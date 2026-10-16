@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CONFIG_FILE = '.repo-archaeology.json';
@@ -61,8 +61,9 @@ const MAX_SKIP_PATTERN_LENGTH = 200;
 /** Reads `.repo-archaeology.json` from the repository root, if present. */
 export function loadConfigFile(root: string): Partial<Settings> {
   const file = join(root, CONFIG_FILE);
-  if (!existsSync(file)) return {};
-  const stat = lstatSync(file);
+  // lstat, not existsSync: existsSync follows links and would silently skip a dangling symlink.
+  const stat = lstatSync(file, { throwIfNoEntry: false });
+  if (!stat) return {};
   if (!stat.isFile()) throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
   if (stat.size > MAX_CONFIG_BYTES) throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
   let raw: unknown;
