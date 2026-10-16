@@ -6,9 +6,9 @@ import { extractSpecifiers } from './typescript.js';
 /**
  * How two co-changing files are related in the current code:
  * - direct:  one imports the other (directly or through an index/barrel file)
- * - test:    a test file and the code it tests
+ * - test:    a test changing with code (or with another test): expected
  * - ghost:   no import link either way, and we could check: a hidden relationship
- * - unknown: we could not check (non-JS/TS files, or unresolvable alias imports)
+ * - unknown: we could not check (non-JS/TS files, project config, or unresolvable alias imports)
  */
 export type Relationship = 'direct' | 'test' | 'ghost' | 'unknown';
 
@@ -55,6 +55,8 @@ export class RelationshipClassifier {
     const ia = this.analyze(a);
     const ib = this.analyze(b);
     if (this.reachable(a).has(b) || this.reachable(b).has(a)) return 'direct';
+    // Manifests and tool config are "used" without imports (dependencies, build settings).
+    if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (!ia.analyzable && !ib.analyzable) return 'unknown';
     if ((ia.analyzable && ia.unresolved > 0) || (ib.analyzable && ib.unresolved > 0)) return 'unknown';
     return 'ghost';
@@ -64,7 +66,8 @@ export class RelationshipClassifier {
   explain(a: string, b: string, relationship: Relationship): string {
     switch (relationship) {
       case 'test':
-        return 'a test and the code it covers';
+        if (isTestFile(a) && isTestFile(b)) return 'two tests that change together';
+        return (isTestFile(a) ? testCovers(a, b) : testCovers(b, a)) ? 'a test and the code it covers' : 'a test that changes with this code';
       case 'direct': {
         if (this.analyze(a).imports.has(b)) return `${posix.basename(a)} imports ${posix.basename(b)}`;
         if (this.analyze(b).imports.has(a)) return `${posix.basename(b)} imports ${posix.basename(a)}`;
@@ -75,6 +78,7 @@ export class RelationshipClassifier {
       case 'unknown': {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
+        if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
         if (!ia.analyzable && !ib.analyzable) return 'import check not possible for these file types';
         return 'some imports could not be resolved (aliases?)';
       }
@@ -140,23 +144,44 @@ export function testStem(path: string): string {
 }
 
 /**
- * A test file and (probably) the code it tests: same name (`foo.ts` / `foo.test.ts`),
- * a more specific name (`command.ts` / `command.help.test.ts`), or the same folder
- * once test folders are stripped (`src/a/x.ts` / `src/a/__tests__/y.test.ts`).
+ * Pairs that involve tests. A test changing alongside code is expected (tests
+ * cover code, often indirectly), so it is never reported as a ghost wire.
+ * Project configuration is the exception: package.json moving with a test is
+ * mechanical, not "the code under test".
  */
 export function isTestPair(a: string, b: string): boolean {
   const aTest = isTestFile(a);
-  if (aTest === isTestFile(b)) return false;
-  const [test, subject] = aTest ? [a, b] : [b, a];
-  if (!SOURCE_CODE.test(subject)) return false; // package.json changing with tests is not "the code under test"
+  const bTest = isTestFile(b);
+  if (aTest && bTest) return true;
+  if (!aTest && !bTest) return false;
+  return !isProjectConfig(aTest ? b : a);
+}
+
+/**
+ * Whether `test` looks like it covers `subject` specifically: same name
+ * (`foo.ts` / `foo.test.ts`), a more specific name (`command.ts` /
+ * `command.help.test.ts`), or the same feature folder once test folders are
+ * stripped (`src/a/x.ts` / `src/a/__tests__/y.test.ts`). Used for wording.
+ */
+export function testCovers(test: string, subject: string): boolean {
   const testName = testStem(test);
   const subjectName = testStem(subject);
   if (testName === subjectName) return true;
   if (testName.startsWith(subjectName) && /^[.\-_]/.test(testName.slice(subjectName.length))) return true;
-  return stripTestDirs(posix.dirname(test)) === posix.dirname(subject);
+  const testArea = stripTestDirs(posix.dirname(test));
+  const subjectArea = posix.dirname(subject);
+  if (testArea === subjectArea) return testArea !== '.';
+  // Shallow folders like `src` are too broad to say a test covers everything below them.
+  const [outer, inner] = testArea.length < subjectArea.length ? [testArea, subjectArea] : [subjectArea, testArea];
+  return outer.split('/').length >= 2 && inner.startsWith(`${outer}/`);
 }
 
-const SOURCE_CODE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro|py|rb|go|rs|java|kt|kts|scala|swift|m|mm|c|cc|cpp|h|hpp|cs|fs|php|ex|exs|erl|clj|dart|lua|r|jl|zig|sql)$/i;
+const PROJECT_CONFIG = /^(?:package\.json|tsconfig[\w.-]*\.json|jsconfig\.json|[\w.-]+\.config\.[cm]?[jt]s|\.[\w.-]*rc(?:\.[\w]+)?|dockerfile|makefile|[\w.-]+\.ya?ml|[\w.-]+\.lock)$/i;
+
+/** Manifests and tooling configuration: they change with everything for mechanical reasons. */
+export function isProjectConfig(path: string): boolean {
+  return path.startsWith('.github/') || PROJECT_CONFIG.test(posix.basename(path));
+}
 
 function stripTestDirs(dir: string): string {
   const stripped = dir

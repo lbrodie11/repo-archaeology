@@ -118,6 +118,8 @@ canvas.pointing { cursor: pointer; }
 .rel-head .swatch { flex: none; transform: translateY(-4px); }
 .file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13px; word-break: break-all; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; }
 .file-link:hover { text-decoration-color: var(--tape); }
+.pair { display: grid; gap: 2px; }
+.pair .file-link + .file-link::before { content: "and "; font-family: var(--text); color: var(--chalk-faded); text-decoration: none; display: inline-block; margin-right: 4px; }
 .rel-body { margin: 4px 0 0 32px; font-size: 13.5px; color: var(--chalk-faded); }
 .evidence { margin: 6px 0 0 32px; font-size: 12.5px; color: var(--chalk-faded); }
 .evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 2px 0; }
@@ -245,7 +247,7 @@ const CLIENT = String.raw`
         b = nodes[j];
         dx = b.x - a.x; dy = b.y - a.y;
         d2 = dx * dx + dy * dy;
-        if (d2 > 360000) continue;
+        if (d2 > 90000) continue;
         if (d2 < 1) { dx = random() - 0.5; dy = random() - 0.5; d2 = 1; }
         f = (1400 * alpha) / d2;
         a.vx -= dx * f; a.vy -= dy * f;
@@ -265,8 +267,8 @@ const CLIENT = String.raw`
     nodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
     nodes.forEach(function (n) {
       var d = dirs[n.dir];
-      n.vx += (d.cx / d.count - n.x) * 0.012 * alpha - n.x * 0.003 * alpha;
-      n.vy += (d.cy / d.count - n.y) * 0.012 * alpha - n.y * 0.003 * alpha;
+      n.vx += (d.cx / d.count - n.x) * 0.012 * alpha - n.x * 0.012 * alpha;
+      n.vy += (d.cy / d.count - n.y) * 0.012 * alpha - n.y * 0.012 * alpha;
       if (n.pinned) { n.vx = 0; n.vy = 0; return; }
       n.vx *= 0.62; n.vy *= 0.62;
       n.x += n.vx; n.y += n.vy;
@@ -285,16 +287,41 @@ const CLIENT = String.raw`
     canvas.height = Math.round(rect.height * size.dpr);
     requestDraw();
   }
-  function fit() {
-    if (nodes.length === 0) return;
+  function bounds(list) {
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    nodes.forEach(function (n) {
+    list.forEach(function (n) {
       minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
       minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
     });
-    cam.x = (minX + maxX) / 2; cam.y = (minY + maxY) / 2;
-    cam.scale = Math.max(0.2, Math.min(2.2, Math.min(size.w / (maxX - minX + 140), size.h / (maxY - minY + 140))));
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(size.w / (maxX - minX + 160), size.h / (maxY - minY + 160)))) };
   }
+  function fit() {
+    var list = nodes.filter(isActive);
+    if (list.length === 0) return;
+    var b = bounds(list);
+    cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
+  }
+  // Smoothly frames a set of files (used when one is selected).
+  var flight = null;
+  function flyTo(list) {
+    if (list.length === 0) return;
+    var b = bounds(list);
+    b.scale = Math.min(b.scale, 2);
+    if (reduceMotion) { cam.x = b.x; cam.y = b.y; cam.scale = b.scale; requestDraw(); return; }
+    flight = { from: { x: cam.x, y: cam.y, scale: cam.scale }, to: b, start: performance.now() };
+    requestDraw();
+  }
+  function stepFlight(now) {
+    if (!flight) return false;
+    var t = Math.min(1, (now - flight.start) / 450);
+    var e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    cam.x = flight.from.x + (flight.to.x - flight.from.x) * e;
+    cam.y = flight.from.y + (flight.to.y - flight.from.y) * e;
+    cam.scale = flight.from.scale + (flight.to.scale - flight.from.scale) * e;
+    if (t >= 1) flight = null;
+    return true;
+  }
+  var userMoved = false;
   function toWorld(px, py) {
     return { x: (px - size.w / 2) / cam.scale + cam.x, y: (py - size.h / 2) / cam.scale + cam.y };
   }
@@ -302,6 +329,8 @@ const CLIENT = String.raw`
   // ---- selection -----------------------------------------------------------
   var selectedNode = null, selectedEdge = null, hoverNode = null, matches = null;
   function isVisible(e) { return visible[e.d.relationship]; }
+  function isActive(n) { return n.edges.some(isVisible); }
+  function hasGhost(n) { return visible.ghost && n.edges.some(function (e) { return e.d.relationship === 'ghost'; }); }
   function focusEdge(e) {
     if (selectedEdge) return e === selectedEdge;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
@@ -321,13 +350,17 @@ const CLIENT = String.raw`
     drawQueued = true;
     requestAnimationFrame(frame);
   }
-  function frame() {
+  function frame(now) {
     drawQueued = false;
-    if (alpha > 0.02) { tick(); tick(); }
+    if (alpha > 0.02) {
+      tick(); tick();
+      if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge) fit();
+    }
+    var flying = stepFlight(now || performance.now());
     var marching = !reduceMotion && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
     if (marching) dashPhase = (dashPhase + 0.35) % 1100;
     draw();
-    if (alpha > 0.02 || marching) requestDraw();
+    if (alpha > 0.02 || marching || flying) requestDraw();
   }
 
   function draw() {
@@ -358,15 +391,16 @@ const CLIENT = String.raw`
         var focused = focusEdge(e);
         ctx.globalAlpha = focused ? 1 : 0.07;
         ctx.strokeStyle = KINDS[kind].color;
-        ctx.lineWidth = Math.max(1 / k, 0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.4);
+        // Widths and dashes are in screen pixels, so zooming does not make lines bloated.
+        ctx.lineWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
         ctx.setLineDash([]);
         ctx.shadowBlur = 0;
         if (kind === 'ghost') {
-          ctx.setLineDash([7, 6]);
-          ctx.lineDashOffset = -dashPhase;
+          ctx.setLineDash([7 / k, 6 / k]);
+          ctx.lineDashOffset = -dashPhase / k;
           if (focused) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
         } else if (kind === 'unknown') {
-          ctx.setLineDash([2, 5]);
+          ctx.setLineDash([2 / k, 5 / k]);
         } else if (kind === 'test') {
           ctx.globalAlpha *= 0.7;
         }
@@ -380,9 +414,9 @@ const CLIENT = String.raw`
     ctx.shadowBlur = 0;
 
     nodes.forEach(function (n) {
-      var visibleEdges = n.edges.some(isVisible);
+      if (!isActive(n)) return;
       var focused = focusNode(n);
-      ctx.globalAlpha = !visibleEdges ? 0.25 : focused ? 1 : 0.18;
+      ctx.globalAlpha = focused ? 1 : 0.18;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fillStyle = n.color;
@@ -398,9 +432,10 @@ const CLIENT = String.raw`
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     nodes.forEach(function (n) {
+      var overview = !selectedNode && !selectedEdge && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge) && focusNode(n)) || (!selectedNode && !selectedEdge && !matches && n.r * k > 9);
-      if (!wanted || !n.edges.some(isVisible)) return;
+        ((selectedNode || selectedEdge) && focusNode(n)) || (overview && (n.r * k > 9 || (hasGhost(n) && k >= 0.5)));
+      if (!wanted || !isActive(n)) return;
       var label = base(n.path);
       var x = n.x + n.r + 5 / k;
       ctx.lineWidth = 4 / k;
@@ -424,7 +459,7 @@ const CLIENT = String.raw`
   function nodeAt(p) {
     for (var i = nodes.length - 1; i >= 0; i--) {
       var n = nodes[i];
-      if (!n.edges.some(isVisible)) continue;
+      if (!isActive(n)) continue;
       var dx = p.x - n.x, dy = p.y - n.y, r = n.r + 3 / cam.scale;
       if (dx * dx + dy * dy <= r * r) return n;
     }
@@ -463,6 +498,7 @@ const CLIENT = String.raw`
         drag.node.x = w.x; drag.node.y = w.y; drag.node.pinned = true;
         alpha = Math.max(alpha, 0.25);
       } else if (drag.moved) {
+        userMoved = true; flight = null;
         cam.x -= (px - drag.lastX) / cam.scale;
         cam.y -= (py - drag.lastY) / cam.scale;
       }
@@ -513,6 +549,7 @@ const CLIENT = String.raw`
   canvas.addEventListener('pointerleave', function () { if (!drag) { tooltip.hidden = true; if (hoverNode) { hoverNode = null; requestDraw(); } } });
   canvas.addEventListener('wheel', function (ev) {
     ev.preventDefault();
+    userMoved = true; flight = null;
     var rect = canvas.getBoundingClientRect();
     var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     var before = toWorld(px, py);
@@ -537,10 +574,14 @@ const CLIENT = String.raw`
 
   function selectNode(n) {
     selectedNode = n; selectedEdge = null; matches = null; search.value = '';
+    var group = [n];
+    n.edges.forEach(function (e) { if (isVisible(e)) group.push(e.s === n ? e.t : e.s); });
+    flyTo(group);
     renderPanel(); requestDraw();
   }
   function selectEdge(e) {
     selectedEdge = e; selectedNode = null;
+    flyTo([e.s, e.t]);
     renderPanel(); requestDraw();
   }
   function clearSelection() {
@@ -566,14 +607,21 @@ const CLIENT = String.raw`
     return list;
   }
   /** One relationship, described from the point of view of 'from'. */
-  function relationshipItem(e, from) {
+  function relationshipItem(e, from, showBoth) {
     var other = e.s === from ? e.t : e.s;
     var forward = e.s === from ? e.d.confidence : e.d.reverseConfidence;
     var backward = e.s === from ? e.d.reverseConfidence : e.d.confidence;
     var li = el('li', 'rel');
     var head = el('div', 'rel-head');
     head.appendChild(el('span', 'swatch ' + e.d.relationship));
-    head.appendChild(fileButton(other));
+    if (showBoth) {
+      var pair = el('div', 'pair');
+      pair.appendChild(fileButton(from));
+      pair.appendChild(fileButton(other));
+      head.appendChild(pair);
+    } else {
+      head.appendChild(fileButton(other));
+    }
     li.appendChild(head);
     li.appendChild(el('p', 'rel-body',
       KINDS[e.d.relationship].label.replace(/s$/, '') + ', ' + e.d.why + '. Changed together in ' + plural(e.d.shared, 'commit') +
@@ -599,7 +647,7 @@ const CLIENT = String.raw`
       var e = selectedEdge;
       panel.appendChild(el('h2', '', KINDS[e.d.relationship].label.replace(/s$/, '')));
       var list2 = el('ol');
-      list2.appendChild(relationshipItem(e, e.s));
+      list2.appendChild(relationshipItem(e, e.s, true));
       panel.appendChild(list2);
     } else {
       panel.appendChild(el('h2', '', 'What moves together'));
@@ -608,7 +656,7 @@ const CLIENT = String.raw`
       if (ghosts.length > 0) {
         panel.appendChild(el('h2', '', 'Strongest ghost wires'));
         var list3 = el('ol');
-        ghosts.forEach(function (e) { list3.appendChild(relationshipItem(e, e.s)); });
+        ghosts.forEach(function (e) { list3.appendChild(relationshipItem(e, e.s, true)); });
         panel.appendChild(list3);
       } else if (edges.length > 0) {
         panel.appendChild(el('p', '', 'No ghost wires among these relationships: everything that changes together here is explained by imports or tests.'));

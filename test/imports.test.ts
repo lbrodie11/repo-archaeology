@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isTestFile, isTestPair, RelationshipClassifier } from '../src/imports/classify.js';
+import { isTestFile, isTestPair, RelationshipClassifier, testCovers } from '../src/imports/classify.js';
 import { ImportResolver, resolveFile, type RepoFiles } from '../src/imports/resolve.js';
 
 function memoryRepo(files: Record<string, string>): RepoFiles {
@@ -74,6 +74,7 @@ describe('relationship classification', () => {
     'src/aliased.ts': "import x from '~/somewhere'",
     'src/api.test.ts': "import { x } from './api'",
     'schema.sql': 'create table t();',
+    'package.json': '{}',
     'docs/a.md': '',
     'docs/b.md': '',
   });
@@ -91,6 +92,7 @@ describe('relationship classification', () => {
   });
 
   it('says unknown when it cannot check', () => {
+    assert.equal(classifier.classify('src/billing.ts', 'package.json'), 'unknown');
     assert.equal(classifier.classify('docs/a.md', 'docs/b.md'), 'unknown');
     assert.equal(classifier.classify('src/aliased.ts', 'src/billing.ts'), 'unknown');
   });
@@ -101,8 +103,16 @@ describe('relationship classification', () => {
     assert.ok(isTestFile('pkg/foo_test.go'));
     assert.ok(!isTestFile('src/contest.ts'));
     assert.ok(isTestPair('lib/command.js', 'tests/command.help.test.js'));
-    assert.ok(isTestPair('src/a/x.ts', 'src/a/__tests__/y.test.ts'));
+    assert.ok(isTestPair('src/a.test.ts', 'src/b.test.ts')); // tests moving together
+    assert.ok(isTestPair('docs/guide.md', 'test/deep/x.test.ts'));
     assert.ok(!isTestPair('package.json', 'tests/command.test.js'));
-    assert.ok(!isTestPair('src/a.test.ts', 'src/b.test.ts'));
+    assert.ok(!isTestPair('tsconfig.json', 'src/a.test.ts'));
+    assert.ok(testCovers('tests/command.help.test.js', 'lib/command.js'));
+    assert.ok(testCovers('src/a/__tests__/y.test.ts', 'src/a/x.ts'));
+    assert.ok(testCovers('playground/worker/__tests__/es/worker-es.spec.ts', 'playground/worker/index.html'));
+    assert.ok(testCovers('playground/glob/__tests__/g.spec.ts', 'playground/glob/root/index.html'));
+    assert.ok(!testCovers('src/__tests__/x.test.ts', 'src/deep/a.ts'));
+    assert.ok(!testCovers('test/x.test.ts', 'README.md'));
+    assert.ok(!isTestPair('src/a.ts', 'src/b.ts'));
   });
 });

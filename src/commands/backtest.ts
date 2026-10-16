@@ -11,6 +11,11 @@ export interface BacktestOptions {
   testFraction: number;
   /** Number of suggestions considered per query. */
   k: number;
+  /**
+   * Ignore commits after this time (unix seconds). Lets you tune settings on an
+   * older window and keep the newest commits untouched for the final score.
+   */
+  before?: number;
 }
 
 export interface StrategyScore {
@@ -37,6 +42,8 @@ export interface BacktestResult {
   test: { commits: number; from?: string; to?: string };
   /** One query per (held-out commit, changed file with training history). */
   queries: number;
+  /** Set when --before cut off the newest commits. */
+  before?: string;
   /** Queries whose commit changed no other file: any suggestion there is a false alarm. */
   soloQueries: number;
   strategies: StrategyScore[];
@@ -79,6 +86,11 @@ export function backtestCommits(
 ): Omit<BacktestResult, 'meta'> {
   if (!(options.testFraction > 0 && options.testFraction < 1)) throw new UsageError('--test-fraction must be between 0 and 1.');
   if (!(Number.isInteger(options.k) && options.k >= 1)) throw new UsageError('--k must be a positive integer.');
+  if (options.before !== undefined) {
+    const cutoff = options.before;
+    commits = commits.filter((commit) => commit.commitTime < cutoff);
+    excluded = excluded.filter((commit) => commit.commitTime < cutoff);
+  }
   if (commits.length < MIN_COMMITS_FOR_BACKTEST) {
     throw new UsageError(`A backtest needs at least ${MIN_COMMITS_FOR_BACKTEST} usable commits; this history has ${commits.length}.`);
   }
@@ -92,6 +104,8 @@ export function backtestCommits(
   const model = new CoChangeModel(trainCommits, { halfLifeDays });
 
   const popular = model.files.map((_, id) => id).sort((x, y) => (model.changeCount[y] ?? 0) - (model.changeCount[x] ?? 0) || x - y);
+  // Set per query: whether the main strategy suggested anything (used by the fair baseline).
+  let modelSpoke = false;
   const strategies: [Omit<StrategyScore, 'fired' | 'coverage' | 'precision' | 'hitRate' | 'falseAlarmRate' | 'recall'>, Recommender][] = [
     [
       { name: 'co-change', description: `your thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence): what \`diff\` reports` },
@@ -104,6 +118,11 @@ export function backtestCommits(
     [
       { name: 'popularity baseline', description: `always suggests the ${options.k} most frequently changed files` },
       (id) => popular.filter((p) => p !== id).slice(0, options.k),
+    ],
+    [
+      // The fair comparison: co-change only speaks up on some changes, which may be easier ones.
+      { name: 'popularity, same changes', description: 'the popularity guess, scored only where co-change spoke up' },
+      (id) => (modelSpoke ? popular.filter((p) => p !== id).slice(0, options.k) : []),
     ],
   ];
 
@@ -123,6 +142,7 @@ export function backtestCommits(
       expectedTotal += expected.size + unseen;
       strategies.forEach(([, recommend], i) => {
         const suggested = recommend(id);
+        if (i === 0) modelSpoke = suggested.length > 0;
         const t = tallies[i]!;
         if (suggested.length === 0) return;
         t.fired++;
@@ -152,6 +172,7 @@ export function backtestCommits(
     train: span(trainCommits),
     test: span(testCommits),
     queries,
+    before: options.before !== undefined ? isoDate(options.before) : undefined,
     soloQueries,
     strategies: scores,
     notes: interpret(scores, queries),
@@ -165,7 +186,7 @@ function span(commits: readonly HistoryCommit[]): { commits: number; from?: stri
 }
 
 function interpret(scores: StrategyScore[], queries: number): string[] {
-  const [model, , baseline] = scores;
+  const [model, , , baseline] = scores;
   if (!model || !baseline || queries === 0) return ['No held-out commit touched a file with training history, so there is nothing to score.'];
   const notes: string[] = [];
   if (model.fired === 0) {
@@ -173,12 +194,12 @@ function interpret(scores: StrategyScore[], queries: number): string[] {
     return notes;
   }
   const lift = baseline.hitRate > 0 ? model.hitRate / baseline.hitRate : Infinity;
-  if (lift >= 2) notes.push(`When it speaks up it is ${Number.isFinite(lift) ? `${lift.toFixed(1)}×` : 'far'} more often right than guessing popular files.`);
-  else if (lift > 1) notes.push('Only slightly better than guessing popular files: try a higher --min-confidence or --min-shared.');
-  else notes.push('Not better than guessing popular files on this repository: treat its suggestions with caution.');
+  if (lift >= 2) notes.push(`When it speaks up it is ${Number.isFinite(lift) ? `${lift.toFixed(1)}×` : 'far'} more often right than guessing popular files on the same changes.`);
+  else if (lift >= 1.25) notes.push(`Right ${lift.toFixed(1)}× as often as guessing popular files on the same changes: useful, but expect noise. A higher --min-confidence may help.`);
+  else notes.push('Barely better than guessing popular files on this repository: treat its suggestions with caution.');
   if (model.coverage < 0.05) notes.push('It rarely speaks up (under 5% of changes). That is fine for a quiet reviewer; lower --min-confidence for more suggestions.');
   if (model.falseAlarmRate > 0.6) notes.push('Most alerts were wrong: raise --min-confidence to make it quieter but more reliable.');
-  notes.push('Tune thresholds with a different --test-fraction than the one you report, so you do not overfit the evaluation.');
+  notes.push('To tune settings without overfitting, experiment with --before <date> (an older window), then report one final run without it.');
   return notes;
 }
 
@@ -187,6 +208,7 @@ export function printBacktest(result: BacktestResult): void {
   console.log(`Learned from ${plural(result.train.commits, 'older commit')} ${c.dim(`(${result.train.from} → ${result.train.to})`)}`);
   console.log(`Replayed ${plural(result.test.commits, 'newer commit')} ${c.dim(`(${result.test.from} → ${result.test.to})`)}, one changed file at a time: ${plural(result.queries, 'query', 'queries')}`);
   console.log(c.dim(`${result.soloQueries} of those queries came from single-file commits, where any suggestion counts as a false alarm.`));
+  if (result.before) console.log(c.dim(`Commits from ${result.before} on were left out (--before).`));
   console.log();
 
   const header = ['strategy', 'speaks up', `hit@${result.k}`, 'precision', 'false alarms', 'recall'];

@@ -10,6 +10,12 @@ export const MAX_CLASSIFIED = 5000;
 export interface ScanOptions {
   limit: number;
   kinds: Relationship[];
+  /**
+   * At most this many "unchecked" results (pairs we could not check for imports,
+   * e.g. config files). They are often mechanical, so by default they only fill
+   * in around the ghost wires instead of crowding them out.
+   */
+  uncheckedCap?: number;
 }
 
 export interface ScanResult {
@@ -41,11 +47,19 @@ export function classifiedPairs(ctx: Context, max = MAX_CLASSIFIED): ClassifiedC
 export function scan(ctx: Context, options: ScanOptions): ScanResult {
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, direct: 0, test: 0 };
   const selected: RelationshipView[] = [];
-  for (const { companion, relationship } of classifiedPairs(ctx)) {
-    counts[relationship]++;
-    if (selected.length < options.limit && options.kinds.includes(relationship)) {
-      selected.push(toView(ctx, companion, relationship));
-    }
+  const pending: ClassifiedCompanion[] = [];
+  for (const entry of classifiedPairs(ctx)) {
+    counts[entry.relationship]++;
+    if (options.kinds.includes(entry.relationship)) pending.push(entry);
+  }
+  if (options.uncheckedCap === undefined) {
+    for (const entry of pending.slice(0, options.limit)) selected.push(toView(ctx, entry.companion, entry.relationship));
+  } else {
+    // Checked results first; unchecked ones only fill the remaining space, up to the cap.
+    const checked = pending.filter((e) => e.relationship !== 'unknown').slice(0, options.limit);
+    const room = Math.min(options.uncheckedCap, options.limit - checked.length);
+    const filler = room > 0 ? pending.filter((e) => e.relationship === 'unknown').slice(0, room) : [];
+    for (const entry of [...checked, ...filler]) selected.push(toView(ctx, entry.companion, entry.relationship));
   }
   return { meta: buildMeta(ctx), counts, relationships: selected };
 }

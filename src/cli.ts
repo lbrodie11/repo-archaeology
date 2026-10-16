@@ -33,6 +33,12 @@ function positiveNumber(value: string): number {
   return n;
 }
 
+function dateValue(value: string): number {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) throw new InvalidArgumentError('Expected a date such as 2026-01-01.');
+  return Math.floor(ms / 1000);
+}
+
 function kindList(value: string): Relationship[] {
   const kinds = value.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
   if (kinds.includes('all')) return [...RELATIONSHIPS];
@@ -41,6 +47,12 @@ function kindList(value: string): Relationship[] {
     throw new InvalidArgumentError(`Use a comma-separated list of: ${RELATIONSHIPS.join(', ')}, or all.`);
   }
   return kinds as Relationship[];
+}
+
+function kindsOption(description: string, defaults: Relationship[]): Option {
+  return new Option('--kinds <list>', `${description}: comma-separated ${RELATIONSHIPS.join(', ')}, or all`)
+    .argParser(kindList)
+    .default(defaults, defaults.length === RELATIONSHIPS.length ? 'all' : defaults.join(','));
 }
 
 function collect(value: string, previous: string[] = []): string[] {
@@ -82,7 +94,7 @@ function printJson(value: unknown): void {
 const program = new Command();
 program
   .name('repo-archaeology')
-  .description('Dig through git history to find files that change together, especially ghost wires:\nfiles that keep changing together without importing each other.')
+  .description('Dig through git history to find files that change together, especially ghost wires: files that keep changing together without importing each other.')
   .version(version)
   .option('-C, --cwd <path>', 'run as if started in <path>')
   .option('--max-commits <n>', 'analyze at most this many recent commits (default 5000)', positiveInt)
@@ -102,13 +114,15 @@ program
   .command('scan', { isDefault: true })
   .description('list the strongest ghost wires across the repository (default command)')
   .option('-n, --limit <n>', 'how many to show', positiveInt, 15)
-  .option('--kinds <list>', `relationship kinds to show: ${RELATIONSHIPS.join(', ')}, or all`, kindList, ['ghost', 'unknown'] as Relationship[])
+  .addOption(kindsOption('relationship kinds to show', ['ghost', 'unknown']))
   .action(async (opts: { limit: number; kinds: Relationship[] }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
-    const result = scan(ctx, opts);
+    // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
+    const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
+    const result = scan(ctx, options);
     if (global.json) printJson(result);
-    else printScan(result, opts);
+    else printScan(result, options);
   });
 
 program
@@ -116,7 +130,7 @@ program
   .description('check your changes: which files usually change with them but were left untouched?')
   .option('-b, --base <ref>', 'also include commits on this branch since it forked from <ref> (e.g. main)')
   .option('-n, --limit <n>', 'how many suggestions to show', positiveInt, 10)
-  .option('--kinds <list>', `relationship kinds to report: ${RELATIONSHIPS.join(', ')}, or all`, kindList, [...RELATIONSHIPS])
+  .addOption(kindsOption('relationship kinds to report', [...RELATIONSHIPS]))
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
   .action(async (opts: { base?: string; limit: number; kinds: Relationship[]; exitCode?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
@@ -145,7 +159,8 @@ program
   .description('measure how often suggestions would have been right on recent history')
   .option('--test-fraction <p>', 'share of the newest commits to replay (default 0.2)', fraction, 0.2)
   .option('-k, --k <n>', 'suggestions considered per changed file (default 3)', positiveInt, 3)
-  .action(async (opts: { testFraction: number; k: number }, cmd: Command) => {
+  .option('--before <date>', 'leave out commits from this date on (tune on an older window)', dateValue)
+  .action(async (opts: { testFraction: number; k: number; before?: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
     const result = backtest(ctx, opts);
@@ -158,7 +173,7 @@ program
   .description('write an interactive map of what changes together and open it in your browser')
   .option('-o, --out <file>', 'where to write the HTML (default: a temporary folder)')
   .option('--edges <n>', 'maximum relationships to draw', positiveInt, 150)
-  .option('--kinds <list>', `relationship kinds to include: ${RELATIONSHIPS.join(', ')}, or all`, kindList, [...RELATIONSHIPS])
+  .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'direct']))
   .option('--no-open', 'write the file without opening a browser')
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();

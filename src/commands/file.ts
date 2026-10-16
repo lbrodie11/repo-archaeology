@@ -62,10 +62,11 @@ export function fileReport(ctx: Context, input: string, options: FileOptions): F
 export function printFile(result: FileResult): void {
   printHeader(`file ${c.bold(result.path)}`, result.meta);
   const times = result.medianChanges > 0 ? ` (${(result.changes / result.medianChanges).toFixed(1)}× the median file)` : '';
-  console.log(`${c.bold('Changes')}   ${plural(result.changes, 'commit')}${times}, busier than ${pct(result.churnPercentile)} of files`);
-  console.log(`${c.bold('Last')}      ${timeAgo(Date.parse(result.lastChanged) / 1000)} ${c.dim(`(${result.lastChanged})`)}`);
+  const label = (s: string) => c.bold(s.padEnd(14));
+  console.log(`${label('Changed in')}${plural(result.changes, 'commit')}${times}, busier than ${pct(result.churnPercentile)} of files`);
+  console.log(`${label('Last changed')}${timeAgo(Date.parse(result.lastChanged) / 1000)} ${c.dim(`(${result.lastChanged})`)}`);
   const who = result.authors.map((a) => `${a.author} ${c.dim(pct(a.share))}`).join(', ');
-  console.log(`${c.bold('Who knows it')} ${who}`);
+  console.log(`${label('Who knows it')}${who}`);
   console.log();
   if (result.companions.length === 0) {
     console.log(`No file changed with it at least ${result.meta.settings.minShared} times.`);

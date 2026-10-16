@@ -123,11 +123,13 @@ export class CoChangeModel {
         if (b <= a || stat.count < thresholds.minShared) continue;
         const ab = this.confidence(stat, a);
         const ba = this.confidence(stat, b);
+        const passAB = ab >= thresholds.minConfidence;
+        const passBA = ba >= thresholds.minConfidence;
+        if (!passAB && !passBA) continue;
         const scoreAB = wilsonLowerBound(ab, this.changeCount[a] ?? 0);
         const scoreBA = wilsonLowerBound(ba, this.changeCount[b] ?? 0);
-        if (Math.max(ab, ba) < thresholds.minConfidence) continue;
-        // Prefer the direction with the better evidence-adjusted score.
-        const forward = scoreAB > scoreBA || (scoreAB === scoreBA && ab >= ba);
+        // Report a direction that passes the thresholds; if both do, the better-evidenced one.
+        const forward = passAB && (!passBA || scoreAB > scoreBA || (scoreAB === scoreBA && ab >= ba));
         yield forward
           ? { from: a, to: b, stat, confidence: ab, reverseConfidence: ba, score: scoreAB }
           : { from: b, to: a, stat, confidence: ba, reverseConfidence: ab, score: scoreBA };
