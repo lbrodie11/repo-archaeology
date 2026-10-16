@@ -16,7 +16,7 @@ Last updated: October 2026.
 - NUL-safe Git history parsing with rename and file-lifetime tracking.
 - Directional co-change confidence, evidence-aware ranking, sweep filtering, and optional recency weighting.
 - A smart default command, plus `scan`, `diff`, `file`, `map`, and `backtest`.
-- JavaScript and TypeScript import classification using the TypeScript compiler.
+- JavaScript and TypeScript import classification using the TypeScript compiler, including explicit triple-slash file path references.
 - Conservative hidden-bridge explanations for rare shared environment variables, API routes, event names and named exports, plus possible parallel implementations.
 - A self-contained local HTML map with no external runtime requests.
 - Strict source and test typechecking, fixture repositories, regression coverage, package smoke tests, and multi-platform CI.

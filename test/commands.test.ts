@@ -50,6 +50,33 @@ after(() => repo.cleanup());
 const flags = { minShared: 3, minConfidence: 0.4 };
 
 describe('scan', () => {
+  it('keeps a type-reference dependency out of ghost-only reports without hiding its history', async () => {
+    const referencedRepo = new FixtureRepo();
+    try {
+      for (let index = 0; index < 3; index++) {
+        referencedRepo.commit({
+          message: `widget contract ${index}`, write: {
+            'src/widget.js': `/// <reference path="./widget.types.d.ts" />\nexport const revision = ${index};`,
+            'src/widget.types.d.ts': `interface WidgetConfig { revision: ${index} }`,
+          }
+        });
+      }
+      const ctx = await loadContext(referencedRepo.dir, flags);
+      const ghosts = scan(ctx, { limit: 10, kinds: ['ghost'] });
+      assert.deepEqual(ghosts.relationships, []);
+      const direct = scan(ctx, { limit: 10, kinds: ['direct'] });
+      assert.equal(direct.relationships.length, 1);
+      assert.equal(direct.relationships[0]?.shared, 3);
+      assert.match(direct.relationships[0]?.why ?? '', /triple-slash path/);
+      referencedRepo.write('src/widget.js', '/// <reference path="./widget.types.d.ts" />\nexport const revision = 4;');
+      const changes = await diff(await loadContext(referencedRepo.dir, flags), { limit: 10, kinds: ['direct'] });
+      assert.equal(changes.suggestions[0]?.to, 'src/widget.types.d.ts');
+      assert.match(changes.suggestions[0]?.why ?? '', /references/);
+    } finally {
+      referencedRepo.cleanup();
+    }
+  });
+
   it('distinguishes same-named files in the explanatory CLI sentence', () => {
     const scanRepo = new FixtureRepo();
     try {

@@ -21,7 +21,14 @@ export function typescript(): typeof TS {
  * pre-processor, which understands comments and strings, unlike a regex.
  */
 export function extractSpecifiers(sourceText: string): string[] {
+  return extractDependencies(sourceText).specifiers;
+}
+
+export function extractDependencies(sourceText: string): { specifiers: string[]; referencePaths: string[] } {
   const ts = typescript();
   const info = ts.preProcessFile(sourceText, true, true);
-  return info.importedFiles.map((f) => f.fileName);
+  return {
+    specifiers: info.importedFiles.map((file) => file.fileName),
+    referencePaths: info.referencedFiles.map((file) => file.fileName),
+  };
 }

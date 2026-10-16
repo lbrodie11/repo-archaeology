@@ -106,9 +106,9 @@ Every relationship has a kind:
 | Kind | Meaning |
 | --- | --- |
 | **ghost wire** | No import link was detected between the files in the current code, yet they change together. The interesting one. |
-| **import link** | One imports the other, directly or through an index/barrel file. Expected. |
+| **import link** | One imports or explicitly path-references the other, directly or through an index/barrel file. A type reference is not a runtime import. |
 | **test link** | A test changing with code, or tests changing together. Expected. |
-| **unchecked** | We could not check imports: non-JS/TS files, project config such as `package.json`, or unresolvable aliases. |
+| **unchecked** | We could not check dependencies fully: non-JS/TS files, project config such as `package.json`, or unresolved imports or path references. |
 
 **Confidence is directional.** "When `a.ts` changed, `b.ts` changed too in 9 of 12 commits (75%)" says nothing about how often `a.ts` changes when `b.ts` does; that number is shown as *reverse*.
 
@@ -153,6 +153,7 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 2. **Noise.** Lockfiles, build output, snapshots and changelogs are ignored. Commits touching more than 25 files are treated as sweeps and skipped. Single-file commits are kept, because leaving them out would inflate every confidence number.
 3. **Statistics.** For files A and B: `confidence(A→B) = shared(A, B) / changes(A)`, ranked by the Wilson lower bound.
 4. **Imports.** JS/TS files are parsed with TypeScript's pre-processor (comments and strings are handled correctly), and imports are resolved across relative paths, `.js`→`.ts` swaps, index files, `tsconfig`/`jsconfig` `paths` and `baseUrl` (including relative `extends` files), and the repository's own packages, including monorepo workspaces and `exports` maps. Only the current code is analyzed.
+  TypeScript `/// <reference path="..." />` directives count as explicit dependencies too. Paths are resolved exactly, relative to the declaring file and within the repository; missing or outside-repository targets make the import check uncertain. `types` and `lib` directives are not treated as local file paths. JSON keeps the existing `direct` relationship kind, with reference-specific explanation text.
 5. **Possible explanations.** The TypeScript syntax tree is checked for rare shared environment variables, API routes, and event names. This is evidence for a possible bridge, never proof of causation.
 
 Known limits: import checks cover JS/TS only. Merge commits are skipped, so squash-merge and rebase workflows give the cleanest signal. Shallow clones only see part of the history; the tool warns about this.

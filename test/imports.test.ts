@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { isTestFile, isTestPair, RelationshipClassifier, testCovers } from '../src/imports/classify.js';
 import { ImportResolver, resolveFile, type RepoFiles } from '../src/imports/resolve.js';
 import { extractSourceReferences } from '../src/imports/references.js';
+import { extractDependencies, extractSpecifiers } from '../src/imports/typescript.js';
 
 function memoryRepo(files: Record<string, string>): RepoFiles {
   return {
@@ -66,6 +67,83 @@ describe('import resolution', () => {
 });
 
 describe('relationship classification', () => {
+  it('keeps module specifiers separate from TypeScript file, types and lib directives', () => {
+    const text = `
+      /// <reference path="types/ambient.d.ts" />
+      /// <reference types="node" />
+      /// <reference lib="es2022" />
+      import './module';
+      export * from './exports';
+      const fake = '/// <reference path="fake.d.ts" />';
+      /* /// <reference path="comment.d.ts" /> */
+    `;
+    assert.deepEqual(extractDependencies(text), {
+      specifiers: ['./module', './exports'], referencePaths: ['types/ambient.d.ts'],
+    });
+    assert.deepEqual(extractSpecifiers(text), ['./module', './exports']);
+    const external = new RelationshipClassifier(memoryRepo({
+      'src/a.ts': '/// <reference types="node" />\n/// <reference lib="es2022" />',
+      'src/b.ts': 'export {};',
+    }));
+    assert.equal(external.classify('src/a.ts', 'src/b.ts'), 'ghost');
+  });
+
+  it('resolves exact path references relative to the declaring file without module extension swaps', () => {
+    const referenced = new RelationshipClassifier(memoryRepo({
+      'src/nested/widget.js': '/// <reference path="../types/widget.d.ts" />',
+      'src/types/widget.d.ts': 'interface Widget {}',
+      'src/backslash.js': String.raw`/// <reference path="types\widget.d.ts" />`,
+      'src/exact.js': '/// <reference path="./only.js" />',
+      'src/only.ts': 'export {};',
+      'src/hash.js': '/// <reference path="./types/with#hash.d.ts" />',
+      'src/types/with#hash.d.ts': 'interface Hash {}',
+    }));
+    assert.equal(referenced.classify('src/nested/widget.js', 'src/types/widget.d.ts'), 'direct');
+    assert.equal(referenced.classify('src/backslash.js', 'src/types/widget.d.ts'), 'direct');
+    assert.equal(referenced.classify('src/hash.js', 'src/types/with#hash.d.ts'), 'direct');
+    assert.equal(referenced.classify('src/exact.js', 'src/only.ts'), 'unknown');
+  });
+
+  it('does not follow path references outside the repository or at absolute locations', () => {
+    for (const path of ['../../outside.d.ts', '/tmp/outside.d.ts', 'C:/outside.d.ts', 'C:outside.d.ts', '//server/share/outside.d.ts']) {
+      const referenced = new RelationshipClassifier(memoryRepo({
+        'src/widget.js': `/// <reference path="${path}" />`,
+        'src/other.ts': 'export {};',
+      }));
+      assert.equal(referenced.classify('src/widget.js', 'src/other.ts'), 'unknown', path);
+      assert.equal(referenced.analyze('src/widget.js').references.size, 0, path);
+    }
+  });
+
+  it('propagates unresolved path references through followed barrel files', () => {
+    const referenced = new RelationshipClassifier(memoryRepo({
+      'src/widget.js': "import './lib';",
+      'src/lib/index.ts': '/// <reference path="missing.d.ts" />',
+      'src/other.ts': 'export {};',
+    }));
+    assert.equal(referenced.classify('src/widget.js', 'src/other.ts'), 'unknown');
+  });
+
+  it('recognizes triple-slash path references as explicit current-code dependencies', () => {
+    const referenced = new RelationshipClassifier(memoryRepo({
+      'src/widget.js': '// @ts-check\n/// <reference path="widget.types.d.ts" />\nexport {};',
+      'src/widget.types.d.ts': 'interface WidgetConfig { enabled: boolean }',
+    }));
+    assert.equal(referenced.classify('src/widget.js', 'src/widget.types.d.ts'), 'direct');
+    assert.equal(referenced.classify('src/widget.types.d.ts', 'src/widget.js'), 'direct');
+    assert.match(referenced.explain('src/widget.js', 'src/widget.types.d.ts', 'direct'), /references.*widget\.types\.d\.ts.*current code/);
+    assert.match(referenced.explain('src/widget.types.d.ts', 'src/widget.js', 'direct'), /widget\.js.*references/);
+  });
+
+  it('marks unresolved relative reference paths as uncertain instead of ghost wires', () => {
+    const referenced = new RelationshipClassifier(memoryRepo({
+      'src/widget.js': '/// <reference path="missing.d.ts" />\nexport {};',
+      'src/other.ts': 'export {};',
+    }));
+    assert.equal(referenced.classify('src/widget.js', 'src/other.ts'), 'unknown');
+    assert.match(referenced.explain('src/widget.js', 'src/other.ts', 'unknown'), /references/);
+  });
+
   it('finds explicit public export names without mistaking private or nested names for exports', () => {
     const source = `
       // export class Fake {}

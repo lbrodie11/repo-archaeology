@@ -1,12 +1,12 @@
 import { readFileSync, statSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { join, posix, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import { ImportResolver, type RepoFiles } from './resolve.js';
-import { extractSpecifiers } from './typescript.js';
+import { extractDependencies } from './typescript.js';
 
 /**
  * How two co-changing files are related in the current code:
- * - direct:  one imports the other (directly or through an index/barrel file)
+ * - direct:  one imports or path-references the other (directly or through an index/barrel file)
  * - test:    a test changing with code (or with another test): expected
  * - ghost:   no import link either way, and we could check: a hidden relationship
  * - unknown: we could not check (non-JS/TS files, project config, or unresolvable alias imports)
@@ -33,6 +33,7 @@ interface FileImports {
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
+  references: Set<string>;
   unresolved: number;
 }
 
@@ -92,6 +93,8 @@ export class RelationshipClassifier {
       case 'direct': {
         if (this.analyze(a).imports.has(b)) return `${posix.basename(a)} imports ${posix.basename(b)}`;
         if (this.analyze(b).imports.has(a)) return `${posix.basename(b)} imports ${posix.basename(a)}`;
+        if (this.analyze(a).references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
+        if (this.analyze(b).references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
       }
       case 'ghost': {
@@ -110,7 +113,7 @@ export class RelationshipClassifier {
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
-        return 'some imports could not be resolved (aliases or barrel files), so an import link cannot be ruled out';
+        return 'some imports or path references could not be resolved, so a dependency link cannot be ruled out';
       }
     }
   }
@@ -137,7 +140,7 @@ export class RelationshipClassifier {
   analyze(file: string): FileImports {
     const cached = this.cache.get(file);
     if (cached) return cached;
-    const result: FileImports = { analyzable: false, sourceUnavailable: false, imports: new Set(), unresolved: 0 };
+    const result: FileImports = { analyzable: false, sourceUnavailable: false, imports: new Set(), references: new Set(), unresolved: 0 };
     this.cache.set(file, result);
     if (!ANALYZABLE.test(file)) return result;
     const text = this.files.read(file);
@@ -146,12 +149,23 @@ export class RelationshipClassifier {
       return result;
     }
     result.analyzable = true;
-    for (const specifier of extractSpecifiers(text)) {
+    const { specifiers, referencePaths } = extractDependencies(text);
+    for (const specifier of specifiers) {
       const resolved = this.resolver.resolve(file, specifier);
       if (resolved.kind === 'file') {
         if (resolved.path !== file) result.imports.add(resolved.path);
       } else if (resolved.kind === 'unresolved') {
         result.unresolved++;
+      }
+    }
+    for (const referencePath of referencePaths) {
+      const path = referencePath.replace(/\\/g, '/');
+      const target = posix.normalize(posix.join(posix.dirname(file), path));
+      if (path === '' || posix.isAbsolute(path) || win32.parse(path).root !== ''
+        || target === '..' || target.startsWith('../') || !this.files.exists(target)) {
+        result.unresolved++;
+      } else if (target !== file) {
+        result.references.add(target);
       }
     }
     return result;
@@ -208,7 +222,7 @@ export class RelationshipClassifier {
     const visit = (current: string, depth: number) => {
       const info = this.analyze(current);
       if (info.unresolved > 0) reach.incomplete = true;
-      for (const target of info.imports) {
+      for (const target of [...info.imports, ...info.references]) {
         if (reach.files.has(target)) continue;
         reach.files.add(target);
         if (!isIndexFile(target)) continue;
