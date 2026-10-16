@@ -61,16 +61,28 @@ export class CoChangeModel {
   readonly authors: Map<string, number>[] = [];
   private readonly ids = new Map<string, number>();
   private readonly adjacency: Map<number, PairStat>[] = [];
-  private readonly referenceTime: number;
+  private referenceTime: number;
   private readonly halfLifeSeconds?: number;
+  readonly commits: HistoryCommit[];
 
   constructor(
-    readonly commits: readonly HistoryCommit[],
+    commits: readonly HistoryCommit[],
     options: ModelOptions = {},
   ) {
+    this.commits = [...commits];
     this.referenceTime = commits.reduce((max, c) => Math.max(max, c.commitTime), 0);
     if (options.halfLifeDays && options.halfLifeDays > 0) this.halfLifeSeconds = options.halfLifeDays * 86400;
-    commits.forEach((commit, index) => this.addCommit(commit, index));
+    this.commits.forEach((commit, index) => this.addCommit(commit, index));
+  }
+
+  /** Incrementally adds a commit to an unweighted model. */
+  appendCommit(commit: HistoryCommit): void {
+    const index = this.commits.length;
+    this.commits.push(commit);
+    if (commit.commitTime > this.referenceTime) {
+      this.referenceTime = commit.commitTime;
+    }
+    this.addCommit(commit, index);
   }
 
   get fileCount(): number {

@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { backtest, backtestCommits, EVALUATION_MAX_FILES } from '../src/commands/backtest.js';
-import { diff } from '../src/commands/diff.js';
+import { collectChanges, diff } from '../src/commands/diff.js';
 import { fileReport } from '../src/commands/file.js';
+import { followUpBenchmark, followUpBenchmarkCommits, printFollowUpBenchmarkSection } from '../src/commands/followup-benchmark.js';
 import { buildMapData, mapOverviewPriority } from '../src/commands/map.js';
 import { classifiedPairs, scan } from '../src/commands/scan.js';
 import { loadContext } from '../src/context.js';
@@ -403,6 +404,621 @@ describe('cli', () => {
       assert.match(badConfig.stderr, /minShared/);
     } finally {
       rmSync(empty, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('explain my silence (diff diagnostics when 0 suggestions are produced)', () => {
+  it('distinguishes all six silence categories without claiming a change is safe', async () => {
+    const r = new FixtureRepo();
+    const extraDirs: string[] = [];
+    try {
+      for (let i = 0; i < 5; i++) {
+        r.touch(['src/billing.ts', 'templates/invoice-template.ts'], `billing ${i}`);
+        r.commit({
+          message: `api ${i}`,
+          write: {
+            'src/db.ts': `export const db = ${i + 1};\n`,
+            'src/api.ts': `import { db } from './db';\nexport const api = ${i + 1};\n`,
+          },
+        });
+      }
+      // File that only ever changed in solo commits (0 co-change partners)
+      for (let i = 0; i < 4; i++) {
+        r.touch(['src/isolated.ts'], `isolated ${i}`);
+      }
+
+      // 1. No files changed
+      const cleanCtx = await loadContext(r.dir, flags);
+      const noChanges = await diff(cleanCtx, { limit: 10, kinds: ['ghost', 'direct', 'indirect', 'test', 'unknown'] });
+      assert.equal(noChanges.suggestions.length, 0);
+      assert.equal(noChanges.silence?.primaryReason, 'no_changed_files');
+      assert.equal(noChanges.silence?.changedFiles, 0);
+
+      // 2. Changed files lack usable history
+      r.write('src/brand-new.ts', 'export const fresh = 1;\n');
+      const noHistoryRes = await diff(await loadContext(r.dir, flags), { limit: 10, kinds: ['ghost'] });
+      assert.equal(noHistoryRes.silence?.primaryReason, 'no_history_for_changed_files');
+      assert.equal(noHistoryRes.silence?.changedFiles, 1);
+      assert.equal(noHistoryRes.silence?.changedWithHistory, 0);
+      const cliNoHistory = runCli(['diff'], r.dir);
+      assert.match(cliNoHistory.stdout, /none of the changed files have usable history/);
+      assert.doesNotMatch(cliNoHistory.stdout, /Nothing obviously missing|safe/i);
+      rmSync(join(r.dir, 'src/brand-new.ts'));
+
+      // 3. No qualifying historical relationships exist (0 co-change partners)
+      r.write('src/isolated.ts', 'export const isolated = "edited";\n');
+      const isolatedRes = await diff(await loadContext(r.dir, flags), { limit: 10, kinds: ['ghost', 'direct', 'unknown'] });
+      assert.equal(isolatedRes.silence?.primaryReason, 'no_cochange_partners');
+      assert.equal(isolatedRes.silence?.rawCompanions, 0);
+      const cliIsolated = runCli(['diff'], r.dir);
+      assert.match(cliIsolated.stdout, /no other live file in the baseline model ever co-changed/);
+      assert.match(cliIsolated.stdout, /does not guarantee the change is complete/);
+      assert.doesNotMatch(cliIsolated.stdout, /Nothing obviously missing/);
+      r.git('checkout', '-q', '--', 'src/isolated.ts');
+
+      // 4. Companions exist but are already included in the changeset
+      r.write('src/billing.ts', 'export const bill = 99;\n');
+      r.write('templates/invoice-template.ts', 'export const tpl = 99;\n');
+      const touchedRes = await diff(await loadContext(r.dir, flags), { limit: 10, kinds: ['ghost'] });
+      assert.equal(touchedRes.silence?.primaryReason, 'all_companions_touched');
+      assert.ok((touchedRes.silence?.touchedCompanions ?? 0) >= 1);
+      assert.match(touchedRes.silence?.details[0] ?? '', /already included in this changeset/);
+      const cliTouched = runCli(['diff'], r.dir);
+      assert.match(cliTouched.stdout, /already included in this changeset/);
+      assert.doesNotMatch(cliTouched.stdout, /Nothing obviously missing/);
+      r.git('checkout', '-q', '--', 'src/billing.ts', 'templates/invoice-template.ts');
+
+      // 5a. Excluded by configured relationship kind filter (--kinds)
+      r.write('src/api.ts', "import { db } from './db';\nexport const api = 999;\n");
+      const kindFilteredRes = await diff(await loadContext(r.dir, flags), { limit: 10, kinds: ['ghost'] });
+      assert.equal(kindFilteredRes.silence?.primaryReason, 'filtered_by_kinds');
+      assert.equal(kindFilteredRes.silence?.filteredByKind, 1);
+      assert.match(kindFilteredRes.silence?.details[0] ?? '', /excluded by --kinds \(direct\)/);
+      r.git('checkout', '-q', '--', 'src/api.ts');
+
+      // 5b. Excluded by configured thresholds (--min-shared / --min-confidence)
+      r.write('src/billing.ts', 'export const bill = 100;\n');
+      const thresholdFilteredRes = await diff(
+        await loadContext(r.dir, { minShared: 20, minConfidence: 0.95 }),
+        { limit: 10, kinds: ['ghost', 'direct', 'unknown'] },
+      );
+      assert.equal(thresholdFilteredRes.silence?.primaryReason, 'filtered_by_thresholds');
+      assert.ok((thresholdFilteredRes.silence?.filteredByThreshold ?? 0) >= 1);
+      assert.match(thresholdFilteredRes.silence?.details[0] ?? '', /fell below thresholds/);
+      r.git('checkout', '-q', '--', 'src/billing.ts');
+
+      // 6. Analysis limited by shallow or insufficient Git history
+      const shallowDir = mkdtempSync(join(tmpdir(), 'ra-silence-shallow-'));
+      extraDirs.push(shallowDir);
+      spawnSync('git', ['clone', '-q', '--depth', '1', `file://${r.dir}`, shallowDir]);
+      writeFileSync(join(shallowDir, 'src/billing.ts'), 'export const shallowEdit = 1;\n');
+      const shallowCtx = await loadContext(shallowDir, { minShared: 3, minConfidence: 0.4 });
+      const shallowRes = await diff(shallowCtx, { limit: 10, kinds: ['ghost'] });
+      assert.equal(shallowRes.silence?.shallowHistory, true);
+      assert.ok(shallowRes.silence?.reasons.includes('limited_repo_history'));
+      assert.equal(shallowRes.silence?.primaryReason, 'limited_repo_history');
+      assert.ok(shallowRes.silence?.details.some((d) => /shallow|insufficient/i.test(d)));
+    } finally {
+      r.cleanup();
+      extraDirs.forEach((d) => rmSync(d, { recursive: true, force: true }));
+    }
+  });
+
+  it('flags partial history truncated by --max-commits or --since via structured flags (S1)', async () => {
+    const r = new FixtureRepo();
+    try {
+      for (let i = 0; i < 60; i++) {
+        r.touch(['src/solo.ts'], `solo ${i}`, { day: i });
+      }
+      r.write('src/solo.ts', 'export const edited = true;\n');
+
+      // Full 60-commit history is not limited
+      const fullCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, maxCommits: 5000 });
+      const fullRes = await diff(fullCtx, { limit: 10, kinds: ['ghost'] });
+      assert.equal(fullRes.silence?.limitedHistory, false);
+      assert.ok(!fullRes.silence?.reasons.includes('limited_repo_history'));
+
+      // Truncated by --max-commits (55 < 60 actual commits, even though 55 >= 50)
+      const truncatedCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, maxCommits: 55 });
+      assert.equal(truncatedCtx.history.stats.truncated, true);
+      const truncatedRes = await diff(truncatedCtx, { limit: 10, kinds: ['ghost'] });
+      assert.equal(truncatedRes.silence?.limitedHistory, true);
+      assert.ok(truncatedRes.silence?.reasons.includes('limited_repo_history'));
+      assert.ok(truncatedRes.silence?.details.some((d) => /--max-commits/i.test(d)));
+
+      // Limited by --since
+      const sinceCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, since: '2020-01-01' });
+      const sinceRes = await diff(sinceCtx, { limit: 10, kinds: ['ghost'] });
+      assert.equal(sinceRes.silence?.limitedHistory, true);
+      assert.ok(sinceRes.silence?.reasons.includes('limited_repo_history'));
+      assert.ok(sinceRes.silence?.details.some((d) => /--since/i.test(d)));
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('recognizes a companion renamed in the active branch changeset as touched rather than deleted (S2) and preserves caller warnings (C1)', async () => {
+    const r = new FixtureRepo();
+    try {
+      for (let i = 0; i < 5; i++) {
+        r.touch(['src/a.ts', 'src/c.ts'], `pair ${i}`);
+      }
+      r.git('checkout', '-qb', 'feature');
+      r.git('mv', 'src/c.ts', 'src/d.ts');
+      r.git('commit', '-qm', 'rename c -> d');
+      r.write('src/a.ts', 'export const a = "edited";\n');
+
+      const ctx = await loadContext(r.dir, flags, { base: 'main' });
+      const res = await diff(ctx, { base: 'main', limit: 10, kinds: ['ghost'] });
+      assert.equal(res.suggestions.length, 0);
+      assert.equal(res.silence?.deletedCompanions, 0);
+      assert.equal(res.silence?.primaryReason, 'all_companions_touched');
+      assert.ok((res.silence?.touchedCompanions ?? 0) >= 1);
+
+      // C1: merge commit on branch does not mutate caller's ctx.warnings when calling collectChanges or diff
+      r.git('checkout', '-q', 'main');
+      r.touch(['src/side.ts'], 'main advance');
+      r.git('checkout', '-q', 'feature');
+      r.git('merge', '--no-ff', '-qm', 'merge main into feature', 'main');
+
+      const callerCtx = await loadContext(r.dir, flags, { base: 'main' });
+      const beforeWarnings = [...callerCtx.warnings];
+      await collectChanges(callerCtx, 'main');
+      assert.deepEqual(callerCtx.warnings, beforeWarnings);
+      const mergeDiff = await diff(callerCtx, { base: 'main', limit: 10, kinds: ['ghost'] });
+      assert.deepEqual(callerCtx.warnings, beforeWarnings);
+      assert.ok(mergeDiff.meta.warnings.some((w) => /merge commits/i.test(w)));
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('prioritizes no_cochange_partners when 0 partners exist and filtered_by_thresholds when untouched partners were filtered (S3)', async () => {
+    const r = new FixtureRepo();
+    try {
+      // 10 filler commits so total repo history >= minShared (5)
+      for (let i = 0; i < 10; i++) {
+        r.touch(['src/a.ts', 'src/b.ts'], `pair ${i}`);
+      }
+      // lonely.ts has only 1 commit (< minShared=5) and 0 co-change partners
+      r.touch(['src/lonely.ts'], 'lonely commit');
+      // weak.ts co-changes with a.ts only once (below minShared=5)
+      r.touch(['src/a.ts', 'src/weak.ts'], 'weak link');
+
+      // Finding 1: lonely.ts has < minShared commits AND 0 partners -> primaryReason is no_cochange_partners
+      r.write('src/lonely.ts', 'export const lonely = 2;\n');
+      const lonelyRes = await diff(
+        await loadContext(r.dir, { minShared: 5, minConfidence: 0.4 }),
+        { limit: 10, kinds: ['ghost'] },
+      );
+      assert.equal(lonelyRes.silence?.rawCompanions, 0);
+      assert.equal(lonelyRes.silence?.primaryReason, 'no_cochange_partners');
+      assert.ok(!lonelyRes.silence?.reasons.includes('filtered_by_thresholds'));
+      r.git('checkout', '-q', '--', 'src/lonely.ts');
+
+      // Finding 2: touching a.ts + b.ts while weak.ts is untouched and below thresholds ->
+      // primaryReason is filtered_by_thresholds, with all_companions_touched secondary
+      r.write('src/a.ts', 'export const a = 999;\n');
+      r.write('src/b.ts', 'export const b = 999;\n');
+      const mixedRes = await diff(
+        await loadContext(r.dir, { minShared: 5, minConfidence: 0.4 }),
+        { limit: 10, kinds: ['ghost'] },
+      );
+      assert.equal(mixedRes.silence?.primaryReason, 'filtered_by_thresholds');
+      assert.deepEqual(mixedRes.silence?.reasons.slice(0, 2), ['filtered_by_thresholds', 'all_companions_touched']);
+    } finally {
+      r.cleanup();
+    }
+  });
+});
+
+describe('follow-up fix benchmark', () => {
+  it('trains strictly on pre-change history before each candidate and reports matches, false positives, coverage, and baselines', () => {
+    const commits: HistoryCommit[] = [];
+    let t = 1_700_000_000;
+    const pushCommit = (hash: string, files: string[], subject: string, deltaHours = 24, author = 'Alice') => {
+      t += deltaHours * 3600;
+      commits.push({ hash, author, authorEmail: `${author.toLowerCase()}@example.com`, time: t, commitTime: t, subject, files });
+    };
+
+    // Initial training history (24 commits):
+    // - popular1.ts and popular2.ts change often so popularity baseline prefers them
+    for (let i = 0; i < 10; i++) pushCommit(`pop-${i}`, ['src/popular1.ts', 'src/popular2.ts'], `popular work ${i}`);
+    // - billing.ts and invoice.ts co-change 4 times (100% confidence, meets minShared=3)
+    for (let i = 0; i < 4; i++) pushCommit(`bill-${i}`, ['src/billing.ts', 'templates/invoice.ts'], `billing pair ${i}`);
+    // - earlyA.ts and earlyB.ts co-change ONLY TWICE before the held-out window (below minShared=3!)
+    for (let i = 0; i < 2; i++) pushCommit(`early-${i}`, ['src/earlyA.ts', 'src/earlyB.ts'], `early pair ${i}`);
+    // - filler solo commits so held-out 25% covers the candidate sequence below
+    for (let i = 0; i < 8; i++) pushCommit(`solo-${i}`, ['src/unrelated.ts'], `solo ${i}`);
+
+    // Held-out window (8 commits -> testFraction = 8 / 32 = 0.25):
+    // Candidate 1: initial commit touches earlyA.ts, followed 1h later by fix touching earlyB.ts.
+    // Because earlyA.ts + earlyB.ts only have 2 prior co-changes before `c1-init`, `co-change` (minShared=3)
+    // MUST NOT trigger on Candidate 1, even though they co-change again later in the held-out window!
+    pushCommit('c1-init', ['src/earlyA.ts'], 'feat: update earlyA', 24, 'Alice');
+    pushCommit('c1-fix', ['src/earlyB.ts'], 'fix: forgot earlyB companion', 1, 'Alice');
+
+    // Now earlyA.ts and earlyB.ts co-change twice more so they reach 4 shared commits BEFORE Candidate 2
+    pushCommit('mid-pair-1', ['src/earlyA.ts', 'src/earlyB.ts'], 'pair update 1', 24, 'Alice');
+    pushCommit('mid-pair-2', ['src/earlyA.ts', 'src/earlyB.ts'], 'pair update 2', 24, 'Alice');
+
+    // Candidate 2: initial commit touches earlyA.ts, followed 2h later by follow-up touching earlyB.ts.
+    // Now pre-candidate history has 4 shared commits, so `co-change` triggers and matches earlyB.ts!
+    pushCommit('c2-init', ['src/earlyA.ts'], 'feat: second earlyA change', 24, 'Alice');
+    pushCommit('c2-fix', ['src/earlyB.ts'], 'follow-up: sync earlyB', 2, 'Alice');
+
+    // Candidate 3 (False positive): initial commit touches billing.ts, followed 1h later by same-author commit
+    // touching unrelated.ts (NOT templates/invoice.ts). `co-change` recommends templates/invoice.ts -> false positive!
+    pushCommit('c3-init', ['src/billing.ts'], 'feat: tweak billing', 24, 'Bob');
+    pushCommit('c3-next', ['src/unrelated.ts'], 'chore: touch unrelated', 1, 'Bob');
+
+    const report = followUpBenchmarkCommits(
+      commits,
+      { minShared: 3, minConfidence: 0.5 },
+      { testFraction: 0.25, k: 1, windowHours: 12 },
+    );
+
+    assert.equal(report.modelsBuilt, 1);
+    assert.equal(report.candidatesEvaluated, 3);
+    assert.equal(report.totalLaterFiles, 3);
+
+    // Verify Candidate 1 did NOT leak future co-changes from mid-pair-1 / mid-pair-2
+    const case1 = report.cases.find((c) => c.initialCommit.hash === 'c1-init')!;
+    assert.deepEqual(case1.recommended, []);
+    assert.deepEqual(case1.matched, []);
+    assert.ok(case1.signals.includes('subject-cue'));
+
+    // Verify Candidate 2 trained on commits up to c2-init and matched src/earlyB.ts
+    const case2 = report.cases.find((c) => c.initialCommit.hash === 'c2-init')!;
+    assert.ok(case2.trainingCommitsBefore > case1.trainingCommitsBefore);
+    assert.deepEqual(case2.recommended, ['src/earlyB.ts']);
+    assert.deepEqual(case2.matched, ['src/earlyB.ts']);
+    assert.deepEqual(case2.falsePositives, []);
+
+    // Verify Candidate 3 recorded templates/invoice.ts as a false positive
+    const case3 = report.cases.find((c) => c.initialCommit.hash === 'c3-init')!;
+    assert.deepEqual(case3.recommended, ['templates/invoice.ts']);
+    assert.deepEqual(case3.matched, []);
+    assert.deepEqual(case3.falsePositives, ['templates/invoice.ts']);
+
+    const [cochange, noThresholds, popularity, popularitySame] = report.strategies;
+    assert.equal(cochange!.candidates, 3);
+    assert.equal(cochange!.triggered, 2); // c2-init and c3-init
+    assert.equal(cochange!.coverage, 2 / 3);
+    assert.equal(cochange!.recommendations, 2);
+    assert.equal(cochange!.correctMatches, 1); // c2-init
+    assert.equal(cochange!.falsePositives, 1); // c3-init
+    assert.equal(cochange!.hitCandidates, 1);
+    assert.equal(cochange!.falseAlarmCandidates, 1);
+    assert.equal(cochange!.hitRate, 0.5);
+    assert.equal(cochange!.precision, 0.5);
+
+    // No-thresholds strategy triggers on all 3 candidates and matches both c1-init and c2-init
+    assert.equal(noThresholds!.triggered, 3);
+    assert.equal(noThresholds!.correctMatches, 2);
+    assert.equal(noThresholds!.falsePositives, 1);
+
+    // Popularity baseline always guesses src/popular1.ts (0 matches)
+    assert.equal(popularity!.triggered, 3);
+    assert.equal(popularity!.correctMatches, 0);
+    assert.equal(popularitySame!.triggered, 2);
+    assert.equal(popularitySame!.correctMatches, 0);
+
+    // Per-signal breakdown isolates subject-cue (c1 + c2 = 2 pairs) vs immediate-same-author (all 3)
+    assert.equal(report.bySignal['subject-cue'].candidates, 2);
+    assert.equal(report.bySignal['subject-cue'].strategies[0]?.triggered, 1);
+    assert.equal(report.bySignal['subject-cue'].strategies[0]?.correctMatches, 1);
+    assert.equal(report.bySignal['immediate-same-author'].candidates, 3);
+
+    // Honest methodology and limitations are included
+    assert.match(report.methodology, /committer timestamp/);
+    assert.match(report.methodology, /strictly on commits preceding the initial commit/);
+    assert.ok(report.limitations.some((l) => /not confirmed bug fixes or omissions/i.test(l)));
+  });
+
+  it('requires same author (B1), never pairs a follow-up twice (B2), and matches recommendation budgets (B3)', () => {
+    // B1: Alice's commit followed by Bob's "fix" commit inside the window -> 0 candidates
+    const b1Commits: HistoryCommit[] = [];
+    let t = 1_700_000_000;
+    for (let i = 0; i < 8; i++) {
+      t += 3600;
+      b1Commits.push({
+        hash: `train-${i}`,
+        author: 'Alice',
+        authorEmail: 'alice@example.com',
+        time: t,
+        commitTime: t,
+        subject: `pair ${i}`,
+        files: ['src/a.ts', 'src/b.ts'],
+      });
+    }
+    t += 3600;
+    b1Commits.push({
+      hash: 'alice-init',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      time: t,
+      commitTime: t,
+      subject: 'feat: touch a',
+      files: ['src/a.ts'],
+    });
+    t += 600;
+    b1Commits.push({
+      hash: 'bob-fix',
+      author: 'Bob',
+      authorEmail: 'bob@example.com',
+      time: t,
+      commitTime: t,
+      subject: 'fix: touch b',
+      files: ['src/b.ts'],
+    });
+    const b1Report = followUpBenchmarkCommits(b1Commits, { minShared: 3, minConfidence: 0.5 }, { testFraction: 0.2, k: 3 });
+    assert.equal(b1Report.candidatesEvaluated, 0);
+    assert.equal(b1Report.strategies[0]?.coverage, null);
+    assert.equal(b1Report.strategies[0]?.hitRate, null);
+    assert.equal(b1Report.strategies[0]?.precision, null);
+
+    // B2: Two initial commits I1, I2 followed by one follow-up F -> exactly 1 candidate (nearest initial I2 gets F)
+    const b2Commits = b1Commits.slice(0, 8);
+    t += 3600;
+    b2Commits.push({
+      hash: 'I1',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      time: t,
+      commitTime: t,
+      subject: 'feat: step 1 on a',
+      files: ['src/a.ts'],
+    });
+    t += 300;
+    b2Commits.push({
+      hash: 'I2',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      time: t,
+      commitTime: t,
+      subject: 'feat: step 2 on a',
+      files: ['src/a.ts'],
+    });
+    t += 300;
+    b2Commits.push({
+      hash: 'F',
+      author: 'Alice',
+      authorEmail: 'alice@example.com',
+      time: t,
+      commitTime: t,
+      subject: 'fix: update b alongside a',
+      files: ['src/a.ts', 'src/b.ts'],
+    });
+    const b2Report = followUpBenchmarkCommits(b2Commits, { minShared: 3, minConfidence: 0.5 }, { testFraction: 3 / 11, k: 3 });
+    assert.equal(b2Report.candidatesEvaluated, 1);
+    assert.equal(b2Report.cases[0]?.initialCommit.hash, 'I2');
+    assert.equal(b2Report.cases[0]?.followUpCommit.hash, 'F');
+
+    // B3 (F2 fixture): when k=3 and co-change makes 1 recommendation, `popularity, same changes`
+    // is capped to 1 recommendation (not 3), so its precision equals its hit rate.
+    const f2Commits: HistoryCommit[] = [];
+    let t2 = 1_700_000_000;
+    for (let i = 0; i < 6; i++) {
+      t2 += 3600;
+      f2Commits.push({
+        hash: `pop-${i}`,
+        author: 'Alice',
+        time: t2,
+        commitTime: t2,
+        subject: `pop ${i}`,
+        files: ['src/b.ts', 'src/p2.ts', 'src/p3.ts'],
+      });
+    }
+    for (let i = 0; i < 4; i++) {
+      t2 += 3600;
+      f2Commits.push({
+        hash: `ab-${i}`,
+        author: 'Alice',
+        time: t2,
+        commitTime: t2,
+        subject: `ab ${i}`,
+        files: ['src/a.ts', 'src/b.ts'],
+      });
+    }
+    t2 += 3600;
+    f2Commits.push({ hash: 'f2-init', author: 'Alice', time: t2, commitTime: t2, subject: 'feat: a', files: ['src/a.ts'] });
+    t2 += 300;
+    f2Commits.push({ hash: 'f2-fix', author: 'Alice', time: t2, commitTime: t2, subject: 'fix: b', files: ['src/b.ts'] });
+
+    const f2Report = followUpBenchmarkCommits(f2Commits, { minShared: 3, minConfidence: 0.5 }, { testFraction: 2 / 12, k: 3 });
+    const [f2Cochange, , f2PopAll, f2PopSame] = f2Report.strategies;
+    assert.equal(f2Cochange?.recommendations, 1);
+    assert.equal(f2Cochange?.precision, 1);
+    assert.equal(f2PopAll?.recommendations, 3);
+    assert.equal(f2PopSame?.recommendations, 1);
+    assert.equal(f2PopSame?.precision, f2PopSame?.hitRate);
+  });
+
+  it('never leaks future commits into earlier candidate recommendations, strips lifetime suffixes, and scales linearly (B4, B5)', () => {
+    const baseCommits: HistoryCommit[] = [];
+    let t = 1_700_000_000;
+    for (let i = 0; i < 12; i++) {
+      t += 3600;
+      baseCommits.push({
+        hash: `tr-${i}`,
+        author: 'Alice',
+        time: t,
+        commitTime: t,
+        subject: `train ${i}`,
+        files: ['src/a.ts\u00001', 'src/b.ts\u00001'],
+      });
+    }
+    // Held-out candidate pair at the same timestamp (0-second gap)
+    t += 3600;
+    baseCommits.push({
+      hash: 'cand-init',
+      logOrder: 1,
+      author: 'Alice',
+      time: t,
+      commitTime: t,
+      subject: 'feat: touch a',
+      files: ['src/a.ts\u00001'],
+    });
+    baseCommits.push({
+      hash: 'cand-follow',
+      logOrder: 0,
+      author: 'Alice',
+      time: t,
+      commitTime: t,
+      subject: 'fix: touch b',
+      files: ['src/b.ts\u00001'],
+    });
+    // Filler commits after the candidate
+    for (let i = 0; i < 4; i++) {
+      t += 86400 * 5;
+      baseCommits.push({
+        hash: `after-${i}`,
+        author: 'Bob',
+        time: t,
+        commitTime: t,
+        subject: `after ${i}`,
+        files: ['src/other.ts'],
+      });
+    }
+
+    const beforeFutureInjection = followUpBenchmarkCommits(
+      baseCommits,
+      { minShared: 3, minConfidence: 0.4 },
+      { testFraction: 6 / 18, k: 2 },
+    );
+    const caseBefore = beforeFutureInjection.cases.find((c) => c.initialCommit.hash === 'cand-init')!;
+    // Lifetime suffixes (\u00001) are stripped by pathOf in cases[]
+    assert.deepEqual(caseBefore.initialCommit.files, ['src/a.ts']);
+    assert.deepEqual(caseBefore.followUpCommit.laterFiles, ['src/b.ts']);
+    assert.deepEqual(caseBefore.recommended, ['src/b.ts']);
+
+    // Inject 20 future commits after `cand-follow` coupling `src/a.ts\u00001` with `src/future-trap.ts`
+    const withFutureTrap: HistoryCommit[] = [
+      ...baseCommits.slice(0, 14),
+      ...Array.from({ length: 20 }, (_, idx) => ({
+        hash: `trap-${idx}`,
+        author: 'Carol',
+        time: t + (idx + 1) * 86400 * 5,
+        commitTime: t + (idx + 1) * 86400 * 5,
+        subject: `trap ${idx}`,
+        files: ['src/a.ts\u00001', 'src/future-trap.ts'],
+      })),
+    ];
+    const afterFutureInjection = followUpBenchmarkCommits(
+      withFutureTrap,
+      { minShared: 3, minConfidence: 0.4 },
+      { testFraction: 22 / 34, k: 2 },
+    );
+    const caseAfter = afterFutureInjection.cases.find((c) => c.initialCommit.hash === 'cand-init')!;
+    assert.deepEqual(caseAfter.recommended, caseBefore.recommended);
+    assert.ok(!caseAfter.recommended.includes('src/future-trap.ts'));
+
+    // Scaling & model-count guard: 2,000 commits builds only 1 incremental model and caps cases[]
+    const scaleCommits: HistoryCommit[] = [];
+    let ts = 1_700_000_000;
+    for (let i = 0; i < 2000; i++) {
+      ts += 600;
+      const fileA = `src/mod-${i % 20}.ts`;
+      const fileB = `src/comp-${i % 20}.ts`;
+      scaleCommits.push({
+        hash: `s-${i}`,
+        author: `dev-${i % 4}`,
+        time: ts,
+        commitTime: ts,
+        subject: i % 2 === 0 ? `feat ${i}` : `fix ${i}`,
+        files: i % 3 === 0 ? [fileA, fileB] : i % 2 === 0 ? [fileA] : [fileB],
+      });
+    }
+    const startMs = Date.now();
+    const scaleReport = followUpBenchmarkCommits(
+      scaleCommits,
+      { minShared: 3, minConfidence: 0.4 },
+      { testFraction: 0.2, k: 3, maxCases: 10 },
+    );
+    const elapsedMs = Date.now() - startMs;
+    assert.equal(scaleReport.modelsBuilt, 1);
+    assert.ok(elapsedMs < 2000, `Expected 2,000-commit benchmark under 2000ms, took ${elapsedMs}ms`);
+    assert.ok(scaleReport.cases.length <= 10);
+    if (scaleReport.candidatesEvaluated > 10) {
+      assert.equal(scaleReport.casesTruncated, scaleReport.candidatesEvaluated - 10);
+    }
+
+    // Print formatting renders "n/a" when a strategy has 0 triggered recommendations
+    const zeroTriggerCommits: HistoryCommit[] = [];
+    for (let i = 0; i < 10; i++) {
+      zeroTriggerCommits.push({
+        hash: `z-${i}`,
+        author: 'Alice',
+        time: 1000 + i * 3600,
+        commitTime: 1000 + i * 3600,
+        subject: `solo ${i}`,
+        files: [i % 2 === 0 ? 'src/x.ts' : 'src/y.ts'],
+      });
+    }
+    const zeroTriggerReport = followUpBenchmarkCommits(
+      zeroTriggerCommits,
+      { minShared: 5, minConfidence: 0.9 },
+      { testFraction: 0.2, k: 2 },
+    );
+    assert.equal(zeroTriggerReport.strategies[0]?.triggered, 0);
+    assert.equal(zeroTriggerReport.strategies[0]?.hitRate, null);
+    assert.equal(zeroTriggerReport.strategies[0]?.precision, null);
+    const lines: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => lines.push(args.join(' '));
+    try {
+      printFollowUpBenchmarkSection(zeroTriggerReport);
+    } finally {
+      console.log = origLog;
+    }
+    assert.ok(lines.some((l) => l.includes('co-change') && l.includes('n/a')));
+  });
+
+  it('integrates with `backtest --follow-ups` via API and CLI without altering standard backtest scores', async () => {
+    const r = new FixtureRepo();
+    try {
+      for (let i = 0; i < 28; i++) {
+        r.touch(['src/a.ts', 'src/b.ts'], `pair ${i}`, { day: i * 2 });
+      }
+      // Held-out candidate follow-up within the same day (delta = 0h <= 48h)
+      r.touch(['src/a.ts'], 'feat: update a', { day: 60 });
+      r.touch(['src/b.ts'], 'fix: forgot b', { day: 60 });
+
+      const ctx = await loadContext(r.dir, flags);
+      const standard = backtest(ctx, { testFraction: 0.2, k: 2 });
+      const withFollowUps = backtest(ctx, { testFraction: 0.2, k: 2, followUps: true, followUpWindowHours: 48 });
+
+      assert.equal(standard.followUpBenchmark, undefined);
+      assert.deepEqual(withFollowUps.strategies, standard.strategies);
+      assert.ok(withFollowUps.followUpBenchmark);
+      assert.equal(withFollowUps.followUpBenchmark?.candidatesEvaluated, 1);
+      assert.equal(withFollowUps.followUpBenchmark?.strategies[0]?.correctMatches, 1);
+
+      const fbStandalone = followUpBenchmark(ctx, { testFraction: 0.2, k: 2, windowHours: 48 });
+      assert.equal(fbStandalone.candidatesEvaluated, 1);
+
+      const cliJson = runCli(['backtest', '--follow-ups', '--follow-up-window', '48', '--json'], r.dir);
+      assert.equal(cliJson.code, 0, cliJson.stderr);
+      const parsed = JSON.parse(cliJson.stdout);
+      assert.equal(parsed.followUpBenchmark.candidatesEvaluated, 1);
+
+      const cliText = runCli(['backtest', '--follow-ups'], r.dir);
+      assert.equal(cliText.code, 0, cliText.stderr);
+      assert.match(cliText.stdout, /Candidate follow-up benchmark/);
+      assert.match(cliText.stdout, /not confirmed bug fixes or omissions/);
+
+      // CLI validation: invalid --follow-up-window and --follow-up-window without --follow-ups
+      const cliBadWindow = runCli(['backtest', '--follow-ups', '--follow-up-window', '0'], r.dir);
+      assert.equal(cliBadWindow.code, 1);
+      assert.match(cliBadWindow.stderr, /Expected a positive number/);
+
+      const cliOrphanWindow = runCli(['backtest', '--follow-up-window', '24'], r.dir);
+      assert.equal(cliOrphanWindow.code, 2);
+      assert.match(cliOrphanWindow.stderr, /--follow-up-window requires --follow-ups/);
+    } finally {
+      r.cleanup();
     }
   });
 });

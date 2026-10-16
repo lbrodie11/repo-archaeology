@@ -6,6 +6,8 @@ export interface HistoryCommit {
   /** Position in git log output (0 is newest), used when timestamps tie. */
   logOrder?: number;
   author: string;
+  /** Normalized author email when present in git log, used for same-author matching. */
+  authorEmail?: string;
   /** Author time, for display ("last changed together 18 days ago"). */
   time: number;
   /** Committer time, for chronological ordering (backtests). */
@@ -30,6 +32,8 @@ export interface HistoryStats {
   /** Commits skipped because every file they touched was ignored. */
   emptyAfterIgnores: number;
   renamesFollowed: number;
+  /** True when git had additional older commits beyond `maxCommits`. */
+  truncated?: boolean;
   oldestTime?: number;
   newestTime?: number;
 }
@@ -155,10 +159,12 @@ export class HistoryBuilder {
       stats.emptyAfterIgnores++;
       return;
     }
+    const email = commit.authorEmail.trim().toLowerCase();
     const entry: HistoryCommit = {
       hash: commit.hash,
       logOrder,
       author: commit.authorName || commit.authorEmail,
+      ...(email ? { authorEmail: email } : {}),
       time: commit.authorTime,
       commitTime: commit.commitTime,
       subject: commit.subject,
@@ -178,6 +184,10 @@ export class HistoryBuilder {
     this.commits.push(entry);
     stats.oldestTime = Math.min(stats.oldestTime ?? Infinity, commit.authorTime);
     stats.newestTime = Math.max(stats.newestTime ?? -Infinity, commit.authorTime);
+  }
+
+  markTruncated(): void {
+    this.stats.truncated = true;
   }
 
   finish(): History {
@@ -201,6 +211,19 @@ export function processCommits(raw: Iterable<RawCommit>, options: BuilderOptions
 
 export async function loadHistory(root: string, options: HistoryOptions): Promise<History> {
   const builder = new HistoryBuilder(options);
-  await readLog(root, options, (commit) => builder.add(commit));
+  const limit = options.maxCommits && options.maxCommits > 0 ? Math.floor(options.maxCommits) : undefined;
+  let seen = 0;
+  await readLog(
+    root,
+    limit !== undefined ? { ...options, maxCommits: limit + 1 } : options,
+    (commit) => {
+      seen++;
+      if (limit !== undefined && seen > limit) {
+        builder.markTruncated();
+        return;
+      }
+      builder.add(commit);
+    },
+  );
   return builder.finish();
 }

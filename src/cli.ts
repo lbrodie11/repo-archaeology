@@ -163,10 +163,15 @@ program
   .option('-k, --k <n>', 'suggestions considered per changed file (default 3)', positiveInt, 3)
   .option('--before <date>', 'leave out commits from this date on (tune on an older window)', dateValue)
   .option('--ghosts', 'diagnose the ghost subset using current imports (contains future information)')
-  .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean }, cmd: Command) => {
+  .option('--follow-ups', 'also evaluate candidate temporal follow-up commits in the held-out window')
+  .option('--follow-up-window <hours>', 'maximum hours between an initial commit and a candidate follow-up (default 48)', positiveNumber)
+  .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean; followUps?: boolean; followUpWindow?: number }, cmd: Command) => {
+    if (opts.followUpWindow !== undefined && !opts.followUps) {
+      throw new UsageError('--follow-up-window requires --follow-ups.');
+    }
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
-    const result = backtest(ctx, opts);
+    const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow });
     if (global.json) printJson(result);
     else printBacktest(result);
   });

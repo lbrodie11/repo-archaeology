@@ -29,6 +29,8 @@ export interface Context {
   classifier: RelationshipClassifier;
   thresholds: Thresholds;
   warnings: string[];
+  /** True when the repository is a shallow clone. */
+  shallow?: boolean;
   /** Base ref used to isolate history, when loaded for a branch comparison. */
   base?: string;
   /** Commit SHA of the unique merge-base, only set when `base` is provided. */
@@ -37,7 +39,9 @@ export interface Context {
   headSha?: string;
 }
 
-const SHALLOW_WARNING =
+export const MIN_FULL_HISTORY_COMMITS = 50;
+
+export const SHALLOW_WARNING =
   'This is a shallow clone, so only part of the history is available. Run `git fetch --unshallow` for complete results.';
 
 /**
@@ -87,7 +91,7 @@ async function trainBaseline(
   if (shallow) warnings.push(SHALLOW_WARNING);
   if (history.commits.length === 0) {
     warnings.push('No usable commits were found (check --since, --max-files and your ignore patterns).');
-  } else if (history.commits.length < 50) {
+  } else if (history.commits.length < MIN_FULL_HISTORY_COMMITS) {
     warnings.push(`Only ${history.commits.length} usable commits: results will be thin until the project has more history.`);
   }
   const model = new CoChangeModel(history.commits, { halfLifeDays: settings.halfLifeDays });
@@ -125,6 +129,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     classifier,
     thresholds: { minShared: settings.minShared, minConfidence: settings.minConfidence },
     warnings: trained.warnings,
+    shallow,
     base: options?.base,
     mergeBaseSha,
     headSha,
@@ -137,7 +142,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
  * - When `base` is omitted: ensures `ctx` is trained at `HEAD` (reloading if `ctx` was previously base-isolated).
  */
 export async function isolateBaselineContext(ctx: Context, base?: string): Promise<Context> {
-  const shallow = ctx.warnings.includes(SHALLOW_WARNING);
+  const shallow = ctx.shallow ?? ctx.warnings.includes(SHALLOW_WARNING);
   if (base === undefined) {
     if (ctx.base === undefined) return ctx;
     const headSha = ctx.headSha ?? (await resolveCommit(ctx.root, 'HEAD'));
@@ -147,6 +152,7 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
       history: trained.history,
       model: trained.model,
       warnings: trained.warnings,
+      shallow,
       base: undefined,
       mergeBaseSha: undefined,
       headSha,
@@ -158,7 +164,7 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
     ctx.headSha !== undefined ? Promise.resolve(ctx.headSha) : resolveCommit(ctx.root, 'HEAD'),
   ]);
   if (ctx.base === undefined && mergeBaseSha === headSha) {
-    return { ...ctx, base, mergeBaseSha, headSha };
+    return { ...ctx, shallow, base, mergeBaseSha, headSha };
   }
   const trained = await trainBaseline(ctx.root, ctx.settings, mergeBaseSha, shallow);
   return {
@@ -166,6 +172,7 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
     history: trained.history,
     model: trained.model,
     warnings: trained.warnings,
+    shallow,
     base,
     mergeBaseSha,
     headSha,
