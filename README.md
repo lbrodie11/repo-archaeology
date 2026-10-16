@@ -16,18 +16,26 @@ Everything runs locally against `.git`. There is no account, upload, or server, 
 
 ## Quick start
 
-Requires Node.js 22+ and Git 2.24+. Use a supported LTS release for everyday work. CI targets Node 22, 24, and 26; Node 26 is currently a non-LTS release.
-
-The npm package is not published yet. Install the current version from source:
+Requires Node.js 22+ and Git 2.24+. Run it inside any Git repository:
 
 ```bash
-git clone https://github.com/lbrodie11/repo-archaeology.git
-cd repo-archaeology
-npm ci
-npm run build
-npm link
+# Explore your current Git repository
+npx repo-archaeology
 
-repo-archaeology -C /path/to/your/repository
+# Open the interactive map
+npx repo-archaeology map
+
+# Check potentially overlooked files
+npx repo-archaeology diff
+
+# Show all options
+npx repo-archaeology --help
+```
+
+Or install it globally:
+
+```bash
+npm install -g repo-archaeology
 ```
 
 With no subcommand, Repo Archaeology checks changed files when they have usable history. On a clean tree, it shows the strongest hidden relationships and points you to the map.
