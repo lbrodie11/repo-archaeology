@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+        include:
+          # Node 20 does not expand the test glob itself, and npm scripts on Windows have no shell globbing.
+          - os: windows-latest
+            node: 22
+          - os: windows-latest
+            node: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Configure git for test fixtures
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Smoke test the built CLI on this repository
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js scan --json
+          node dist/cli.js backtest --json --test-fraction 0.5
+        continue-on-error: true # young repositories may have too little history for a backtest

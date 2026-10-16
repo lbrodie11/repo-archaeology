@@ -151,7 +151,8 @@ export class ImportResolver {
   }
 
   resolve(fromFile: string, rawSpecifier: string): Resolution {
-    const specifier = rawSpecifier.replace(/[?#].*$/, '');
+    // Drop query/hash suffixes (`./x.svg?raw`), but a leading `#` is a subpath alias (`#/utils`).
+    const specifier = rawSpecifier.startsWith('#') ? rawSpecifier.replace(/\?.*$/, '') : rawSpecifier.replace(/[?#].*$/, '');
     if (specifier === '') return { kind: 'unresolved' };
     if (/^[a-z][a-z0-9+.-]*:/i.test(specifier)) return { kind: 'external' }; // node:fs, https://, data:
 

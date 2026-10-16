@@ -44,7 +44,7 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R
 export class RelationshipClassifier {
   private readonly resolver: ImportResolver;
   private readonly cache = new Map<string, FileImports>();
-  private readonly reachCache = new Map<string, Set<string>>();
+  private readonly reachCache = new Map<string, Reach>();
 
   constructor(private readonly files: RepoFiles) {
     this.resolver = new ImportResolver(files);
@@ -54,11 +54,14 @@ export class RelationshipClassifier {
     if (isTestPair(a, b)) return 'test';
     const ia = this.analyze(a);
     const ib = this.analyze(b);
-    if (this.reachable(a).has(b) || this.reachable(b).has(a)) return 'direct';
+    const ra = this.reachable(a);
+    const rb = this.reachable(b);
+    if (ra.files.has(b) || rb.files.has(a)) return 'direct';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (!ia.analyzable && !ib.analyzable) return 'unknown';
-    if ((ia.analyzable && ia.unresolved > 0) || (ib.analyzable && ib.unresolved > 0)) return 'unknown';
+    // "No import link" is only a claim we can make if every path we followed was resolved.
+    if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete)) return 'unknown';
     return 'ghost';
   }
 
@@ -80,7 +83,7 @@ export class RelationshipClassifier {
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
         if (!ia.analyzable && !ib.analyzable) return 'import check not possible for these file types';
-        return 'some imports could not be resolved (aliases?)';
+        return 'some imports could not be resolved (aliases or barrel files), so an import link cannot be ruled out';
       }
     }
   }
@@ -105,22 +108,35 @@ export class RelationshipClassifier {
     return result;
   }
 
-  /** Direct imports plus whatever is re-exported through index (barrel) files. */
-  private reachable(file: string): Set<string> {
+  /**
+   * Direct imports plus whatever is re-exported through index (barrel) files.
+   * `incomplete` is set when the file itself or any barrel followed had an import
+   * we could not resolve, or barrels nested deeper than we follow.
+   */
+  private reachable(file: string): Reach {
     const cached = this.reachCache.get(file);
     if (cached) return cached;
-    const reach = new Set<string>();
+    const reach: Reach = { files: new Set(), incomplete: false };
     const visit = (current: string, depth: number) => {
-      for (const target of this.analyze(current).imports) {
-        if (reach.has(target)) continue;
-        reach.add(target);
-        if (depth < BARREL_DEPTH && isIndexFile(target)) visit(target, depth + 1);
+      const info = this.analyze(current);
+      if (info.unresolved > 0) reach.incomplete = true;
+      for (const target of info.imports) {
+        if (reach.files.has(target)) continue;
+        reach.files.add(target);
+        if (!isIndexFile(target)) continue;
+        if (depth < BARREL_DEPTH) visit(target, depth + 1);
+        else reach.incomplete = true;
       }
     };
     visit(file, 0);
     this.reachCache.set(file, reach);
     return reach;
   }
+}
+
+interface Reach {
+  files: Set<string>;
+  incomplete: boolean;
 }
 
 function isIndexFile(path: string): boolean {

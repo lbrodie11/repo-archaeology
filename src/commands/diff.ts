@@ -52,7 +52,9 @@ export function suggestMissing(ctx: Context, changes: ChangedFile[], options: Pi
   }
 
   const changed: ChangedFileView[] = [];
-  const best = new Map<number, { companion: Companion; fromPath: string; linkedFrom: Set<string> }>();
+  // Classify and filter every (changed file, partner) link *before* picking the strongest
+  // per partner: otherwise a strong import link could hide a weaker but qualifying ghost wire.
+  const best = new Map<number, { companion: Companion; fromPath: string; relationship: Relationship; linkedFrom: Set<string> }>();
   for (const file of changes) {
     const historyPath = model.id(file.path) !== undefined ? file.path : file.oldPath !== undefined && model.id(file.oldPath) !== undefined ? file.oldPath : undefined;
     changed.push({ ...file, historyPath, hasHistory: historyPath !== undefined });
@@ -60,29 +62,29 @@ export function suggestMissing(ctx: Context, changes: ChangedFile[], options: Pi
     for (const companion of model.companions(model.id(historyPath)!, ctx.thresholds)) {
       const target = model.path(companion.to);
       if (touched.has(target) || !ctx.currentFiles.has(target)) continue;
+      const relationship = ctx.classifier.classify(file.path, target);
+      if (!options.kinds.includes(relationship)) continue;
       const existing = best.get(companion.to);
       if (!existing) {
-        best.set(companion.to, { companion, fromPath: file.path, linkedFrom: new Set([file.path]) });
+        best.set(companion.to, { companion, fromPath: file.path, relationship, linkedFrom: new Set([file.path]) });
       } else {
         existing.linkedFrom.add(file.path);
         if (compareCompanions(companion, existing.companion) < 0) {
           existing.companion = companion;
           existing.fromPath = file.path;
+          existing.relationship = relationship;
         }
       }
     }
   }
 
-  const ranked = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
-  const suggestions: Suggestion[] = [];
-  for (const entry of ranked) {
-    if (suggestions.length >= options.limit) break;
-    const to = model.path(entry.companion.to);
-    const relationship = ctx.classifier.classify(entry.fromPath, to);
-    if (!options.kinds.includes(relationship)) continue;
-    const view = toView(ctx, entry.companion, relationship, entry.fromPath);
-    suggestions.push({ ...view, alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath) });
-  }
+  const suggestions: Suggestion[] = [...best.values()]
+    .sort((x, y) => compareCompanions(x.companion, y.companion))
+    .slice(0, options.limit)
+    .map((entry) => ({
+      ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
+      alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
+    }));
   return { changed, suggestions };
 }
 

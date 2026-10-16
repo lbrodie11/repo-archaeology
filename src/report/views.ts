@@ -28,6 +28,8 @@ export interface RelationshipView {
   reverseConfidence: number;
   /** Evidence-adjusted ranking score (Wilson lower bound of confidence). */
   score: number;
+  /** True when confidence is recency-weighted (--half-life), so it is not simply shared / fromChanges. */
+  weighted: boolean;
   lastTogether: string;
   crossesDirectories: boolean;
   evidence: EvidenceView[];
@@ -98,6 +100,7 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
     confidence: round(companion.confidence),
     reverseConfidence: round(companion.reverseConfidence),
     score: round(companion.score),
+    weighted: model.weighted,
     lastTogether: isoDate(companion.stat.lastTime),
     crossesDirectories: posix.dirname(from) !== posix.dirname(to),
     evidence: companion.stat.evidence.map((i) => {
@@ -149,7 +152,9 @@ export function printEvidence(view: RelationshipView, indent = '    '): void {
 }
 
 export function describeStrength(view: RelationshipView): string {
-  return `${view.shared} of ${view.fromChanges} commits (${pct(view.confidence)}) · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
+  // With a half-life the percentage is weighted, so it is not shared/total: say so.
+  const rate = view.weighted ? `${pct(view.confidence)} recency-weighted` : pct(view.confidence);
+  return `${view.shared} of ${view.fromChanges} commits (${rate}) · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
 }
 
 export const DISCLAIMER = 'Historical signal, not proof: check whether the change really needs these files.';

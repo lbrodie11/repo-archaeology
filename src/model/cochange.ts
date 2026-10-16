@@ -55,6 +55,8 @@ export class CoChangeModel {
   readonly files: string[] = [];
   readonly changeCount: number[] = [];
   readonly changeWeight: number[] = [];
+  /** Sum of squared commit weights, for the effective sample size. */
+  private readonly changeWeightSq: number[] = [];
   readonly lastTime: number[] = [];
   readonly authors: Map<string, number>[] = [];
   private readonly ids = new Map<string, number>();
@@ -87,6 +89,23 @@ export class CoChangeModel {
     return this.adjacency[a]?.get(b);
   }
 
+  /**
+   * How many commits' worth of evidence a file's history carries. Equals the raw
+   * change count without a half-life; with one, old commits count for less
+   * (Kish effective sample size: (Σw)² / Σw²), so 3 recent commits plus 1,000
+   * nearly weightless old ones count as about 3, not 1,003.
+   */
+  effectiveChanges(id: number): number {
+    const sumSq = this.changeWeightSq[id] ?? 0;
+    const sum = this.changeWeight[id] ?? 0;
+    return sumSq === 0 ? 0 : (sum * sum) / sumSq;
+  }
+
+  /** Whether confidence is recency-weighted (a half-life is set). */
+  get weighted(): boolean {
+    return this.halfLifeSeconds !== undefined;
+  }
+
   /** Confidence that `to` changes, given that `from` changed. */
   confidence(stat: PairStat, from: number): number {
     const denominator = this.changeWeight[from] ?? 0;
@@ -108,7 +127,7 @@ export class CoChangeModel {
         stat,
         confidence,
         reverseConfidence: this.confidence(stat, to),
-        score: wilsonLowerBound(confidence, this.changeCount[from] ?? 0),
+        score: wilsonLowerBound(confidence, this.effectiveChanges(from)),
       });
     }
     return result.sort(compareCompanions);
@@ -126,8 +145,8 @@ export class CoChangeModel {
         const passAB = ab >= thresholds.minConfidence;
         const passBA = ba >= thresholds.minConfidence;
         if (!passAB && !passBA) continue;
-        const scoreAB = wilsonLowerBound(ab, this.changeCount[a] ?? 0);
-        const scoreBA = wilsonLowerBound(ba, this.changeCount[b] ?? 0);
+        const scoreAB = wilsonLowerBound(ab, this.effectiveChanges(a));
+        const scoreBA = wilsonLowerBound(ba, this.effectiveChanges(b));
         // Report a direction that passes the thresholds; if both do, the better-evidenced one.
         const forward = passAB && (!passBA || scoreAB > scoreBA || (scoreAB === scoreBA && ab >= ba));
         yield forward
@@ -162,6 +181,7 @@ export class CoChangeModel {
       this.files.push(path);
       this.changeCount.push(0);
       this.changeWeight.push(0);
+      this.changeWeightSq.push(0);
       this.lastTime.push(0);
       this.authors.push(new Map());
       this.adjacency.push(new Map());
@@ -175,6 +195,7 @@ export class CoChangeModel {
     for (const id of ids) {
       this.changeCount[id]!++;
       this.changeWeight[id]! += weight;
+      this.changeWeightSq[id]! += weight * weight;
       this.lastTime[id] = Math.max(this.lastTime[id]!, commit.time);
       const authors = this.authors[id]!;
       authors.set(commit.author, (authors.get(commit.author) ?? 0) + 1);

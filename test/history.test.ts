@@ -67,11 +67,13 @@ describe('history from real git repositories', () => {
 
   it('handles spaces, unicode and newlines in file names', async () => {
     const r = repo();
-    r.touch(['docs/read me.md', 'src/ünï.ts', 'weird\nname.ts']);
-    r.touch(['docs/read me.md', 'src/ünï.ts', 'weird\nname.ts']);
+    // Windows does not allow newlines in file names.
+    const names = ['docs/read me.md', 'src/ünï.ts', ...(process.platform === 'win32' ? [] : ['weird\nname.ts'])];
+    r.touch(names);
+    r.touch(names);
     const history = await loadHistory(r.dir, options);
     const model = new CoChangeModel(history.commits);
-    for (const f of ['docs/read me.md', 'src/ünï.ts', 'weird\nname.ts']) assert.equal(model.changeCount[model.id(f)!], 2, f);
+    for (const f of names) assert.equal(model.changeCount[model.id(f)!], 2, f);
   });
 
   it('respects maxCommits and records authors and times', async () => {

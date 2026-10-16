@@ -37,6 +37,12 @@ export async function refExists(root: string, ref: string): Promise<boolean> {
  * Used to avoid suggesting deleted files and to resolve imports without touching disk.
  */
 export async function listCurrentFiles(root: string): Promise<Set<string>> {
-  const out = await runGit(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
-  return new Set(splitNul(out));
+  const [present, deleted] = await Promise.all([
+    runGit(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']),
+    // Deleted from disk but not yet staged: still in the index, but gone.
+    runGit(root, ['ls-files', '-z', '--deleted']),
+  ]);
+  const files = new Set(splitNul(present));
+  for (const path of splitNul(deleted)) files.delete(path);
+  return files;
 }

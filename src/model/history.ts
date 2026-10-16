@@ -9,7 +9,10 @@ export interface HistoryCommit {
   /** Committer time, for chronological ordering (backtests). */
   commitTime: number;
   subject: string;
-  /** Files in this commit, under their current (latest) names, after ignores. */
+  /**
+   * Files in this commit, under their current (latest) names, after ignores.
+   * Files that were later deleted and replaced carry a lifetime suffix (see pathOf).
+   */
   files: string[];
 }
 
@@ -48,34 +51,51 @@ export interface HistoryOptions extends LogOptions {
 
 type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits'>;
 
+/** Separates a path from the lifetime marker of an earlier, deleted file at that path. */
+const LIFETIME_SEPARATOR = '\u0000';
+
+/** The path part of a file identity (identities of earlier, deleted files carry a suffix). */
+export function pathOf(identity: string): string {
+  const cut = identity.indexOf(LIFETIME_SEPARATOR);
+  return cut === -1 ? identity : identity.slice(0, cut);
+}
+
 /**
- * Follows renames so a file keeps its identity across moves.
+ * Gives every file a stable identity across its lifetime.
  *
- * Commits arrive newest first. When a commit renames OLD -> NEW, every *older*
- * commit that mentions OLD is really about the file now called NEW, so we record
- * OLD -> current(NEW). Newer commits were already processed, so a path that is
- * later reused for an unrelated file is not affected.
+ * Commits arrive newest first, so a change is seen before everything older than it:
+ * - Rename OLD -> NEW: every older mention of OLD is the file now called NEW.
+ * - A file created at PATH (added, copied, or renamed into place): every older
+ *   mention of PATH is an earlier, unrelated file that was deleted, so it gets its
+ *   own identity (`PATH` + NUL + n). That identity never exists in the working tree,
+ *   so it never appears in results, and its history cannot leak into the new file.
  */
 export class RenameTracker {
   private readonly alias = new Map<string, string>();
+  private lifetimes = 0;
   renames = 0;
 
   current(path: string): string {
     return this.alias.get(path) ?? path;
   }
 
-  /** Returns the current names of the files in this commit and records its renames. */
+  /** Returns the identities of the files in this commit and records its renames and births. */
   apply(commit: RawCommit): string[] {
-    const files: string[] = [];
+    // Resolve every name against the state *before* this commit, then update.
+    const names = commit.changes.map((change) => this.current(change.path));
     for (const change of commit.changes) {
-      const name = this.current(change.path);
+      const born = change.status === 'A' || change.status === 'C' || (change.status === 'R' && change.oldPath !== change.path);
+      if (born) this.alias.set(change.path, `${change.path}${LIFETIME_SEPARATOR}${++this.lifetimes}`);
+    }
+    // Renames win over births: if OLD is renamed and a new OLD is added in the same
+    // commit, older mentions of OLD are the file that moved.
+    commit.changes.forEach((change, i) => {
       if (change.status === 'R' && change.oldPath !== undefined && change.oldPath !== change.path) {
-        this.alias.set(change.oldPath, name);
+        this.alias.set(change.oldPath, names[i]!);
         this.renames++;
       }
-      files.push(name);
-    }
-    return files;
+    });
+    return names;
   }
 }
 
@@ -96,7 +116,7 @@ export class HistoryBuilder {
     stats.commitsRead++;
     // Renames must be tracked even for skipped commits, or older history would be orphaned.
     const names = this.renames.apply(commit);
-    const files = [...new Set(names)].filter((f) => !this.ignore.matches(f));
+    const files = [...new Set(names)].filter((f) => !this.ignore.matches(pathOf(f)));
     if (files.length === 0) {
       stats.emptyAfterIgnores++;
       return;
