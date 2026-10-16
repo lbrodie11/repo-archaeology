@@ -1,8 +1,11 @@
 # Repo Archaeology
 
 [![CI](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml/badge.svg)](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/repo-archaeology.svg)](https://www.npmjs.com/package/repo-archaeology)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/package.json)
+
+**Discover files you might have forgotten to update.** Explore hidden relationships in your codebase using Git history. See which files frequently change together, investigate why, and check your pending changes for possible omissions.
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 
@@ -13,6 +16,28 @@ Everything runs locally against `.git`. There is no account, upload, or server, 
 ![Repo Archaeology map showing ghost wires in the Hono repository](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/repo-archaeology-map.png)
 
 *The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with the default thresholds.*
+
+## The two core experiences
+
+* **Check your changes**: Find related files that historically changed alongside the files you are editing:
+  ```bash
+  npx repo-archaeology diff
+  # Or check an entire feature branch against main:
+  npx repo-archaeology diff --base main
+  ```
+* **Explore your codebase**: Open an interactive visual graph showing hidden coupling across your project:
+  ```bash
+  npx repo-archaeology map
+  ```
+
+## When to use Repo Archaeology
+
+| Situation | What Repo Archaeology does | Recommended command |
+| --- | --- | --- |
+| **Editing code** | Check if files that usually change alongside your edits were missed | `npx repo-archaeology diff` |
+| **Reviewing a PR** | Check all commits on a branch before merging | `npx repo-archaeology diff --base main` |
+| **Joining a new project** | Surface surprising dependencies between modules | `npx repo-archaeology` |
+| **Architecture audits** | Visualize historical coupling across folders | `npx repo-archaeology map` |
 
 ## Quick start
 
