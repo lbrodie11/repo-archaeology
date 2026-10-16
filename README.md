@@ -43,7 +43,7 @@ Possibly missed (2)
 
   src/adapter/deno/serve-static.ts  ghost wire
     changed with src/adapter/bun/serve-static.ts in 12 of 19 commits (63%) · last together 5 months ago
-    unexplained coupling: no import link in either direction
+    possible parallel implementations: serve-static.ts appears in sibling folders
     26f8c33 2026-05-16  fix(serveStatic): make options parameter optional in all adapters (#4934)
     1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291)
     246a06a 2024-09-24  feat(serve-static): support absolute root (#3420)
@@ -99,7 +99,7 @@ Every relationship has a kind:
 
 | Kind | Meaning |
 | --- | --- |
-| **ghost wire** | Neither file imports the other (checked), yet they change together. The interesting one. |
+| **ghost wire** | No import link was detected between the files in the current code, yet they change together. The interesting one. |
 | **import link** | One imports the other, directly or through an index/barrel file. Expected. |
 | **test link** | A test changing with code, or tests changing together. Expected. |
 | **unchecked** | We could not check imports: non-JS/TS files, project config such as `package.json`, or unresolvable aliases. |
@@ -110,7 +110,7 @@ Every relationship has a kind:
 
 **It is a historical signal, not proof.** Two files changing together in the past does not mean your change needs both.
 
-**Hidden bridges are possible explanations, not diagnoses.** For JS/TS files, Repo Archaeology walks the TypeScript syntax tree for shared environment variables, `/api/...` route strings, and event names used in event-method calls. A signal is shown only when at most three current, non-ignored source files use it; common values such as `NODE_ENV` are suppressed. No recognized signal is labelled **unexplained coupling**.
+**Hidden bridges are possible explanations, not diagnoses.** For JS/TS files, Repo Archaeology recognizes possible parallel implementations in sibling folders and walks the TypeScript syntax tree for shared environment variables, `/api/...` route strings, and event names used in event-method calls. Reference signals are shown only when at most three current, non-ignored source files use them; common values such as `NODE_ENV` are suppressed. Without a recognized signal, the tool says only that no import link was detected in the current code.
 
 ## Options
 

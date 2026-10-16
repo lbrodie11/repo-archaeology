@@ -13,6 +13,8 @@ export interface MapOptions {
   /** Maximum number of relationships drawn. */
   edges: number;
   kinds: Relationship[];
+  /** Optional cap for unchecked relationships so they do not consume the map. */
+  uncheckedCap?: number;
   out?: string;
   open: boolean;
 }
@@ -37,6 +39,7 @@ export interface MapEdge {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
+  score: number;
   weighted: boolean;
   lastTogether: string;
   crossesDirectories: boolean;
@@ -53,7 +56,7 @@ export interface MapData {
   edges: MapEdge[];
 }
 
-export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds'>): MapData {
+export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
   const nodes: MapNode[] = [];
   const nodeIndex = new Map<string, number>();
   const nodeFor = (path: string): number => {
@@ -76,11 +79,17 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
 
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
+  let unchecked = 0;
   const classified = classifiedPairs(ctx);
+  const hasPrimary = classified.entries.some(({ relationship }) => relationship !== 'unknown' && options.kinds.includes(relationship));
+  const uncheckedCap = hasPrimary ? options.uncheckedCap : undefined;
   for (const { companion, relationship } of classified.entries) {
     counts[relationship]++;
-    if (edges.length >= options.edges || !options.kinds.includes(relationship)) continue;
+    if (!options.kinds.includes(relationship)) continue;
+    if (relationship === 'unknown' && uncheckedCap !== undefined && unchecked >= uncheckedCap) continue;
+    if (edges.length >= options.edges) continue;
     const view = toView(ctx, companion, relationship);
+    if (relationship === 'unknown') unchecked++;
     edges.push({
       source: nodeFor(view.from),
       target: nodeFor(view.to),
@@ -92,6 +101,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       toChanges: view.toChanges,
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
+      score: companion.score,
       weighted: view.weighted,
       lastTogether: view.lastTogether,
       crossesDirectories: view.crossesDirectories,

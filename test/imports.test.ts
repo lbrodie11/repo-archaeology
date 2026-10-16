@@ -78,6 +78,9 @@ describe('relationship classification', () => {
     'src/route-b.ts': "app.get('/api/orders', handler)",
     'src/event-a.ts': "bus.emit('order.created')",
     'src/event-b.ts': "bus.on('order.created', handler)",
+    'src/adapter/bun/serve.ts': 'export const runtime = "bun"',
+    'src/adapter/deno/serve.ts': 'export const runtime = "deno"',
+    'src/other/serve.ts': 'export const unrelated = true',
     'src/common-a.ts': 'process.env.NODE_ENV',
     'src/common-b.ts': 'process.env.NODE_ENV',
     'src/common-c.ts': 'process.env.NODE_ENV',
@@ -106,8 +109,17 @@ describe('relationship classification', () => {
 
   it('calls a checked pair with no import link a ghost wire', () => {
     assert.equal(classifier.classify('src/db.ts', 'src/billing.ts'), 'ghost');
-    assert.equal(classifier.classify('schema.sql', 'src/billing.ts'), 'ghost');
-    assert.match(classifier.explain('src/db.ts', 'src/billing.ts', 'ghost'), /^unexplained coupling:/);
+    assert.match(classifier.explain('src/db.ts', 'src/billing.ts', 'ghost'), /current code/);
+  });
+
+  it('recognizes possible parallel implementations only in sibling folders', () => {
+    assert.deepEqual(classifier.hiddenBridge('src/adapter/bun/serve.ts', 'src/adapter/deno/serve.ts'), {
+      signal: 'parallel-implementation', value: 'serve.ts', filesUsing: 2,
+    });
+    assert.match(classifier.explain('src/adapter/bun/serve.ts', 'src/adapter/deno/serve.ts', 'ghost'), /possible parallel implementations/);
+    assert.equal(classifier.hiddenBridge('src/adapter/bun/serve.ts', 'src/other/serve.ts'), undefined);
+    assert.equal(classifier.hiddenBridge('serve.ts', 'adapter/serve.ts'), undefined);
+    assert.equal(classifier.hiddenBridge('src/a/index.d.ts', 'src/b/index.d.ts'), undefined);
   });
 
   it('explains rare shared environment, route and event references', () => {
@@ -135,7 +147,9 @@ describe('relationship classification', () => {
     assert.equal(classifier.classify('docs/a.md', 'docs/b.md'), 'unknown');
     assert.equal(classifier.classify('src/aliased.ts', 'src/billing.ts'), 'unknown');
     assert.equal(classifier.classify('src/deleted.ts', 'src/billing.ts'), 'unknown');
+    assert.equal(classifier.classify('schema.sql', 'src/billing.ts'), 'unknown');
     assert.match(classifier.explain('src/deleted.ts', 'src/billing.ts', 'unknown'), /source is unavailable/);
+    assert.match(classifier.explain('schema.sql', 'src/billing.ts', 'unknown'), /file types are not supported/);
   });
 
   it('recognizes tests and the code they cover', () => {

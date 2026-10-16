@@ -92,7 +92,7 @@ h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; fon
 .search input::placeholder { color: var(--chalk-faded); }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
 .toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; }
-.toggle[aria-pressed="false"] { opacity: 0.45; }
+.toggle[aria-pressed="false"] { opacity: 0.65; border-style: dashed; }
 .toggle .count { color: var(--chalk-faded); font-variant-numeric: tabular-nums; }
 .swatch { width: 22px; height: 0; border-top: 2px solid; }
 .swatch.ghost { border-top: 2px dashed var(--tape); filter: drop-shadow(0 0 3px var(--tape)); }
@@ -120,10 +120,16 @@ canvas.pointing { cursor: pointer; }
 .file-link:hover { text-decoration-color: var(--tape); }
 .pair { display: grid; gap: 2px; }
 .pair .file-link + .file-link::before { content: "and "; font-family: var(--text); color: var(--chalk-faded); text-decoration: none; display: inline-block; margin-right: 4px; }
-.rel-body { margin: 4px 0 0 32px; font-size: 13.5px; color: var(--chalk-faded); }
+.rel-summary { margin: 6px 0 0 32px; font-size: 13px; color: var(--chalk-faded); }
+.rel-why { margin: 5px 0 0 32px; font-size: 13px; color: var(--chalk-faded); }
+.directions { display: grid; gap: 5px; margin: 7px 0 0 32px; font-size: 12.5px; }
+.direction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.direction dt { min-width: 0; overflow-wrap: anywhere; font-family: var(--code); color: var(--chalk); }
+.direction dd { margin: 0; color: var(--chalk-faded); font-variant-numeric: tabular-nums; text-align: right; }
 .evidence { margin: 6px 0 0 32px; font-size: 12.5px; color: var(--chalk-faded); }
 .evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 2px 0; }
-.evidence .hash { font-family: var(--code); color: var(--chalk); opacity: 0.8; }
+.evidence .hash { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--code); color: var(--chalk); opacity: 0.8; }
+.evidence .hash:hover { opacity: 1; text-decoration: underline; }
 .evidence-wrap { margin: 7px 0 0 32px; color: var(--chalk-faded); font-size: 12.5px; }
 .evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); }
 .evidence-wrap .evidence { margin: 5px 0 0; }
@@ -135,6 +141,8 @@ canvas.pointing { cursor: pointer; }
   .panel { border-left: 0; border-top: 1px solid rgba(159, 180, 204, 0.18); }
   .search input { width: 100%; }
   .controls, .search { width: 100%; }
+  .direction { grid-template-columns: 1fr; gap: 0; }
+  .direction dd { text-align: left; }
 }
 `;
 
@@ -172,8 +180,27 @@ const CLIENT = String.raw`
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
   function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
-  function shortPath(p) { var parts = p.split('/'); return parts.slice(-2).join('/'); }
+  function distinguishingPaths(a, b) {
+    var aParts = a.split('/'), bParts = b.split('/');
+    for (var depth = 1; depth <= Math.max(aParts.length, bParts.length); depth++) {
+      var aLabel = aParts.slice(-depth).join('/');
+      var bLabel = bParts.slice(-depth).join('/');
+      if (aLabel !== bLabel) return [aLabel, bLabel];
+    }
+    return [a, b];
+  }
   function plural(n, w) { return n.toLocaleString('en-US') + ' ' + w + (n === 1 ? '' : 's'); }
+  function relativeDate(date) {
+    var days = Math.max(0, Math.floor((Date.parse(data.generatedAt) - Date.parse(date)) / 86400000));
+    if (days < 1) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 45) return days + ' days ago';
+    var months = Math.round(days / 30.44);
+    if (months < 18) return months + ' ' + (months === 1 ? 'month' : 'months') + ' ago';
+    var years = (days / 365.25).toFixed(1).replace(/\.0$/, '');
+    return years + ' years ago';
+  }
+  function capitalize(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
 
   // Deterministic layout: the same repo produces the same picture every time.
   var seed = 7;
@@ -208,15 +235,18 @@ const CLIENT = String.raw`
     edge.t.edges.push(edge);
     return edge;
   });
+  function overviewTier(e) {
+    if (!e.d.crossesDirectories) return 0;
+    return e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation' ? 1 : 2;
+  }
   var overviewGhosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
-    return Number(b.d.crossesDirectories) - Number(a.d.crossesDirectories) ||
-      Math.min(b.d.confidence, b.d.reverseConfidence) - Math.min(a.d.confidence, a.d.reverseConfidence) ||
-      b.d.shared - a.d.shared;
+    return overviewTier(b) - overviewTier(a) || b.d.score - a.d.score || b.d.shared - a.d.shared;
   });
   var overviewLabelNodes = {};
   overviewGhosts.slice(0, 3).forEach(function (e) {
-    overviewLabelNodes[e.s.i] = true;
-    overviewLabelNodes[e.t.i] = true;
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    overviewLabelNodes[e.s.i] = labels[0];
+    overviewLabelNodes[e.t.i] = labels[1];
   });
   dirList.forEach(function (d, i) {
     var angle = (i / Math.max(1, dirList.length)) * Math.PI * 2;
@@ -233,9 +263,14 @@ const CLIENT = String.raw`
   // ---- header --------------------------------------------------------------
   var m = data.meta;
   var span = m.oldestCommit && m.newestCommit ? ' between ' + m.oldestCommit + ' and ' + m.newestCommit : '';
-  document.getElementById('summary').textContent =
-    'Built from ' + plural(m.commitsAnalyzed, 'commit') + span + '. Loaded the ' + plural(edges.length, 'strongest relationship') +
-    ' (each at least ' + m.settings.minShared + ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
+  function updateSummary() {
+    var shown = edges.filter(function (e) { return visible[e.d.relationship]; }).length;
+    document.getElementById('summary').textContent =
+      'Analyzed ' + plural(m.commitsAnalyzed, 'commit') + span + '. Loaded ' + plural(edges.length, 'relationship') +
+      ' and showing ' + shown.toLocaleString('en-US') + ' (each at least ' + m.settings.minShared +
+      ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
+  }
+  updateSummary();
 
   var toggles = document.getElementById('toggles');
   ORDER.forEach(function (kind) {
@@ -244,6 +279,7 @@ const CLIENT = String.raw`
     var b = el('button', 'toggle');
     b.type = 'button';
     b.setAttribute('aria-pressed', String(visible[kind]));
+    if (kind === 'unknown') b.title = 'Hidden by default when other links exist: import status could not be verified';
     b.appendChild(el('span', 'swatch ' + kind));
     b.appendChild(el('span', '', KINDS[kind].label));
     b.appendChild(el('span', 'count', String(shown)));
@@ -251,7 +287,10 @@ const CLIENT = String.raw`
       visible[kind] = !visible[kind];
       b.setAttribute('aria-pressed', String(visible[kind]));
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
+      alpha = Math.max(alpha, 0.6);
+      if (reduceMotion) { while (alpha > 0.02) tick(); }
       if (!selectedNode && !selectedEdge && !userMoved) { flight = null; fit(); }
+      updateSummary();
       renderPanel();
       requestDraw();
     });
@@ -262,10 +301,12 @@ const CLIENT = String.raw`
   var alpha = 1;
   function tick() {
     var i, j, a, b, dx, dy, d2, f;
-    for (i = 0; i < nodes.length; i++) {
-      a = nodes[i];
-      for (j = i + 1; j < nodes.length; j++) {
-        b = nodes[j];
+    var activeNodes = nodes.filter(isActive);
+    nodes.forEach(function (n) { if (!isActive(n)) { n.vx = 0; n.vy = 0; } });
+    for (i = 0; i < activeNodes.length; i++) {
+      a = activeNodes[i];
+      for (j = i + 1; j < activeNodes.length; j++) {
+        b = activeNodes[j];
         dx = b.x - a.x; dy = b.y - a.y;
         d2 = dx * dx + dy * dy;
         if (d2 > 90000) continue;
@@ -276,6 +317,7 @@ const CLIENT = String.raw`
       }
     }
     edges.forEach(function (e) {
+      if (!isVisible(e)) return;
       dx = e.t.x - e.s.x; dy = e.t.y - e.s.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       var strength = Math.max(e.d.confidence, e.d.reverseConfidence);
@@ -285,8 +327,8 @@ const CLIENT = String.raw`
       e.t.vx -= dx * f; e.t.vy -= dy * f;
     });
     dirList.forEach(function (d) { d.cx = 0; d.cy = 0; d.count = 0; });
-    nodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
-    nodes.forEach(function (n) {
+    activeNodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
+    activeNodes.forEach(function (n) {
       var d = dirs[n.dir];
       n.vx += (d.cx / d.count - n.x) * 0.012 * alpha - n.x * 0.012 * alpha;
       n.vy += (d.cy / d.count - n.y) * 0.012 * alpha - n.y * 0.012 * alpha;
@@ -377,7 +419,7 @@ const CLIENT = String.raw`
       if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge) fit();
     }
     var flying = stepFlight(now || performance.now());
-    var marching = !reduceMotion && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
+    var marching = !reduceMotion && !document.hidden && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
     if (marching) dashPhase = (dashPhase + 0.35) % 1100;
     draw();
     if (alpha > 0.02 || marching || flying) requestDraw();
@@ -451,14 +493,20 @@ const CLIENT = String.raw`
     ctx.font = (12 / k) + 'px ui-monospace, Menlo, Consolas, monospace';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
+    var labelBoxes = [];
     nodes.forEach(function (n) {
       var overview = !selectedNode && !selectedEdge && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
         ((selectedNode || selectedEdge) && focusNode(n)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
-      var label = overviewLabelNodes[n.i] ? shortPath(n.path) : base(n.path);
+      var label = overviewLabelNodes[n.i] || base(n.path);
       var x = n.x + n.r + 5 / k;
+      var labelBox = { left: x - 2 / k, right: x + ctx.measureText(label).width + 2 / k, top: n.y - 8 / k, bottom: n.y + 8 / k };
+      if (overview && labelBoxes.some(function (box) {
+        return labelBox.left < box.right && labelBox.right > box.left && labelBox.top < box.bottom && labelBox.bottom > box.top;
+      })) return;
+      labelBoxes.push(labelBox);
       ctx.lineWidth = 4 / k;
       ctx.strokeStyle = 'rgba(19, 48, 79, 0.92)';
       ctx.strokeText(label, x, n.y);
@@ -540,7 +588,8 @@ const CLIENT = String.raw`
         tooltip.appendChild(el('div', '', 'Folder: ' + n.dir));
         tooltip.appendChild(el('div', '', 'Changed in ' + plural(n.changes, 'commit')));
       } else {
-        tooltip.appendChild(el('div', '', KINDS[e.d.relationship].label.replace(/s$/, '') + ': ' + base(e.s.path) + ' and ' + base(e.t.path)));
+        var labels = distinguishingPaths(e.s.path, e.t.path);
+        tooltip.appendChild(el('div', '', KINDS[e.d.relationship].label.replace(/s$/, '') + ': ' + labels[0] + ' and ' + labels[1]));
         tooltip.appendChild(el('div', '', plural(e.d.shared, 'shared commit')));
       }
       tooltip.hidden = false;
@@ -618,13 +667,37 @@ const CLIENT = String.raw`
     b.addEventListener('click', function () { selectNode(n); });
     return b;
   }
+  function copyHash(hash, button) {
+    function copied() {
+      var original = button.dataset.hashLabel || button.textContent;
+      button.dataset.hashLabel = original;
+      if (button._copyTimer) clearTimeout(button._copyTimer);
+      button.textContent = 'Copied';
+      button._copyTimer = setTimeout(function () { button.textContent = original; button._copyTimer = null; }, 900);
+    }
+    function fallback() {
+      var input = el('textarea');
+      input.value = hash; input.style.position = 'fixed'; input.style.opacity = '0';
+      document.body.appendChild(input); input.select();
+      try { if (document.execCommand('copy')) copied(); } catch (_) {}
+      input.remove();
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(hash).then(copied, fallback);
+      return;
+    }
+    fallback();
+  }
   function evidenceDetails(e) {
     var details = el('details', 'evidence-wrap');
-    details.appendChild(el('summary', '', 'View ' + plural(e.d.evidence.length, 'evidence commit')));
+    details.appendChild(el('summary', '', 'Latest ' + e.d.evidence.length + ' of ' + plural(e.d.shared, 'shared commit')));
     var list = el('ul', 'evidence');
     e.d.evidence.forEach(function (ev) {
       var li = el('li');
-      li.appendChild(el('span', 'hash', ev.hash.slice(0, 7)));
+      var hash = el('button', 'hash', ev.hash.slice(0, 7));
+      hash.type = 'button'; hash.title = 'Copy full commit hash';
+      hash.addEventListener('click', function () { copyHash(ev.hash, hash); });
+      li.appendChild(hash);
       li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
       list.appendChild(li);
     });
@@ -637,10 +710,21 @@ const CLIENT = String.raw`
     if (e.d.weighted) return pct(confidence) + ' recency-weighted confidence (' + e.d.shared + ' shared / ' + total + ' raw commits)';
     return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ')';
   }
+  function directionRow(from, to, evidence) {
+    var row = el('div', 'direction');
+    row.appendChild(el('dt', '', from + ' → ' + to));
+    row.appendChild(el('dd', '', evidence));
+    return row;
+  }
+  function findingLabel(e) {
+    if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Possible parallel implementations';
+    return KINDS[e.d.relationship].label.replace(/s$/, '');
+  }
   /** One relationship, described from the point of view of 'from'. */
   function relationshipItem(e, from, showBoth) {
     var other = e.s === from ? e.t : e.s;
     var fromSource = e.s === from;
+    var labels = distinguishingPaths(from.path, other.path);
     var li = el('li', 'rel');
     var head = el('div', 'rel-head');
     head.appendChild(el('span', 'swatch ' + e.d.relationship));
@@ -653,11 +737,13 @@ const CLIENT = String.raw`
       head.appendChild(fileButton(other));
     }
     li.appendChild(head);
-    var scope = e.d.crossesDirectories ? ' Crosses folders.' : '';
-    li.appendChild(el('p', 'rel-body',
-      KINDS[e.d.relationship].label.replace(/s$/, '') + ', ' + e.d.why + '. Changed together in ' + plural(e.d.shared, 'commit') +
-      '. Historical direction: when ' + shortPath(from.path) + ' changes, ' + shortPath(other.path) + ' also changes in ' + directionEvidence(e, fromSource) +
-      '; reverse ' + directionEvidence(e, !fromSource) + '. Last together ' + e.d.lastTogether + '.' + scope));
+    li.appendChild(el('p', 'rel-summary', findingLabel(e) + ' · ' + plural(e.d.shared, 'shared commit') + ' · last together ' + relativeDate(e.d.lastTogether)));
+    var directions = el('dl', 'directions');
+    directions.appendChild(directionRow(labels[0], labels[1], directionEvidence(e, fromSource)));
+    directions.appendChild(directionRow(labels[1], labels[0], directionEvidence(e, !fromSource)));
+    li.appendChild(directions);
+    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') ? ' Located in different folders.' : '';
+    li.appendChild(el('p', 'rel-why', capitalize(e.d.why) + '.' + scope));
     if (e.d.evidence.length > 0) li.appendChild(evidenceDetails(e));
     return li;
   }
@@ -683,7 +769,7 @@ const CLIENT = String.raw`
       panel.appendChild(list2);
     } else {
       panel.appendChild(el('h2', '', 'What moves together'));
-      panel.appendChild(el('p', '', 'Each dot is a file, sized by how often it changes and coloured by folder. Lines join files that keep changing in the same commits. Pink dashed lines are ghost wires: no import connects the two files, yet history says they move together.'));
+      panel.appendChild(el('p', '', 'Each dot is a file, sized by how often it changes and coloured by folder. Lines join files that keep changing in the same commits. Pink dashed lines are ghost wires: no import is detected between the files in the current code, yet history says they move together.'));
       var ghosts = overviewGhosts.slice(0, 10);
       if (ghosts.length > 0) {
         panel.appendChild(el('h2', '', 'Notable ghost wires'));
@@ -710,6 +796,7 @@ const CLIENT = String.raw`
   if (reduceMotion) { while (alpha > 0.02) tick(); }
   else { for (var w = 0; w < 120; w++) tick(); }
   window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) requestDraw(); });
   resize();
   fit();
   renderPanel();

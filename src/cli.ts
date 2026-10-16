@@ -179,7 +179,11 @@ program
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
-    const { file, data } = await writeMap(ctx, opts);
+    const options = {
+      ...opts,
+      uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? Math.max(1, Math.floor(opts.edges * 0.1)) : undefined,
+    };
+    const { file, data } = await writeMap(ctx, options);
     const shouldOpen = opts.open && !global.json && process.stdout.isTTY === true;
     if (shouldOpen) openInBrowser(file);
     if (global.json) printJson({ file, nodes: data.nodes.length, edges: data.edges.length, counts: data.counts });

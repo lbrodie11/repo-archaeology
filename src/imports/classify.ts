@@ -20,7 +20,7 @@ export const MAX_BRIDGE_SOURCE_FILES = 10_000;
 export const MAX_BRIDGE_SOURCE_BYTES = 50_000_000;
 
 export interface HiddenBridge {
-  signal: 'shared-environment' | 'shared-api-route' | 'shared-event';
+  signal: 'parallel-implementation' | 'shared-environment' | 'shared-api-route' | 'shared-event';
   value: string;
   filesUsing: number;
 }
@@ -77,7 +77,7 @@ export class RelationshipClassifier {
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
-    if (!ia.analyzable && !ib.analyzable) return 'unknown';
+    if (!ia.analyzable || !ib.analyzable) return 'unknown';
     // "No import link" is only a claim we can make if every path we followed was resolved.
     if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete)) return 'unknown';
     return 'ghost';
@@ -96,7 +96,8 @@ export class RelationshipClassifier {
       }
       case 'ghost': {
         const signal = bridge ?? this.hiddenBridge(a, b);
-        if (!signal) return 'unexplained coupling: no import link in either direction';
+        if (!signal) return 'no import link detected in the current code';
+        if (signal.signal === 'parallel-implementation') return `possible parallel implementations: ${signal.value} appears in sibling folders`;
         const rarity = `used in ${signal.filesUsing} files`;
         if (signal.signal === 'shared-environment') return `shared configuration: both reference environment variable ${signal.value} (${rarity})`;
         const kind = signal.signal === 'shared-api-route' ? 'API route' : 'event';
@@ -107,13 +108,15 @@ export class RelationshipClassifier {
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
-        if (!ia.analyzable && !ib.analyzable) return 'import check not possible for these file types';
+        if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
         return 'some imports could not be resolved (aliases or barrel files), so an import link cannot be ruled out';
       }
     }
   }
 
   hiddenBridge(a: string, b: string): HiddenBridge | undefined {
+    const parallel = parallelImplementation(a, b);
+    if (parallel) return parallel;
     this.indexBridgeReferences();
     const aReferences = this.bridgeReferences!.get(a);
     const bReferences = this.bridgeReferences!.get(b);
@@ -216,6 +219,15 @@ export class RelationshipClassifier {
     this.reachCache.set(file, reach);
     return reach;
   }
+}
+
+function parallelImplementation(a: string, b: string): HiddenBridge | undefined {
+  const name = posix.basename(a);
+  if (name !== posix.basename(b) || /^index(?:\.[^.]+)+$/i.test(name)) return undefined;
+  const aDir = posix.dirname(a);
+  const bDir = posix.dirname(b);
+  if (aDir === '.' || bDir === '.' || aDir === bDir || posix.dirname(aDir) !== posix.dirname(bDir)) return undefined;
+  return { signal: 'parallel-implementation', value: name, filesUsing: 2 };
 }
 
 function referencePriority(kind: SourceReferenceKind): number {

@@ -25,7 +25,7 @@ function runCli(args: string[], cwd: string) {
 /**
  * A small app where:
  *  - api.ts imports db.ts and they change together (import link)
- *  - billing.ts and invoice-template.html always change together (ghost wire)
+ *  - billing.ts and invoice-template.ts always change together (ghost wire)
  *  - api.test.ts tests api.ts (test link)
  */
 let repo: FixtureRepo;
@@ -35,12 +35,12 @@ before(() => {
   repo.write('src/api.ts', "import { db } from './db'\n");
   repo.write('src/api.test.ts', "import './api'\n");
   repo.write('src/billing.ts', 'export const bill = 1\n');
-  repo.write('templates/invoice-template.html', '<p></p>\n');
+  repo.write('templates/invoice-template.ts', 'export const template = `<p></p>`\n');
   repo.write('src/other.ts', 'export {}\n');
   repo.git('add', '.');
   repo.commit({ message: 'initial' });
   for (let i = 0; i < 6; i++) {
-    repo.touch(['src/billing.ts', 'templates/invoice-template.html'], `billing change ${i}`);
+    repo.touch(['src/billing.ts', 'templates/invoice-template.ts'], `billing change ${i}`);
     repo.commit({ message: `api change ${i}`, write: { 'src/api.ts': `import { db } from './db'\n// ${i}\n`, 'src/db.ts': `export const db = ${i}\n`, 'src/api.test.ts': `import './api'\n// ${i}\n` } });
     repo.touch(['src/other.ts'], `other ${i}`);
   }
@@ -54,7 +54,7 @@ describe('scan', () => {
     const ctx = await loadContext(repo.dir, flags);
     const result = scan(ctx, { limit: 10, kinds: ['ghost', 'unknown', 'direct', 'test'] });
     const kinds = new Map(result.relationships.map((r) => [[r.from, r.to].sort().join(' + '), r.relationship]));
-    assert.equal(kinds.get('src/billing.ts + templates/invoice-template.html'), 'ghost');
+    assert.equal(kinds.get('src/billing.ts + templates/invoice-template.ts'), 'ghost');
     assert.equal(kinds.get('src/api.ts + src/db.ts'), 'direct');
     assert.equal(kinds.get('src/api.test.ts + src/api.ts'), 'test');
     const ghost = result.relationships.find((r) => r.relationship === 'ghost')!;
@@ -77,10 +77,10 @@ describe('diff', () => {
       const ctx = await loadContext(repo.dir, flags);
       const result = await diff(ctx, { limit: 10, kinds: ['ghost', 'unknown', 'direct', 'test'] });
       assert.deepEqual(result.changed.map((c) => c.path), ['src/billing.ts']);
-      assert.deepEqual(result.suggestions.map((s) => [s.to, s.relationship]), [['templates/invoice-template.html', 'ghost']]);
+      assert.deepEqual(result.suggestions.map((s) => [s.to, s.relationship]), [['templates/invoice-template.ts', 'ghost']]);
 
-      repo.write('templates/invoice-template.html', '<p>changed</p>\n');
-      repo.git('add', 'templates/invoice-template.html');
+      repo.write('templates/invoice-template.ts', 'export const template = `<p>changed</p>`\n');
+      repo.git('add', 'templates/invoice-template.ts');
       const both = await diff(await loadContext(repo.dir, flags), { limit: 10, kinds: ['ghost'] });
       assert.deepEqual(both.suggestions, []);
     } finally {
@@ -95,7 +95,7 @@ describe('diff', () => {
       const result = await diff(ctx, { limit: 10, kinds: ['ghost', 'unknown', 'direct', 'test'] });
       const moved = result.changed.find((c) => c.path === 'src/payments.ts')!;
       assert.equal(moved.historyPath, 'src/billing.ts');
-      assert.deepEqual(result.suggestions.map((s) => s.to), ['templates/invoice-template.html']);
+      assert.deepEqual(result.suggestions.map((s) => s.to), ['templates/invoice-template.ts']);
     } finally {
       repo.git('reset', '-q', '--hard');
     }
@@ -108,7 +108,7 @@ describe('diff', () => {
       const ctx = await loadContext(repo.dir, flags);
       const result = await diff(ctx, { base: 'main', limit: 10, kinds: ['ghost'] });
       assert.deepEqual(result.changed.map((c) => [c.path, c.sources.join()]), [['src/billing.ts', 'branch']]);
-      assert.equal(result.suggestions[0]?.to, 'templates/invoice-template.html');
+      assert.equal(result.suggestions[0]?.to, 'templates/invoice-template.ts');
       await assert.rejects(diff(ctx, { base: 'no-such-branch', limit: 10, kinds: ['ghost'] }), /not a branch/);
     } finally {
       repo.git('checkout', '-q', 'main');
@@ -123,7 +123,7 @@ describe('file', () => {
     const result = fileReport(ctx, 'billing.ts', { limit: 5 });
     assert.equal(result.path, 'src/billing.ts');
     assert.equal(result.changes, 7);
-    assert.equal(result.companions[0]?.to, 'templates/invoice-template.html');
+    assert.equal(result.companions[0]?.to, 'templates/invoice-template.ts');
     assert.equal(result.companions[0]?.wouldAlert, true);
     assert.throws(() => fileReport(ctx, '../nope.ts', { limit: 5 }), /Nothing to show/);
   });
@@ -138,11 +138,33 @@ describe('map', () => {
       assert.ok(data.nodes[e.source] && data.nodes[e.target]);
       assert.ok(e.fromChanges >= e.shared);
       assert.ok(e.toChanges >= e.shared);
+      assert.ok(e.score >= 0 && e.score <= 1);
       assert.equal(e.weighted, false);
     }
     const ghost = buildMapData(ctx, { edges: 1, kinds: ['ghost'] }).edges[0];
     assert.ok(ghost);
     assert.equal(ghost?.crossesDirectories, true);
+  });
+
+  it('caps unchecked links only when primary relationships are also requested', async () => {
+    const mapRepo = new FixtureRepo();
+    try {
+      for (let i = 0; i < 3; i++) {
+        mapRepo.touch(['src/a.ts', 'src/b.ts'], `code ${i}`);
+        mapRepo.touch(['docs/a.md', 'docs/b.md'], `docs ${i}`);
+      }
+      const ctx = await loadContext(mapRepo.dir, flags);
+      const mixed = buildMapData(ctx, { edges: 10, kinds: ['ghost', 'unknown'], uncheckedCap: 0 });
+      assert.deepEqual(mixed.edges.map((edge) => edge.relationship), ['ghost']);
+
+      const uncapped = buildMapData(ctx, { edges: 10, kinds: ['ghost', 'unknown'] });
+      assert.deepEqual(new Set(uncapped.edges.map((edge) => edge.relationship)), new Set(['ghost', 'unknown']));
+
+      const unknownOnly = buildMapData(ctx, { edges: 10, kinds: ['unknown'], uncheckedCap: 0 });
+      assert.deepEqual(unknownOnly.edges.map((edge) => edge.relationship), ['unknown']);
+    } finally {
+      mapRepo.cleanup();
+    }
   });
 });
 
@@ -213,7 +235,7 @@ describe('cli', () => {
     const cleanResult = JSON.parse(clean.stdout);
     assert.equal(cleanResult.mode, 'scan');
     assert.equal(cleanResult.meta.settings.minShared, 2);
-    assert.ok(cleanResult.relationships.some((r: { to: string }) => r.to === 'templates/invoice-template.html'));
+    assert.ok(cleanResult.relationships.some((r: { to: string }) => r.to === 'templates/invoice-template.ts'));
     assert.match(runCli(['--min-shared', '2'], repo.dir).stdout, /repo-archaeology map/);
 
     writeFileSync(join(repo.dir, 'src/billing.ts'), 'changed\n');
@@ -223,7 +245,7 @@ describe('cli', () => {
       const dirtyResult = JSON.parse(dirty.stdout);
       assert.equal(dirtyResult.mode, 'diff');
       assert.deepEqual(dirtyResult.changed.map((f: { path: string }) => f.path), ['src/billing.ts']);
-      assert.equal(dirtyResult.suggestions[0]?.to, 'templates/invoice-template.html');
+      assert.equal(dirtyResult.suggestions[0]?.to, 'templates/invoice-template.ts');
     } finally {
       repo.git('checkout', '-q', '--', 'src/billing.ts');
     }
