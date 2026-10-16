@@ -171,14 +171,14 @@ program
 program
   .command('map')
   .description('write an interactive map of what changes together and open it in your browser')
-  .option('-o, --out <file>', 'where to write the HTML (default: a temporary folder)')
+  .option('-o, --out <file>', 'where to write the HTML (default: .git/repo-archaeology/map.html)')
   .option('--edges <n>', 'maximum relationships to draw', positiveInt, 150)
   .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'direct']))
   .option('--no-open', 'write the file without opening a browser')
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
-    const { file, data } = writeMap(ctx, opts);
+    const { file, data } = await writeMap(ctx, opts);
     const shouldOpen = opts.open && !global.json && process.stdout.isTTY === true;
     if (shouldOpen) openInBrowser(file);
     if (global.json) printJson({ file, nodes: data.nodes.length, edges: data.edges.length, counts: data.counts });
@@ -186,6 +186,11 @@ program
   });
 
 async function main(): Promise<void> {
+  // `repo-archaeology scan | head` closes the pipe early: that is not an error.
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') process.exit(process.exitCode ?? 0);
+    throw err;
+  });
   try {
     await program.parseAsync(process.argv);
   } catch (err) {

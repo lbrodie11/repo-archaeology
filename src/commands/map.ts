@@ -1,9 +1,8 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
-import { posix } from 'node:path';
+import { basename, dirname, join, posix, resolve } from 'node:path';
 import type { Context } from '../context.js';
+import { runGit } from '../git/run.js';
 import type { Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
 import { buildMeta, toView, type Meta } from '../report/views.js';
@@ -87,32 +86,39 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       evidence: view.evidence.map((e) => ({ hash: e.hash, date: e.date, subject: e.subject })),
     });
   }
-  return { meta: buildMeta(ctx), repoName: basename(ctx.root), generatedAt: new Date().toISOString(), counts, nodes, edges };
+  const repoName = basename(ctx.root);
+  // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
+  const meta = { ...buildMeta(ctx), root: repoName };
+  return { meta, repoName, generatedAt: new Date().toISOString(), counts, nodes, edges };
 }
 
-export function defaultMapPath(root: string): string {
-  const safe = basename(root).replace(/[^\w.-]+/g, '_') || 'repo';
-  return join(tmpdir(), 'repo-archaeology', `${safe}-map.html`);
+/**
+ * Default location: inside the repository's .git folder. It is never committed,
+ * stays the same between runs, and (unlike a shared temp folder) cannot be
+ * pre-created by another user of the machine.
+ */
+export async function defaultMapPath(root: string): Promise<string> {
+  const gitDir = (await runGit(root, ['rev-parse', '--absolute-git-dir'])).trim();
+  return join(gitDir, 'repo-archaeology', 'map.html');
 }
 
-export function writeMap(ctx: Context, options: MapOptions): { file: string; data: MapData } {
+export async function writeMap(ctx: Context, options: MapOptions): Promise<{ file: string; data: MapData }> {
   const data = buildMapData(ctx, options);
-  const file = options.out ? resolve(ctx.cwd, options.out) : defaultMapPath(ctx.root);
+  // --out is relative to where the command was run, even with --cwd.
+  const file = options.out ? resolve(process.cwd(), options.out) : await defaultMapPath(ctx.root);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, renderMapHtml(data), 'utf8');
   return { file, data };
 }
 
-/** Opens a file in the default browser; failures are silent because the path is printed anyway. */
+/**
+ * Opens a file in the default browser; failures are silent because the path is printed anyway.
+ * No shell is involved on any platform, so unusual file names cannot run commands.
+ */
 export function openInBrowser(file: string): void {
-  const [command, args] =
-    process.platform === 'darwin'
-      ? ['open', [file]]
-      : process.platform === 'win32'
-        ? ['cmd', ['/c', 'start', '""', `"${file}"`]]
-        : ['xdg-open', [file]];
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
   try {
-    const child = spawn(command as string, args as string[], { stdio: 'ignore', detached: true, windowsVerbatimArguments: process.platform === 'win32' });
+    const child = spawn(command, [file], { stdio: 'ignore', detached: true });
     child.on('error', () => {});
     child.unref();
   } catch {

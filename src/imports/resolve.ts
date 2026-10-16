@@ -16,7 +16,8 @@ export type Resolution =
   /** Looks local (relative, alias, subpath import) but could not be resolved. */
   | { kind: 'unresolved' };
 
-const APPEND_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.js', '.jsx', '.mjs', '.cjs', '.json'];
+// Implementation files before declaration files: `./foo` with foo.js and foo.d.ts is foo.js.
+const APPEND_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.d.ts', '.json'];
 const INDEX_FILES = APPEND_EXTENSIONS.filter((e) => e !== '.d.ts' && e !== '.json').map((e) => `index${e}`);
 // TypeScript lets `./foo.js` refer to `./foo.ts` in ESM projects.
 const EXTENSION_SWAPS: Record<string, string[]> = {

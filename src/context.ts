@@ -73,7 +73,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
 export function toRepoPath(ctx: Pick<Context, 'cwd' | 'root'>, input: string): string {
   const absolute = realpathLenient(isAbsolute(input) ? input : resolve(ctx.cwd, input));
   const rel = relative(realpathLenient(ctx.root), absolute);
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new UsageError(`${input} is outside the repository at ${ctx.root}.`);
   }
   return rel.split(sep).join('/');

@@ -161,7 +161,7 @@ const CLIENT = String.raw`
     if (text !== undefined) e.textContent = text;
     return e;
   }
-  function pct(x) { return Math.round(x * 100) + '%'; }
+  function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
   function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
   function plural(n, w) { return n.toLocaleString('en-US') + ' ' + w + (n === 1 ? '' : 's'); }
 

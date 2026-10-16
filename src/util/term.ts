@@ -23,8 +23,12 @@ export const c = {
   gray: wrap(90, 39),
 };
 
+/**
+ * Percentages are rounded down, so a value just under a threshold never prints
+ * as the threshold itself (39.5% shows as 39%, not 40%).
+ */
 export function pct(value: number): string {
-  return `${Math.round(value * 100)}%`;
+  return `${Math.floor(value * 100 + 1e-9)}%`;
 }
 
 export function shortHash(hash: string): string {
