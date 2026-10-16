@@ -31,7 +31,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   const root = await findRepoRoot(cwd);
   if (!(await hasCommits(root))) throw new GitError('This repository has no commits yet, so there is no history to analyze.');
   const settings = resolveSettings(loadConfigFile(root), flags);
-  compileSkipPattern(settings.skipCommits); // fail fast on a bad pattern, before reading history
+  const skipFilter = compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
 
   const warnings: string[] = [];
   if (await isShallow(root)) {
@@ -46,7 +46,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       since: settings.since,
       maxFilesPerCommit: settings.maxFilesPerCommit,
       ignore: ignores,
-      skipCommits: compileSkipPattern(settings.skipCommits),
+      skipCommits: skipFilter,
     }),
     listCurrentFiles(root),
   ]);

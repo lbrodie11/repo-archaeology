@@ -87,13 +87,14 @@ export class RelationshipClassifier {
     const ra = this.reachable(a);
     const rb = this.reachable(b);
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
-    if (this.indirectLink(a, b)) return 'indirect';
+    const indirect = this.indirectLink(a, b);
+    if (indirect.linked) return 'indirect';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
     if (!ia.analyzable || !ib.analyzable) return 'unknown';
     // "No import link" is only a claim we can make if every path we followed was resolved.
-    if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete)) return 'unknown';
+    if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete) || indirect.uncertain) return 'unknown';
     return 'ghost';
   }
 
@@ -102,14 +103,17 @@ export class RelationshipClassifier {
    * round). "No import link" would be literally true for these pairs, but readers take
    * a ghost wire to mean hidden coupling, and this coupling is visible in the code.
    */
-  indirectLink(a: string, b: string): { from: string; via: string; to: string } | undefined {
+  indirectLink(a: string, b: string): { linked?: { from: string; via: string; to: string }; uncertain: boolean } {
+    let uncertain = false;
     for (const [from, to] of [[a, b], [b, a]] as const) {
       const vias = [...this.reachable(from).files].filter((via) => via !== a && via !== b).sort();
       for (const via of vias) {
-        if (this.reachable(via).files.has(to)) return { from, via, to };
+        const rvia = this.reachable(via);
+        if (rvia.files.has(to)) return { linked: { from, via, to }, uncertain: false };
+        if (rvia.incomplete) uncertain = true;
       }
     }
-    return undefined;
+    return { uncertain };
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
@@ -126,7 +130,7 @@ export class RelationshipClassifier {
         return 'linked through an index/barrel file';
       }
       case 'indirect': {
-        const link = this.indirectLink(a, b);
+        const link = this.indirectLink(a, b).linked;
         if (!link) return 'connected through one intermediate import';
         return `connected through ${link.via}: ${posix.basename(link.from)} imports ${posix.basename(link.via)}, which imports ${posix.basename(link.to)}`;
       }

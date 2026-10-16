@@ -35,7 +35,7 @@ export function extractDependencies(sourceText: string, fileName = 'file.tsx'): 
 }
 
 /** Cheap pre-check so most files never need a full parse. */
-const MAYBE_DYNAMIC = /\brequire\b|\bimport\s*\(|\bimport\.meta\.glob\b/;
+const MAYBE_DYNAMIC = /\brequire\b|\bimport\s*[(<]|\bimport\s*\/\*|\bimport\s*\.\s*meta\b/;
 
 /**
  * Loads whose target cannot be read from the source: `import(name)`, `require(name)`,
@@ -57,7 +57,7 @@ export function countNonLiteralLoads(sourceText: string, fileName = 'file.tsx'):
       if (ts.isPropertyAccessExpression(callee)) {
         const target = callee.expression;
         const name = callee.name.text;
-        const importMetaGlob = name === 'glob' && ts.isMetaProperty(target) && target.keywordToken === ts.SyntaxKind.ImportKeyword;
+        const importMetaGlob = (name === 'glob' || name === 'globEager') && ts.isMetaProperty(target) && target.keywordToken === ts.SyntaxKind.ImportKeyword;
         const requireContext = name === 'context' && ts.isIdentifier(target) && target.text === 'require';
         if (importMetaGlob || requireContext) count++;
       }

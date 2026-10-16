@@ -192,6 +192,10 @@ program
     else printMap(file, data, shouldOpen);
   });
 
+for (const cmd of program.commands) {
+  cmd.allowExcessArguments(false);
+}
+
 program.action(async () => {
   // The bare command has a default action, so a mistyped command arrives as an extra argument.
   const [unexpected] = program.args;

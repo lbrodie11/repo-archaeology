@@ -57,7 +57,7 @@ interface PathsConfig {
   pathsBase?: string;
 }
 
-const CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json'];
+const CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json', 'tsconfig.app.json'];
 
 /**
  * Reads `baseUrl` and `paths` from the nearest tsconfig/jsconfig, following
@@ -97,7 +97,11 @@ export class TsConfigPaths {
     const text = this.files.read(configPath);
     if (text === undefined) return null;
     const parsed = typescript().parseConfigFileTextToJson(configPath, text);
-    const json = parsed.config as { extends?: string | string[]; compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } } | undefined;
+    const json = parsed.config as {
+      extends?: string | string[];
+      references?: { path?: string }[];
+      compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
+    } | undefined;
     if (!json) return null;
 
     const dir = posix.dirname(configPath);
@@ -111,14 +115,31 @@ export class TsConfigPaths {
       if (inherited) result = { ...result, ...inherited };
     }
 
+    const references = Array.isArray(json.references) ? json.references : [];
+    for (const ref of references) {
+      if (depth >= 5 || typeof ref?.path !== 'string') continue;
+      let refPath = posix.normalize(posix.join(dir, ref.path));
+      if (this.files.exists(posix.join(refPath, 'tsconfig.json'))) refPath = posix.join(refPath, 'tsconfig.json');
+      else if (!refPath.endsWith('.json')) refPath += '.json';
+      const referenced = this.load(refPath, depth + 1);
+      if (referenced) {
+        result = {
+          ...result,
+          ...referenced,
+          paths: [...(result.paths ?? []), ...(referenced.paths ?? [])],
+        };
+      }
+    }
+
     const options = json.compilerOptions ?? {};
     if (typeof options.baseUrl === 'string') {
       result.baseUrl = posix.normalize(posix.join(dir, options.baseUrl));
     }
     if (options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)) {
-      result.paths = Object.entries(options.paths)
+      const declaredPaths = Object.entries(options.paths)
         .filter(([, targets]) => Array.isArray(targets))
         .map(([pattern, targets]) => ({ pattern, targets: targets.filter((t) => typeof t === 'string') }));
+      result.paths = [...(result.paths ?? []), ...declaredPaths];
       result.pathsDir = dir;
     }
     // Same rule as TypeScript: paths resolve against the effective baseUrl when there is one.
@@ -139,7 +160,7 @@ function matchPattern(pattern: string, specifier: string): string | undefined {
 }
 
 /** Specifiers that look like local aliases even when no config explains them. */
-const ALIAS_LIKE = /^(?:[@~]\/|~|#)/;
+const ALIAS_LIKE = /^(?:[@~#$]\/|~|#|\$|@[a-zA-Z0-9_-]+\/)/;
 
 export class ImportResolver {
   private readonly tsconfig: TsConfigPaths;
@@ -250,56 +271,53 @@ function packageCandidates(json: Record<string, unknown>, subpath: string): stri
     const map = exportsField as Record<string, unknown>;
     const isConditionsOnly = Object.keys(map).every((k) => !k.startsWith('.'));
     if (isConditionsOnly && !subpath) {
-      const target = pickExportTarget(map);
-      if (target) out.push(target);
+      out.push(...collectExportTargets(map));
     } else {
-      const direct = pickExportTarget(map[exportKey]);
-      if (direct) out.push(direct);
+      out.push(...collectExportTargets(map[exportKey]));
       for (const [key, value] of Object.entries(map)) {
         const capture = key.includes('*') ? matchPattern(key, exportKey) : undefined;
-        const target = capture !== undefined ? pickExportTarget(value) : undefined;
-        if (target) out.push(target.replace('*', capture!));
+        if (capture !== undefined) {
+          for (const target of collectExportTargets(value)) {
+            out.push(target.replace('*', capture));
+          }
+        }
       }
     }
   }
   if (!subpath) {
-    for (const field of ['source', 'module', 'main', 'types']) {
+    for (const field of ['source', 'browser', 'module', 'main', 'types']) {
       if (typeof json[field] === 'string') out.push(json[field] as string);
     }
     out.push('src/index', 'index');
   } else {
     out.push(`src/${subpath}`, subpath, `lib/${subpath}`);
   }
-  return out;
+  return [...new Set(out)];
 }
 
 /** Conditions a runtime import can match. `types` is only a fallback: runtime code never loads it. */
-const RUNTIME_CONDITIONS = new Set(['development', 'import', 'module', 'node', 'require', 'default']);
+const RUNTIME_CONDITIONS = new Set(['browser', 'development', 'import', 'module', 'node', 'require', 'default']);
 
-function pickExportTarget(value: unknown): string | undefined {
-  if (typeof value === 'string') return value;
+function collectExportTargets(value: unknown): string[] {
+  const out: string[] = [];
+  if (typeof value === 'string') return [value];
   if (Array.isArray(value)) {
-    for (const v of value) {
-      const t = pickExportTarget(v);
-      if (t) return t;
-    }
-    return undefined;
+    for (const v of value) out.push(...collectExportTargets(v));
+    return out;
   }
   if (value && typeof value === 'object') {
     const conditions = value as Record<string, unknown>;
     // `source` is a widespread convention pointing straight at the source file.
-    const source = pickExportTarget(conditions.source);
-    if (source) return source;
-    // Like Node: the first matching condition *in the object's own order* wins, so
-    // `{ "node": "./node.js", "default": "./browser.js" }` resolves to node.js.
+    if (typeof conditions.source === 'string') out.push(conditions.source);
+    // Like Node: the first matching condition *in the object's own order* wins.
+    // We collect in that order, ignoring `types` until the end.
     for (const [key, target] of Object.entries(conditions)) {
       if (!RUNTIME_CONDITIONS.has(key)) continue;
-      const t = pickExportTarget(target);
-      if (t) return t;
+      out.push(...collectExportTargets(target));
     }
-    return pickExportTarget(conditions.types);
+    if (typeof conditions.types === 'string') out.push(conditions.types);
   }
-  return undefined;
+  return out;
 }
 
 /** Maps a published path such as `dist/esm/utils.js` back to a likely source file such as `src/utils.ts`. */

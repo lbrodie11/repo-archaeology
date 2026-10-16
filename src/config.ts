@@ -18,6 +18,8 @@ export interface Settings {
   halfLifeDays?: number;
   /** Optional regular expression (case-insensitive): commits whose subject matches are left out. */
   skipCommits?: string;
+  /** Optional list of plain prefix strings to skip (e.g. ["chore", "style", "docs"]). */
+  skipCommitPrefixes?: string[];
   /** Extra glob patterns to ignore, added to the defaults. */
   ignore: string[];
   /** Set to false to drop the built-in ignore list. */
@@ -94,16 +96,18 @@ export function loadConfigFile(root: string): Partial<Settings> {
 export function riskySkipPattern(pattern: string): string | undefined {
   if (pattern.length > MAX_SKIP_PATTERN_LENGTH) return `is longer than ${MAX_SKIP_PATTERN_LENGTH} characters`;
   if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
+  let quantifierCount = 0;
   // Find each group's contents and check whether the group is followed by a quantifier.
   const stack: number[] = [];
   for (let i = 0; i < pattern.length; i++) {
     const ch = pattern[i];
     if (ch === '\\') { i++; continue; }
     if (ch === '[') {
-      // Skip character classes, where ( ) + * | are literal.
+      // Skip character classes, where ( ) + * | { are literal.
       for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
       continue;
     }
+    if (ch === '*' || ch === '+' || ch === '{') quantifierCount++;
     if (ch === '(') stack.push(i);
     else if (ch === ')' && stack.length > 0) {
       const start = stack.pop()!;
@@ -113,12 +117,15 @@ export function riskySkipPattern(pattern: string): string | undefined {
       }
     }
   }
+  if (quantifierCount > 2) {
+    return 'has more than 2 repetition quantifiers (*, +, {n,m})';
+  }
   return undefined;
 }
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
   const out: Partial<Settings> = {};
-  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits']));
+  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes']));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new ConfigError(`${source}: unknown setting "${key}".`);
   }
@@ -152,6 +159,12 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
     compileSkipPattern(raw.skipCommits, source);
     out.skipCommits = raw.skipCommits;
   }
+  if (raw.skipCommitPrefixes !== undefined) {
+    if (!Array.isArray(raw.skipCommitPrefixes) || raw.skipCommitPrefixes.some((p) => typeof p !== 'string' || p.trim() === '')) {
+      throw new ConfigError(`${source}: "skipCommitPrefixes" must be an array of non-empty strings.`);
+    }
+    out.skipCommitPrefixes = raw.skipCommitPrefixes as string[];
+  }
   if (raw.ignore !== undefined) {
     if (!Array.isArray(raw.ignore) || raw.ignore.some((p) => typeof p !== 'string')) {
       throw new ConfigError(`${source}: "ignore" must be an array of glob strings.`);
@@ -172,10 +185,18 @@ export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<
   return merged;
 }
 
-export function compileSkipPattern(pattern: string | undefined, source = '--skip-commits'): RegExp | undefined {
-  if (pattern === undefined || pattern === '') return undefined;
+export function compileSkipPattern(pattern: string | undefined, source = '--skip-commits', prefixes?: string[]): RegExp | undefined {
+  const parts: string[] = [];
+  if (prefixes && prefixes.length > 0) {
+    const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    parts.push(`^(?:${escaped})(?:\\b|[:\\s_-])`);
+  }
+  if (pattern !== undefined && pattern !== '') {
+    parts.push(`(?:${pattern})`);
+  }
+  if (parts.length === 0) return undefined;
   try {
-    return new RegExp(pattern, 'i');
+    return new RegExp(parts.join('|'), 'i');
   } catch (err) {
     throw new ConfigError(`${source}: invalid regular expression: ${(err as Error).message}`);
   }

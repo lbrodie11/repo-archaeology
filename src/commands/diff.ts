@@ -56,11 +56,10 @@ export function suggestMissing(ctx: Context, changes: ChangedFile[], options: Pi
   // per partner: otherwise a strong import link could hide a weaker but qualifying ghost wire.
   const best = new Map<number, { companion: Companion; fromPath: string; relationship: Relationship; linkedFrom: Set<string> }>();
   for (const file of changes) {
-    // A path created only in the working tree has no committed history of its own: whatever
-    // the log knows under that name belonged to an earlier, deleted file. Paths created on the
-    // branch are fine, because the log saw their creation and gave the old file its own identity.
-    const bornUncommitted = file.added === true && !file.sources.includes('branch');
-    const ownHistory = !bornUncommitted && model.id(file.path) !== undefined;
+    // A path created in this change (working tree or branch) has no pre-existing history of its own:
+    // whatever the log knows under that name belonged to an earlier, deleted file.
+    // If it is a rename (oldPath is set), its history comes from oldPath.
+    const ownHistory = file.added !== true && model.id(file.path) !== undefined;
     const historyPath = ownHistory ? file.path : file.oldPath !== undefined && model.id(file.oldPath) !== undefined ? file.oldPath : undefined;
     changed.push({ ...file, historyPath, hasHistory: historyPath !== undefined });
     if (historyPath === undefined) continue;
@@ -106,11 +105,16 @@ export function printDiff(result: DiffResult): void {
     return;
   }
   const withoutHistory = result.changed.filter((f) => !f.hasHistory).length;
+  const withHistory = result.changed.length - withoutHistory;
   const note = withoutHistory > 0 ? c.dim(` (${withoutHistory} new or without usable history)`) : '';
   console.log(`You changed ${plural(result.changed.length, 'file')}${note}.`);
   console.log();
   if (result.suggestions.length === 0) {
-    console.log(c.green('✓ Nothing obviously missing: no untouched file usually changes alongside these.'));
+    if (withHistory === 0) {
+      console.log(c.dim('No suggestions: none of the changed files have usable history to evaluate.'));
+    } else {
+      console.log(c.green(`✓ Nothing obviously missing: evaluated ${plural(withHistory, 'file')}; no untouched file usually changes alongside ${withHistory === 1 ? 'it' : 'them'}.`));
+    }
     return;
   }
   console.log(c.bold(`Possibly missed (${result.suggestions.length})`));
