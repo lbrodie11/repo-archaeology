@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/package.json)
 
-**Discover files you might have forgotten to update.** Explore hidden relationships in your codebase using Git history. See which files frequently change together, investigate why, and check your pending changes for possible omissions.
+**See which files your git history says move together, and why.** Explore hidden relationships in your codebase using Git history. Investigate unexplained coupling, explore interactive dependency graphs, and test whether pending changes might have companion files worth reviewing.
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 

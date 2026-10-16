@@ -48,9 +48,15 @@ export function resolveFile(base: string, files: RepoFiles): string | undefined 
   return undefined;
 }
 
+export interface PathEntry {
+  pattern: string;
+  targets: string[];
+  base: string;
+}
+
 interface PathsConfig {
   baseUrl?: string;
-  paths?: { pattern: string; targets: string[] }[];
+  paths?: PathEntry[];
   /** Directory of the config that declared `paths`. */
   pathsDir?: string;
   /** Where `paths` targets resolve from: the effective baseUrl, else `pathsDir`. */
@@ -126,7 +132,10 @@ export class TsConfigPaths {
         result = {
           ...result,
           ...referenced,
-          paths: [...(result.paths ?? []), ...(referenced.paths ?? [])],
+          paths: [
+            ...(referenced.paths ?? []),
+            ...(result.paths ?? []).filter((ip) => !(referenced.paths ?? []).some((rp) => rp.pattern === ip.pattern)),
+          ],
         };
       }
     }
@@ -136,10 +145,17 @@ export class TsConfigPaths {
       result.baseUrl = posix.normalize(posix.join(dir, options.baseUrl));
     }
     if (options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)) {
-      const declaredPaths = Object.entries(options.paths)
+      const currentBase = result.baseUrl ?? dir;
+      const declaredPaths: PathEntry[] = Object.entries(options.paths)
         .filter(([, targets]) => Array.isArray(targets))
-        .map(([pattern, targets]) => ({ pattern, targets: targets.filter((t) => typeof t === 'string') }));
-      result.paths = [...(result.paths ?? []), ...declaredPaths];
+        .map(([pattern, targets]) => ({
+          pattern,
+          targets: targets.filter((t) => typeof t === 'string'),
+          base: currentBase,
+        }));
+      // Child mappings override parent mappings for the same pattern, and come first.
+      const inherited = (result.paths ?? []).filter((ip) => !declaredPaths.some((dp) => dp.pattern === ip.pattern));
+      result.paths = [...declaredPaths, ...inherited];
       result.pathsDir = dir;
     }
     // Same rule as TypeScript: paths resolve against the effective baseUrl when there is one.
@@ -160,7 +176,7 @@ function matchPattern(pattern: string, specifier: string): string | undefined {
 }
 
 /** Specifiers that look like local aliases even when no config explains them. */
-const ALIAS_LIKE = /^(?:[@~#$]\/|~|#|\$|@[a-zA-Z0-9_-]+\/)/;
+const ALIAS_LIKE = /^(?:[@~#$]\/|~(?:\/|$)|#|\$(?:lib|app)?(?:\/|$))/;
 
 export class ImportResolver {
   private readonly tsconfig: TsConfigPaths;
@@ -187,12 +203,12 @@ export class ImportResolver {
     if (config?.paths) {
       const matches = config.paths
         .map((entry) => ({ entry, capture: matchPattern(entry.pattern, specifier) }))
-        .filter((m): m is { entry: (typeof config.paths)[number]; capture: string } => m.capture !== undefined)
+        .filter((m): m is { entry: PathEntry; capture: string } => m.capture !== undefined)
         // TypeScript prefers an exact pattern, then the longest prefix before `*`.
         .sort((x, y) => prefixLength(y.entry.pattern) - prefixLength(x.entry.pattern));
       for (const { entry, capture } of matches) {
         for (const target of entry.targets) {
-          const found = resolveFile(posix.join(config.pathsBase ?? '', target.replace('*', capture)), this.files);
+          const found = resolveFile(posix.join(entry.base, target.replace('*', capture)), this.files);
           if (found) return { kind: 'file', path: found };
         }
       }
@@ -202,7 +218,8 @@ export class ImportResolver {
       const found = resolveFile(posix.join(config.baseUrl, specifier), this.files);
       if (found) return { kind: 'file', path: found };
     }
-    const local = this.packages.resolve(specifier);
+    const mode = fromFile.endsWith('.cjs') || fromFile.endsWith('.cts') ? 'require' : 'import';
+    const local = this.packages.resolve(specifier, mode);
     if (local) return local;
     return ALIAS_LIKE.test(specifier) ? { kind: 'unresolved' } : { kind: 'external' };
   }
@@ -229,13 +246,13 @@ export class LocalPackages {
 
   constructor(private readonly files: RepoFiles & { list(): Iterable<string> }) { }
 
-  resolve(specifier: string): Resolution | undefined {
+  resolve(specifier: string, mode: 'import' | 'require' = 'import'): Resolution | undefined {
     const pkg = this.all()
       .filter((p) => specifier === p.name || specifier.startsWith(`${p.name}/`))
       .sort((a, b) => b.name.length - a.name.length)[0];
     if (!pkg) return undefined;
     const subpath = specifier.slice(pkg.name.length + 1);
-    for (const candidate of packageCandidates(pkg.json, subpath)) {
+    for (const candidate of packageCandidates(pkg.json, subpath, mode)) {
       const target = posix.join(pkg.dir, candidate);
       const sourceTarget = sourceForBuildOutput(target, pkg.dir);
       const found = resolveFile(sourceTarget, this.files) ?? resolveFile(target, this.files);
@@ -262,7 +279,7 @@ export class LocalPackages {
 }
 
 /** Paths (relative to the package) an import of `subpath` may point at, most likely first. */
-function packageCandidates(json: Record<string, unknown>, subpath: string): string[] {
+function packageCandidates(json: Record<string, unknown>, subpath: string, mode: 'import' | 'require' = 'import'): string[] {
   const out: string[] = [];
   const exportKey = subpath ? `./${subpath}` : '.';
   const exportsField = json.exports;
@@ -271,13 +288,13 @@ function packageCandidates(json: Record<string, unknown>, subpath: string): stri
     const map = exportsField as Record<string, unknown>;
     const isConditionsOnly = Object.keys(map).every((k) => !k.startsWith('.'));
     if (isConditionsOnly && !subpath) {
-      out.push(...collectExportTargets(map));
+      out.push(...collectExportTargets(map, mode));
     } else {
-      out.push(...collectExportTargets(map[exportKey]));
+      out.push(...collectExportTargets(map[exportKey], mode));
       for (const [key, value] of Object.entries(map)) {
         const capture = key.includes('*') ? matchPattern(key, exportKey) : undefined;
         if (capture !== undefined) {
-          for (const target of collectExportTargets(value)) {
+          for (const target of collectExportTargets(value, mode)) {
             out.push(target.replace('*', capture));
           }
         }
@@ -296,24 +313,33 @@ function packageCandidates(json: Record<string, unknown>, subpath: string): stri
 }
 
 /** Conditions a runtime import can match. `types` is only a fallback: runtime code never loads it. */
+const ESM_CONDITIONS = new Set(['browser', 'development', 'import', 'module', 'node', 'default']);
+const CJS_CONDITIONS = new Set(['browser', 'development', 'require', 'node', 'default']);
 const RUNTIME_CONDITIONS = new Set(['browser', 'development', 'import', 'module', 'node', 'require', 'default']);
 
-function collectExportTargets(value: unknown): string[] {
+function collectExportTargets(value: unknown, mode: 'import' | 'require' = 'import'): string[] {
   const out: string[] = [];
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) {
-    for (const v of value) out.push(...collectExportTargets(v));
+    for (const v of value) out.push(...collectExportTargets(v, mode));
     return out;
   }
   if (value && typeof value === 'object') {
     const conditions = value as Record<string, unknown>;
     // `source` is a widespread convention pointing straight at the source file.
     if (typeof conditions.source === 'string') out.push(conditions.source);
-    // Like Node: the first matching condition *in the object's own order* wins.
-    // We collect in that order, ignoring `types` until the end.
+    // In Node.js, `import` and `require` are mutually exclusive conditions.
+    const active = mode === 'require' ? CJS_CONDITIONS : ESM_CONDITIONS;
     for (const [key, target] of Object.entries(conditions)) {
-      if (!RUNTIME_CONDITIONS.has(key)) continue;
-      out.push(...collectExportTargets(target));
+      if (!active.has(key)) continue;
+      out.push(...collectExportTargets(target, mode));
+    }
+    // Fall back to any runtime condition if mode-specific conditions yielded no targets
+    if (out.length === 0) {
+      for (const [key, target] of Object.entries(conditions)) {
+        if (!RUNTIME_CONDITIONS.has(key)) continue;
+        out.push(...collectExportTargets(target, mode));
+      }
     }
     if (typeof conditions.types === 'string') out.push(conditions.types);
   }

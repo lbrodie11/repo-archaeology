@@ -39,6 +39,7 @@ export function renderMapHtml(data: MapData): string {
     <div class="heading">
       <h1>${escapeHtml(title)}</h1>
       <p id="summary" class="summary"></p>
+      ${data.meta.warnings && data.meta.warnings.length > 0 ? `<div class="banner-warning">${data.meta.warnings.map((w) => `! ${escapeHtml(w)}`).join('<br>')}</div>` : ''}
     </div>
     <div class="controls">
       <label class="search"><span class="visually-hidden">Find a file</span>
@@ -52,6 +53,7 @@ export function renderMapHtml(data: MapData): string {
     <div id="tooltip" class="tooltip" hidden></div>
     <div class="stage-overlay">
       <button id="reset-view" class="map-btn" type="button" title="Fit all files in view">Reset view</button>
+      <button id="toggle-anim" class="map-btn" type="button" title="Pause or resume line animation">Pause animation</button>
     </div>
     <p class="hint">Drag to pan, scroll to zoom, drag a file to pin it.</p>
   </main>
@@ -100,10 +102,13 @@ h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; fon
 .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
 .search input { width: 240px; padding: 7px 11px; border: 1px solid var(--border-active); border-radius: 6px; background: var(--ground-deep); font-size: 13.5px; }
 .search input::placeholder { color: var(--chalk-faded); }
+.banner-warning { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 12px; background: rgba(227, 182, 91, 0.12); border: 1px solid rgba(227, 182, 91, 0.35); border-radius: 6px; font-size: 13px; color: var(--ochre); }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
-.toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s ease; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--chalk); transition: all 0.15s ease; }
 .toggle:hover { border-color: var(--chalk); }
-.toggle[aria-pressed="false"] { opacity: 0.6; border-style: dashed; }
+.toggle[aria-pressed="false"] { border-style: dashed; border-color: rgba(159, 180, 204, 0.25); background: rgba(14, 37, 64, 0.4); color: var(--chalk-faded); }
+.toggle[aria-pressed="false"] .count { color: var(--chalk-dim); }
+.toggle[aria-pressed="true"] { background: rgba(23, 59, 97, 0.5); border-color: var(--border-active); color: var(--chalk); }
 .toggle .count { color: var(--chalk-faded); font-variant-numeric: tabular-nums; }
 .swatch { width: 22px; height: 0; border-top: 2px solid; }
 .swatch.ghost { border-top: 2px dashed var(--tape); filter: drop-shadow(0 0 3px var(--tape)); }
@@ -132,6 +137,7 @@ canvas.pointing { cursor: pointer; }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .badge.ghost { background: rgba(255, 79, 154, 0.15); color: var(--tape); border: 1px solid rgba(255, 79, 154, 0.35); }
+.badge.parallel { background: rgba(160, 200, 240, 0.12); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
 .badge.unknown { background: rgba(227, 182, 91, 0.15); color: var(--ochre); border: 1px solid rgba(227, 182, 91, 0.35); }
 .badge.indirect { background: rgba(160, 200, 240, 0.15); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
 .badge.direct { background: rgba(232, 238, 245, 0.1); color: var(--chalk); border: 1px solid rgba(232, 238, 245, 0.25); }
@@ -142,8 +148,9 @@ canvas.pointing { cursor: pointer; }
 .tab-btn:hover { color: var(--chalk); }
 .tab-btn.active { background: var(--ground-surface); color: var(--chalk); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 
-.card { background: var(--ground-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease; }
-.card.interactive { cursor: pointer; }
+.card-hint { font-size: 12px; color: var(--chalk-dim); margin: -4px 0 8px; }
+.card { background: var(--ground-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease; display: block; width: 100%; text-align: left; }
+.card.interactive { cursor: pointer; font: inherit; }
 .card.interactive:hover { border-color: rgba(255, 79, 154, 0.5); background: var(--ground-card-hover); transform: translateY(-1px); }
 .card.selected { border-color: var(--tape); box-shadow: 0 0 14px var(--tape-glow); }
 
@@ -271,8 +278,8 @@ const CLIENT = String.raw`
   }
   function hashHue(str) {
     var h = 0;
-    for (var i = 0; i < str.length; i++) h = (h * 33 + str.charCodeAt(i)) >>> 0;
-    return h % 360;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return Math.round((h * 137.508) % 360);
   }
 
   // ---- data ----------------------------------------------------------------
@@ -284,7 +291,7 @@ const CLIENT = String.raw`
     return {
       i: i, path: n.path, dir: n.dir, changes: n.changes, author: n.topAuthor, share: n.topAuthorShare,
       r: 4 + Math.min(14, Math.sqrt(n.changes) * 1.25),
-      color: 'hsl(' + hashHue(n.dir) + ', 46%, 74%)',
+      color: 'hsl(' + hashHue(n.dir) + ', 58%, 72%)',
       x: 0, y: 0, vx: 0, vy: 0, pinned: false, edges: []
     };
   });
@@ -459,19 +466,22 @@ const CLIENT = String.raw`
   }
 
   // ---- selection -----------------------------------------------------------
-  var selectedNode = null, selectedEdge = null, hoverNode = null, matches = null;
+  var selectedNode = null, selectedEdge = null, hoverNode = null, hoverEdge = null, matches = null;
   var overviewTab = 'ghost';
   var overviewExpanded = false;
+  var animPaused = false;
 
   function isVisible(e) { return visible[e.d.relationship]; }
   function isActive(n) { return n.edges.some(isVisible); }
   function focusEdge(e) {
     if (selectedEdge) return e === selectedEdge;
+    if (hoverEdge) return e === hoverEdge;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
     return true;
   }
   function focusNode(n) {
     if (selectedEdge) return n === selectedEdge.s || n === selectedEdge.t;
+    if (hoverEdge) return n === hoverEdge.s || n === hoverEdge.t;
     if (selectedNode) return n === selectedNode || n.edges.some(function (e) { return isVisible(e) && (e.s === selectedNode || e.t === selectedNode); });
     if (matches) return matches.indexOf(n) >= 0;
     return true;
@@ -491,7 +501,7 @@ const CLIENT = String.raw`
       if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge) fit();
     }
     var flying = stepFlight(now || performance.now());
-    var marching = !reduceMotion && !document.hidden && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
+    var marching = !animPaused && !reduceMotion && !document.hidden && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
     if (marching) dashPhase = (dashPhase + 0.35) % 1100;
     draw();
     if (alpha > 0.02 || marching || flying) requestDraw();
@@ -530,7 +540,7 @@ const CLIENT = String.raw`
         if (kind === 'ghost') {
           ctx.setLineDash([7 / k, 6 / k]);
           ctx.lineDashOffset = -dashPhase / k;
-          if (focused && (selectedEdge || selectedNode)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
+          if (focused && (selectedEdge || selectedNode || hoverEdge)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
         } else if (kind === 'unknown') {
           ctx.setLineDash([2 / k, 5 / k]);
         } else if (kind === 'indirect') {
@@ -556,7 +566,8 @@ const CLIENT = String.raw`
       ctx.fillStyle = n.color;
       ctx.fill();
       ctx.lineWidth = Math.max(1 / k, 1.2);
-      var isTargetEndpoint = selectedEdge && (n === selectedEdge.s || n === selectedEdge.t);
+      var isTargetEndpoint = (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
+                             (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t));
       ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
       if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
       ctx.stroke();
@@ -568,9 +579,9 @@ const CLIENT = String.raw`
     ctx.lineJoin = 'round';
     var labelBoxes = [];
     nodes.forEach(function (n) {
-      var overview = !selectedNode && !selectedEdge && !matches;
+      var overview = !selectedNode && !selectedEdge && !hoverEdge && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge) && focusNode(n)) ||
+        ((selectedNode || selectedEdge || hoverEdge) && focusNode(n)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
       var label = overviewLabelNodes[n.i] || getNodeLabel(n);
@@ -723,6 +734,14 @@ const CLIENT = String.raw`
       fit(); renderPanel(); requestDraw();
     });
   }
+  var toggleAnimBtn = document.getElementById('toggle-anim');
+  if (toggleAnimBtn) {
+    toggleAnimBtn.addEventListener('click', function () {
+      animPaused = !animPaused;
+      toggleAnimBtn.textContent = animPaused ? 'Resume animation' : 'Pause animation';
+      requestDraw();
+    });
+  }
 
   function selectNode(n) {
     selectedNode = n; selectedEdge = null; matches = null; search.value = '';
@@ -770,6 +789,12 @@ const CLIENT = String.raw`
     fallback();
   }
 
+  function sanitizeMarkdown(text) {
+    return String(text)
+      .replace(/@([a-zA-Z0-9_-]+)/g, '@\u200B$1')
+      .replace(/#([0-9]+)/g, '#\u200B$1');
+  }
+
   function formatFindingMarkdown(e) {
     var q = String.fromCharCode(96);
     var labels = distinguishingPaths(e.s.path, e.t.path);
@@ -789,13 +814,13 @@ const CLIENT = String.raw`
       '- ' + q + labels[1] + q + ' → ' + q + labels[0] + q + ': ' + directionEvidence(e, false),
       '',
       '**Why It Matters:**',
-      '- ' + capitalize(e.d.why) + '.' + scope,
+      '- ' + sanitizeMarkdown(capitalize(e.d.why)) + '.' + scope,
       (e.d.relationship === 'ghost' ? '- No direct or supported indirect import relationship found in current code.' : '')
     ];
     if (e.d.evidence && e.d.evidence.length > 0) {
       lines.push('', '**Supporting Commits:**');
       e.d.evidence.slice(0, 5).forEach(function (ev) {
-        lines.push('- ' + q + ev.hash.slice(0, 7) + q + ' (' + ev.date + '): ' + ev.subject);
+        lines.push('- ' + q + ev.hash.slice(0, 7) + q + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
@@ -808,22 +833,54 @@ const CLIENT = String.raw`
     return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ')';
   }
   function findingLabel(e) {
-    if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Possible parallel implementations';
+    if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Related implementations';
     return KINDS[e.d.relationship].label.replace(/s$/, '');
   }
 
   // ---- panel rendering -----------------------------------------------------
+  function getTopFindings(list, maxCount) {
+    var result = [];
+    var seenParallel = new Set();
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var isParallel = item.d.hiddenBridge && item.d.hiddenBridge.signal === 'parallel-implementation';
+      if (isParallel) {
+        var baseName = base(item.s.path);
+        if (seenParallel.has(baseName)) continue;
+        seenParallel.add(baseName);
+      }
+      result.push(item);
+      if (result.length >= maxCount) break;
+    }
+    if (result.length < maxCount) {
+      for (var j = 0; j < list.length; j++) {
+        if (result.indexOf(list[j]) === -1) {
+          result.push(list[j]);
+          if (result.length >= maxCount) break;
+        }
+      }
+    }
+    return result;
+  }
+
   function renderOverview() {
     var header = el('div');
     header.appendChild(el('h2', '', 'Explore file relationships'));
-    header.appendChild(el('p', '', 'Each dot represents a file sized by commit frequency and colored by directory. Lines connect files that change together. Pink dashed lines are ghost wires: files with no import relationship in current code that repeatedly move together in git history.'));
+    header.appendChild(el('p', '', 'Each dot represents a file sized by commit frequency and colored by directory. Lines connect files that change together. Pink dashed lines are ghost wires: files with no direct or supported indirect import relationship in current code that repeatedly move together in git history.'));
     panel.appendChild(header);
 
     var visibleEdges = edges.filter(isVisible);
     var ghosts = visibleEdges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
       return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
     });
-    var surprising = ghosts.filter(function (e) { return e.d.crossesDirectories || e.d.overviewPriority >= 2; });
+    var surprising = ghosts.filter(function (e) {
+      var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+      if (isParallel) return false;
+      var fromDir = e.s.dir, toDir = e.t.dir;
+      var independent = fromDir !== toDir && fromDir !== '.' && toDir !== '.'
+        && !fromDir.startsWith(toDir + '/') && !toDir.startsWith(fromDir + '/');
+      return independent || e.d.overviewPriority >= 2;
+    });
     var strongest = visibleEdges.slice().sort(function (a, b) { return b.d.shared - a.d.shared || b.d.score - a.d.score; });
 
     // Tabs
@@ -853,10 +910,11 @@ const CLIENT = String.raw`
     if (listData.length === 0) {
       panel.appendChild(el('p', '', 'No relationships found for this filter.'));
     } else {
-      var displayCount = overviewExpanded ? listData.length : Math.min(3, listData.length);
+      panel.appendChild(el('p', 'card-hint', 'Select a card or line to inspect directional stats & commits'));
+      var displayCards = overviewExpanded ? listData : getTopFindings(listData, 3);
       var cardsContainer = el('div');
-      for (var idx = 0; idx < displayCount; idx++) {
-        cardsContainer.appendChild(relationshipCard(listData[idx]));
+      for (var idx = 0; idx < displayCards.length; idx++) {
+        cardsContainer.appendChild(relationshipCard(displayCards[idx]));
       }
       panel.appendChild(cardsContainer);
 
@@ -876,14 +934,24 @@ const CLIENT = String.raw`
   }
 
   function renderFolderLegend() {
-    var activeDirs = dirList.filter(function (d) { return d.count > 0; }).slice(0, 8);
-    if (activeDirs.length === 0) return;
-    panel.appendChild(el('h3', '', 'Directory color legend'));
+    var activeNodes = nodes.filter(isActive);
+    var dirCounts = Object.create(null);
+    activeNodes.forEach(function (n) {
+      dirCounts[n.dir] = (dirCounts[n.dir] || 0) + 1;
+    });
+    var sortedDirs = Object.keys(dirCounts)
+      .map(function (name) { return { name: name, count: dirCounts[name] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+    if (sortedDirs.length === 0) return;
+    var title = sortedDirs.length > 8
+      ? 'Directory color legend (' + sortedDirs.slice(0, 8).length + ' of ' + sortedDirs.length + ' folders)'
+      : 'Directory color legend';
+    panel.appendChild(el('h3', '', title));
     var legend = el('div', 'folder-legend');
-    activeDirs.forEach(function (d) {
+    sortedDirs.slice(0, 8).forEach(function (d) {
       var item = el('div', 'legend-item');
       var dot = el('span', 'legend-dot');
-      dot.style.background = 'hsl(' + hashHue(d.name) + ', 46%, 74%)';
+      dot.style.background = 'hsl(' + hashHue(d.name) + ', 58%, 72%)';
       item.appendChild(dot);
       item.appendChild(el('span', '', d.name + ' (' + d.count + ')'));
       legend.appendChild(item);
@@ -892,10 +960,14 @@ const CLIENT = String.raw`
   }
 
   function relationshipCard(e) {
-    var card = el('div', 'card interactive');
+    var card = el('button', 'card interactive');
+    card.type = 'button';
     var head = el('div', 'card-header');
-    head.appendChild(el('span', 'badge ' + e.d.relationship, findingLabel(e)));
-    head.appendChild(el('span', 'card-sub', 'Changed together in ' + plural(e.d.shared, 'commit')));
+    var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+    var badgeClass = isParallel ? 'badge parallel' : 'badge ' + e.d.relationship;
+    head.appendChild(el('span', badgeClass, findingLabel(e)));
+    var peakPct = pct(Math.max(e.d.confidence, e.d.reverseConfidence));
+    head.appendChild(el('span', 'card-sub', plural(e.d.shared, 'shared commit') + ' · ' + peakPct));
     card.appendChild(head);
 
     var pair = el('div', 'card-title');
@@ -904,12 +976,26 @@ const CLIENT = String.raw`
     card.appendChild(pair);
 
     var note = el('div', 'card-sub');
-    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')
-      ? 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + '). '
-      : '';
-    note.textContent = scope + capitalize(e.d.why) + '.';
+    if (isParallel) {
+      note.textContent = 'These files support related functionality across sibling directories and have been updated together in ' + plural(e.d.shared, 'commit') + '.';
+    } else {
+      var scope = e.d.crossesDirectories
+        ? 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + '). '
+        : '';
+      note.textContent = scope + capitalize(e.d.why) + '.';
+    }
     card.appendChild(note);
 
+    card.addEventListener('pointerenter', function () {
+      hoverEdge = e;
+      requestDraw();
+    });
+    card.addEventListener('pointerleave', function () {
+      if (hoverEdge === e) {
+        hoverEdge = null;
+        requestDraw();
+      }
+    });
     card.addEventListener('click', function () {
       selectEdge(e);
     });
@@ -923,7 +1009,9 @@ const CLIENT = String.raw`
     panel.appendChild(backBtn);
 
     var head = el('div');
-    head.appendChild(el('span', 'badge ' + e.d.relationship, findingLabel(e)));
+    var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+    var badgeClass = isParallel ? 'badge parallel' : 'badge ' + e.d.relationship;
+    head.appendChild(el('span', badgeClass, findingLabel(e)));
     head.appendChild(el('h2', '', 'Connection worth checking'));
     head.appendChild(el('p', 'card-sub', 'Changed together in ' + plural(e.d.shared, 'commit') + ' · Last together ' + relativeDate(e.d.lastTogether)));
     panel.appendChild(head);
@@ -967,12 +1055,14 @@ const CLIENT = String.raw`
     var grid = el('div', 'cochange-grid');
     var card1 = el('div', 'cochange-card');
     card1.appendChild(el('div', 'cochange-pct', pct(e.d.confidence)));
-    card1.appendChild(el('div', 'cochange-label', labels[0] + ' changes also modified ' + labels[1]));
+    var desc1 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits)';
+    card1.appendChild(el('div', 'cochange-label', desc1));
     grid.appendChild(card1);
 
     var card2 = el('div', 'cochange-card');
     card2.appendChild(el('div', 'cochange-pct', pct(e.d.reverseConfidence)));
-    card2.appendChild(el('div', 'cochange-label', labels[1] + ' changes also modified ' + labels[0]));
+    var desc2 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits)';
+    card2.appendChild(el('div', 'cochange-label', desc2));
     grid.appendChild(card2);
     panel.appendChild(grid);
 

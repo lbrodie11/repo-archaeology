@@ -154,10 +154,10 @@ describe('review 3, diff branch additions and history isolation', () => {
       settings: {},
     } as any;
 
-    // A file newly added on a branch: file.added is true
+    // A file newly added in uncommitted work: file.added is true
     const { changed, suggestions } = suggestMissing(
       ctx,
-      [{ path: 'old.ts', added: true, deleted: false, sources: ['branch'] }],
+      [{ path: 'old.ts', added: true, deleted: false, sources: ['unstaged'] }],
       {
         limit: 10,
         kinds: ['ghost', 'unknown', 'indirect', 'direct', 'test'],
@@ -209,13 +209,13 @@ describe('review 3, tsconfig project references and alias patterns', () => {
     assert.equal((res as any).path, 'src/utils/math.ts');
   });
 
-  it('marks scoped package aliases and $lib prefixes as unresolved if not found', () => {
+  it('marks alias prefixes as unresolved and scoped npm packages as external', () => {
     const files = memoryRepo({
       'src/index.ts': "import { x } from '$lib/utils';\nimport { y } from '@custom-scope/helper';\n",
     });
     const resolver = new ImportResolver(files);
     assert.equal(resolver.resolve('src/index.ts', '$lib/utils').kind, 'unresolved');
-    assert.equal(resolver.resolve('src/index.ts', '@custom-scope/helper').kind, 'unresolved');
+    assert.equal(resolver.resolve('src/index.ts', '@custom-scope/helper').kind, 'external');
   });
 });
 
