@@ -8,6 +8,16 @@ import { CoChangeModel } from '../src/model/cochange.js';
 import type { HistoryCommit } from '../src/model/history.js';
 import { globToRegExp, PathMatcher } from '../src/util/glob.js';
 import { wilsonLowerBound } from '../src/util/stats.js';
+import { terminalText } from '../src/util/term.js';
+
+describe('terminal output', () => {
+  it('escapes control and bidirectional characters without changing ordinary unicode', () => {
+    assert.equal(
+      terminalText('ok\n\u001b[31m café\u061c\u200f\u2028\u202e'),
+      'ok\\n\\x1b[31m café\\u061c\\u200f\\u2028\\u202e',
+    );
+  });
+});
 
 describe('glob', () => {
   const m = (pattern: string, path: string) => globToRegExp(pattern).test(path);
@@ -172,17 +182,18 @@ describe('config', () => {
 
 describe('map html', () => {
   it('cannot be broken out of by data such as commit subjects', () => {
-    const json = embedJson({ s: '</script><script>alert(1)</script>', t: ' <!--' });
+    const json = embedJson({ s: '</script><script>alert(1)</script>', t: '\u2028<!--' });
     assert.ok(!json.includes('<'));
-    assert.deepEqual(JSON.parse(json), { s: '</script><script>alert(1)</script>', t: ' <!--' });
+    assert.deepEqual(JSON.parse(json), { s: '</script><script>alert(1)</script>', t: '\u2028<!--' });
     const html = renderMapHtml({
       meta: {
         tool: 'repo-archaeology', root: '/r', commitsRead: 1, commitsAnalyzed: 1, sweepsSkipped: 0, subjectSkipped: 0, renamesFollowed: 0, files: 1,
-        settings: { maxCommits: 1, maxFilesPerCommit: 1, minShared: 1, minConfidence: 0 }, warnings: [],
+        settings: { maxCommits: 1, maxFilesPerCommit: 1, minShared: 1, minConfidence: 0, ignore: [], useDefaultIgnores: true }, warnings: [],
       },
       repoName: '<img src=x onerror=alert(1)>',
       generatedAt: '',
       counts: { ghost: 0, unknown: 0, direct: 0, test: 0 },
+      classificationTruncated: false,
       nodes: [],
       edges: [],
     });

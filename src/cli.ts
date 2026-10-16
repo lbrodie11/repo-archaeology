@@ -8,9 +8,10 @@ import { openInBrowser, printMap, writeMap } from './commands/map.js';
 import { printScan, scan } from './commands/scan.js';
 import { ConfigError, type Settings } from './config.js';
 import { loadContext, UsageError } from './context.js';
+import { workingTreeChanges } from './git/changes.js';
 import { GitError } from './git/run.js';
 import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
-import { c } from './util/term.js';
+import { c, terminalText } from './util/term.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -111,8 +112,8 @@ program
   .showHelpAfterError('(run with --help for usage)');
 
 program
-  .command('scan', { isDefault: true })
-  .description('list the strongest ghost wires across the repository (default command)')
+  .command('scan')
+  .description('list the strongest ghost wires across the repository')
   .option('-n, --limit <n>', 'how many to show', positiveInt, 15)
   .addOption(kindsOption('relationship kinds to show', ['ghost', 'unknown']))
   .action(async (opts: { limit: number; kinds: Relationship[] }, cmd: Command) => {
@@ -185,6 +186,32 @@ program
     else printMap(file, data, shouldOpen);
   });
 
+program.action(async () => {
+  const global = program.opts<GlobalOptions>();
+  const ctx = await loadContext(global.cwd, settingsFrom(global));
+  const changes = await workingTreeChanges(ctx.root);
+  let changedWithoutHistory = 0;
+  if (changes.length > 0) {
+    const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
+    if (result.changed.some((file) => file.hasHistory)) {
+      if (global.json) printJson({ mode: 'diff', ...result });
+      else printDiff(result);
+      return;
+    }
+    changedWithoutHistory = result.changed.length;
+  }
+
+  const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };
+  const result = scan(ctx, options);
+  if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
+  else {
+    if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
+    printScan(result, options);
+    console.log();
+    console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
+  }
+});
+
 async function main(): Promise<void> {
   // `repo-archaeology scan | head` closes the pipe early: that is not an error.
   process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -195,7 +222,7 @@ async function main(): Promise<void> {
     await program.parseAsync(process.argv);
   } catch (err) {
     if (err instanceof GitError || err instanceof UsageError || err instanceof ConfigError) {
-      console.error(c.red(`error: ${err.message}`));
+      console.error(c.red(`error: ${terminalText(err.message)}`));
       process.exitCode = 2;
       return;
     }

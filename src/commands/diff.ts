@@ -5,7 +5,7 @@ import { refExists } from '../git/repo.js';
 import type { Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
 import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
-import { c, plural } from '../util/term.js';
+import { c, plural, terminalText } from '../util/term.js';
 
 export interface DiffOptions {
   /** Compare the branch against this ref (merge-base) in addition to uncommitted changes. */
@@ -88,8 +88,8 @@ export function suggestMissing(ctx: Context, changes: ChangedFile[], options: Pi
   return { changed, suggestions };
 }
 
-export async function diff(ctx: Context, options: DiffOptions): Promise<DiffResult> {
-  const changes = await collectChanges(ctx, options.base);
+export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
+  changes ??= await collectChanges(ctx, options.base);
   const { changed, suggestions } = suggestMissing(ctx, changes, options);
   return { meta: buildMeta(ctx), base: options.base, changed, suggestions };
 }
@@ -111,9 +111,10 @@ export function printDiff(result: DiffResult): void {
   console.log(c.bold(`Possibly missed (${result.suggestions.length})`));
   console.log();
   for (const s of result.suggestions) {
-    console.log(`  ${c.bold(s.to)}  ${relationshipLabel(s.relationship)}`);
-    console.log(`    changed with ${s.from} in ${describeStrength(s)}`);
-    if (s.alsoLinkedFrom.length > 0) console.log(c.dim(`    also linked to: ${s.alsoLinkedFrom.join(', ')}`));
+    console.log(`  ${c.bold(terminalText(s.to))}  ${relationshipLabel(s.relationship)}`);
+    console.log(`    changed with ${terminalText(s.from)} in ${describeStrength(s)}`);
+    if (s.alsoLinkedFrom.length > 0) console.log(c.dim(`    also linked to: ${s.alsoLinkedFrom.map(terminalText).join(', ')}`));
+    console.log(c.dim(`    ${terminalText(s.why)}`));
     printEvidence(s);
     console.log();
   }

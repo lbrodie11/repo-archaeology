@@ -1,8 +1,8 @@
 import { posix } from 'node:path';
 import type { Context } from '../context.js';
-import type { Relationship } from '../imports/classify.js';
+import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import type { Companion } from '../model/cochange.js';
-import { c, isoDate, pct, plural, shortHash, timeAgo } from '../util/term.js';
+import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 export interface EvidenceView {
   hash: string;
@@ -17,6 +17,7 @@ export interface RelationshipView {
   to: string;
   relationship: Relationship;
   why: string;
+  hiddenBridge?: HiddenBridge;
   /** Commits that touched both files. */
   shared: number;
   /** Commits that touched `from` (the denominator of `confidence`). */
@@ -54,6 +55,8 @@ export interface Meta {
     minConfidence: number;
     halfLifeDays?: number;
     skipCommits?: string;
+    ignore: string[];
+    useDefaultIgnores: boolean;
   };
   warnings: string[];
 }
@@ -80,6 +83,8 @@ export function buildMeta(ctx: Context): Meta {
       minConfidence: s.minConfidence,
       halfLifeDays: s.halfLifeDays,
       skipCommits: s.skipCommits,
+      ignore: [...s.ignore],
+      useDefaultIgnores: s.useDefaultIgnores,
     },
     warnings: ctx.warnings,
   };
@@ -89,11 +94,13 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
   const { model } = ctx;
   const from = fromPath ?? model.path(companion.from);
   const to = model.path(companion.to);
+  const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(from, to) : undefined;
   return {
     from,
     to,
     relationship,
-    why: ctx.classifier.explain(from, to, relationship),
+    why: ctx.classifier.explain(from, to, relationship, hiddenBridge),
+    hiddenBridge,
     shared: companion.stat.count,
     fromChanges: model.changeCount[companion.from] ?? 0,
     toChanges: model.changeCount[companion.to] ?? 0,
@@ -141,13 +148,13 @@ export function printHeader(title: string, meta: Meta): void {
   ].filter(Boolean);
   const skipped = skippedParts.length > 0 ? `, ${skippedParts.join(' and ')} skipped` : '';
   console.log(c.dim(`${plural(meta.commitsAnalyzed, 'commit')} analyzed${span}${skipped}`));
-  for (const warning of meta.warnings) console.log(c.yellow(`! ${warning}`));
+  for (const warning of meta.warnings) console.log(c.yellow(`! ${terminalText(warning)}`));
   console.log();
 }
 
 export function printEvidence(view: RelationshipView, indent = '    '): void {
   for (const e of view.evidence) {
-    console.log(`${indent}${c.gray(shortHash(e.hash))} ${c.dim(e.date)}  ${e.subject}`);
+    console.log(`${indent}${c.gray(shortHash(e.hash))} ${c.dim(e.date)}  ${terminalText(e.subject)}`);
   }
 }
 

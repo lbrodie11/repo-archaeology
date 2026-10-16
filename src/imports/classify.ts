@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { join, posix } from 'node:path';
+import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import { ImportResolver, type RepoFiles } from './resolve.js';
 import { extractSpecifiers } from './typescript.js';
 
@@ -14,12 +15,23 @@ export type Relationship = 'direct' | 'test' | 'ghost' | 'unknown';
 
 export const RELATIONSHIPS: readonly Relationship[] = ['ghost', 'unknown', 'direct', 'test'];
 
+export const MAX_BRIDGE_FILES = 3;
+export const MAX_BRIDGE_SOURCE_FILES = 10_000;
+export const MAX_BRIDGE_SOURCE_BYTES = 50_000_000;
+
+export interface HiddenBridge {
+  signal: 'shared-environment' | 'shared-api-route' | 'shared-event';
+  value: string;
+  filesUsing: number;
+}
+
 const ANALYZABLE = /\.(?:[cm]?[jt]sx?)$/i;
 const MAX_SOURCE_BYTES = 1_000_000;
 const BARREL_DEPTH = 3;
 
 interface FileImports {
   analyzable: boolean;
+  sourceUnavailable: boolean;
   imports: Set<string>;
   unresolved: number;
 }
@@ -45,8 +57,13 @@ export class RelationshipClassifier {
   private readonly resolver: ImportResolver;
   private readonly cache = new Map<string, FileImports>();
   private readonly reachCache = new Map<string, Reach>();
+  private bridgeReferences?: Map<string, Set<string>>;
+  private bridgeUses?: Map<string, SourceReference & { filesUsing: number }>;
 
-  constructor(private readonly files: RepoFiles) {
+  constructor(
+    private readonly files: RepoFiles,
+    private readonly includeBridgeFile: (path: string) => boolean = () => true,
+  ) {
     this.resolver = new ImportResolver(files);
   }
 
@@ -59,6 +76,7 @@ export class RelationshipClassifier {
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
+    if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
     if (!ia.analyzable && !ib.analyzable) return 'unknown';
     // "No import link" is only a claim we can make if every path we followed was resolved.
     if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete)) return 'unknown';
@@ -66,7 +84,7 @@ export class RelationshipClassifier {
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
-  explain(a: string, b: string, relationship: Relationship): string {
+  explain(a: string, b: string, relationship: Relationship, bridge?: HiddenBridge): string {
     switch (relationship) {
       case 'test':
         if (isTestFile(a) && isTestFile(b)) return 'two tests that change together';
@@ -76,26 +94,53 @@ export class RelationshipClassifier {
         if (this.analyze(b).imports.has(a)) return `${posix.basename(b)} imports ${posix.basename(a)}`;
         return 'linked through an index/barrel file';
       }
-      case 'ghost':
-        return 'no import link in either direction';
+      case 'ghost': {
+        const signal = bridge ?? this.hiddenBridge(a, b);
+        if (!signal) return 'unexplained coupling: no import link in either direction';
+        const rarity = `used in ${signal.filesUsing} files`;
+        if (signal.signal === 'shared-environment') return `shared configuration: both reference environment variable ${signal.value} (${rarity})`;
+        const kind = signal.signal === 'shared-api-route' ? 'API route' : 'event';
+        return `possible shared contract: both reference ${kind} ${JSON.stringify(signal.value)} (${rarity})`;
+      }
       case 'unknown': {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
+        if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable && !ib.analyzable) return 'import check not possible for these file types';
         return 'some imports could not be resolved (aliases or barrel files), so an import link cannot be ruled out';
       }
     }
   }
 
+  hiddenBridge(a: string, b: string): HiddenBridge | undefined {
+    this.indexBridgeReferences();
+    const aReferences = this.bridgeReferences!.get(a);
+    const bReferences = this.bridgeReferences!.get(b);
+    if (!aReferences || !bReferences) return undefined;
+
+    const candidates = [...aReferences]
+      .filter((key) => bReferences.has(key))
+      .map((key) => this.bridgeUses!.get(key)!)
+      .filter((reference) => reference.filesUsing <= MAX_BRIDGE_FILES)
+      .sort((x, y) => x.filesUsing - y.filesUsing || referencePriority(x.kind) - referencePriority(y.kind) || x.value.localeCompare(y.value));
+    const best = candidates[0];
+    if (!best) return undefined;
+    const signal = best.kind === 'environment' ? 'shared-environment' : best.kind === 'api-route' ? 'shared-api-route' : 'shared-event';
+    return { signal, value: best.value, filesUsing: best.filesUsing };
+  }
+
   analyze(file: string): FileImports {
     const cached = this.cache.get(file);
     if (cached) return cached;
-    const result: FileImports = { analyzable: false, imports: new Set(), unresolved: 0 };
+    const result: FileImports = { analyzable: false, sourceUnavailable: false, imports: new Set(), unresolved: 0 };
     this.cache.set(file, result);
     if (!ANALYZABLE.test(file)) return result;
     const text = this.files.read(file);
-    if (text === undefined) return result;
+    if (text === undefined) {
+      result.sourceUnavailable = true;
+      return result;
+    }
     result.analyzable = true;
     for (const specifier of extractSpecifiers(text)) {
       const resolved = this.resolver.resolve(file, specifier);
@@ -106,6 +151,45 @@ export class RelationshipClassifier {
       }
     }
     return result;
+  }
+
+  private indexBridgeReferences(): void {
+    if (this.bridgeReferences && this.bridgeUses) return;
+    const files: string[] = [];
+    for (const file of this.files.list()) {
+      if (!ANALYZABLE.test(file) || !this.includeBridgeFile(file)) continue;
+      files.push(file);
+      if (files.length > MAX_BRIDGE_SOURCE_FILES) {
+        this.bridgeReferences = new Map();
+        this.bridgeUses = new Map();
+        return;
+      }
+    }
+
+    const byFile = new Map<string, Set<string>>();
+    const uses = new Map<string, SourceReference & { filesUsing: number }>();
+    let sourceBytes = 0;
+    for (const file of files) {
+      const text = this.files.read(file);
+      if (text === undefined) continue;
+      sourceBytes += Buffer.byteLength(text);
+      if (sourceBytes > MAX_BRIDGE_SOURCE_BYTES) {
+        this.bridgeReferences = new Map();
+        this.bridgeUses = new Map();
+        return;
+      }
+      const keys = new Set<string>();
+      for (const reference of extractSourceReferences(file, text)) {
+        const key = sourceReferenceKey(reference);
+        keys.add(key);
+        const existing = uses.get(key);
+        if (existing) existing.filesUsing++;
+        else uses.set(key, { ...reference, filesUsing: 1 });
+      }
+      byFile.set(file, keys);
+    }
+    this.bridgeReferences = byFile;
+    this.bridgeUses = uses;
   }
 
   /**
@@ -132,6 +216,10 @@ export class RelationshipClassifier {
     this.reachCache.set(file, reach);
     return reach;
   }
+}
+
+function referencePriority(kind: SourceReferenceKind): number {
+  return kind === 'environment' ? 0 : kind === 'api-route' ? 1 : 2;
 }
 
 interface Reach {

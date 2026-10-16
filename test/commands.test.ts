@@ -8,7 +8,7 @@ import { backtestCommits, EVALUATION_MAX_FILES } from '../src/commands/backtest.
 import { diff } from '../src/commands/diff.js';
 import { fileReport } from '../src/commands/file.js';
 import { buildMapData } from '../src/commands/map.js';
-import { scan } from '../src/commands/scan.js';
+import { classifiedPairs, scan } from '../src/commands/scan.js';
 import { loadContext } from '../src/context.js';
 import type { HistoryCommit } from '../src/model/history.js';
 import { FixtureRepo } from './helpers.js';
@@ -63,6 +63,10 @@ describe('scan', () => {
     assert.equal(ghost.evidence.length, 3);
     assert.equal(ghost.evidence[0]!.subject, 'billing change 5');
     assert.equal(result.counts.ghost, 1);
+    const capped = classifiedPairs(ctx, 1);
+    assert.equal(capped.entries.length, 1);
+    assert.ok(capped.qualifying > capped.entries.length);
+    assert.equal(capped.truncated, true);
   });
 });
 
@@ -168,6 +172,20 @@ describe('backtest', () => {
   it('refuses tiny histories', () => {
     assert.throws(() => backtestCommits(make(10), { minShared: 3, minConfidence: 0.4 }, { testFraction: 0.2, k: 3 }), /at least/);
   });
+
+  it('stops recommending a file after its deletion', () => {
+    const commits: HistoryCommit[] = [];
+    for (let i = 0; i < 30; i++) commits.push({ hash: `pair${i}`, author: 'x', time: i, commitTime: i, subject: '', files: ['a.ts', 'b.ts'] });
+    commits.push({ hash: 'delete', author: 'x', time: 30, commitTime: 30, subject: '', files: ['b.ts'], deleted: ['b.ts'] });
+    for (let i = 31; i < 40; i++) commits.push({ hash: `solo${i}`, author: 'x', time: i, commitTime: i, subject: '', files: ['a.ts'] });
+    commits.forEach((commit, index) => {
+      commit.commitTime = 1;
+      commit.logOrder = commits.length - index - 1;
+    });
+
+    const result = backtestCommits(commits, { minShared: 3, minConfidence: 0.4 }, { testFraction: 0.25, k: 1 });
+    assert.equal(result.strategies[0]!.fired, 1); // deletion commit only; later a.ts changes do not suggest b.ts
+  });
 });
 
 describe('cli', () => {
@@ -183,12 +201,38 @@ describe('cli', () => {
     rmSync(mapFile);
   });
 
-  it('runs scan by default and honours global flags after the subcommand', () => {
-    const out = runCli(['--min-shared', '2'], repo.dir);
-    assert.equal(out.code, 0, out.stderr);
-    assert.match(out.stdout, /templates\/invoice-template\.html/);
-    const after = runCli(['scan', '--min-shared', '2', '--json'], repo.dir);
-    assert.equal(JSON.parse(after.stdout).meta.settings.minShared, 2);
+  it('shows scan when clean and diff when dirty, while honouring global flags', () => {
+    const clean = runCli(['--min-shared', '2', '--json'], repo.dir);
+    assert.equal(clean.code, 0, clean.stderr);
+    const cleanResult = JSON.parse(clean.stdout);
+    assert.equal(cleanResult.mode, 'scan');
+    assert.equal(cleanResult.meta.settings.minShared, 2);
+    assert.ok(cleanResult.relationships.some((r: { to: string }) => r.to === 'templates/invoice-template.html'));
+    assert.match(runCli(['--min-shared', '2'], repo.dir).stdout, /repo-archaeology map/);
+
+    writeFileSync(join(repo.dir, 'src/billing.ts'), 'changed\n');
+    try {
+      const dirty = runCli(['--min-shared', '2', '--json'], repo.dir);
+      assert.equal(dirty.code, 0, dirty.stderr);
+      const dirtyResult = JSON.parse(dirty.stdout);
+      assert.equal(dirtyResult.mode, 'diff');
+      assert.deepEqual(dirtyResult.changed.map((f: { path: string }) => f.path), ['src/billing.ts']);
+      assert.equal(dirtyResult.suggestions[0]?.to, 'templates/invoice-template.html');
+    } finally {
+      repo.git('checkout', '-q', '--', 'src/billing.ts');
+    }
+
+    writeFileSync(join(repo.dir, 'package-lock.json'), '{}\n');
+    try {
+      const noHistory = JSON.parse(runCli(['--json'], repo.dir).stdout);
+      assert.equal(noHistory.mode, 'scan');
+      assert.equal(noHistory.changedWithoutHistory, 1);
+    } finally {
+      rmSync(join(repo.dir, 'package-lock.json'));
+    }
+
+    const explicit = runCli(['scan', '--min-shared', '2', '--json'], repo.dir);
+    assert.equal(JSON.parse(explicit.stdout).meta.settings.minShared, 2);
   });
 
   it('exits 1 from diff --exit-code only when something looks missed', () => {

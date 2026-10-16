@@ -32,7 +32,7 @@ jobs:
           git config --global user.name "CI"
           git config --global user.email "ci@example.com"
           git config --global init.defaultBranch main
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -40,5 +40,13 @@ jobs:
         run: |
           node dist/cli.js --version
           node dist/cli.js scan --json
-          node dist/cli.js backtest --json --test-fraction 0.5
-        continue-on-error: true # young repositories may have too little history for a backtest
+      - name: Smoke test the packed package
+        shell: bash
+        run: |
+          package=$(npm pack --silent)
+          install_dir=$(mktemp -d)
+          npm install --prefix "$install_dir" "./$package" --no-audit --no-fund
+          npm exec --prefix "$install_dir" -- repo-archaeology --version
+      - name: Backtest the repository when it has enough history
+        run: node dist/cli.js backtest --json --test-fraction 0.5
+        continue-on-error: true

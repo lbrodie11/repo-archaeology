@@ -96,33 +96,43 @@ export function backtestCommits(
   }
 
   const left = new Set(excluded);
-  // Ties broken by hash so the split is deterministic.
-  const ordered = [...commits, ...excluded].sort((x, y) => y.commitTime - x.commitTime || (x.hash < y.hash ? -1 : x.hash > y.hash ? 1 : 0));
+  // Git timestamps have one-second precision. Preserve git-log order for ties so
+  // file availability is replayed in the same order as the original history.
+  const ordered = [...commits, ...excluded].sort((x, y) =>
+    y.commitTime - x.commitTime
+    || compareLogOrder(x, y)
+    || (x.hash < y.hash ? -1 : x.hash > y.hash ? 1 : 0),
+  );
   const testCount = Math.max(1, Math.round(ordered.length * options.testFraction));
-  const testCommits = ordered.slice(0, testCount).filter((commit) => commit.files.length <= EVALUATION_MAX_FILES);
-  const trainCommits = ordered.slice(testCount).filter((commit) => !left.has(commit));
+  const testTimeline = ordered.slice(0, testCount);
+  const testCommits = testTimeline.filter((commit) => commit.files.length <= EVALUATION_MAX_FILES);
+  const trainingTimeline = ordered.slice(testCount);
+  const trainCommits = trainingTimeline.filter((commit) => !left.has(commit));
   const model = new CoChangeModel(trainCommits, { halfLifeDays });
+  const available = new Set<string>();
+  for (const commit of [...trainingTimeline].reverse()) updateAvailability(available, commit);
 
   const popular = model.files.map((_, id) => id).sort((x, y) => (model.changeCount[y] ?? 0) - (model.changeCount[x] ?? 0) || x - y);
+  const existing = (ids: number[]) => ids.filter((id) => available.has(model.path(id)));
   // Set per query: whether the main strategy suggested anything (used by the fair baseline).
   let modelSpoke = false;
   const strategies: [Omit<StrategyScore, 'fired' | 'coverage' | 'precision' | 'hitRate' | 'falseAlarmRate' | 'recall'>, Recommender][] = [
     [
       { name: 'co-change', description: `your thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence): what \`diff\` reports` },
-      (id) => model.companions(id, thresholds).slice(0, options.k).map((x) => x.to),
+      (id) => existing(model.companions(id, thresholds).map((x) => x.to)).slice(0, options.k),
     ],
     [
       { name: 'co-change, no thresholds', description: 'same ranking, always suggests something it has seen' },
-      (id) => model.companions(id, { minShared: 1, minConfidence: 0 }).slice(0, options.k).map((x) => x.to),
+      (id) => existing(model.companions(id, { minShared: 1, minConfidence: 0 }).map((x) => x.to)).slice(0, options.k),
     ],
     [
       { name: 'popularity baseline', description: `always suggests the ${options.k} most frequently changed files` },
-      (id) => popular.filter((p) => p !== id).slice(0, options.k),
+      (id) => existing(popular.filter((p) => p !== id)).slice(0, options.k),
     ],
     [
       // The fair comparison: co-change only speaks up on some changes, which may be easier ones.
       { name: 'popularity, same changes', description: 'the popularity guess, scored only where co-change spoke up' },
-      (id) => (modelSpoke ? popular.filter((p) => p !== id).slice(0, options.k) : []),
+      (id) => (modelSpoke ? existing(popular.filter((p) => p !== id)).slice(0, options.k) : []),
     ],
   ];
 
@@ -131,27 +141,30 @@ export function backtestCommits(
   let soloQueries = 0;
   let expectedTotal = 0;
 
-  for (const commit of testCommits) {
-    for (const file of commit.files) {
-      const id = model.id(file);
-      if (id === undefined) continue; // a file born after the split: nothing to learn from
-      const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
-      const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
-      queries++;
-      if (commit.files.length === 1) soloQueries++;
-      expectedTotal += expected.size + unseen;
-      strategies.forEach(([, recommend], i) => {
-        const suggested = recommend(id);
-        if (i === 0) modelSpoke = suggested.length > 0;
-        const t = tallies[i]!;
-        if (suggested.length === 0) return;
-        t.fired++;
-        t.suggestions += suggested.length;
-        const hits = suggested.filter((s) => expected.has(s)).length;
-        t.correct += hits;
-        if (hits > 0) t.hitQueries++;
-      });
+  for (const commit of [...testTimeline].reverse()) {
+    if (commit.files.length <= EVALUATION_MAX_FILES) {
+      for (const file of commit.files) {
+        const id = model.id(file);
+        if (id === undefined) continue; // a file born after the split: nothing to learn from
+        const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
+        const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
+        queries++;
+        if (commit.files.length === 1) soloQueries++;
+        expectedTotal += expected.size + unseen;
+        strategies.forEach(([, recommend], i) => {
+          const suggested = recommend(id);
+          if (i === 0) modelSpoke = suggested.length > 0;
+          const t = tallies[i]!;
+          if (suggested.length === 0) return;
+          t.fired++;
+          t.suggestions += suggested.length;
+          const hits = suggested.filter((s) => expected.has(s)).length;
+          t.correct += hits;
+          if (hits > 0) t.hitQueries++;
+        });
+      }
     }
+    updateAvailability(available, commit);
   }
 
   const scores: StrategyScore[] = strategies.map(([info], i) => {
@@ -177,6 +190,18 @@ export function backtestCommits(
     strategies: scores,
     notes: interpret(scores, queries),
   };
+}
+
+function updateAvailability(available: Set<string>, commit: HistoryCommit): void {
+  const deleted = new Set(commit.deleted ?? []);
+  for (const file of commit.files) {
+    if (deleted.has(file)) available.delete(file);
+    else available.add(file);
+  }
+}
+
+function compareLogOrder(a: HistoryCommit, b: HistoryCommit): number {
+  return a.logOrder !== undefined && b.logOrder !== undefined ? a.logOrder - b.logOrder : 0;
 }
 
 function span(commits: readonly HistoryCommit[]): { commits: number; from?: string; to?: string } {

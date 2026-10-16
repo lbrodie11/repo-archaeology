@@ -54,6 +54,17 @@ export function plural(n: number, word: string, pluralWord = `${word}s`): string
   return `${n.toLocaleString('en-US')} ${n === 1 ? word : pluralWord}`;
 }
 
+/** Makes repository-controlled text inert when printed to a terminal. */
+export function terminalText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]|\p{Bidi_Control}/gu, (character) => {
+    if (character === '\n') return '\\n';
+    if (character === '\r') return '\\r';
+    if (character === '\t') return '\\t';
+    const code = character.codePointAt(0)!;
+    return code <= 0xff ? `\\x${code.toString(16).padStart(2, '0')}` : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+}
+
 /** Progress messages go to stderr so stdout stays clean for --json and pipes. */
 export function progress(message: string): void {
   if (process.stderr.isTTY) process.stderr.write(`${c.dim(message)}\n`);

@@ -1,0 +1,56 @@
+name: Suggestion feedback
+description: Tell us whether a Repo Archaeology finding was useful.
+title: "[Feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Repo Archaeology. Please do not paste proprietary file names, commit subjects, source code, or other confidential repository details.
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command
+      description: Which command produced the finding?
+      options:
+        - repo-archaeology (default)
+        - diff
+        - scan
+        - file
+        - map
+        - backtest
+    validations:
+      required: true
+  - type: dropdown
+    id: useful
+    attributes:
+      label: Was the finding useful?
+      options:
+        - Yes, it caught something I would have missed
+        - Yes, it confirmed something worth checking
+        - No, it was a false alarm
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: explanation
+    attributes:
+      label: What happened?
+      description: Describe the relationship in general terms and whether the explanation made sense.
+      placeholder: Two adapters changed together, but the suggested shared contract was not relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: repeat
+    attributes:
+      label: Have you run diff again since your first try?
+      options:
+        - Yes, without being prompted
+        - Not yet, but I plan to
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Optional. Share the OS, Node.js version, repository size, and workflow style without identifying a private repository.

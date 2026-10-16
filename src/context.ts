@@ -6,6 +6,7 @@ import { findRepoRoot, hasCommits, isShallow, listCurrentFiles } from './git/rep
 import { RelationshipClassifier, workingTreeFiles } from './imports/classify.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
 import { loadHistory, type History } from './model/history.js';
+import { PathMatcher } from './util/glob.js';
 import { progress } from './util/term.js';
 
 export class UsageError extends Error {
@@ -38,12 +39,13 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   }
 
   progress('Reading git history…');
+  const ignores = ignorePatterns(settings);
   const [history, currentFiles] = await Promise.all([
     loadHistory(root, {
       maxCommits: settings.maxCommits,
       since: settings.since,
       maxFilesPerCommit: settings.maxFilesPerCommit,
-      ignore: ignorePatterns(settings),
+      ignore: ignores,
       skipCommits: compileSkipPattern(settings.skipCommits),
     }),
     listCurrentFiles(root),
@@ -55,7 +57,8 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   }
 
   const model = new CoChangeModel(history.commits, { halfLifeDays: settings.halfLifeDays });
-  const classifier = new RelationshipClassifier(workingTreeFiles(root, currentFiles));
+  const bridgeIgnores = new PathMatcher(ignores);
+  const classifier = new RelationshipClassifier(workingTreeFiles(root, currentFiles), (path) => !bridgeIgnores.matches(path));
   return {
     cwd,
     root,

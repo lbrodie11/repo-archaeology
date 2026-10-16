@@ -67,7 +67,7 @@ export class TsConfigPaths {
   private readonly byDir = new Map<string, PathsConfig | null>();
   private readonly byFile = new Map<string, PathsConfig | null>();
 
-  constructor(private readonly files: RepoFiles) {}
+  constructor(private readonly files: RepoFiles) { }
 
   forFile(filePath: string): PathsConfig | null {
     return this.forDir(posix.dirname(filePath));
@@ -206,7 +206,7 @@ interface LocalPackage {
 export class LocalPackages {
   private packages?: LocalPackage[];
 
-  constructor(private readonly files: RepoFiles & { list(): Iterable<string> }) {}
+  constructor(private readonly files: RepoFiles & { list(): Iterable<string> }) { }
 
   resolve(specifier: string): Resolution | undefined {
     const pkg = this.all()
@@ -216,7 +216,8 @@ export class LocalPackages {
     const subpath = specifier.slice(pkg.name.length + 1);
     for (const candidate of packageCandidates(pkg.json, subpath)) {
       const target = posix.join(pkg.dir, candidate);
-      const found = resolveFile(target, this.files) ?? resolveFile(sourceForBuildOutput(target, pkg.dir), this.files);
+      const sourceTarget = sourceForBuildOutput(target, pkg.dir);
+      const found = resolveFile(sourceTarget, this.files) ?? resolveFile(target, this.files);
       if (found) return { kind: 'file', path: found };
     }
     return { kind: 'unresolved' };

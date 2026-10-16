@@ -8,18 +8,30 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md",
+    "PLAN.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=20"
   },
+  "author": "Laqwan Brodie",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lbrodie11/repo-archaeology.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lbrodie11/repo-archaeology/issues"
+  },
+  "homepage": "https://github.com/lbrodie11/repo-archaeology#readme",
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test"
   },
   "keywords": [
     "git",

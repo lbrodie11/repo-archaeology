@@ -1,5 +1,12 @@
 node_modules/
 dist/
+coverage/
+.nyc_output/
 *.log
+*.tgz
+*.tsbuildinfo
 .DS_Store
+.env
+.env.*
+!.env.example
 repo-archaeology-map.html

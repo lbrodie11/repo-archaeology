@@ -2,7 +2,7 @@ import type { Context } from '../context.js';
 import { toRepoPath, UsageError } from '../context.js';
 import { buildMeta, describeStrength, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
 import { median } from '../util/stats.js';
-import { c, isoDate, pct, plural, timeAgo } from '../util/term.js';
+import { c, isoDate, pct, plural, terminalText, timeAgo } from '../util/term.js';
 
 export interface FileOptions {
   limit: number;
@@ -60,12 +60,12 @@ export function fileReport(ctx: Context, input: string, options: FileOptions): F
 }
 
 export function printFile(result: FileResult): void {
-  printHeader(`file ${c.bold(result.path)}`, result.meta);
+  printHeader(`file ${c.bold(terminalText(result.path))}`, result.meta);
   const times = result.medianChanges > 0 ? ` (${(result.changes / result.medianChanges).toFixed(1)}× the median file)` : '';
   const label = (s: string) => c.bold(s.padEnd(14));
   console.log(`${label('Changed in')}${plural(result.changes, 'commit')}${times}, busier than ${pct(result.churnPercentile)} of files`);
   console.log(`${label('Last changed')}${timeAgo(Date.parse(result.lastChanged) / 1000)} ${c.dim(`(${result.lastChanged})`)}`);
-  const who = result.authors.map((a) => `${a.author} ${c.dim(pct(a.share))}`).join(', ');
+  const who = result.authors.map((a) => `${terminalText(a.author)} ${c.dim(pct(a.share))}`).join(', ');
   console.log(`${label('Who knows it')}${who}`);
   console.log();
   if (result.companions.length === 0) {
@@ -77,8 +77,9 @@ export function printFile(result: FileResult): void {
   console.log();
   for (const comp of result.companions) {
     const dot = comp.wouldAlert ? c.magenta('●') : c.dim('○');
-    console.log(`  ${dot} ${c.bold(comp.to)}  ${relationshipLabel(comp.relationship)}`);
+    console.log(`  ${dot} ${c.bold(terminalText(comp.to))}  ${relationshipLabel(comp.relationship)}`);
     console.log(`    ${describeStrength(comp)} · reverse ${pct(comp.reverseConfidence)}`);
+    console.log(c.dim(`    ${terminalText(comp.why)}`));
     printEvidence(comp);
     console.log();
   }

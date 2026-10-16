@@ -19,6 +19,7 @@ describe('import resolution', () => {
     'src/util/index.ts': '',
     'src/data.json': '',
     'src/esm.ts': '',
+    'dist/index.js': 'export const built = true',
     'lib/legacy.js': '',
     'tsconfig.base.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], "@exact": ["src/a.ts"] } } }',
     'tsconfig.json': '{ // comments are allowed\n "extends": "./tsconfig.base", "compilerOptions": { "strict": true, } }',
@@ -71,6 +72,23 @@ describe('relationship classification', () => {
     'src/lib/index.ts': "export * from './payments'",
     'src/lib/payments.ts': 'export const pay = 1',
     'src/billing.ts': 'export {}',
+    'src/env-a.ts': 'export const key = process.env.PAYMENTS_KEY',
+    'src/env-b.ts': "export const key = import.meta.env['PAYMENTS_KEY']",
+    'src/route-a.ts': "fetch('/api/orders')",
+    'src/route-b.ts': "app.get('/api/orders', handler)",
+    'src/event-a.ts': "bus.emit('order.created')",
+    'src/event-b.ts': "bus.on('order.created', handler)",
+    'src/common-a.ts': 'process.env.NODE_ENV',
+    'src/common-b.ts': 'process.env.NODE_ENV',
+    'src/common-c.ts': 'process.env.NODE_ENV',
+    'src/common-d.ts': 'process.env.NODE_ENV',
+    'src/reference-noise.ts': `
+      // process.env.PAYMENTS_KEY; bus.on('order.created')
+      const code = "process.env.PAYMENTS_KEY";
+      const eventName = 'order.created';
+      on('order.created');
+      import('/api/orders');
+    `,
     'src/aliased.ts': "import x from '~/somewhere'",
     'src/api.test.ts': "import { x } from './api'",
     'schema.sql': 'create table t();',
@@ -89,12 +107,35 @@ describe('relationship classification', () => {
   it('calls a checked pair with no import link a ghost wire', () => {
     assert.equal(classifier.classify('src/db.ts', 'src/billing.ts'), 'ghost');
     assert.equal(classifier.classify('schema.sql', 'src/billing.ts'), 'ghost');
+    assert.match(classifier.explain('src/db.ts', 'src/billing.ts', 'ghost'), /^unexplained coupling:/);
+  });
+
+  it('explains rare shared environment, route and event references', () => {
+    assert.deepEqual(classifier.hiddenBridge('src/env-a.ts', 'src/env-b.ts'), {
+      signal: 'shared-environment', value: 'PAYMENTS_KEY', filesUsing: 2,
+    });
+    assert.match(classifier.explain('src/env-a.ts', 'src/env-b.ts', 'ghost'), /shared configuration/);
+    assert.deepEqual(classifier.hiddenBridge('src/route-a.ts', 'src/route-b.ts'), {
+      signal: 'shared-api-route', value: '/api/orders', filesUsing: 2,
+    });
+    assert.deepEqual(classifier.hiddenBridge('src/event-a.ts', 'src/event-b.ts'), {
+      signal: 'shared-event', value: 'order.created', filesUsing: 2,
+    });
+  });
+
+  it('suppresses common references and ignores comments, code-like strings and module specifiers', () => {
+    assert.equal(classifier.hiddenBridge('src/common-a.ts', 'src/common-b.ts'), undefined);
+    assert.equal(classifier.hiddenBridge('src/env-a.ts', 'src/reference-noise.ts'), undefined);
+    assert.equal(classifier.hiddenBridge('src/route-a.ts', 'src/reference-noise.ts'), undefined);
+    assert.equal(classifier.hiddenBridge('src/event-a.ts', 'src/reference-noise.ts'), undefined);
   });
 
   it('says unknown when it cannot check', () => {
     assert.equal(classifier.classify('src/billing.ts', 'package.json'), 'unknown');
     assert.equal(classifier.classify('docs/a.md', 'docs/b.md'), 'unknown');
     assert.equal(classifier.classify('src/aliased.ts', 'src/billing.ts'), 'unknown');
+    assert.equal(classifier.classify('src/deleted.ts', 'src/billing.ts'), 'unknown');
+    assert.match(classifier.explain('src/deleted.ts', 'src/billing.ts', 'unknown'), /source is unavailable/);
   });
 
   it('recognizes tests and the code they cover', () => {

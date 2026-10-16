@@ -3,6 +3,8 @@ import { PathMatcher } from '../util/glob.js';
 
 export interface HistoryCommit {
   hash: string;
+  /** Position in git log output (0 is newest), used when timestamps tie. */
+  logOrder?: number;
   author: string;
   /** Author time, for display ("last changed together 18 days ago"). */
   time: number;
@@ -14,6 +16,8 @@ export interface HistoryCommit {
    * Files that were later deleted and replaced carry a lifetime suffix (see pathOf).
    */
   files: string[];
+  /** File identities deleted by this commit, used to replay historical availability. */
+  deleted?: string[];
 }
 
 export interface HistoryStats {
@@ -113,6 +117,7 @@ export class HistoryBuilder {
 
   add(commit: RawCommit): void {
     const stats = this.stats;
+    const logOrder = stats.commitsRead;
     stats.commitsRead++;
     // Renames must be tracked even for skipped commits, or older history would be orphaned.
     const names = this.renames.apply(commit);
@@ -123,11 +128,13 @@ export class HistoryBuilder {
     }
     const entry: HistoryCommit = {
       hash: commit.hash,
+      logOrder,
       author: commit.authorName || commit.authorEmail,
       time: commit.authorTime,
       commitTime: commit.commitTime,
       subject: commit.subject,
       files,
+      deleted: [...new Set(commit.changes.flatMap((change, index) => change.status === 'D' && files.includes(names[index]!) ? [names[index]!] : []))],
     };
     if (files.length > this.options.maxFilesPerCommit) {
       stats.sweepsSkipped++;

@@ -134,3 +134,27 @@ describe('6. unstaged deletions', () => {
     assert.deepEqual(result.relationships, []);
   });
 });
+
+describe('7. hidden bridge reports', () => {
+  it('carry a cautious structured explanation into diff suggestions', () => {
+    const commits: HistoryCommit[] = Array.from({ length: 3 }, (_, index) => ({
+      hash: `h${index}`, author: 'x', time: index, commitTime: index, subject: '', files: ['src/a.ts', 'src/b.ts'],
+    }));
+    const files = {
+      'src/a.ts': 'export const key = process.env.PAYMENTS_KEY',
+      'src/b.ts': "export const key = import.meta.env['PAYMENTS_KEY']",
+    };
+    const ctx = {
+      model: new CoChangeModel(commits),
+      currentFiles: new Set(Object.keys(files)),
+      classifier: new RelationshipClassifier(memoryRepo(files)),
+      thresholds: { minShared: 3, minConfidence: 0.4 },
+    } as unknown as Context;
+
+    const result = suggestMissing(ctx, [{ path: 'src/a.ts', deleted: false, sources: ['unstaged'] }], { limit: 10, kinds: ['ghost'] });
+    assert.deepEqual(result.suggestions[0]?.hiddenBridge, {
+      signal: 'shared-environment', value: 'PAYMENTS_KEY', filesUsing: 2,
+    });
+    assert.match(result.suggestions[0]?.why ?? '', /shared configuration/);
+  });
+});

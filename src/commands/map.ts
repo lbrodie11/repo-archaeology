@@ -3,10 +3,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, posix, resolve } from 'node:path';
 import type { Context } from '../context.js';
 import { runGit } from '../git/run.js';
-import type { Relationship } from '../imports/classify.js';
+import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
 import { buildMeta, toView, type Meta } from '../report/views.js';
-import { c } from '../util/term.js';
+import { c, terminalText } from '../util/term.js';
 import { classifiedPairs } from './scan.js';
 
 export interface MapOptions {
@@ -31,6 +31,7 @@ export interface MapEdge {
   target: number;
   relationship: Relationship;
   why: string;
+  hiddenBridge?: HiddenBridge;
   shared: number;
   confidence: number;
   reverseConfidence: number;
@@ -43,6 +44,7 @@ export interface MapData {
   repoName: string;
   generatedAt: string;
   counts: Record<Relationship, number>;
+  classificationTruncated: boolean;
   nodes: MapNode[];
   edges: MapEdge[];
 }
@@ -70,7 +72,8 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
 
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
-  for (const { companion, relationship } of classifiedPairs(ctx)) {
+  const classified = classifiedPairs(ctx);
+  for (const { companion, relationship } of classified.entries) {
     counts[relationship]++;
     if (edges.length >= options.edges || !options.kinds.includes(relationship)) continue;
     const view = toView(ctx, companion, relationship);
@@ -79,6 +82,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       target: nodeFor(view.to),
       relationship,
       why: view.why,
+      hiddenBridge: view.hiddenBridge,
       shared: view.shared,
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
@@ -89,7 +93,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
   const repoName = basename(ctx.root);
   // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
   const meta = { ...buildMeta(ctx), root: repoName };
-  return { meta, repoName, generatedAt: new Date().toISOString(), counts, nodes, edges };
+  return { meta, repoName, generatedAt: new Date().toISOString(), counts, classificationTruncated: classified.truncated, nodes, edges };
 }
 
 /**
@@ -119,7 +123,7 @@ export function openInBrowser(file: string): void {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open';
   try {
     const child = spawn(command, [file], { stdio: 'ignore', detached: true });
-    child.on('error', () => {});
+    child.on('error', () => { });
     child.unref();
   } catch {
     // ignore: the path is printed for the user to open
@@ -129,11 +133,12 @@ export function openInBrowser(file: string): void {
 export function printMap(file: string, data: MapData, opened: boolean): void {
   const ghosts = data.edges.filter((e) => e.relationship === 'ghost').length;
   console.log(`${c.bold('Repo Archaeology')} ${c.dim('·')} map`);
-  for (const warning of data.meta.warnings) console.log(c.yellow(`! ${warning}`));
+  for (const warning of data.meta.warnings) console.log(c.yellow(`! ${terminalText(warning)}`));
   if (data.edges.length === 0) {
     console.log('No relationships passed the thresholds, so the map is empty. Try --min-shared 2 or --min-confidence 0.3.');
   } else {
     console.log(`Drew ${data.edges.length} relationships between ${data.nodes.length} files (${ghosts} ghost wires).`);
   }
-  console.log(`${opened ? 'Opened' : 'Wrote'} ${c.bold(file)}`);
+  if (data.classificationTruncated) console.log(c.yellow('Only the strongest relationships were classified; additional relationship kinds may exist.'));
+  console.log(`${opened ? 'Opened' : 'Wrote'} ${c.bold(terminalText(file))}`);
 }

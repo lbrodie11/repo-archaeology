@@ -146,7 +146,12 @@ const CLIENT = String.raw`
     test: { label: 'Test links', color: '#7fd1b0' }
   };
   var ORDER = ['ghost', 'unknown', 'direct', 'test'];
-  var visible = { ghost: true, unknown: true, direct: true, test: false };
+  var visible = {
+    ghost: data.edges.some(function (e) { return e.relationship === 'ghost'; }),
+    unknown: data.edges.some(function (e) { return e.relationship === 'unknown'; }),
+    direct: data.edges.some(function (e) { return e.relationship === 'direct'; }),
+    test: data.edges.some(function (e) { return e.relationship === 'test'; })
+  };
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var canvas = document.getElementById('map');
@@ -659,7 +664,12 @@ const CLIENT = String.raw`
         ghosts.forEach(function (e) { list3.appendChild(relationshipItem(e, e.s, true)); });
         panel.appendChild(list3);
       } else if (edges.length > 0) {
-        panel.appendChild(el('p', '', 'No ghost wires among these relationships: everything that changes together here is explained by imports or tests.'));
+        var hasUnchecked = edges.some(function (e) { return e.d.relationship === 'unknown'; });
+        var message = hasUnchecked
+          ? 'No ghost wires among these relationships. Some links are unchecked because their imports could not be fully analyzed.'
+          : 'No ghost wires among these relationships: everything shown here is explained by imports or tests.';
+        if (data.classificationTruncated) message += ' Only the strongest relationships were classified.';
+        panel.appendChild(el('p', '', message));
       }
       return;
     }
