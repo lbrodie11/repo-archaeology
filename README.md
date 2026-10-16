@@ -229,7 +229,7 @@ Known limits:
 
 ## Project status
 
-The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [PLAN.md](https://github.com/lbrodie11/repo-archaeology/blob/main/PLAN.md) for the validation gates and roadmap.
+The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 

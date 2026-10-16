@@ -10,3 +10,9 @@ coverage/
 .env.*
 !.env.example
 repo-archaeology-map.html
+
+# Private documentation & strategy
+*.private.md
+ROADMAP.private.md
+STRATEGY.private.md
+private/
