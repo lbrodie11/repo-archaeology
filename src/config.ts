@@ -40,7 +40,7 @@ export const DEFAULT_IGNORES = [
   'Cargo.lock', 'go.sum', 'poetry.lock', 'uv.lock', 'Pipfile.lock', 'Gemfile.lock', 'composer.lock',
   // build output and vendored code
   'dist/', 'build/', 'out/', 'coverage/', 'node_modules/', 'vendor/', '.next/', '.nuxt/', '.svelte-kit/',
-  '*.min.js', '*.min.css', '*.map', '*.generated.*',
+  '*.min.js', '*.min.css', '*.map', '*.generated.*', '*.tsbuildinfo',
   // snapshots and release bookkeeping
   '__snapshots__/', '*.snap', 'CHANGELOG*', 'HISTORY.md',
 ];
