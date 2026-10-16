@@ -136,7 +136,13 @@ describe('map', () => {
     assert.equal(data.edges.length, 2);
     for (const e of data.edges) {
       assert.ok(data.nodes[e.source] && data.nodes[e.target]);
+      assert.ok(e.fromChanges >= e.shared);
+      assert.ok(e.toChanges >= e.shared);
+      assert.equal(e.weighted, false);
     }
+    const ghost = buildMapData(ctx, { edges: 1, kinds: ['ghost'] }).edges[0];
+    assert.ok(ghost);
+    assert.equal(ghost?.crossesDirectories, true);
   });
 });
 

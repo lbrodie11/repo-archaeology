@@ -111,12 +111,12 @@ canvas.pointing { cursor: pointer; }
 .panel { overflow-y: auto; padding: 20px 22px 32px; background: var(--ground-deep); border-left: 1px solid rgba(159, 180, 204, 0.18); }
 .panel h2 { margin: 0 0 6px; font: 600 21px/1.2 var(--condensed); font-stretch: condensed; }
 .panel p { margin: 0 0 12px; color: var(--chalk-faded); }
-.panel .path { font-family: var(--code); font-size: 13px; word-break: break-all; color: var(--chalk); }
+.panel .path { font-family: var(--code); font-size: 13px; overflow-wrap: anywhere; color: var(--chalk); }
 .panel ol, .panel ul { list-style: none; margin: 0; padding: 0; }
 .rel { padding: 12px 0; border-top: 1px solid rgba(159, 180, 204, 0.14); }
 .rel-head { display: flex; gap: 10px; align-items: baseline; }
 .rel-head .swatch { flex: none; transform: translateY(-4px); }
-.file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13px; word-break: break-all; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; }
+.file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; }
 .file-link:hover { text-decoration-color: var(--tape); }
 .pair { display: grid; gap: 2px; }
 .pair .file-link + .file-link::before { content: "and "; font-family: var(--text); color: var(--chalk-faded); text-decoration: none; display: inline-block; margin-right: 4px; }
@@ -124,6 +124,9 @@ canvas.pointing { cursor: pointer; }
 .evidence { margin: 6px 0 0 32px; font-size: 12.5px; color: var(--chalk-faded); }
 .evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 2px 0; }
 .evidence .hash { font-family: var(--code); color: var(--chalk); opacity: 0.8; }
+.evidence-wrap { margin: 7px 0 0 32px; color: var(--chalk-faded); font-size: 12.5px; }
+.evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); }
+.evidence-wrap .evidence { margin: 5px 0 0; }
 .clear { margin-top: 18px; padding: 6px 12px; border: 1px solid rgba(159, 180, 204, 0.35); border-radius: 6px; background: transparent; cursor: pointer; }
 .empty { padding: 40px 24px; max-width: 46ch; }
 
@@ -146,9 +149,10 @@ const CLIENT = String.raw`
     test: { label: 'Test links', color: '#7fd1b0' }
   };
   var ORDER = ['ghost', 'unknown', 'direct', 'test'];
+  var hasPrimary = data.edges.some(function (e) { return e.relationship !== 'unknown'; });
   var visible = {
     ghost: data.edges.some(function (e) { return e.relationship === 'ghost'; }),
-    unknown: data.edges.some(function (e) { return e.relationship === 'unknown'; }),
+    unknown: !hasPrimary && data.edges.some(function (e) { return e.relationship === 'unknown'; }),
     direct: data.edges.some(function (e) { return e.relationship === 'direct'; }),
     test: data.edges.some(function (e) { return e.relationship === 'test'; })
   };
@@ -168,6 +172,7 @@ const CLIENT = String.raw`
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
   function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
+  function shortPath(p) { var parts = p.split('/'); return parts.slice(-2).join('/'); }
   function plural(n, w) { return n.toLocaleString('en-US') + ' ' + w + (n === 1 ? '' : 's'); }
 
   // Deterministic layout: the same repo produces the same picture every time.
@@ -203,6 +208,16 @@ const CLIENT = String.raw`
     edge.t.edges.push(edge);
     return edge;
   });
+  var overviewGhosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
+    return Number(b.d.crossesDirectories) - Number(a.d.crossesDirectories) ||
+      Math.min(b.d.confidence, b.d.reverseConfidence) - Math.min(a.d.confidence, a.d.reverseConfidence) ||
+      b.d.shared - a.d.shared;
+  });
+  var overviewLabelNodes = {};
+  overviewGhosts.slice(0, 3).forEach(function (e) {
+    overviewLabelNodes[e.s.i] = true;
+    overviewLabelNodes[e.t.i] = true;
+  });
   dirList.forEach(function (d, i) {
     var angle = (i / Math.max(1, dirList.length)) * Math.PI * 2;
     var radius = 120 + 40 * Math.sqrt(dirList.length);
@@ -219,7 +234,7 @@ const CLIENT = String.raw`
   var m = data.meta;
   var span = m.oldestCommit && m.newestCommit ? ' between ' + m.oldestCommit + ' and ' + m.newestCommit : '';
   document.getElementById('summary').textContent =
-    'Built from ' + plural(m.commitsAnalyzed, 'commit') + span + '. Showing the ' + plural(edges.length, 'strongest relationship') +
+    'Built from ' + plural(m.commitsAnalyzed, 'commit') + span + '. Loaded the ' + plural(edges.length, 'strongest relationship') +
     ' (each at least ' + m.settings.minShared + ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
 
   var toggles = document.getElementById('toggles');
@@ -236,6 +251,7 @@ const CLIENT = String.raw`
       visible[kind] = !visible[kind];
       b.setAttribute('aria-pressed', String(visible[kind]));
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
+      if (!selectedNode && !selectedEdge && !userMoved) { flight = null; fit(); }
       renderPanel();
       requestDraw();
     });
@@ -335,7 +351,6 @@ const CLIENT = String.raw`
   var selectedNode = null, selectedEdge = null, hoverNode = null, matches = null;
   function isVisible(e) { return visible[e.d.relationship]; }
   function isActive(n) { return n.edges.some(isVisible); }
-  function hasGhost(n) { return visible.ghost && n.edges.some(function (e) { return e.d.relationship === 'ghost'; }); }
   function focusEdge(e) {
     if (selectedEdge) return e === selectedEdge;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
@@ -439,9 +454,10 @@ const CLIENT = String.raw`
     nodes.forEach(function (n) {
       var overview = !selectedNode && !selectedEdge && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge) && focusNode(n)) || (overview && (n.r * k > 9 || (hasGhost(n) && k >= 0.5)));
+        ((selectedNode || selectedEdge) && focusNode(n)) ||
+        (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
-      var label = base(n.path);
+      var label = overviewLabelNodes[n.i] ? shortPath(n.path) : base(n.path);
       var x = n.x + n.r + 5 / k;
       ctx.lineWidth = 4 / k;
       ctx.strokeStyle = 'rgba(19, 48, 79, 0.92)';
@@ -521,6 +537,7 @@ const CLIENT = String.raw`
       tooltip.textContent = '';
       if (n) {
         tooltip.appendChild(el('code', '', n.path));
+        tooltip.appendChild(el('div', '', 'Folder: ' + n.dir));
         tooltip.appendChild(el('div', '', 'Changed in ' + plural(n.changes, 'commit')));
       } else {
         tooltip.appendChild(el('div', '', KINDS[e.d.relationship].label.replace(/s$/, '') + ': ' + base(e.s.path) + ' and ' + base(e.t.path)));
@@ -601,7 +618,9 @@ const CLIENT = String.raw`
     b.addEventListener('click', function () { selectNode(n); });
     return b;
   }
-  function evidenceList(e) {
+  function evidenceDetails(e) {
+    var details = el('details', 'evidence-wrap');
+    details.appendChild(el('summary', '', 'View ' + plural(e.d.evidence.length, 'evidence commit')));
     var list = el('ul', 'evidence');
     e.d.evidence.forEach(function (ev) {
       var li = el('li');
@@ -609,13 +628,19 @@ const CLIENT = String.raw`
       li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
       list.appendChild(li);
     });
-    return list;
+    details.appendChild(list);
+    return details;
+  }
+  function directionEvidence(e, fromSource) {
+    var total = fromSource ? e.d.fromChanges : e.d.toChanges;
+    var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
+    if (e.d.weighted) return pct(confidence) + ' recency-weighted confidence (' + e.d.shared + ' shared / ' + total + ' raw commits)';
+    return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ')';
   }
   /** One relationship, described from the point of view of 'from'. */
   function relationshipItem(e, from, showBoth) {
     var other = e.s === from ? e.t : e.s;
-    var forward = e.s === from ? e.d.confidence : e.d.reverseConfidence;
-    var backward = e.s === from ? e.d.reverseConfidence : e.d.confidence;
+    var fromSource = e.s === from;
     var li = el('li', 'rel');
     var head = el('div', 'rel-head');
     head.appendChild(el('span', 'swatch ' + e.d.relationship));
@@ -628,10 +653,12 @@ const CLIENT = String.raw`
       head.appendChild(fileButton(other));
     }
     li.appendChild(head);
+    var scope = e.d.crossesDirectories ? ' Crosses folders.' : '';
     li.appendChild(el('p', 'rel-body',
       KINDS[e.d.relationship].label.replace(/s$/, '') + ', ' + e.d.why + '. Changed together in ' + plural(e.d.shared, 'commit') +
-      ': when ' + base(from.path) + ' changes, ' + base(other.path) + ' changes ' + pct(forward) + ' of the time (' + pct(backward) + ' the other way). Last together ' + e.d.lastTogether + '.'));
-    li.appendChild(evidenceList(e));
+      '. Historical direction: when ' + shortPath(from.path) + ' changes, ' + shortPath(other.path) + ' also changes in ' + directionEvidence(e, fromSource) +
+      '; reverse ' + directionEvidence(e, !fromSource) + '. Last together ' + e.d.lastTogether + '.' + scope));
+    if (e.d.evidence.length > 0) li.appendChild(evidenceDetails(e));
     return li;
   }
 
@@ -657,9 +684,9 @@ const CLIENT = String.raw`
     } else {
       panel.appendChild(el('h2', '', 'What moves together'));
       panel.appendChild(el('p', '', 'Each dot is a file, sized by how often it changes and coloured by folder. Lines join files that keep changing in the same commits. Pink dashed lines are ghost wires: no import connects the two files, yet history says they move together.'));
-      var ghosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).slice(0, 10);
+      var ghosts = overviewGhosts.slice(0, 10);
       if (ghosts.length > 0) {
-        panel.appendChild(el('h2', '', 'Strongest ghost wires'));
+        panel.appendChild(el('h2', '', 'Notable ghost wires'));
         var list3 = el('ol');
         ghosts.forEach(function (e) { list3.appendChild(relationshipItem(e, e.s, true)); });
         panel.appendChild(list3);

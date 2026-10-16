@@ -33,9 +33,13 @@ export interface MapEdge {
   why: string;
   hiddenBridge?: HiddenBridge;
   shared: number;
+  fromChanges: number;
+  toChanges: number;
   confidence: number;
   reverseConfidence: number;
+  weighted: boolean;
   lastTogether: string;
+  crossesDirectories: boolean;
   evidence: { hash: string; date: string; subject: string }[];
 }
 
@@ -84,9 +88,13 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       why: view.why,
       hiddenBridge: view.hiddenBridge,
       shared: view.shared,
+      fromChanges: view.fromChanges,
+      toChanges: view.toChanges,
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
+      weighted: view.weighted,
       lastTogether: view.lastTogether,
+      crossesDirectories: view.crossesDirectories,
       evidence: view.evidence.map((e) => ({ hash: e.hash, date: e.date, subject: e.subject })),
     });
   }
