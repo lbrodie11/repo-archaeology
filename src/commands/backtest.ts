@@ -1,0 +1,203 @@
+import type { Context } from '../context.js';
+import { UsageError } from '../context.js';
+import { CoChangeModel, type Thresholds } from '../model/cochange.js';
+import type { HistoryCommit } from '../model/history.js';
+import { buildMeta, printHeader, type Meta } from '../report/views.js';
+import { ratio } from '../util/stats.js';
+import { c, isoDate, pct, plural } from '../util/term.js';
+
+export interface BacktestOptions {
+  /** Share of the newest commits held out for testing (0..1). */
+  testFraction: number;
+  /** Number of suggestions considered per query. */
+  k: number;
+}
+
+export interface StrategyScore {
+  name: string;
+  description: string;
+  /** Queries where the strategy suggested at least one file. */
+  fired: number;
+  /** fired / queries. */
+  coverage: number;
+  /** Of all suggestions made, the share that really changed in the same commit. */
+  precision: number;
+  /** Of fired queries, the share with at least one correct suggestion (hit@k). */
+  hitRate: number;
+  /** Of fired queries, the share where every suggestion was wrong. */
+  falseAlarmRate: number;
+  /** Of all files that really changed alongside, the share that was suggested. */
+  recall: number;
+}
+
+export interface BacktestResult {
+  meta: Meta;
+  k: number;
+  train: { commits: number; from?: string; to?: string };
+  test: { commits: number; from?: string; to?: string };
+  /** One query per (held-out commit, changed file with training history). */
+  queries: number;
+  /** Queries whose commit changed no other file: any suggestion there is a false alarm. */
+  soloQueries: number;
+  strategies: StrategyScore[];
+  notes: string[];
+}
+
+type Recommender = (fileId: number) => number[];
+
+export const MIN_COMMITS_FOR_BACKTEST = 30;
+
+/**
+ * Held-out commits touching more files than this are not replayed. Fixed on purpose:
+ * if it followed --max-files, tightening the filter would also quietly drop the
+ * hardest test cases and make the score look better than it is.
+ */
+export const EVALUATION_MAX_FILES = 25;
+
+/**
+ * Chronological backtest: learn from older commits only, then replay each newer
+ * commit one file at a time and check whether the suggestions for that file were
+ * among the files that really changed with it. Exactly what `diff` would have said.
+ */
+export function backtest(ctx: Context, options: BacktestOptions): BacktestResult {
+  const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded);
+  return { ...result, meta: buildMeta(ctx) };
+}
+
+/**
+ * @param commits  commits the model may learn from
+ * @param excluded commits the settings leave out of learning (sweeps, skipped subjects);
+ *                 they still take part in the chronological split and are replayed
+ *                 when small enough, so every setting is scored on the same test cases
+ */
+export function backtestCommits(
+  commits: readonly HistoryCommit[],
+  thresholds: Thresholds,
+  options: BacktestOptions,
+  halfLifeDays?: number,
+  excluded: readonly HistoryCommit[] = [],
+): Omit<BacktestResult, 'meta'> {
+  if (!(options.testFraction > 0 && options.testFraction < 1)) throw new UsageError('--test-fraction must be between 0 and 1.');
+  if (!(Number.isInteger(options.k) && options.k >= 1)) throw new UsageError('--k must be a positive integer.');
+  if (commits.length < MIN_COMMITS_FOR_BACKTEST) {
+    throw new UsageError(`A backtest needs at least ${MIN_COMMITS_FOR_BACKTEST} usable commits; this history has ${commits.length}.`);
+  }
+
+  const left = new Set(excluded);
+  // Ties broken by hash so the split is deterministic.
+  const ordered = [...commits, ...excluded].sort((x, y) => y.commitTime - x.commitTime || (x.hash < y.hash ? -1 : x.hash > y.hash ? 1 : 0));
+  const testCount = Math.max(1, Math.round(ordered.length * options.testFraction));
+  const testCommits = ordered.slice(0, testCount).filter((commit) => commit.files.length <= EVALUATION_MAX_FILES);
+  const trainCommits = ordered.slice(testCount).filter((commit) => !left.has(commit));
+  const model = new CoChangeModel(trainCommits, { halfLifeDays });
+
+  const popular = model.files.map((_, id) => id).sort((x, y) => (model.changeCount[y] ?? 0) - (model.changeCount[x] ?? 0) || x - y);
+  const strategies: [Omit<StrategyScore, 'fired' | 'coverage' | 'precision' | 'hitRate' | 'falseAlarmRate' | 'recall'>, Recommender][] = [
+    [
+      { name: 'co-change', description: `your thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence): what \`diff\` reports` },
+      (id) => model.companions(id, thresholds).slice(0, options.k).map((x) => x.to),
+    ],
+    [
+      { name: 'co-change, no thresholds', description: 'same ranking, always suggests something it has seen' },
+      (id) => model.companions(id, { minShared: 1, minConfidence: 0 }).slice(0, options.k).map((x) => x.to),
+    ],
+    [
+      { name: 'popularity baseline', description: `always suggests the ${options.k} most frequently changed files` },
+      (id) => popular.filter((p) => p !== id).slice(0, options.k),
+    ],
+  ];
+
+  const tallies = strategies.map(() => ({ fired: 0, suggestions: 0, correct: 0, hitQueries: 0 }));
+  let queries = 0;
+  let soloQueries = 0;
+  let expectedTotal = 0;
+
+  for (const commit of testCommits) {
+    for (const file of commit.files) {
+      const id = model.id(file);
+      if (id === undefined) continue; // a file born after the split: nothing to learn from
+      const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
+      const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
+      queries++;
+      if (commit.files.length === 1) soloQueries++;
+      expectedTotal += expected.size + unseen;
+      strategies.forEach(([, recommend], i) => {
+        const suggested = recommend(id);
+        const t = tallies[i]!;
+        if (suggested.length === 0) return;
+        t.fired++;
+        t.suggestions += suggested.length;
+        const hits = suggested.filter((s) => expected.has(s)).length;
+        t.correct += hits;
+        if (hits > 0) t.hitQueries++;
+      });
+    }
+  }
+
+  const scores: StrategyScore[] = strategies.map(([info], i) => {
+    const t = tallies[i]!;
+    return {
+      ...info,
+      fired: t.fired,
+      coverage: ratio(t.fired, queries),
+      precision: ratio(t.correct, t.suggestions),
+      hitRate: ratio(t.hitQueries, t.fired),
+      falseAlarmRate: ratio(t.fired - t.hitQueries, t.fired),
+      recall: ratio(t.correct, expectedTotal),
+    };
+  });
+
+  return {
+    k: options.k,
+    train: span(trainCommits),
+    test: span(testCommits),
+    queries,
+    soloQueries,
+    strategies: scores,
+    notes: interpret(scores, queries),
+  };
+}
+
+function span(commits: readonly HistoryCommit[]): { commits: number; from?: string; to?: string } {
+  if (commits.length === 0) return { commits: 0 };
+  const times = commits.map((x) => x.commitTime);
+  return { commits: commits.length, from: isoDate(Math.min(...times)), to: isoDate(Math.max(...times)) };
+}
+
+function interpret(scores: StrategyScore[], queries: number): string[] {
+  const [model, , baseline] = scores;
+  if (!model || !baseline || queries === 0) return ['No held-out commit touched a file with training history, so there is nothing to score.'];
+  const notes: string[] = [];
+  if (model.fired === 0) {
+    notes.push('With these thresholds it never spoke up. Try --min-confidence 0.3 or --min-shared 2.');
+    return notes;
+  }
+  const lift = baseline.hitRate > 0 ? model.hitRate / baseline.hitRate : Infinity;
+  if (lift >= 2) notes.push(`When it speaks up it is ${Number.isFinite(lift) ? `${lift.toFixed(1)}×` : 'far'} more often right than guessing popular files.`);
+  else if (lift > 1) notes.push('Only slightly better than guessing popular files: try a higher --min-confidence or --min-shared.');
+  else notes.push('Not better than guessing popular files on this repository: treat its suggestions with caution.');
+  if (model.coverage < 0.05) notes.push('It rarely speaks up (under 5% of changes). That is fine for a quiet reviewer; lower --min-confidence for more suggestions.');
+  if (model.falseAlarmRate > 0.6) notes.push('Most alerts were wrong: raise --min-confidence to make it quieter but more reliable.');
+  notes.push('Tune thresholds with a different --test-fraction than the one you report, so you do not overfit the evaluation.');
+  return notes;
+}
+
+export function printBacktest(result: BacktestResult): void {
+  printHeader('backtest', result.meta);
+  console.log(`Learned from ${plural(result.train.commits, 'older commit')} ${c.dim(`(${result.train.from} → ${result.train.to})`)}`);
+  console.log(`Replayed ${plural(result.test.commits, 'newer commit')} ${c.dim(`(${result.test.from} → ${result.test.to})`)}, one changed file at a time: ${plural(result.queries, 'query', 'queries')}`);
+  console.log(c.dim(`${result.soloQueries} of those queries came from single-file commits, where any suggestion counts as a false alarm.`));
+  console.log();
+
+  const header = ['strategy', 'speaks up', `hit@${result.k}`, 'precision', 'false alarms', 'recall'];
+  const rows = result.strategies.map((s) => [s.name, pct(s.coverage), pct(s.hitRate), pct(s.precision), pct(s.falseAlarmRate), pct(s.recall)]);
+  const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)));
+  const line = (cells: string[]) => cells.map((cell, i) => (i === 0 ? cell.padEnd(widths[i]!) : cell.padStart(widths[i]!))).join('   ');
+  console.log(c.bold(line(header)));
+  for (const row of rows) console.log(line(row));
+  console.log();
+  for (const s of result.strategies) console.log(c.dim(`${s.name}: ${s.description}`));
+  console.log(c.dim(`speaks up = share of queries with any suggestion · hit@${result.k} = of those, share with ≥1 correct · precision = correct / all suggestions · recall = share of real companions suggested`));
+  console.log();
+  for (const note of result.notes) console.log(`• ${note}`);
+}

@@ -1,0 +1,42 @@
+{
+  "name": "repo-archaeology",
+  "version": "0.1.0",
+  "description": "Dig through git history to find ghost wires: files that change together without importing each other.",
+  "type": "module",
+  "bin": {
+    "repo-archaeology": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "keywords": [
+    "git",
+    "co-change",
+    "change-coupling",
+    "temporal-coupling",
+    "code-review",
+    "cli",
+    "visualization"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "typescript": "^5.4.0 || ^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
+  }
+}
