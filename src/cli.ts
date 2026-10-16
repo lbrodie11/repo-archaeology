@@ -136,7 +136,7 @@ program
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
   .action(async (opts: { base?: string; limit: number; kinds: Relationship[]; exitCode?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
     const result = await diff(ctx, opts);
     if (global.json) printJson(result);
     else printDiff(result);

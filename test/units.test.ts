@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolveSettings, validatePartial, ConfigError, compileSkipPattern } from '../src/config.js';
-import { mergeChanges, parseNameStatus, parsePorcelainStatus } from '../src/git/changes.js';
+import { mergeChanges, parseNameStatus, parsePorcelainStatus, reconcileBranchLineage } from '../src/git/changes.js';
 import { LogParser, type RawCommit } from '../src/git/log.js';
 import { embedJson, renderMapHtml } from '../src/map/template.js';
 import { CoChangeModel } from '../src/model/cochange.js';
@@ -109,6 +109,39 @@ describe('working tree parsing', () => {
     assert.equal(y.oldPath, 'x.ts');
     assert.deepEqual(y.sources, ['branch', 'unstaged']);
     assert.equal(merged.find((f) => f.path === 'z.ts')!.deleted, false);
+  });
+  it('reconciles multi-step branch lineage and chains working-tree renames', () => {
+    const rawCommit = (hash: string, changes: RawCommit['changes']): RawCommit => ({
+      hash, authorName: 'a', authorEmail: 'a@b', authorTime: 1, commitTime: 1, subject: hash, changes,
+    });
+    // Endpoint diff saw D a.ts + A c.ts + M recreated.ts, while commit log had a->b->c and D+A on recreated.ts
+    const net = parseNameStatus('D\0a.ts\0A\0c.ts\0M\0recreated.ts\0');
+    const reconciled = reconcileBranchLineage(net, [
+      rawCommit('c1', [{ status: 'R', oldPath: 'a.ts', path: 'b.ts' }, { status: 'D', path: 'recreated.ts' }]),
+      rawCommit('c2', [{ status: 'R', oldPath: 'b.ts', path: 'c.ts' }, { status: 'A', path: 'recreated.ts' }]),
+    ]);
+    assert.deepEqual(reconciled, [
+      { path: 'c.ts', oldPath: 'a.ts', deleted: false, added: true, sources: ['branch'] },
+      { path: 'recreated.ts', deleted: false, added: true, sources: ['branch'] },
+    ]);
+    // Chaining a working-tree rename c.ts -> d.ts preserves oldPath='a.ts' and drops intermediate c.ts
+    const chained = mergeChanges(reconciled, parsePorcelainStatus('R  d.ts\0c.ts\0'));
+    assert.deepEqual(chained, [
+      { path: 'recreated.ts', deleted: false, added: true, sources: ['branch'] },
+      { path: 'd.ts', oldPath: 'a.ts', deleted: false, added: true, sources: ['branch', 'staged'] },
+    ]);
+    // Phantom paths not in HEAD (e.g. side-branch M after rename) are never emitted
+    const withSideEdit = reconcileBranchLineage(
+      parseNameStatus('R100\0a.ts\0r.ts\0'),
+      [
+        rawCommit('c1', [{ status: 'R', oldPath: 'a.ts', path: 'r.ts' }]),
+        rawCommit('c2', [{ status: 'M', path: 'a.ts' }]),
+      ],
+      new Set(['r.ts']),
+    );
+    assert.deepEqual(withSideEdit, [
+      { path: 'r.ts', oldPath: 'a.ts', deleted: false, added: true, sources: ['branch'] },
+    ]);
   });
 });
 
