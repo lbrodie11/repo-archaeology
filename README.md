@@ -10,9 +10,9 @@ Repo Archaeology mines your Git history to find files that repeatedly change tog
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 
-Repo Archaeology compares those stories. It finds **ghost wires**: files that repeatedly change together even though neither imports the other (directly or one step removed). It shows the commits behind each relationship, suggests companion files a change may have overlooked, and offers cautious explanations when both files reference the same rare environment variable, API route, or event name.
+Repo Archaeology compares those stories. It finds **ghost wires**: files that repeatedly change together even though Repo Archaeology finds no direct or supported indirect import relationship between them in the current code. It surfaces the commits behind each link, suggests companion files a change may have overlooked, and offers cautious explanations when both files reference the same rare environment variable, API route, or event name.
 
-Everything runs locally against `.git`. No account, no uploads, and no external network requests.
+Analysis runs entirely locally against your `.git` repository. Once installed or fetched via `npx`, Repo Archaeology operates offline—no accounts, no telemetry, and no code uploads.
 
 ![Repo Archaeology map showing ghost wires in the Hono repository](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/repo-archaeology-map.png)
 
@@ -172,7 +172,7 @@ Every relationship has a kind:
 Being upfront about limitations builds trust. Repo Archaeology is designed for specific kinds of codebases and questions:
 
 * **Young repositories or large squash commits**: If a repository has fewer than ~50 commits, or was migrated via large monolithic commits, there is insufficient co-change history to surface reliable patterns.
-* **Code you wrote yourself recently**: If you just authored or refactored a module, you already carry its mental model. Repo Archaeology is most valuable for *other people's* code, new teammates, and pull request reviews.
+* **Code you wrote yesterday**: If you just authored or refactored a module, you already carry its mental model in fresh memory. Repo Archaeology is most valuable for older work where context has faded, *other people's* code, new teammates, and pull request reviews.
 * **Coupling outside Git's view**: Cross-repository dependencies, database schema migrations, and external API contracts are invisible to a single repository's Git history.
 * **Non-JavaScript/TypeScript import verification**: All file types participate in Git co-change history, but AST analysis and import checking currently support JS/TS only. Other file types (Go, Python, Rust, CSS, YAML) are classified as **unchecked**, not verified ghost wires.
 * **Historical clues, not proof of omission**: Co-change history indicates that files have frequently changed together in the past. It is a clue to guide review, not proof that an untouched file must change.
