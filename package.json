@@ -1,6 +1,6 @@
 {
   "name": "repo-archaeology",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Dig through git history to find ghost wires: files that change together without importing each other.",
   "type": "module",
   "bin": {

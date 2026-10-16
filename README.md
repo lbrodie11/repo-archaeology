@@ -5,55 +5,34 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/LICENSE)
 [![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/package.json)
 
-**See which files your git history says move together, and why.** Explore hidden relationships in your codebase using Git history. Investigate unexplained coupling, explore interactive dependency graphs, and test whether pending changes might have companion files worth reviewing.
+**Your codebase remembers relationships your imports don't show.**
+Repo Archaeology mines your Git history to find files that repeatedly change together—even when no import connects them—and shows you the commits behind them.
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 
-Repo Archaeology compares those stories. It finds **ghost wires**: files that repeatedly change together even though neither imports the other. It shows the commits behind each relationship, suggests files a change may have overlooked, and offers cautious explanations when both files reference the same rare environment variable, API route, or event name.
+Repo Archaeology compares those stories. It finds **ghost wires**: files that repeatedly change together even though neither imports the other (directly or one step removed). It shows the commits behind each relationship, suggests companion files a change may have overlooked, and offers cautious explanations when both files reference the same rare environment variable, API route, or event name.
 
-Everything runs locally against `.git`. There is no account, upload, or server, and warnings never block a commit unless you explicitly request an exit code.
+Everything runs locally against `.git`. No account, no uploads, and no external network requests.
 
 ![Repo Archaeology map showing ghost wires in the Hono repository](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/repo-archaeology-map.png)
 
-*The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with the default thresholds.*
-
-## The two core experiences
-
-* **Check your changes**: Find related files that historically changed alongside the files you are editing:
-  ```bash
-  npx repo-archaeology diff
-  # Or check an entire feature branch against main:
-  npx repo-archaeology diff --base main
-  ```
-* **Explore your codebase**: Open an interactive visual graph showing hidden coupling across your project:
-  ```bash
-  npx repo-archaeology map
-  ```
-
-## When to use Repo Archaeology
-
-| Situation | What Repo Archaeology does | Recommended command |
-| --- | --- | --- |
-| **Editing code** | Check if files that usually change alongside your edits were missed | `npx repo-archaeology diff` |
-| **Reviewing a PR** | Check all commits on a branch before merging | `npx repo-archaeology diff --base main` |
-| **Joining a new project** | Surface surprising dependencies between modules | `npx repo-archaeology` |
-| **Architecture audits** | Visualize historical coupling across folders | `npx repo-archaeology map` |
+*The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with default thresholds.*
 
 ## Quick start
 
 Requires Node.js 22+ and Git 2.24+. Run it inside any Git repository:
 
 ```bash
-# Explore your current Git repository
+# Explore your current Git repository (checks changed files or shows top findings)
 npx repo-archaeology
 
-# Open the interactive map
+# Open the interactive visual map
 npx repo-archaeology map
 
-# Check potentially overlooked files
+# Check potentially overlooked companion files for staged/working changes
 npx repo-archaeology diff
 
-# Show all options
+# Show all options and subcommands
 npx repo-archaeology --help
 ```
 
@@ -63,12 +42,29 @@ Or install it globally:
 npm install -g repo-archaeology
 ```
 
-With no subcommand, Repo Archaeology checks changed files when they have usable history. On a clean tree, it shows the strongest hidden relationships and points you to the map.
+## Real-world workflows
 
-## Example
+### 1. Explore an unfamiliar codebase visually (`map`)
+
+Joining a new project with hundreds of files? You can trace explicit imports, but you don't yet know which modules developers usually modify together or where hidden coupling lives.
+
+Generate a self-contained, offline interactive map in one command:
+
+```bash
+$ npx repo-archaeology map
+# Writes an offline HTML report to .git/repo-archaeology/map.html and opens it in your browser.
+```
+
+Files are colored by folder and sized by churn. Pink dashed lines mark **ghost wires**—files that co-evolve without direct or indirect imports. Click any file or wire to inspect the exact shared commits behind the link.
+
+### 2. Catch companion files when editing or reviewing a PR (`diff`)
+
+You fix a bug or add an option to `src/adapter/bun/serve-static.ts`. Did you remember that sibling adapters often require the same update?
+
+`diff` checks the co-change history of the files in your working tree (or on your branch with `--base main`) and highlights companion files that haven't been touched:
 
 ```text
-$ repo-archaeology diff
+$ npx repo-archaeology diff --base main
 
 You changed 1 file.
 
@@ -83,10 +79,29 @@ Possibly missed (2)
 
   src/adapter/cloudflare-workers/serve-static.ts  ghost wire
     changed with src/adapter/bun/serve-static.ts in 10 of 19 commits (53%) · last together 5 months ago
-    ...
 ```
 
-*(Real output from the [hono](https://github.com/honojs/hono) repository after editing the Bun adapter.)*
+*(Verified output from [honojs/hono](https://github.com/honojs/hono) after editing the Bun adapter.)*
+
+**The decision it prompts:** Parallel implementations aren't bugs—they're expected sibling patterns. `diff` gives you the commit evidence so you can review the other adapters and decide whether the new behavior should stay consistent across platforms.
+
+### 3. Audit hidden architectural coupling across modules (`scan`)
+
+Two files in different modules keep changing together, even though neither directly imports the other and there is no one-step indirect import between them.
+
+Run `scan` to audit hidden coupling and ghost wires across your entire repository:
+
+```text
+$ npx repo-archaeology scan
+
+Top relationships in hono (2,757 commits analyzed):
+  1. src/adapter/bun/serve-static.ts ↔ src/adapter/deno/serve-static.ts
+     Parallel implementations · 12 shared commits · 63% → / 52% ←
+  2. src/helper/streaming/stream.ts ↔ src/helper/streaming/sse.ts
+     Ghost wire (no import link) · 7 shared commits · 87% → / 38% ←
+```
+
+Repo Archaeology inspects TypeScript ASTs for shared environment variables, event names, or route patterns to give you evidence of why they might be coupled.
 
 ## Commands
 
@@ -151,6 +166,16 @@ Every relationship has a kind:
 **It is a historical signal, not proof.** Two files changing together in the past does not mean your change needs both.
 
 **Hidden bridges are possible explanations, not diagnoses.** For JS/TS files, Repo Archaeology recognizes possible parallel implementations in sibling folders and walks the TypeScript syntax tree for shared environment variables, `/api/...` route strings, event names used in event-method calls, and explicit named exports. Reference signals are shown only when at most three current, non-ignored source files use them. A shared export name suggests a possible public contract, not identical behavior; private, default, wildcard and nested namespace exports are not inferred. Without a recognized signal, the tool says only that no import link was detected in the current code.
+
+## When Repo Archaeology won't help
+
+Being upfront about limitations builds trust. Repo Archaeology is designed for specific kinds of codebases and questions:
+
+* **Young repositories or large squash commits**: If a repository has fewer than ~50 commits, or was migrated via large monolithic commits, there is insufficient co-change history to surface reliable patterns.
+* **Code you wrote yourself recently**: If you just authored or refactored a module, you already carry its mental model. Repo Archaeology is most valuable for *other people's* code, new teammates, and pull request reviews.
+* **Coupling outside Git's view**: Cross-repository dependencies, database schema migrations, and external API contracts are invisible to a single repository's Git history.
+* **Non-JavaScript/TypeScript import verification**: All file types participate in Git co-change history, but AST analysis and import checking currently support JS/TS only. Other file types (Go, Python, Rust, CSS, YAML) are classified as **unchecked**, not verified ghost wires.
+* **Historical clues, not proof of omission**: Co-change history indicates that files have frequently changed together in the past. It is a clue to guide review, not proof that an untouched file must change.
 
 ## Options
 
