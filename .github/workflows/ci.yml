@@ -12,14 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node: [20, 22, 24]
-        include:
-          # Node 20 does not expand the test glob itself, and npm scripts on Windows have no shell globbing.
-          - os: windows-latest
-            node: 22
-          - os: windows-latest
-            node: 24
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -47,6 +41,3 @@ jobs:
           install_dir=$(mktemp -d)
           npm install --prefix "$install_dir" "./$package" --no-audit --no-fund
           npm exec --prefix "$install_dir" -- repo-archaeology --version
-      - name: Backtest the repository when it has enough history
-        run: node dist/cli.js backtest --json --test-fraction 0.5
-        continue-on-error: true

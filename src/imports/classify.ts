@@ -20,7 +20,7 @@ export const MAX_BRIDGE_SOURCE_FILES = 10_000;
 export const MAX_BRIDGE_SOURCE_BYTES = 50_000_000;
 
 export interface HiddenBridge {
-  signal: 'parallel-implementation' | 'shared-environment' | 'shared-api-route' | 'shared-event';
+  signal: 'parallel-implementation' | 'shared-environment' | 'shared-api-route' | 'shared-event' | 'shared-export';
   value: string;
   filesUsing: number;
 }
@@ -99,6 +99,7 @@ export class RelationshipClassifier {
         if (!signal) return 'no import link detected in the current code';
         if (signal.signal === 'parallel-implementation') return `possible parallel implementations: ${signal.value} appears in sibling folders`;
         const rarity = `used in ${signal.filesUsing} files`;
+        if (signal.signal === 'shared-export') return `possible shared public contract: both export ${JSON.stringify(signal.value)} in the current code (${rarity})`;
         if (signal.signal === 'shared-environment') return `shared configuration: both reference environment variable ${signal.value} (${rarity})`;
         const kind = signal.signal === 'shared-api-route' ? 'API route' : 'event';
         return `possible shared contract: both reference ${kind} ${JSON.stringify(signal.value)} (${rarity})`;
@@ -129,7 +130,7 @@ export class RelationshipClassifier {
       .sort((x, y) => x.filesUsing - y.filesUsing || referencePriority(x.kind) - referencePriority(y.kind) || x.value.localeCompare(y.value));
     const best = candidates[0];
     if (!best) return undefined;
-    const signal = best.kind === 'environment' ? 'shared-environment' : best.kind === 'api-route' ? 'shared-api-route' : 'shared-event';
+    const signal = best.kind === 'environment' ? 'shared-environment' : best.kind === 'api-route' ? 'shared-api-route' : best.kind === 'event' ? 'shared-event' : 'shared-export';
     return { signal, value: best.value, filesUsing: best.filesUsing };
   }
 
@@ -231,7 +232,7 @@ function parallelImplementation(a: string, b: string): HiddenBridge | undefined 
 }
 
 function referencePriority(kind: SourceReferenceKind): number {
-  return kind === 'environment' ? 0 : kind === 'api-route' ? 1 : 2;
+  return kind === 'environment' ? 0 : kind === 'api-route' ? 1 : kind === 'event' ? 2 : 3;
 }
 
 interface Reach {

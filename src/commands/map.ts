@@ -5,7 +5,7 @@ import type { Context } from '../context.js';
 import { runGit } from '../git/run.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
-import { buildMeta, toView, type Meta } from '../report/views.js';
+import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
 import { c, terminalText } from '../util/term.js';
 import { classifiedPairs } from './scan.js';
 
@@ -40,6 +40,7 @@ export interface MapEdge {
   confidence: number;
   reverseConfidence: number;
   score: number;
+  overviewPriority: number;
   weighted: boolean;
   lastTogether: string;
   crossesDirectories: boolean;
@@ -57,6 +58,7 @@ export interface MapData {
 }
 
 export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
+  const generatedAt = new Date().toISOString();
   const nodes: MapNode[] = [];
   const nodeIndex = new Map<string, number>();
   const nodeFor = (path: string): number => {
@@ -102,6 +104,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
       score: companion.score,
+      overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, Date.parse(generatedAt)),
       weighted: view.weighted,
       lastTogether: view.lastTogether,
       crossesDirectories: view.crossesDirectories,
@@ -111,7 +114,22 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
   const repoName = basename(ctx.root);
   // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
   const meta = { ...buildMeta(ctx), root: repoName };
-  return { meta, repoName, generatedAt: new Date().toISOString(), counts, classificationTruncated: classified.truncated, nodes, edges };
+  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, nodes, edges };
+}
+
+export function mapOverviewPriority(
+  view: Pick<RelationshipView, 'from' | 'to' | 'confidence' | 'reverseConfidence' | 'lastTogether' | 'hiddenBridge'>,
+  minConfidence: number,
+  referenceTime: number,
+): number {
+  const age = referenceTime - Date.parse(view.lastTogether);
+  if (!Number.isFinite(age) || age < 0 || age > 365 * 86400000
+    || Math.min(view.confidence, view.reverseConfidence) < minConfidence) return 0;
+  const fromDir = posix.dirname(view.from);
+  const toDir = posix.dirname(view.to);
+  const independent = fromDir !== toDir && fromDir !== '.' && toDir !== '.'
+    && !fromDir.startsWith(`${toDir}/`) && !toDir.startsWith(`${fromDir}/`);
+  return independent && view.hiddenBridge?.signal !== 'parallel-implementation' ? 2 : 1;
 }
 
 /**

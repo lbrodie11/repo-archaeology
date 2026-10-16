@@ -108,7 +108,7 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
     const from = terminalText(view.from);
     const to = terminalText(view.to);
     console.log(`${n} ${c.bold(from)} ${c.dim('→')} ${c.bold(to)}  ${relationshipLabel(view.relationship)}`);
-    console.log(`    when ${from.split('/').pop()} changed, ${to.split('/').pop()} changed too in ${describeStrength(view)}`);
+    console.log(`    when ${from} changed, ${to} changed too in ${describeStrength(view)}`);
     console.log(c.dim(`    reverse: ${pct(view.reverseConfidence)} · ${terminalText(view.why)}`));
     printEvidence(view);
     console.log();

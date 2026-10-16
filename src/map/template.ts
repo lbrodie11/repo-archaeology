@@ -235,12 +235,8 @@ const CLIENT = String.raw`
     edge.t.edges.push(edge);
     return edge;
   });
-  function overviewTier(e) {
-    if (!e.d.crossesDirectories) return 0;
-    return e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation' ? 1 : 2;
-  }
   var overviewGhosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
-    return overviewTier(b) - overviewTier(a) || b.d.score - a.d.score || b.d.shared - a.d.shared;
+    return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
   });
   var overviewLabelNodes = {};
   overviewGhosts.slice(0, 3).forEach(function (e) {

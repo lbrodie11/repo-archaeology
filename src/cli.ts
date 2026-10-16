@@ -161,7 +161,8 @@ program
   .option('--test-fraction <p>', 'share of the newest commits to replay (default 0.2)', fraction, 0.2)
   .option('-k, --k <n>', 'suggestions considered per changed file (default 3)', positiveInt, 3)
   .option('--before <date>', 'leave out commits from this date on (tune on an older window)', dateValue)
-  .action(async (opts: { testFraction: number; k: number; before?: number }, cmd: Command) => {
+  .option('--ghosts', 'diagnose the ghost subset using current imports (contains future information)')
+  .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
     const result = backtest(ctx, opts);

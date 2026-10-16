@@ -16,6 +16,20 @@ export interface BacktestOptions {
    * older window and keep the newest commits untouched for the final score.
    */
   before?: number;
+  ghosts?: boolean;
+}
+
+export interface GhostDiagnostics {
+  classification: 'current-code';
+  queries: number;
+  fired: number;
+  suggestions: number;
+  correct: number;
+  coverage: number;
+  hitRate: number;
+  precision: number;
+  falseAlarmRate: number;
+  caveat: string;
 }
 
 export interface StrategyScore {
@@ -48,6 +62,7 @@ export interface BacktestResult {
   soloQueries: number;
   strategies: StrategyScore[];
   notes: string[];
+  ghostDiagnostics?: GhostDiagnostics;
 }
 
 type Recommender = (fileId: number) => number[];
@@ -64,10 +79,12 @@ export const EVALUATION_MAX_FILES = 25;
 /**
  * Chronological backtest: learn from older commits only, then replay each newer
  * commit one file at a time and check whether the suggestions for that file were
- * among the files that really changed with it. Exactly what `diff` would have said.
+ * among the files that really changed with it, using a frozen training model.
  */
 export function backtest(ctx: Context, options: BacktestOptions): BacktestResult {
-  const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded);
+  const isGhost = options.ghosts ? (from: string, to: string) => ctx.currentFiles.has(from)
+    && ctx.currentFiles.has(to) && ctx.classifier.classify(from, to) === 'ghost' : undefined;
+  const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded, isGhost);
   return { ...result, meta: buildMeta(ctx) };
 }
 
@@ -83,9 +100,11 @@ export function backtestCommits(
   options: BacktestOptions,
   halfLifeDays?: number,
   excluded: readonly HistoryCommit[] = [],
+  isGhost?: (from: string, to: string) => boolean,
 ): Omit<BacktestResult, 'meta'> {
   if (!(options.testFraction > 0 && options.testFraction < 1)) throw new UsageError('--test-fraction must be between 0 and 1.');
   if (!(Number.isInteger(options.k) && options.k >= 1)) throw new UsageError('--k must be a positive integer.');
+  if (options.ghosts && !isGhost) throw new UsageError('Ghost diagnostics require a current-code classifier.');
   if (options.before !== undefined) {
     const cutoff = options.before;
     commits = commits.filter((commit) => commit.commitTime < cutoff);
@@ -137,6 +156,7 @@ export function backtestCommits(
   ];
 
   const tallies = strategies.map(() => ({ fired: 0, suggestions: 0, correct: 0, hitQueries: 0 }));
+  const ghostTally = { fired: 0, suggestions: 0, correct: 0, hitQueries: 0 };
   let queries = 0;
   let soloQueries = 0;
   let expectedTotal = 0;
@@ -154,6 +174,14 @@ export function backtestCommits(
         strategies.forEach(([, recommend], i) => {
           const suggested = recommend(id);
           if (i === 0) modelSpoke = suggested.length > 0;
+          if (i === 0 && options.ghosts && isGhost) {
+            const ghosts = suggested.filter((target) => isGhost(model.path(id), model.path(target)));
+            const correct = ghosts.filter((target) => expected.has(target)).length;
+            ghostTally.suggestions += ghosts.length;
+            ghostTally.correct += correct;
+            if (ghosts.length > 0) ghostTally.fired++;
+            if (correct > 0) ghostTally.hitQueries++;
+          }
           const t = tallies[i]!;
           if (suggested.length === 0) return;
           t.fired++;
@@ -189,6 +217,20 @@ export function backtestCommits(
     soloQueries,
     strategies: scores,
     notes: interpret(scores, queries),
+    ...(options.ghosts ? {
+      ghostDiagnostics: {
+        classification: 'current-code' as const,
+        queries,
+        fired: ghostTally.fired,
+        suggestions: ghostTally.suggestions,
+        correct: ghostTally.correct,
+        coverage: ratio(ghostTally.fired, queries),
+        hitRate: ratio(ghostTally.hitQueries, ghostTally.fired),
+        precision: ratio(ghostTally.correct, ghostTally.suggestions),
+        falseAlarmRate: ratio(ghostTally.fired - ghostTally.hitQueries, ghostTally.fired),
+        caveat: 'Diagnostic subset of the original top-k suggestions, classified using current working-tree imports. This leaks future information (also with --before); missing files are excluded. Not an unbiased historical accuracy estimate or a ghost-only recommender.',
+      }
+    } : {}),
   };
 }
 
@@ -247,4 +289,13 @@ export function printBacktest(result: BacktestResult): void {
   console.log(c.dim(`speaks up = share of queries with any suggestion · hit@${result.k} = of those, share with ≥1 correct · precision = correct / all suggestions · recall = share of real companions suggested`));
   console.log();
   for (const note of result.notes) console.log(`• ${note}`);
+  if (result.ghostDiagnostics) {
+    const ghosts = result.ghostDiagnostics;
+    console.log();
+    console.log(c.bold('Ghost subset (current-code diagnostic)'));
+    console.log(`${ghosts.fired} of ${ghosts.queries} queries raised ghost suggestions; ${ghosts.correct} of ${ghosts.suggestions} suggestions matched the held-out commit.`);
+    if (ghosts.fired > 0) console.log(`Hit rate ${pct(ghosts.hitRate)} · precision ${pct(ghosts.precision)} · false alarms ${pct(ghosts.falseAlarmRate)}`);
+    else console.log('No ghost suggestions to score.');
+    console.log(c.dim(ghosts.caveat));
+  }
 }

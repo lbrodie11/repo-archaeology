@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { isTestFile, isTestPair, RelationshipClassifier, testCovers } from '../src/imports/classify.js';
 import { ImportResolver, resolveFile, type RepoFiles } from '../src/imports/resolve.js';
+import { extractSourceReferences } from '../src/imports/references.js';
 
 function memoryRepo(files: Record<string, string>): RepoFiles {
   return {
@@ -65,6 +66,41 @@ describe('import resolution', () => {
 });
 
 describe('relationship classification', () => {
+  it('finds explicit public export names without mistaking private or nested names for exports', () => {
+    const source = `
+      // export class Fake {}
+      const quoted = 'export class AlsoFake {}';
+      class Private {}
+      export class Hono {}
+      export function createClient() {}
+      export interface Options {}
+      export type Result = string;
+      export enum Mode { Read }
+      export const route = '/', port = 8080;
+      export { Private as Public, Private as default };
+      export type { Request as PublicRequest } from './types';
+      export * from './other';
+      export default class DefaultName {}
+      namespace Internal { export class Nested {} }
+    `;
+    assert.deepEqual(extractSourceReferences('src/a.ts', source).filter((reference) => reference.kind === 'export').map((reference) => reference.value),
+      ['Hono', 'createClient', 'Options', 'Result', 'Mode', 'route', 'port', 'Public', 'PublicRequest']);
+  });
+
+  it('explains rare shared export names without asserting equivalent implementations', () => {
+    const files = { 'src/preset/tiny.ts': 'export class Hono {}', 'src/hono.ts': 'export class Hono {}' };
+    const exports = new RelationshipClassifier(memoryRepo(files));
+    assert.deepEqual(exports.hiddenBridge('src/preset/tiny.ts', 'src/hono.ts'), {
+      signal: 'shared-export', value: 'Hono', filesUsing: 2,
+    });
+    assert.match(exports.explain('src/preset/tiny.ts', 'src/hono.ts', 'ghost'), /possible shared public contract.*Hono.*current code/);
+    const common = new RelationshipClassifier(memoryRepo({
+      ...files,
+      'src/third.ts': 'export class Hono {}', 'src/fourth.ts': 'export class Hono {}',
+    }));
+    assert.equal(common.hiddenBridge('src/preset/tiny.ts', 'src/hono.ts'), undefined);
+  });
+
   const repo = memoryRepo({
     'src/api.ts': "import { db } from './db'\nexport const x = 1",
     'src/db.ts': "// import './api' in a comment does not count\nexport const db = 1; const s = \"require('./api')\"",

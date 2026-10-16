@@ -4,10 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { backtestCommits, EVALUATION_MAX_FILES } from '../src/commands/backtest.js';
+import { backtest, backtestCommits, EVALUATION_MAX_FILES } from '../src/commands/backtest.js';
 import { diff } from '../src/commands/diff.js';
 import { fileReport } from '../src/commands/file.js';
-import { buildMapData } from '../src/commands/map.js';
+import { buildMapData, mapOverviewPriority } from '../src/commands/map.js';
 import { classifiedPairs, scan } from '../src/commands/scan.js';
 import { loadContext } from '../src/context.js';
 import type { HistoryCommit } from '../src/model/history.js';
@@ -50,6 +50,21 @@ after(() => repo.cleanup());
 const flags = { minShared: 3, minConfidence: 0.4 };
 
 describe('scan', () => {
+  it('distinguishes same-named files in the explanatory CLI sentence', () => {
+    const scanRepo = new FixtureRepo();
+    try {
+      for (let index = 0; index < 3; index++) {
+        scanRepo.touch(['src/bun/ssg.ts', 'src/deno/ssg.ts']);
+      }
+      const result = runCli(['scan'], scanRepo.dir);
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, /when src\/(bun|deno)\/ssg\.ts changed, src\/(bun|deno)\/ssg\.ts changed too/);
+      assert.doesNotMatch(result.stdout, /when ssg\.ts changed, ssg\.ts changed too/);
+    } finally {
+      scanRepo.cleanup();
+    }
+  });
+
   it('finds the ghost wire and classifies the other relationships', async () => {
     const ctx = await loadContext(repo.dir, flags);
     const result = scan(ctx, { limit: 10, kinds: ['ghost', 'unknown', 'direct', 'test'] });
@@ -130,6 +145,21 @@ describe('file', () => {
 });
 
 describe('map', () => {
+  it('promotes recent mutual links without treating parent folders or hubs as independent areas', () => {
+    const now = Date.parse('2026-10-16T00:00:00Z');
+    const view = { from: 'src/router/a.ts', to: 'src/adapter/b.ts', confidence: 0.8, reverseConfidence: 0.6, lastTogether: '2026-10-01' };
+    const priority = (overrides: Partial<typeof view> = {}) => mapOverviewPriority({ ...view, ...overrides }, 0.4, now);
+    assert.equal(priority(), 2);
+    assert.equal(priority({ from: 'src/hono.ts', to: 'src/preset/tiny.ts' }), 1);
+    assert.equal(priority({ from: 'src/preset/tiny.ts', to: 'src/hono.ts' }), 1);
+    assert.equal(priority({ from: 'hono.ts' }), 1);
+    assert.equal(priority({ reverseConfidence: 0.04 }), 0);
+    assert.equal(priority({ lastTogether: '2024-01-01' }), 0);
+    assert.equal(priority({ lastTogether: 'invalid' }), 0);
+    assert.equal(mapOverviewPriority({ ...view, hiddenBridge: { signal: 'parallel-implementation', value: 'a.ts', filesUsing: 2 } }, 0.4, now), 1);
+    assert.equal(priority({ from: 'src/routes/a.ts', to: 'src/routes-other/b.ts' }), 2);
+  });
+
   it('builds nodes and edges for the strongest relationships', async () => {
     const ctx = await loadContext(repo.dir, flags);
     const data = buildMapData(ctx, { edges: 2, kinds: ['ghost', 'direct', 'test', 'unknown'] });
@@ -169,6 +199,37 @@ describe('map', () => {
 });
 
 describe('backtest', () => {
+  it('reports a current-code ghost subset without altering the default strategies', async () => {
+    const historyRepo = new FixtureRepo();
+    try {
+      for (let index = 0; index < 40; index++) {
+        historyRepo.commit({
+          message: `update ${index}`, write: {
+            'src/a.ts': `import './b'; export const value = ${index};`,
+            'src/b.ts': `export const value = ${index};`,
+            'src/c.ts': `export const value = ${index};`,
+          }
+        });
+      }
+      const ctx = await loadContext(historyRepo.dir, flags);
+      const options = { k: 2, testFraction: 0.2 };
+      const flat = backtest(ctx, options);
+      const report = backtest(ctx, { ...options, ghosts: true });
+      assert.equal(flat.ghostDiagnostics, undefined);
+      assert.deepEqual(report.strategies, flat.strategies);
+      assert.equal(report.ghostDiagnostics?.suggestions, 32);
+      assert.equal(report.ghostDiagnostics?.correct, 32);
+      assert.equal(report.ghostDiagnostics?.queries, 24);
+      assert.equal(report.ghostDiagnostics?.precision, 1);
+      assert.match(report.ghostDiagnostics?.caveat ?? '', /leaks future information/);
+      const cli = runCli(['backtest', '--ghosts', '--json', '-k', '2'], historyRepo.dir);
+      assert.equal(cli.code, 0, cli.stderr);
+      assert.deepEqual(JSON.parse(cli.stdout).ghostDiagnostics, report.ghostDiagnostics);
+    } finally {
+      historyRepo.cleanup();
+    }
+  });
+
   const make = (n: number): HistoryCommit[] => {
     const commits: HistoryCommit[] = [];
     for (let i = 0; i < n; i++) {
@@ -199,6 +260,30 @@ describe('backtest', () => {
 
   it('refuses tiny histories', () => {
     assert.throws(() => backtestCommits(make(10), { minShared: 3, minConfidence: 0.4 }, { testFraction: 0.2, k: 3 }), /at least/);
+  });
+
+  it('does not replace top-k suggestions when none are classified as ghosts', () => {
+    const report = backtestCommits(make(100), flags, { testFraction: 0.2, k: 1, ghosts: true }, undefined, [], () => false);
+    assert.equal(report.ghostDiagnostics?.fired, 0);
+    assert.equal(report.ghostDiagnostics?.suggestions, 0);
+    assert.equal(report.ghostDiagnostics?.hitRate, 0);
+    assert.equal(report.strategies[0]?.hitRate, 1);
+  });
+
+  it('counts incorrect ghost suggestions as false alarms rather than abstentions', () => {
+    const commits: HistoryCommit[] = Array.from({ length: 40 }, (_, index) => ({
+      hash: `commit${index}`, author: 'Test', time: index, commitTime: index, subject: '',
+      files: index < 30 ? ['a.ts', 'b.ts'] : ['a.ts'],
+    }));
+    const report = backtestCommits(commits, flags, { testFraction: 0.25, k: 1, ghosts: true }, undefined, [], () => true);
+    assert.equal(report.ghostDiagnostics?.queries, 10);
+    assert.equal(report.ghostDiagnostics?.fired, 10);
+    assert.equal(report.ghostDiagnostics?.suggestions, 10);
+    assert.equal(report.ghostDiagnostics?.correct, 0);
+    assert.equal(report.ghostDiagnostics?.coverage, 1);
+    assert.equal(report.ghostDiagnostics?.falseAlarmRate, 1);
+    assert.equal(report.ghostDiagnostics?.hitRate, 0);
+    assert.equal(report.ghostDiagnostics?.precision, 0);
   });
 
   it('stops recommending a file after its deletion', () => {

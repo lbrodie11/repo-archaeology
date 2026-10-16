@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml/badge.svg)](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](LICENSE)
-[![Node.js 20+](https://img.shields.io/badge/node-%3E%3D20-3c873a.svg)](package.json)
+[![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](package.json)
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 
@@ -16,7 +16,7 @@ Everything runs locally against `.git`. There is no account, upload, or server, 
 
 ## Quick start
 
-Requires Node.js 20+ and Git 2.24+.
+Requires Node.js 22+ and Git 2.24+. Use a supported LTS release for everyday work. CI targets Node 22, 24, and 26; Node 26 is currently a non-LTS release.
 
 The npm package is not published yet. Install the current version from source:
 
@@ -81,6 +81,10 @@ repo-archaeology diff --exit-code   # exit 1 when something looks missed (for ho
 
 Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file to see what moves with it and the commits behind each link. By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. The map includes file paths, author names and commit subjects, so treat it like the repository itself when sharing.
 
+The overview prioritizes pairs that changed together within the past year and meet `--min-confidence` in both directions. Independent folders receive priority over parent/child folders and possible parallel implementations. Wilson score orders findings within each group. This is a discovery heuristic, not a risk score; older and one-way links remain available, and `diff` ranking is unchanged.
+
+Unsupported code/schema pairs remain **unchecked**, not proven ghost wires. `diff` includes these by default. Use `map --kinds unknown` or `scan --kinds unknown` to inspect them without the default unchecked cap.
+
 ### `backtest`
 
 Learns from older commits only, then replays newer ones one changed file at a time and checks whether the suggestions were among the files that really changed. It compares against a "guess the most popular files" baseline scored on the same changes.
@@ -92,6 +96,8 @@ popularity, same changes         65%     13%          5%            87%       3%
 ```
 
 Use it to choose thresholds for your repo. To avoid fooling yourself, tune with `--before <date>` (an older window) and look at the final score once without it.
+
+`repo-archaeology backtest --ghosts` adds a diagnostic breakdown of the original top-k suggestions that are ghost wires in today's working tree. It reports raw query/suggestion counts, hit rate and precision without altering the main scores. **Current imports leak future information**, including with `--before`; missing current files are excluded. This is neither an unbiased historical ghost-accuracy estimate nor a simulation of filtering to ghosts before ranking.
 
 ## How to read the results
 
@@ -110,7 +116,7 @@ Every relationship has a kind:
 
 **It is a historical signal, not proof.** Two files changing together in the past does not mean your change needs both.
 
-**Hidden bridges are possible explanations, not diagnoses.** For JS/TS files, Repo Archaeology recognizes possible parallel implementations in sibling folders and walks the TypeScript syntax tree for shared environment variables, `/api/...` route strings, and event names used in event-method calls. Reference signals are shown only when at most three current, non-ignored source files use them; common values such as `NODE_ENV` are suppressed. Without a recognized signal, the tool says only that no import link was detected in the current code.
+**Hidden bridges are possible explanations, not diagnoses.** For JS/TS files, Repo Archaeology recognizes possible parallel implementations in sibling folders and walks the TypeScript syntax tree for shared environment variables, `/api/...` route strings, event names used in event-method calls, and explicit named exports. Reference signals are shown only when at most three current, non-ignored source files use them. A shared export name suggests a possible public contract, not identical behavior; private, default, wildcard and nested namespace exports are not inferred. Without a recognized signal, the tool says only that no import link was detected in the current code.
 
 ## Options
 

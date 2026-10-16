@@ -1,7 +1,7 @@
 import type * as TS from 'typescript';
 import { typescript } from './typescript.js';
 
-export type SourceReferenceKind = 'environment' | 'api-route' | 'event';
+export type SourceReferenceKind = 'environment' | 'api-route' | 'event' | 'export';
 
 export interface SourceReference {
   kind: SourceReferenceKind;
@@ -18,6 +18,28 @@ export function extractSourceReferences(fileName: string, sourceText: string): S
   const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, false, scriptKind(ts, fileName));
   const found = new Map<string, SourceReference>();
   const add = (kind: SourceReferenceKind, value: string) => found.set(keyOf(kind, value), { kind, value });
+
+  for (const statement of source.statements) {
+    if (ts.isExportDeclaration(statement)) {
+      if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+        for (const element of statement.exportClause.elements) {
+          if (element.name.text !== 'default') add('export', element.name.text);
+        }
+      }
+      continue;
+    }
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
+    if (!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      || modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name)) add('export', declaration.name.text);
+      }
+    } else if (ts.isClassDeclaration(statement) || ts.isFunctionDeclaration(statement)
+      || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) {
+      if (statement.name) add('export', statement.name.text);
+    }
+  }
 
   const visit = (node: TS.Node, parent?: TS.Node): void => {
     const environment = environmentName(ts, node);
