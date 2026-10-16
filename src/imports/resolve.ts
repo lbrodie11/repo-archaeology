@@ -273,6 +273,9 @@ function packageCandidates(json: Record<string, unknown>, subpath: string): stri
   return out;
 }
 
+/** Conditions a runtime import can match. `types` is only a fallback: runtime code never loads it. */
+const RUNTIME_CONDITIONS = new Set(['development', 'import', 'module', 'node', 'require', 'default']);
+
 function pickExportTarget(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
@@ -284,10 +287,17 @@ function pickExportTarget(value: unknown): string | undefined {
   }
   if (value && typeof value === 'object') {
     const conditions = value as Record<string, unknown>;
-    for (const key of ['source', 'development', 'import', 'module', 'default', 'require', 'node', 'types']) {
-      const t = pickExportTarget(conditions[key]);
+    // `source` is a widespread convention pointing straight at the source file.
+    const source = pickExportTarget(conditions.source);
+    if (source) return source;
+    // Like Node: the first matching condition *in the object's own order* wins, so
+    // `{ "node": "./node.js", "default": "./browser.js" }` resolves to node.js.
+    for (const [key, target] of Object.entries(conditions)) {
+      if (!RUNTIME_CONDITIONS.has(key)) continue;
+      const t = pickExportTarget(target);
       if (t) return t;
     }
+    return pickExportTarget(conditions.types);
   }
   return undefined;
 }

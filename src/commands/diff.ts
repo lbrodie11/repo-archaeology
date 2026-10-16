@@ -56,7 +56,12 @@ export function suggestMissing(ctx: Context, changes: ChangedFile[], options: Pi
   // per partner: otherwise a strong import link could hide a weaker but qualifying ghost wire.
   const best = new Map<number, { companion: Companion; fromPath: string; relationship: Relationship; linkedFrom: Set<string> }>();
   for (const file of changes) {
-    const historyPath = model.id(file.path) !== undefined ? file.path : file.oldPath !== undefined && model.id(file.oldPath) !== undefined ? file.oldPath : undefined;
+    // A path created only in the working tree has no committed history of its own: whatever
+    // the log knows under that name belonged to an earlier, deleted file. Paths created on the
+    // branch are fine, because the log saw their creation and gave the old file its own identity.
+    const bornUncommitted = file.added === true && !file.sources.includes('branch');
+    const ownHistory = !bornUncommitted && model.id(file.path) !== undefined;
+    const historyPath = ownHistory ? file.path : file.oldPath !== undefined && model.id(file.oldPath) !== undefined ? file.oldPath : undefined;
     changed.push({ ...file, historyPath, hasHistory: historyPath !== undefined });
     if (historyPath === undefined) continue;
     for (const companion of model.companions(model.id(historyPath)!, ctx.thresholds)) {

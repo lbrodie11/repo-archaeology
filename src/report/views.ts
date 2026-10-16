@@ -124,6 +124,7 @@ function round(x: number): number {
 const LABELS: Record<Relationship, (s: string) => string> = {
   ghost: (s) => c.magenta(s),
   unknown: (s) => c.yellow(s),
+  indirect: (s) => c.cyan(s),
   direct: (s) => c.blue(s),
   test: (s) => c.green(s),
 };
@@ -131,6 +132,7 @@ const LABELS: Record<Relationship, (s: string) => string> = {
 const NAMES: Record<Relationship, string> = {
   ghost: 'ghost wire',
   unknown: 'unchecked',
+  indirect: 'indirect import',
   direct: 'import link',
   test: 'test link',
 };

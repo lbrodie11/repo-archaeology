@@ -8,9 +8,7 @@
   },
   "files": [
     "dist",
-    "docs",
     "README.md",
-    "PLAN.md",
     "LICENSE"
   ],
   "engines": {

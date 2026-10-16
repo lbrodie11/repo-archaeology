@@ -55,7 +55,7 @@ export function classifiedPairs(ctx: Context, max = MAX_CLASSIFIED): ClassifiedP
 }
 
 export function scan(ctx: Context, options: ScanOptions): ScanResult {
-  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, direct: 0, test: 0 };
+  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
   const selected: RelationshipView[] = [];
   const pending: ClassifiedCompanion[] = [];
   const classified = classifiedPairs(ctx);
@@ -95,12 +95,12 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
   console.log(result.truncated
     ? `${result.qualifying} relationships above the thresholds; strongest ${result.classified} classified: ${counted}`
     : `${total} relationships above the thresholds: ${counted}`);
-  console.log(c.dim(`Showing ${options.kinds.map((k) => relationshipLabel(k)).join(', ')}. Change with --kinds ghost,unknown,direct,test.`));
+  console.log(c.dim(`Showing ${options.kinds.map((k) => relationshipLabel(k)).join(', ')}. Change with --kinds ghost,unknown,indirect,direct,test.`));
   console.log();
   if (result.relationships.length === 0) {
     console.log(result.truncated
       ? 'Nothing of the selected kinds was found within the classification limit.'
-      : 'Nothing of the selected kinds. Everything that changes together is explained by imports or tests.');
+      : 'Nothing of the selected kinds. Everything that changes together is explained by imports (direct or one step removed) or tests.');
     return;
   }
   result.relationships.forEach((view, i) => {

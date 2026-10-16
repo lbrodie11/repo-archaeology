@@ -76,6 +76,10 @@ export function pathOf(identity: string): string {
  */
 export class RenameTracker {
   private readonly alias = new Map<string, string>();
+  /** Plain paths already used as identities, by commits newer than the current one. */
+  private readonly usedPlain = new Set<string>();
+  /** Identities to rewrite once the whole log has been read (see `apply`). */
+  private readonly redirects = new Map<string, string>();
   private lifetimes = 0;
   renames = 0;
 
@@ -87,6 +91,9 @@ export class RenameTracker {
   apply(commit: RawCommit): string[] {
     // Resolve every name against the state *before* this commit, then update.
     const names = commit.changes.map((change) => this.current(change.path));
+    commit.changes.forEach((change, i) => {
+      if (names[i] === change.path) this.usedPlain.add(change.path);
+    });
     for (const change of commit.changes) {
       const born = change.status === 'A' || change.status === 'C' || (change.status === 'R' && change.oldPath !== change.path);
       if (born) this.alias.set(change.path, `${change.path}${LIFETIME_SEPARATOR}${++this.lifetimes}`);
@@ -95,11 +102,33 @@ export class RenameTracker {
     // commit, older mentions of OLD are the file that moved.
     commit.changes.forEach((change, i) => {
       if (change.status === 'R' && change.oldPath !== undefined && change.oldPath !== change.path) {
+        // Merged branches: the log is ordered by date, so a commit on a parallel branch can
+        // modify OLD *after* (newer than) the rename on the main line. Git carries those
+        // edits into NEW at the merge. If OLD was mentioned by newer commits and no newer
+        // commit created a fresh OLD, those mentions are this file too.
+        if (!this.alias.has(change.oldPath) && this.usedPlain.has(change.oldPath) && !this.redirects.has(change.oldPath)) {
+          this.redirects.set(change.oldPath, names[i]!);
+        }
         this.alias.set(change.oldPath, names[i]!);
         this.renames++;
       }
     });
     return names;
+  }
+
+  /** Maps identities recorded before a later-seen rename onto the renamed file. */
+  resolve(identity: string): string {
+    let current = identity;
+    for (let hops = 0; hops < 100; hops++) {
+      const next = this.redirects.get(current);
+      if (next === undefined || next === current) return current;
+      current = next;
+    }
+    return current;
+  }
+
+  get hasRedirects(): boolean {
+    return this.redirects.size > 0;
   }
 }
 
@@ -153,6 +182,13 @@ export class HistoryBuilder {
 
   finish(): History {
     this.stats.renamesFollowed = this.renames.renames;
+    if (this.renames.hasRedirects) {
+      for (const commit of [...this.commits, ...this.excluded]) {
+        commit.files = [...new Set(commit.files.map((f) => this.renames.resolve(f)))];
+        // A branch-side deletion of the old path does not delete the renamed file.
+        if (commit.deleted) commit.deleted = commit.deleted.filter((f) => this.renames.resolve(f) === f);
+      }
+    }
     return { commits: this.commits, excluded: this.excluded, stats: this.stats };
   }
 }

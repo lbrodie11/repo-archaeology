@@ -59,6 +59,10 @@ export interface MapData {
 
 export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
   const generatedAt = new Date().toISOString();
+  // "Past year" is measured back from the newest analyzed commit, not from today: an inactive
+  // repository, or a run with --before, would otherwise have nothing that counts as recent.
+  const newest = ctx.history.stats.newestTime;
+  const recencyReference = newest !== undefined ? newest * 1000 : Date.parse(generatedAt);
   const nodes: MapNode[] = [];
   const nodeIndex = new Map<string, number>();
   const nodeFor = (path: string): number => {
@@ -79,7 +83,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     return index;
   };
 
-  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, direct: 0, test: 0 };
+  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
   let unchecked = 0;
   const classified = classifiedPairs(ctx);
@@ -104,7 +108,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
       score: companion.score,
-      overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, Date.parse(generatedAt)),
+      overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
       weighted: view.weighted,
       lastTogether: view.lastTogether,
       crossesDirectories: view.crossesDirectories,

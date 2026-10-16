@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CONFIG_FILE = '.repo-archaeology.json';
@@ -49,10 +49,22 @@ export class ConfigError extends Error {
   override name = 'ConfigError';
 }
 
+/**
+ * The config file comes from the repository, which may not be yours (the README demo
+ * runs on fresh clones), so its values are limited: it must not be able to hang the
+ * tool or exhaust memory. Command-line flags are typed by the user and stay unrestricted.
+ */
+const MAX_CONFIG_BYTES = 64 * 1024;
+export const MAX_FILES_PER_COMMIT_FROM_FILE = 1000;
+const MAX_SKIP_PATTERN_LENGTH = 200;
+
 /** Reads `.repo-archaeology.json` from the repository root, if present. */
 export function loadConfigFile(root: string): Partial<Settings> {
   const file = join(root, CONFIG_FILE);
   if (!existsSync(file)) return {};
+  const stat = lstatSync(file);
+  if (!stat.isFile()) throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
+  if (stat.size > MAX_CONFIG_BYTES) throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'));
@@ -62,7 +74,45 @@ export function loadConfigFile(root: string): Partial<Settings> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new ConfigError(`${CONFIG_FILE} must contain a JSON object.`);
   }
-  return validatePartial(raw as Record<string, unknown>, CONFIG_FILE);
+  const settings = validatePartial(raw as Record<string, unknown>, CONFIG_FILE);
+  if (settings.maxFilesPerCommit !== undefined && settings.maxFilesPerCommit > MAX_FILES_PER_COMMIT_FROM_FILE) {
+    throw new ConfigError(`${CONFIG_FILE}: "maxFilesPerCommit" must be at most ${MAX_FILES_PER_COMMIT_FROM_FILE} (use --max-files for more).`);
+  }
+  if (settings.skipCommits !== undefined) {
+    const problem = riskySkipPattern(settings.skipCommits);
+    if (problem) throw new ConfigError(`${CONFIG_FILE}: "skipCommits" ${problem}. Pass it with --skip-commits if you trust it.`);
+  }
+  return settings;
+}
+
+/**
+ * Patterns that can backtrack catastrophically: a quantified group that itself contains
+ * a quantifier or an alternation, like `(a+)+` or `(a|aa)*`, and backreferences.
+ * Deliberately conservative: ordinary subject filters such as `^(chore|style)\b` pass.
+ */
+export function riskySkipPattern(pattern: string): string | undefined {
+  if (pattern.length > MAX_SKIP_PATTERN_LENGTH) return `is longer than ${MAX_SKIP_PATTERN_LENGTH} characters`;
+  if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
+  // Find each group's contents and check whether the group is followed by a quantifier.
+  const stack: number[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '[') {
+      // Skip character classes, where ( ) + * | are literal.
+      for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
+      continue;
+    }
+    if (ch === '(') stack.push(i);
+    else if (ch === ')' && stack.length > 0) {
+      const start = stack.pop()!;
+      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(pattern.slice(i + 1));
+      if (quantified && /(?:^|[^\\])(?:[*+|]|\{\d*,?\d*\})/.test(pattern.slice(start + 1, i).replace(/\[(?:\\.|[^\]])*\]/g, 'x'))) {
+        return 'repeats a group that contains a quantifier or alternation, which can hang on some commit messages';
+      }
+    }
+  }
+  return undefined;
 }
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {

@@ -97,6 +97,7 @@ h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; fon
 .swatch { width: 22px; height: 0; border-top: 2px solid; }
 .swatch.ghost { border-top: 2px dashed var(--tape); filter: drop-shadow(0 0 3px var(--tape)); }
 .swatch.unknown { border-top: 2px dotted var(--ochre); }
+.swatch.indirect { border-top: 2px dashed var(--import); opacity: 0.8; }
 .swatch.direct { border-top-color: var(--import); }
 .swatch.test { border-top-color: var(--lichen); }
 
@@ -153,14 +154,16 @@ const CLIENT = String.raw`
   var KINDS = {
     ghost: { label: 'Ghost wires', color: '#ff4f9a' },
     unknown: { label: 'Unchecked', color: '#e3b65b' },
+    indirect: { label: 'Indirect imports', color: 'rgba(160, 200, 240, 0.6)' },
     direct: { label: 'Import links', color: 'rgba(232, 238, 245, 0.55)' },
     test: { label: 'Test links', color: '#7fd1b0' }
   };
-  var ORDER = ['ghost', 'unknown', 'direct', 'test'];
+  var ORDER = ['ghost', 'unknown', 'indirect', 'direct', 'test'];
   var hasPrimary = data.edges.some(function (e) { return e.relationship !== 'unknown'; });
   var visible = {
     ghost: data.edges.some(function (e) { return e.relationship === 'ghost'; }),
     unknown: !hasPrimary && data.edges.some(function (e) { return e.relationship === 'unknown'; }),
+    indirect: data.edges.some(function (e) { return e.relationship === 'indirect'; }),
     direct: data.edges.some(function (e) { return e.relationship === 'direct'; }),
     test: data.edges.some(function (e) { return e.relationship === 'test'; })
   };
@@ -218,7 +221,8 @@ const CLIENT = String.raw`
   }
 
   // ---- data ----------------------------------------------------------------
-  var dirs = {};
+  // Null-prototype object: folders named "constructor" or "__proto__" must not hit Object.prototype.
+  var dirs = Object.create(null);
   var dirList = [];
   var nodes = data.nodes.map(function (n, i) {
     if (!dirs[n.dir]) { dirs[n.dir] = { name: n.dir, x: 0, y: 0, count: 0 }; dirList.push(dirs[n.dir]); }
@@ -442,7 +446,7 @@ const CLIENT = String.raw`
     var k = cam.scale;
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (size.w / 2 - cam.x * k), dpr * (size.h / 2 - cam.y * k));
 
-    ['test', 'direct', 'unknown', 'ghost'].forEach(function (kind) {
+    ['test', 'direct', 'indirect', 'unknown', 'ghost'].forEach(function (kind) {
       if (!visible[kind]) return;
       edges.forEach(function (e) {
         if (e.d.relationship !== kind) return;
@@ -459,6 +463,8 @@ const CLIENT = String.raw`
           if (focused) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
         } else if (kind === 'unknown') {
           ctx.setLineDash([2 / k, 5 / k]);
+        } else if (kind === 'indirect') {
+          ctx.setLineDash([10 / k, 4 / k]);
         } else if (kind === 'test') {
           ctx.globalAlpha *= 0.7;
         }

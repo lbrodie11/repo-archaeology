@@ -109,6 +109,7 @@ program
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
+  .allowExcessArguments(true)
   .showHelpAfterError('(run with --help for usage)');
 
 program
@@ -175,7 +176,7 @@ program
   .description('write an interactive map of what changes together and open it in your browser')
   .option('-o, --out <file>', 'where to write the HTML (default: .git/repo-archaeology/map.html)')
   .option('--edges <n>', 'maximum relationships to draw', positiveInt, 150)
-  .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'direct']))
+  .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'indirect', 'direct']))
   .option('--no-open', 'write the file without opening a browser')
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
@@ -192,6 +193,12 @@ program
   });
 
 program.action(async () => {
+  // The bare command has a default action, so a mistyped command arrives as an extra argument.
+  const [unexpected] = program.args;
+  if (unexpected !== undefined) {
+    const suggestion = closestCommand(unexpected, program.commands.map((cmd) => cmd.name()));
+    program.error(`error: unknown command '${terminalText(unexpected)}'${suggestion ? `\n(Did you mean ${suggestion}?)` : ''}`, { exitCode: 2, code: 'commander.unknownCommand' });
+  }
   const global = program.opts<GlobalOptions>();
   const ctx = await loadContext(global.cwd, settingsFrom(global));
   const changes = await workingTreeChanges(ctx.root);
@@ -216,6 +223,25 @@ program.action(async () => {
     console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
   }
 });
+
+/** The command name within two edits of `input`, if any (for "Did you mean …?"). */
+function closestCommand(input: string, names: string[]): string | undefined {
+  const distance = (a: string, b: string): number => {
+    const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      let diagonal = row[0]!;
+      row[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const above = row[j]!;
+        row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+        diagonal = above;
+      }
+    }
+    return row[b.length]!;
+  };
+  const ranked = names.map((name) => ({ name, d: distance(input.toLowerCase(), name) })).sort((x, y) => x.d - y.d);
+  return ranked[0] && ranked[0].d <= 2 ? ranked[0].name : undefined;
+}
 
 async function main(): Promise<void> {
   // `repo-archaeology scan | head` closes the pipe early: that is not an error.

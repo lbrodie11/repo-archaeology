@@ -219,11 +219,15 @@ export class CoChangeModel {
   }
 
   private addEvidence(stat: PairStat, index: number): void {
-    const time = (i: number) => this.commits[i]!.commitTime;
+    // Ordered by author time: the date shown next to each commit and used for "last together".
+    // Committer time breaks ties, so rebased commits keep their original order.
+    const time = (i: number) => this.commits[i]!.time;
+    const tie = (i: number) => this.commits[i]!.commitTime;
     const ev = stat.evidence;
-    if (ev.length >= EVIDENCE_LIMIT && time(index) <= time(ev[ev.length - 1]!)) return;
+    const last = ev[ev.length - 1];
+    if (ev.length >= EVIDENCE_LIMIT && last !== undefined && (time(index) < time(last) || (time(index) === time(last) && tie(index) <= tie(last)))) return;
     ev.push(index);
-    ev.sort((x, y) => time(y) - time(x) || x - y);
+    ev.sort((x, y) => time(y) - time(x) || tie(y) - tie(x) || x - y);
     if (ev.length > EVIDENCE_LIMIT) ev.length = EVIDENCE_LIMIT;
   }
 }

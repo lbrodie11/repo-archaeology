@@ -45,7 +45,7 @@ export function timeAgo(unixSeconds: number, now = Date.now() / 1000): string {
   if (days === 1) return 'yesterday';
   if (days < 45) return `${days} days ago`;
   const months = Math.round(days / 30.44);
-  if (months < 18) return `${months} months ago`;
+  if (months < 18) return `${months} ${months === 1 ? 'month' : 'months'} ago`;
   const years = (days / 365.25).toFixed(1).replace(/\.0$/, '');
   return `${years} years ago`;
 }

@@ -1,19 +1,20 @@
-import { readFileSync, statSync } from 'node:fs';
-import { join, posix, win32 } from 'node:path';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { join, posix, sep, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import { ImportResolver, type RepoFiles } from './resolve.js';
 import { extractDependencies } from './typescript.js';
 
 /**
  * How two co-changing files are related in the current code:
- * - direct:  one imports or path-references the other (directly or through an index/barrel file)
- * - test:    a test changing with code (or with another test): expected
- * - ghost:   no import link either way, and we could check: a hidden relationship
- * - unknown: we could not check (non-JS/TS files, project config, or unresolvable alias imports)
+ * - direct:   one imports or path-references the other (directly or through an index/barrel file)
+ * - indirect: no direct link, but one imports a file that imports the other (one step removed)
+ * - test:     a test changing with code (or with another test): expected
+ * - ghost:    no import link either way, and we could check: a hidden relationship
+ * - unknown:  we could not check (non-JS/TS files, project config, unresolvable or dynamic imports)
  */
-export type Relationship = 'direct' | 'test' | 'ghost' | 'unknown';
+export type Relationship = 'direct' | 'indirect' | 'test' | 'ghost' | 'unknown';
 
-export const RELATIONSHIPS: readonly Relationship[] = ['ghost', 'unknown', 'direct', 'test'];
+export const RELATIONSHIPS: readonly Relationship[] = ['ghost', 'unknown', 'indirect', 'direct', 'test'];
 
 export const MAX_BRIDGE_FILES = 3;
 export const MAX_BRIDGE_SOURCE_FILES = 10_000;
@@ -37,15 +38,26 @@ interface FileImports {
   unresolved: number;
 }
 
-/** Repository access backed by the working tree and a set of known files. */
+/**
+ * Repository access backed by the working tree and a set of known files.
+ * Only regular files that really live inside the repository are read: a committed
+ * symlink to `/dev/zero` would otherwise hang the read (devices report size 0), and
+ * a symlink to a file outside the repository would leak its contents into reports.
+ */
 export function workingTreeFiles(root: string, existing: ReadonlySet<string>): RepoFiles {
+  let realRoot: string | undefined;
   return {
     exists: (path) => existing.has(path),
     list: () => existing,
     read: (path) => {
       try {
         const full = join(root, path);
-        if (statSync(full).size > MAX_SOURCE_BYTES) return undefined;
+        const stat = lstatSync(full);
+        if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) return undefined;
+        realRoot ??= realpathSync(root);
+        // A parent folder may itself be a symlink pointing elsewhere.
+        const real = realpathSync(full);
+        if (real !== realRoot && !real.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep)) return undefined;
         return readFileSync(full, 'utf8');
       } catch {
         return undefined;
@@ -75,6 +87,7 @@ export class RelationshipClassifier {
     const ra = this.reachable(a);
     const rb = this.reachable(b);
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
+    if (this.indirectLink(a, b)) return 'indirect';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
@@ -82,6 +95,21 @@ export class RelationshipClassifier {
     // "No import link" is only a claim we can make if every path we followed was resolved.
     if ((ia.analyzable && ra.incomplete) || (ib.analyzable && rb.incomplete)) return 'unknown';
     return 'ghost';
+  }
+
+  /**
+   * One-step import chains: `a` imports some file that imports `b` (or the other way
+   * round). "No import link" would be literally true for these pairs, but readers take
+   * a ghost wire to mean hidden coupling, and this coupling is visible in the code.
+   */
+  indirectLink(a: string, b: string): { from: string; via: string; to: string } | undefined {
+    for (const [from, to] of [[a, b], [b, a]] as const) {
+      const vias = [...this.reachable(from).files].filter((via) => via !== a && via !== b).sort();
+      for (const via of vias) {
+        if (this.reachable(via).files.has(to)) return { from, via, to };
+      }
+    }
+    return undefined;
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
@@ -96,6 +124,11 @@ export class RelationshipClassifier {
         if (this.analyze(a).references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
         if (this.analyze(b).references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
+      }
+      case 'indirect': {
+        const link = this.indirectLink(a, b);
+        if (!link) return 'connected through one intermediate import';
+        return `connected through ${link.via}: ${posix.basename(link.from)} imports ${posix.basename(link.via)}, which imports ${posix.basename(link.to)}`;
       }
       case 'ghost': {
         const signal = bridge ?? this.hiddenBridge(a, b);
@@ -149,7 +182,9 @@ export class RelationshipClassifier {
       return result;
     }
     result.analyzable = true;
-    const { specifiers, referencePaths } = extractDependencies(text);
+    const { specifiers, referencePaths, nonLiteralLoads } = extractDependencies(text, file);
+    // A load whose target is computed at runtime could be the partner file.
+    result.unresolved += nonLiteralLoads;
     for (const specifier of specifiers) {
       const resolved = this.resolver.resolve(file, specifier);
       if (resolved.kind === 'file') {
@@ -221,7 +256,8 @@ export class RelationshipClassifier {
     const reach: Reach = { files: new Set(), incomplete: false };
     const visit = (current: string, depth: number) => {
       const info = this.analyze(current);
-      if (info.unresolved > 0) reach.incomplete = true;
+      // An unreadable barrel could re-export anything, so nothing can be ruled out.
+      if (info.unresolved > 0 || info.sourceUnavailable) reach.incomplete = true;
       for (const target of [...info.imports, ...info.references]) {
         if (reach.files.has(target)) continue;
         reach.files.add(target);
@@ -237,12 +273,15 @@ export class RelationshipClassifier {
 }
 
 function parallelImplementation(a: string, b: string): HiddenBridge | undefined {
+  // Compare names without the extension: `react-ts/App.tsx` and `react/App.jsx` are the same component.
   const name = posix.basename(a);
-  if (name !== posix.basename(b) || /^index(?:\.[^.]+)+$/i.test(name)) return undefined;
+  const stem = (path: string) => posix.basename(path).replace(/\.[^.]+$/, '');
+  if (stem(a) === '' || stem(a) !== stem(b) || /^index(?:\.[^.]+)+$/i.test(name)) return undefined;
   const aDir = posix.dirname(a);
   const bDir = posix.dirname(b);
   if (aDir === '.' || bDir === '.' || aDir === bDir || posix.dirname(aDir) !== posix.dirname(bDir)) return undefined;
-  return { signal: 'parallel-implementation', value: name, filesUsing: 2 };
+  const value = name === posix.basename(b) ? name : `${posix.basename(a)} / ${posix.basename(b)}`;
+  return { signal: 'parallel-implementation', value, filesUsing: 2 };
 }
 
 function referencePriority(kind: SourceReferenceKind): number {

@@ -8,6 +8,8 @@ export interface ChangedFile {
   /** Previous path when the file was renamed (history may still know it by this name). */
   oldPath?: string;
   deleted: boolean;
+  /** The path was created by this change (added, untracked, or the target of a rename or copy). */
+  added?: boolean;
   sources: ChangeSource[];
 }
 
@@ -36,7 +38,7 @@ export function parsePorcelainStatus(output: string): ChangedFile[] {
       if (x !== ' ') sources.push('staged');
       if (y !== ' ') sources.push('unstaged');
     }
-    files.push({ path, oldPath, deleted: x === 'D' || y === 'D', sources });
+    files.push({ path, oldPath, deleted: x === 'D' || y === 'D', added: x === '?' || x === 'A' || x === 'R' || x === 'C' || y === 'A' || y === 'R' || y === 'C', sources });
   }
   return files;
 }
@@ -53,11 +55,11 @@ export function parseNameStatus(output: string): ChangedFile[] {
       const oldPath = tokens[++i];
       const path = tokens[++i];
       if (path === undefined) break;
-      files.push({ path, oldPath: letter === 'R' ? oldPath : undefined, deleted: false, sources: ['branch'] });
+      files.push({ path, oldPath: letter === 'R' ? oldPath : undefined, deleted: false, added: true, sources: ['branch'] });
     } else {
       const path = tokens[++i];
       if (path === undefined) break;
-      files.push({ path, deleted: letter === 'D', sources: ['branch'] });
+      files.push({ path, deleted: letter === 'D', added: letter === 'A', sources: ['branch'] });
     }
   }
   return files;
@@ -87,6 +89,7 @@ export function mergeChanges(...lists: ChangedFile[][]): ChangedFile[] {
       existing.oldPath ??= file.oldPath;
       // The latest state wins: a file deleted on the branch but restored in the working tree exists.
       existing.deleted = file.deleted;
+      if (file.added) existing.added = true;
       for (const s of file.sources) if (!existing.sources.includes(s)) existing.sources.push(s);
     }
   }

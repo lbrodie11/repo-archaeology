@@ -1,8 +1,8 @@
 # Repo Archaeology
 
 [![CI](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml/badge.svg)](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](LICENSE)
-[![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f5e.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/LICENSE)
+[![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://github.com/lbrodie11/repo-archaeology/blob/main/package.json)
 
 A repository tells two stories. The source tree says what depends on what. Git history records what people have learned to change together.
 
@@ -10,7 +10,7 @@ Repo Archaeology compares those stories. It finds **ghost wires**: files that re
 
 Everything runs locally against `.git`. There is no account, upload, or server, and warnings never block a commit unless you explicitly request an exit code.
 
-![Repo Archaeology map showing ghost wires in the Hono repository](docs/repo-archaeology-map.png)
+![Repo Archaeology map showing ghost wires in the Hono repository](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/repo-archaeology-map.png)
 
 *The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with the default thresholds.*
 
@@ -105,10 +105,11 @@ Every relationship has a kind:
 
 | Kind | Meaning |
 | --- | --- |
-| **ghost wire** | No import link was detected between the files in the current code, yet they change together. The interesting one. |
+| **ghost wire** | No import link was detected between the files in the current code, not even one step removed, yet they change together. The interesting one. |
+| **indirect import** | No direct import, but one file imports a file that imports the other (for example `hono.ts → hono-base.ts → compose.ts`). The coupling is visible in the code, one step removed. |
 | **import link** | One imports or explicitly path-references the other, directly or through an index/barrel file. A type reference is not a runtime import. |
 | **test link** | A test changing with code, or tests changing together. Expected. |
-| **unchecked** | We could not check dependencies fully: non-JS/TS files, project config such as `package.json`, or unresolved imports or path references. |
+| **unchecked** | We could not check dependencies fully: non-JS/TS files, project config such as `package.json`, unresolved imports or path references, or dynamic loads whose target is computed at runtime (`import(name)`, `require(name)`, `import.meta.glob`). |
 
 **Confidence is directional.** "When `a.ts` changed, `b.ts` changed too in 9 of 12 commits (75%)" says nothing about how often `a.ts` changes when `b.ts` does; that number is shown as *reverse*.
 
@@ -147,20 +148,29 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 }
 ```
 
+The config file is part of the repository, so it is treated as untrusted input: it must be a small regular file, `maxFilesPerCommit` is capped at 1000, and `skipCommits` patterns that can backtrack catastrophically (a repeated group containing a quantifier or alternation, such as `(a+)+`, or a backreference) are refused. Command-line flags are not restricted.
+
 ## How it works
 
 1. **History.** Streams `git log --no-merges -M --name-status -z` (NUL-delimited, so any file name is safe). Renames are followed, so a file keeps its history when it moves. A path later reused for a different file is not confused with the original.
 2. **Noise.** Lockfiles, build output, snapshots and changelogs are ignored. Commits touching more than 25 files are treated as sweeps and skipped. Single-file commits are kept, because leaving them out would inflate every confidence number.
 3. **Statistics.** For files A and B: `confidence(A→B) = shared(A, B) / changes(A)`, ranked by the Wilson lower bound.
-4. **Imports.** JS/TS files are parsed with TypeScript's pre-processor (comments and strings are handled correctly), and imports are resolved across relative paths, `.js`→`.ts` swaps, index files, `tsconfig`/`jsconfig` `paths` and `baseUrl` (including relative `extends` files), and the repository's own packages, including monorepo workspaces and `exports` maps. Only the current code is analyzed.
+4. **Imports.** JS/TS files are parsed with TypeScript's pre-processor (comments and strings are handled correctly), and imports are resolved across relative paths, `.js`→`.ts` swaps, index files, `tsconfig`/`jsconfig` `paths` and `baseUrl` (including relative `extends` files), and the repository's own packages, including monorepo workspaces and `exports` maps (conditions are matched in the map's own order, as Node does). Only the current code is analyzed. Only regular files inside the repository are read; symlinks are skipped.
   TypeScript `/// <reference path="..." />` directives count as explicit dependencies too. Paths are resolved exactly, relative to the declaring file and within the repository; missing or outside-repository targets make the import check uncertain. `types` and `lib` directives are not treated as local file paths. JSON keeps the existing `direct` relationship kind, with reference-specific explanation text.
 5. **Possible explanations.** The TypeScript syntax tree is checked for rare shared environment variables, API routes, and event names. This is evidence for a possible bridge, never proof of causation.
 
-Known limits: import checks cover JS/TS only. Merge commits are skipped, so squash-merge and rebase workflows give the cleanest signal. Shallow clones only see part of the history; the tool warns about this.
+Known limits:
+
+- Import checks cover JS/TS only.
+- Only the nearest `tsconfig.json` is read; project references are not followed. Setups that keep `paths` in a referenced file (Vite templates use `tsconfig.app.json`) leave those aliases unresolved, so affected pairs are reported as **unchecked**, never as ghost wires.
+- In config-heavy monorepos (many example apps with their own `package.json`), most relationships can end up unchecked. `scan` caps how many it shows.
+- Merge commits are skipped. Edits made on a branch to a file that was renamed on the main line are folded into the renamed file, but squash-merge and rebase workflows still give the cleanest signal.
+- Shallow clones only see part of the history; the tool warns about this.
+- In `map`, "recent" means within a year of the newest analyzed commit, not of today.
 
 ## Project status
 
-The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [PLAN.md](PLAN.md) for the validation gates and roadmap.
+The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [PLAN.md](https://github.com/lbrodie11/repo-archaeology/blob/main/PLAN.md) for the validation gates and roadmap.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 

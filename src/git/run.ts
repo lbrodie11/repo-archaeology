@@ -13,14 +13,25 @@ export class GitError extends Error {
 
 /**
  * Config overrides applied to every git call so user settings cannot change the
- * output format we parse (quoted paths, colors, relative paths, signatures).
+ * output format we parse (quoted paths, colors, relative paths, signatures) or
+ * which history is reported (rename detection, the root commit's files, submodule
+ * entries, commit message encoding). Replace refs are ignored too: `git replace`
+ * can graft a different history onto the repository.
  */
 const CONFIG_OVERRIDES = [
+  '--no-replace-objects',
   '-c', 'core.quotepath=off',
   '-c', 'color.ui=never',
   '-c', 'log.showSignature=false',
+  '-c', 'log.showRoot=true',
   '-c', 'diff.relative=false',
   '-c', 'diff.noprefix=false',
+  '-c', 'diff.renames=true',
+  '-c', 'diff.renameLimit=1000',
+  '-c', 'diff.ignoreSubmodules=none',
+  '-c', 'status.renames=true',
+  '-c', 'status.renameLimit=1000',
+  '-c', 'i18n.logOutputEncoding=UTF-8',
 ];
 
 const MAX_STDERR = 64 * 1024;
@@ -40,6 +51,7 @@ function spawnGit(cwd: string, args: string[], onData: (chunk: string) => void):
         // Read-only commands like `git status` must not take the index lock.
         GIT_OPTIONAL_LOCKS: '0',
         GIT_PAGER: 'cat',
+        GIT_NO_REPLACE_OBJECTS: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,

@@ -192,7 +192,7 @@ describe('map html', () => {
       },
       repoName: '<img src=x onerror=alert(1)>',
       generatedAt: '',
-      counts: { ghost: 0, unknown: 0, direct: 0, test: 0 },
+      counts: { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 },
       classificationTruncated: false,
       nodes: [],
       edges: [],

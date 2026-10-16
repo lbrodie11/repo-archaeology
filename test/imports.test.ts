@@ -78,7 +78,7 @@ describe('relationship classification', () => {
       /* /// <reference path="comment.d.ts" /> */
     `;
     assert.deepEqual(extractDependencies(text), {
-      specifiers: ['./module', './exports'], referencePaths: ['types/ambient.d.ts'],
+      specifiers: ['./module', './exports'], referencePaths: ['types/ambient.d.ts'], nonLiteralLoads: 0,
     });
     assert.deepEqual(extractSpecifiers(text), ['./module', './exports']);
     const external = new RelationshipClassifier(memoryRepo({
