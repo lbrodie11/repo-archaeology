@@ -21,7 +21,7 @@ function escapeHtml(s: string): string {
  * A single self-contained HTML file: no network requests, no external fonts or
  * libraries, so it works offline and can be attached to an issue or shared as-is.
  * Visual idea: a cyanotype survey sheet of the dig site, with ghost wires marked
- * in the fluorescent pink flagging tape archaeologists use to mark finds.
+ * in fluorescent pink flagging tape.
  */
 export function renderMapHtml(data: MapData): string {
   const title = `Ghost wires in ${data.repoName}`;
@@ -50,6 +50,9 @@ export function renderMapHtml(data: MapData): string {
   <main class="stage">
     <canvas id="map" role="img" aria-label="Map of files that change together. The panel lists the same relationships as text."></canvas>
     <div id="tooltip" class="tooltip" hidden></div>
+    <div class="stage-overlay">
+      <button id="reset-view" class="map-btn" type="button" title="Fit all files in view">Reset view</button>
+    </div>
     <p class="hint">Drag to pan, scroll to zoom, drag a file to pin it.</p>
   </main>
   <aside id="panel" class="panel" aria-live="polite"></aside>
@@ -65,34 +68,42 @@ const STYLES = String.raw`
 :root {
   --ground: #13304f;
   --ground-deep: #0e2540;
+  --ground-surface: #173b61;
+  --ground-card: rgba(14, 37, 64, 0.75);
+  --ground-card-hover: rgba(23, 59, 97, 0.9);
   --chalk: #e8eef5;
   --chalk-faded: #9fb4cc;
+  --chalk-dim: #7189a5;
   --grid: rgba(159, 180, 204, 0.08);
   --tape: #ff4f9a;
+  --tape-glow: rgba(255, 79, 154, 0.35);
   --ochre: #e3b65b;
   --lichen: #7fd1b0;
   --import: rgba(232, 238, 245, 0.55);
+  --border-subtle: rgba(159, 180, 204, 0.18);
+  --border-active: rgba(159, 180, 204, 0.35);
   --condensed: "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
   --text: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --code: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--ground); color: var(--chalk); font: 15px/1.5 var(--text); }
+html, body { margin: 0; height: 100%; background: var(--ground); color: var(--chalk); font: 15px/1.55 var(--text); }
 button, input { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.app { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
-.bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between; padding: 18px 24px 14px; border-bottom: 1px solid rgba(159, 180, 204, 0.18); }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
+.bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between; padding: 18px 24px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--ground); }
 h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; font-stretch: condensed; }
-.summary { margin: 4px 0 0; color: var(--chalk-faded); font-size: 14px; max-width: 70ch; }
+.summary { margin: 4px 0 0; color: var(--chalk-faded); font-size: 14px; max-width: 75ch; }
 .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-.search input { width: 240px; padding: 7px 10px; border: 1px solid rgba(159, 180, 204, 0.35); border-radius: 6px; background: var(--ground-deep); }
+.search input { width: 240px; padding: 7px 11px; border: 1px solid var(--border-active); border-radius: 6px; background: var(--ground-deep); font-size: 13.5px; }
 .search input::placeholder { color: var(--chalk-faded); }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
-.toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; }
-.toggle[aria-pressed="false"] { opacity: 0.65; border-style: dashed; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s ease; }
+.toggle:hover { border-color: var(--chalk); }
+.toggle[aria-pressed="false"] { opacity: 0.6; border-style: dashed; }
 .toggle .count { color: var(--chalk-faded); font-variant-numeric: tabular-nums; }
 .swatch { width: 22px; height: 0; border-top: 2px solid; }
 .swatch.ghost { border-top: 2px dashed var(--tape); filter: drop-shadow(0 0 3px var(--tape)); }
@@ -105,45 +116,88 @@ h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; fon
 canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 canvas.dragging { cursor: grabbing; }
 canvas.pointing { cursor: pointer; }
-.hint { position: absolute; left: 16px; bottom: 10px; margin: 0; font-size: 12px; color: var(--chalk-faded); pointer-events: none; }
-.tooltip { position: absolute; pointer-events: none; max-width: 420px; padding: 6px 9px; border-radius: 6px; background: var(--ground-deep); border: 1px solid rgba(159, 180, 204, 0.35); font-size: 13px; }
-.tooltip code { font-family: var(--code); font-size: 12.5px; word-break: break-all; }
+.stage-overlay { position: absolute; top: 14px; left: 14px; display: flex; gap: 8px; z-index: 10; }
+.map-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(14, 37, 64, 0.88); backdrop-filter: blur(6px); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+.map-btn:hover { background: rgba(19, 48, 79, 0.98); border-color: var(--chalk); transform: translateY(-1px); }
+.hint { position: absolute; left: 16px; bottom: 12px; margin: 0; font-size: 12.5px; color: var(--chalk-faded); pointer-events: none; }
+.tooltip { position: absolute; pointer-events: none; max-width: 440px; padding: 7px 11px; border-radius: 6px; background: var(--ground-deep); border: 1px solid var(--border-active); font-size: 13.5px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); z-index: 20; }
+.tooltip code { font-family: var(--code); font-size: 13px; word-break: break-all; }
 
-.panel { overflow-y: auto; padding: 20px 22px 32px; background: var(--ground-deep); border-left: 1px solid rgba(159, 180, 204, 0.18); }
-.panel h2 { margin: 0 0 6px; font: 600 21px/1.2 var(--condensed); font-stretch: condensed; }
-.panel p { margin: 0 0 12px; color: var(--chalk-faded); }
-.panel .path { font-family: var(--code); font-size: 13px; overflow-wrap: anywhere; color: var(--chalk); }
+.panel { overflow-y: auto; padding: 22px 24px 36px; background: var(--ground-deep); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { margin: 0 0 6px; font: 600 22px/1.25 var(--condensed); font-stretch: condensed; }
+.panel h3 { margin: 18px 0 8px; font: 600 13px/1.2 var(--text); text-transform: uppercase; letter-spacing: 0.05em; color: var(--chalk-faded); }
+.panel p { margin: 0 0 10px; color: var(--chalk-faded); font-size: 14.5px; line-height: 1.55; }
+.panel .path { font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; color: var(--chalk); }
 .panel ol, .panel ul { list-style: none; margin: 0; padding: 0; }
-.rel { padding: 12px 0; border-top: 1px solid rgba(159, 180, 204, 0.14); }
-.rel-head { display: flex; gap: 10px; align-items: baseline; }
-.rel-head .swatch { flex: none; transform: translateY(-4px); }
-.file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; }
-.file-link:hover { text-decoration-color: var(--tape); }
-.pair { display: grid; gap: 2px; }
-.pair .file-link + .file-link::before { content: "and "; font-family: var(--text); color: var(--chalk-faded); text-decoration: none; display: inline-block; margin-right: 4px; }
-.rel-summary { margin: 6px 0 0 32px; font-size: 13px; color: var(--chalk-faded); }
-.rel-why { margin: 5px 0 0 32px; font-size: 13px; color: var(--chalk-faded); }
-.directions { display: grid; gap: 5px; margin: 7px 0 0 32px; font-size: 12.5px; }
-.direction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
-.direction dt { min-width: 0; overflow-wrap: anywhere; font-family: var(--code); color: var(--chalk); }
-.direction dd { margin: 0; color: var(--chalk-faded); font-variant-numeric: tabular-nums; text-align: right; }
-.evidence { margin: 6px 0 0 32px; font-size: 12.5px; color: var(--chalk-faded); }
-.evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 2px 0; }
-.evidence .hash { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--code); color: var(--chalk); opacity: 0.8; }
-.evidence .hash:hover { opacity: 1; text-decoration: underline; }
-.evidence-wrap { margin: 7px 0 0 32px; color: var(--chalk-faded); font-size: 12.5px; }
-.evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); }
-.evidence-wrap .evidence { margin: 5px 0 0; }
-.clear { margin-top: 18px; padding: 6px 12px; border: 1px solid rgba(159, 180, 204, 0.35); border-radius: 6px; background: transparent; cursor: pointer; }
-.empty { padding: 40px 24px; max-width: 46ch; }
 
-@media (max-width: 860px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 62vh auto; height: auto; }
-  .panel { border-left: 0; border-top: 1px solid rgba(159, 180, 204, 0.18); }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.badge.ghost { background: rgba(255, 79, 154, 0.15); color: var(--tape); border: 1px solid rgba(255, 79, 154, 0.35); }
+.badge.unknown { background: rgba(227, 182, 91, 0.15); color: var(--ochre); border: 1px solid rgba(227, 182, 91, 0.35); }
+.badge.indirect { background: rgba(160, 200, 240, 0.15); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
+.badge.direct { background: rgba(232, 238, 245, 0.1); color: var(--chalk); border: 1px solid rgba(232, 238, 245, 0.25); }
+.badge.test { background: rgba(127, 209, 176, 0.15); color: var(--lichen); border: 1px solid rgba(127, 209, 176, 0.35); }
+
+.tab-group { display: flex; gap: 4px; margin-bottom: 8px; background: rgba(14, 37, 64, 0.7); padding: 3px; border-radius: 8px; border: 1px solid var(--border-subtle); }
+.tab-btn { flex: 1; padding: 6px 8px; background: transparent; border: 0; border-radius: 6px; color: var(--chalk-faded); font-size: 12.5px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s ease; }
+.tab-btn:hover { color: var(--chalk); }
+.tab-btn.active { background: var(--ground-surface); color: var(--chalk); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+
+.card { background: var(--ground-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease; }
+.card.interactive { cursor: pointer; }
+.card.interactive:hover { border-color: rgba(255, 79, 154, 0.5); background: var(--ground-card-hover); transform: translateY(-1px); }
+.card.selected { border-color: var(--tape); box-shadow: 0 0 14px var(--tape-glow); }
+
+.card-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.card-title { font-family: var(--code); font-size: 13.5px; font-weight: 600; color: var(--chalk); overflow-wrap: anywhere; }
+.card-sub { font-size: 12.5px; color: var(--chalk-faded); margin-top: 4px; }
+
+.file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; color: var(--chalk); }
+.file-link:hover { text-decoration-color: var(--tape); color: #fff; }
+
+.back-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; margin-bottom: 8px; background: rgba(14, 37, 64, 0.6); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; width: fit-content; }
+.back-btn:hover { background: var(--ground-surface); border-color: var(--chalk); }
+
+.pair-container { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.pair-box { background: rgba(14, 37, 64, 0.85); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px; }
+.pair-box-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.pair-dir { font-size: 12px; color: var(--chalk-dim); }
+.pair-wire { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--chalk-faded); padding: 2px 0; }
+
+.cochange-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.cochange-card { background: rgba(14, 37, 64, 0.65); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 8px; text-align: center; }
+.cochange-pct { font-size: 21px; font-weight: 700; color: var(--chalk); font-variant-numeric: tabular-nums; }
+.cochange-label { font-size: 12px; color: var(--chalk-faded); margin-top: 4px; line-height: 1.3; }
+
+.callout { background: rgba(19, 48, 79, 0.6); border-left: 3px solid var(--tape); border-radius: 0 6px 6px 0; padding: 12px 14px; margin: 12px 0; font-size: 14px; line-height: 1.55; color: var(--chalk); }
+.callout.unknown { border-left-color: var(--ochre); }
+.callout.indirect { border-left-color: #a0c8f0; }
+.callout.direct { border-left-color: var(--chalk-faded); }
+.callout.test { border-left-color: var(--lichen); }
+.callout-title { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.evidence-wrap { margin: 12px 0 0; color: var(--chalk-faded); font-size: 13px; }
+.evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); font-weight: 500; padding: 4px 0; }
+.evidence { margin: 8px 0 0; font-size: 13px; color: var(--chalk-faded); }
+.evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 4px 0; border-top: 1px solid rgba(159, 180, 204, 0.1); }
+.evidence .hash { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); }
+.evidence .hash:hover { border-color: var(--tape); color: var(--tape); }
+
+.btn-export { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 9px 16px; margin-top: 14px; background: rgba(255, 79, 154, 0.14); border: 1px solid rgba(255, 79, 154, 0.4); border-radius: 6px; color: var(--chalk); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-export:hover { background: rgba(255, 79, 154, 0.25); border-color: var(--tape); }
+.btn-export.copied { background: rgba(127, 209, 176, 0.22); border-color: var(--lichen); color: var(--lichen); }
+
+.view-all-btn { display: block; width: 100%; padding: 8px 12px; margin-top: 10px; background: transparent; border: 1px dashed var(--border-active); border-radius: 6px; color: var(--chalk-faded); font-size: 13px; font-weight: 500; cursor: pointer; text-align: center; }
+.view-all-btn:hover { color: var(--chalk); border-color: var(--chalk); border-style: solid; }
+
+.folder-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--chalk-faded); }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh auto; height: auto; }
+  .panel { border-left: 0; border-top: 1px solid var(--border-subtle); }
   .search input { width: 100%; }
   .controls, .search { width: 100%; }
-  .direction { grid-template-columns: 1fr; gap: 0; }
-  .direction dd { text-align: left; }
 }
 `;
 
@@ -174,6 +228,7 @@ const CLIENT = String.raw`
   var tooltip = document.getElementById('tooltip');
   var panel = document.getElementById('panel');
   var search = document.getElementById('search');
+  var resetBtn = document.getElementById('reset-view');
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -239,6 +294,21 @@ const CLIENT = String.raw`
     edge.t.edges.push(edge);
     return edge;
   });
+
+  // Disambiguate duplicate basenames (e.g. multiple page.tsx or route.ts)
+  var baseCounts = Object.create(null);
+  nodes.forEach(function (n) {
+    var b = base(n.path);
+    baseCounts[b] = (baseCounts[b] || 0) + 1;
+  });
+  function getNodeLabel(n) {
+    var b = base(n.path);
+    if (baseCounts[b] <= 1) return b;
+    var parts = n.path.split('/');
+    if (parts.length >= 2) return parts.slice(-2).join('/');
+    return n.path;
+  }
+
   var overviewGhosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
     return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
   });
@@ -364,7 +434,6 @@ const CLIENT = String.raw`
     var b = bounds(list);
     cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
   }
-  // Smoothly frames a set of files (used when one is selected).
   var flight = null;
   function flyTo(list) {
     if (list.length === 0) return;
@@ -391,6 +460,9 @@ const CLIENT = String.raw`
 
   // ---- selection -----------------------------------------------------------
   var selectedNode = null, selectedEdge = null, hoverNode = null, matches = null;
+  var overviewTab = 'ghost';
+  var overviewExpanded = false;
+
   function isVisible(e) { return visible[e.d.relationship]; }
   function isActive(n) { return n.edges.some(isVisible); }
   function focusEdge(e) {
@@ -431,7 +503,6 @@ const CLIENT = String.raw`
     ctx.fillStyle = '#13304f';
     ctx.fillRect(0, 0, size.w, size.h);
 
-    // survey grid in world space, so it moves with the map
     var step = 80 * cam.scale;
     if (step > 14) {
       var origin = { x: size.w / 2 - cam.x * cam.scale, y: size.h / 2 - cam.y * cam.scale };
@@ -451,16 +522,15 @@ const CLIENT = String.raw`
       edges.forEach(function (e) {
         if (e.d.relationship !== kind) return;
         var focused = focusEdge(e);
-        ctx.globalAlpha = focused ? 1 : 0.07;
+        ctx.globalAlpha = focused ? 1 : 0.06;
         ctx.strokeStyle = KINDS[kind].color;
-        // Widths and dashes are in screen pixels, so zooming does not make lines bloated.
         ctx.lineWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
         ctx.setLineDash([]);
         ctx.shadowBlur = 0;
         if (kind === 'ghost') {
           ctx.setLineDash([7 / k, 6 / k]);
           ctx.lineDashOffset = -dashPhase / k;
-          if (focused) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
+          if (focused && (selectedEdge || selectedNode)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
         } else if (kind === 'unknown') {
           ctx.setLineDash([2 / k, 5 / k]);
         } else if (kind === 'indirect') {
@@ -480,19 +550,20 @@ const CLIENT = String.raw`
     nodes.forEach(function (n) {
       if (!isActive(n)) return;
       var focused = focusNode(n);
-      ctx.globalAlpha = focused ? 1 : 0.18;
+      ctx.globalAlpha = focused ? 1 : 0.14;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fillStyle = n.color;
       ctx.fill();
       ctx.lineWidth = Math.max(1 / k, 1.2);
-      ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)';
-      if (n === selectedNode) ctx.lineWidth = 3 / Math.sqrt(k);
+      var isTargetEndpoint = selectedEdge && (n === selectedEdge.s || n === selectedEdge.t);
+      ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
+      if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
       ctx.stroke();
     });
 
     ctx.globalAlpha = 1;
-    ctx.font = (12 / k) + 'px ui-monospace, Menlo, Consolas, monospace';
+    ctx.font = (12.5 / k) + 'px ui-monospace, Menlo, Consolas, monospace';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     var labelBoxes = [];
@@ -502,7 +573,7 @@ const CLIENT = String.raw`
         ((selectedNode || selectedEdge) && focusNode(n)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
-      var label = overviewLabelNodes[n.i] || base(n.path);
+      var label = overviewLabelNodes[n.i] || getNodeLabel(n);
       var x = n.x + n.r + 5 / k;
       var labelBox = { left: x - 2 / k, right: x + ctx.measureText(label).width + 2 / k, top: n.y - 8 / k, bottom: n.y + 8 / k };
       if (overview && labelBoxes.some(function (box) {
@@ -510,7 +581,7 @@ const CLIENT = String.raw`
       })) return;
       labelBoxes.push(labelBox);
       ctx.lineWidth = 4 / k;
-      ctx.strokeStyle = 'rgba(19, 48, 79, 0.92)';
+      ctx.strokeStyle = 'rgba(19, 48, 79, 0.94)';
       ctx.strokeText(label, x, n.y);
       ctx.fillStyle = '#e8eef5';
       ctx.fillText(label, x, n.y);
@@ -645,6 +716,14 @@ const CLIENT = String.raw`
     if (ev.key === 'Enter' && matches && matches.length > 0) { selectNode(matches[0]); }
   });
 
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      userMoved = false; flight = null;
+      selectedNode = null; selectedEdge = null;
+      fit(); renderPanel(); requestDraw();
+    });
+  }
+
   function selectNode(n) {
     selectedNode = n; selectedEdge = null; matches = null; search.value = '';
     var group = [n];
@@ -653,7 +732,7 @@ const CLIENT = String.raw`
     renderPanel(); requestDraw();
   }
   function selectEdge(e) {
-    selectedEdge = e; selectedNode = null;
+    selectedEdge = e; selectedNode = null; matches = null; search.value = '';
     flyTo([e.s, e.t]);
     renderPanel(); requestDraw();
   }
@@ -662,136 +741,332 @@ const CLIENT = String.raw`
     renderPanel(); requestDraw();
   }
 
-  // ---- panel ---------------------------------------------------------------
-  function fileButton(n) {
-    var b = el('button', 'file-link', n.path);
-    b.type = 'button';
-    b.addEventListener('click', function () { selectNode(n); });
-    return b;
-  }
-  function copyHash(hash, button) {
+  // ---- copy & clipboard helpers --------------------------------------------
+  function copyText(text, button, successMsg) {
+    var label = successMsg || 'Copied';
     function copied() {
-      var original = button.dataset.hashLabel || button.textContent;
-      button.dataset.hashLabel = original;
+      var original = button.dataset.origLabel || button.textContent;
+      button.dataset.origLabel = original;
       if (button._copyTimer) clearTimeout(button._copyTimer);
-      button.textContent = 'Copied';
-      button._copyTimer = setTimeout(function () { button.textContent = original; button._copyTimer = null; }, 900);
+      button.textContent = label;
+      button.classList.add('copied');
+      button._copyTimer = setTimeout(function () {
+        button.textContent = original;
+        button.classList.remove('copied');
+        button._copyTimer = null;
+      }, 1500);
     }
     function fallback() {
       var input = el('textarea');
-      input.value = hash; input.style.position = 'fixed'; input.style.opacity = '0';
+      input.value = text; input.style.position = 'fixed'; input.style.opacity = '0';
       document.body.appendChild(input); input.select();
       try { if (document.execCommand('copy')) copied(); } catch (_) {}
       input.remove();
     }
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(hash).then(copied, fallback);
+      navigator.clipboard.writeText(text).then(copied, fallback);
       return;
     }
     fallback();
   }
-  function evidenceDetails(e) {
-    var details = el('details', 'evidence-wrap');
-    details.appendChild(el('summary', '', 'Latest ' + e.d.evidence.length + ' of ' + plural(e.d.shared, 'shared commit')));
-    var list = el('ul', 'evidence');
-    e.d.evidence.forEach(function (ev) {
-      var li = el('li');
-      var hash = el('button', 'hash', ev.hash.slice(0, 7));
-      hash.type = 'button'; hash.title = 'Copy full commit hash';
-      hash.addEventListener('click', function () { copyHash(ev.hash, hash); });
-      li.appendChild(hash);
-      li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
-      list.appendChild(li);
-    });
-    details.appendChild(list);
-    return details;
+
+  function formatFindingMarkdown(e) {
+    var q = String.fromCharCode(96);
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    var kindName = findingLabel(e);
+    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')
+      ? ' Connects different parts of the project (' + q + e.s.dir + q + ' and ' + q + e.t.dir + q + ').'
+      : '';
+    var lines = [
+      '### 🔍 Repo Archaeology: File Relationship Finding',
+      '',
+      '**Files:** ' + q + e.s.path + q + ' ↔ ' + q + e.t.path + q + '  ',
+      '**Relationship:** ' + kindName + ' (' + plural(e.d.shared, 'shared commit') + ')  ',
+      '**Last Together:** ' + relativeDate(e.d.lastTogether) + '  ',
+      '',
+      '**Directional Co-Change:**',
+      '- ' + q + labels[0] + q + ' → ' + q + labels[1] + q + ': ' + directionEvidence(e, true),
+      '- ' + q + labels[1] + q + ' → ' + q + labels[0] + q + ': ' + directionEvidence(e, false),
+      '',
+      '**Why It Matters:**',
+      '- ' + capitalize(e.d.why) + '.' + scope,
+      (e.d.relationship === 'ghost' ? '- No direct or supported indirect import relationship found in current code.' : '')
+    ];
+    if (e.d.evidence && e.d.evidence.length > 0) {
+      lines.push('', '**Supporting Commits:**');
+      e.d.evidence.slice(0, 5).forEach(function (ev) {
+        lines.push('- ' + q + ev.hash.slice(0, 7) + q + ' (' + ev.date + '): ' + ev.subject);
+      });
+    }
+    return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
+
   function directionEvidence(e, fromSource) {
     var total = fromSource ? e.d.fromChanges : e.d.toChanges;
     var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
-    if (e.d.weighted) return pct(confidence) + ' recency-weighted confidence (' + e.d.shared + ' shared / ' + total + ' raw commits)';
+    if (e.d.weighted) return pct(confidence) + ' recency-weighted co-change (' + e.d.shared + ' shared / ' + total + ' total commits)';
     return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ')';
-  }
-  function directionRow(from, to, evidence) {
-    var row = el('div', 'direction');
-    row.appendChild(el('dt', '', from + ' → ' + to));
-    row.appendChild(el('dd', '', evidence));
-    return row;
   }
   function findingLabel(e) {
     if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Possible parallel implementations';
     return KINDS[e.d.relationship].label.replace(/s$/, '');
   }
-  /** One relationship, described from the point of view of 'from'. */
-  function relationshipItem(e, from, showBoth) {
-    var other = e.s === from ? e.t : e.s;
-    var fromSource = e.s === from;
-    var labels = distinguishingPaths(from.path, other.path);
-    var li = el('li', 'rel');
-    var head = el('div', 'rel-head');
-    head.appendChild(el('span', 'swatch ' + e.d.relationship));
-    if (showBoth) {
-      var pair = el('div', 'pair');
-      pair.appendChild(fileButton(from));
-      pair.appendChild(fileButton(other));
-      head.appendChild(pair);
+
+  // ---- panel rendering -----------------------------------------------------
+  function renderOverview() {
+    var header = el('div');
+    header.appendChild(el('h2', '', 'Explore file relationships'));
+    header.appendChild(el('p', '', 'Each dot represents a file sized by commit frequency and colored by directory. Lines connect files that change together. Pink dashed lines are ghost wires: files with no import relationship in current code that repeatedly move together in git history.'));
+    panel.appendChild(header);
+
+    var visibleEdges = edges.filter(isVisible);
+    var ghosts = visibleEdges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
+      return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
+    });
+    var surprising = ghosts.filter(function (e) { return e.d.crossesDirectories || e.d.overviewPriority >= 2; });
+    var strongest = visibleEdges.slice().sort(function (a, b) { return b.d.shared - a.d.shared || b.d.score - a.d.score; });
+
+    // Tabs
+    var tabGroup = el('div', 'tab-group');
+    var tabDefs = [
+      { id: 'ghost', label: 'Ghost wires (' + ghosts.length + ')' },
+      { id: 'surprising', label: 'Surprising (' + surprising.length + ')' },
+      { id: 'all', label: 'All links (' + visibleEdges.length + ')' }
+    ];
+    tabDefs.forEach(function (t) {
+      var btn = el('button', 'tab-btn' + (overviewTab === t.id ? ' active' : ''), t.label);
+      btn.type = 'button';
+      btn.addEventListener('click', function () {
+        overviewTab = t.id;
+        overviewExpanded = false;
+        renderPanel();
+      });
+      tabGroup.appendChild(btn);
+    });
+    panel.appendChild(tabGroup);
+
+    var listData = overviewTab === 'surprising' ? surprising : (overviewTab === 'all' ? strongest : ghosts);
+    var titleText = overviewTab === 'surprising' ? 'Cross-folder connections worth exploring' : (overviewTab === 'all' ? 'Strongest co-changing files' : 'Connections worth exploring');
+
+    panel.appendChild(el('h3', '', titleText));
+
+    if (listData.length === 0) {
+      panel.appendChild(el('p', '', 'No relationships found for this filter.'));
     } else {
-      head.appendChild(fileButton(other));
+      var displayCount = overviewExpanded ? listData.length : Math.min(3, listData.length);
+      var cardsContainer = el('div');
+      for (var idx = 0; idx < displayCount; idx++) {
+        cardsContainer.appendChild(relationshipCard(listData[idx]));
+      }
+      panel.appendChild(cardsContainer);
+
+      if (listData.length > 3) {
+        var viewAllBtn = el('button', 'view-all-btn', overviewExpanded ? 'Show top 3 findings' : 'View all ' + listData.length + ' findings');
+        viewAllBtn.type = 'button';
+        viewAllBtn.addEventListener('click', function () {
+          overviewExpanded = !overviewExpanded;
+          renderPanel();
+        });
+        panel.appendChild(viewAllBtn);
+      }
     }
-    li.appendChild(head);
-    li.appendChild(el('p', 'rel-summary', findingLabel(e) + ' · ' + plural(e.d.shared, 'shared commit') + ' · last together ' + relativeDate(e.d.lastTogether)));
-    var directions = el('dl', 'directions');
-    directions.appendChild(directionRow(labels[0], labels[1], directionEvidence(e, fromSource)));
-    directions.appendChild(directionRow(labels[1], labels[0], directionEvidence(e, !fromSource)));
-    li.appendChild(directions);
-    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') ? ' Located in different folders.' : '';
-    li.appendChild(el('p', 'rel-why', capitalize(e.d.why) + '.' + scope));
-    if (e.d.evidence.length > 0) li.appendChild(evidenceDetails(e));
-    return li;
+
+    // Folder Color Legend
+    renderFolderLegend();
+  }
+
+  function renderFolderLegend() {
+    var activeDirs = dirList.filter(function (d) { return d.count > 0; }).slice(0, 8);
+    if (activeDirs.length === 0) return;
+    panel.appendChild(el('h3', '', 'Directory color legend'));
+    var legend = el('div', 'folder-legend');
+    activeDirs.forEach(function (d) {
+      var item = el('div', 'legend-item');
+      var dot = el('span', 'legend-dot');
+      dot.style.background = 'hsl(' + hashHue(d.name) + ', 46%, 74%)';
+      item.appendChild(dot);
+      item.appendChild(el('span', '', d.name + ' (' + d.count + ')'));
+      legend.appendChild(item);
+    });
+    panel.appendChild(legend);
+  }
+
+  function relationshipCard(e) {
+    var card = el('div', 'card interactive');
+    var head = el('div', 'card-header');
+    head.appendChild(el('span', 'badge ' + e.d.relationship, findingLabel(e)));
+    head.appendChild(el('span', 'card-sub', 'Changed together in ' + plural(e.d.shared, 'commit')));
+    card.appendChild(head);
+
+    var pair = el('div', 'card-title');
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    pair.textContent = labels[0] + ' ↔ ' + labels[1];
+    card.appendChild(pair);
+
+    var note = el('div', 'card-sub');
+    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')
+      ? 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + '). '
+      : '';
+    note.textContent = scope + capitalize(e.d.why) + '.';
+    card.appendChild(note);
+
+    card.addEventListener('click', function () {
+      selectEdge(e);
+    });
+    return card;
+  }
+
+  function renderSelectedEdge(e) {
+    var backBtn = el('button', 'back-btn', '← Back to overview');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', clearSelection);
+    panel.appendChild(backBtn);
+
+    var head = el('div');
+    head.appendChild(el('span', 'badge ' + e.d.relationship, findingLabel(e)));
+    head.appendChild(el('h2', '', 'Connection worth checking'));
+    head.appendChild(el('p', 'card-sub', 'Changed together in ' + plural(e.d.shared, 'commit') + ' · Last together ' + relativeDate(e.d.lastTogether)));
+    panel.appendChild(head);
+
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+
+    // Pair Boxes
+    var pairContainer = el('div', 'pair-container');
+
+    var boxA = el('div', 'pair-box');
+    var boxAHead = el('div', 'pair-box-head');
+    var linkA = el('button', 'file-link', e.s.path);
+    linkA.type = 'button';
+    linkA.addEventListener('click', function () { selectNode(e.s); });
+    boxAHead.appendChild(linkA);
+    boxA.appendChild(boxAHead);
+    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : ''));
+    boxA.appendChild(subA);
+    pairContainer.appendChild(boxA);
+
+    var wire = el('div', 'pair-wire');
+    wire.appendChild(el('span', 'swatch ' + e.d.relationship));
+    wire.appendChild(el('span', '', plural(e.d.shared, 'shared commit')));
+    wire.appendChild(el('span', 'swatch ' + e.d.relationship));
+    pairContainer.appendChild(wire);
+
+    var boxB = el('div', 'pair-box');
+    var boxBHead = el('div', 'pair-box-head');
+    var linkB = el('button', 'file-link', e.t.path);
+    linkB.type = 'button';
+    linkB.addEventListener('click', function () { selectNode(e.t); });
+    boxBHead.appendChild(linkB);
+    boxB.appendChild(boxBHead);
+    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : ''));
+    boxB.appendChild(subB);
+    pairContainer.appendChild(boxB);
+
+    panel.appendChild(pairContainer);
+
+    // Directional Co-Change Cards
+    var grid = el('div', 'cochange-grid');
+    var card1 = el('div', 'cochange-card');
+    card1.appendChild(el('div', 'cochange-pct', pct(e.d.confidence)));
+    card1.appendChild(el('div', 'cochange-label', labels[0] + ' changes also modified ' + labels[1]));
+    grid.appendChild(card1);
+
+    var card2 = el('div', 'cochange-card');
+    card2.appendChild(el('div', 'cochange-pct', pct(e.d.reverseConfidence)));
+    card2.appendChild(el('div', 'cochange-label', labels[1] + ' changes also modified ' + labels[0]));
+    grid.appendChild(card2);
+    panel.appendChild(grid);
+
+    // Why it matters
+    var callout = el('div', 'callout ' + e.d.relationship);
+    callout.appendChild(el('div', 'callout-title', 'Why it matters'));
+    var p1 = el('p');
+    p1.textContent = 'These files have been updated together before. If you\'re making changes to one, consider reviewing both.';
+    callout.appendChild(p1);
+
+    var p2 = el('p');
+    if (e.d.relationship === 'ghost') {
+      p2.textContent = 'No direct or supported indirect import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+    } else if (e.d.relationship === 'indirect') {
+      p2.textContent = 'Connected indirectly through intermediate files in the dependency tree.';
+    } else if (e.d.relationship === 'direct') {
+      p2.textContent = 'Connected by a direct import link in the current codebase.';
+    } else if (e.d.relationship === 'test') {
+      p2.textContent = 'Recognized test and implementation pair.';
+    } else {
+      p2.textContent = 'Import relationship status could not be fully verified from static imports.';
+    }
+    callout.appendChild(p2);
+
+    if (e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')) {
+      var p3 = el('p');
+      p3.textContent = 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + ').';
+      callout.appendChild(p3);
+    }
+    panel.appendChild(callout);
+
+    // Supporting Commits
+    if (e.d.evidence && e.d.evidence.length > 0) {
+      var details = el('details', 'evidence-wrap');
+      details.open = true;
+      details.appendChild(el('summary', '', 'View ' + e.d.evidence.length + ' supporting commit' + (e.d.evidence.length === 1 ? '' : 's')));
+      var list = el('ul', 'evidence');
+      e.d.evidence.forEach(function (ev) {
+        var li = el('li');
+        var hash = el('button', 'hash', ev.hash.slice(0, 7));
+        hash.type = 'button'; hash.title = 'Copy full commit hash';
+        hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+        li.appendChild(hash);
+        li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+        list.appendChild(li);
+      });
+      details.appendChild(list);
+      panel.appendChild(details);
+    }
+
+    // Export button
+    var exportBtn = el('button', 'btn-export', '📋 Copy finding for PR / discussion');
+    exportBtn.type = 'button';
+    exportBtn.addEventListener('click', function () {
+      var markdown = formatFindingMarkdown(e);
+      copyText(markdown, exportBtn, '✓ Copied finding to clipboard');
+    });
+    panel.appendChild(exportBtn);
+  }
+
+  function renderSelectedNode(n) {
+    var backBtn = el('button', 'back-btn', '← Back to overview');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', clearSelection);
+    panel.appendChild(backBtn);
+
+    panel.appendChild(el('h2', '', base(n.path)));
+    panel.appendChild(el('p', 'path', n.path));
+    var who = n.author ? ' Most commits by ' + n.author + ' (' + pct(n.share || 0) + ').' : '';
+    panel.appendChild(el('p', '', 'Folder: ' + n.dir + ' · Changed in ' + plural(n.changes, 'commit') + '.' + who));
+
+    var rels = n.edges.filter(isVisible).sort(function (a, b) { return b.d.shared - a.d.shared; });
+    panel.appendChild(el('h3', '', 'Connected file relationships (' + rels.length + ')'));
+
+    if (rels.length === 0) {
+      panel.appendChild(el('p', '', 'Its relationships are hidden by the filters above.'));
+    } else {
+      var cardsContainer = el('div');
+      rels.forEach(function (e) {
+        cardsContainer.appendChild(relationshipCard(e));
+      });
+      panel.appendChild(cardsContainer);
+    }
   }
 
   function renderPanel() {
     panel.textContent = '';
     if (selectedNode) {
-      var n = selectedNode;
-      panel.appendChild(el('h2', '', base(n.path)));
-      panel.appendChild(el('p', 'path', n.path));
-      var who = n.author ? ' Most commits by ' + n.author + ' (' + pct(n.share || 0) + ').' : '';
-      panel.appendChild(el('p', '', 'Changed in ' + plural(n.changes, 'commit') + '.' + who));
-      var rels = n.edges.filter(isVisible).sort(function (a, b) { return b.d.shared - a.d.shared; });
-      var list = el('ol');
-      rels.forEach(function (e) { list.appendChild(relationshipItem(e, n)); });
-      panel.appendChild(list);
-      if (rels.length === 0) panel.appendChild(el('p', '', 'Its relationships are hidden by the filters above.'));
+      renderSelectedNode(selectedNode);
     } else if (selectedEdge) {
-      var e = selectedEdge;
-      panel.appendChild(el('h2', '', KINDS[e.d.relationship].label.replace(/s$/, '')));
-      var list2 = el('ol');
-      list2.appendChild(relationshipItem(e, e.s, true));
-      panel.appendChild(list2);
+      renderSelectedEdge(selectedEdge);
     } else {
-      panel.appendChild(el('h2', '', 'What moves together'));
-      panel.appendChild(el('p', '', 'Each dot is a file, sized by how often it changes and coloured by folder. Lines join files that keep changing in the same commits. Pink dashed lines are ghost wires: no import is detected between the files in the current code, yet history says they move together.'));
-      var ghosts = overviewGhosts.slice(0, 10);
-      if (ghosts.length > 0) {
-        panel.appendChild(el('h2', '', 'Notable ghost wires'));
-        var list3 = el('ol');
-        ghosts.forEach(function (e) { list3.appendChild(relationshipItem(e, e.s, true)); });
-        panel.appendChild(list3);
-      } else if (edges.length > 0) {
-        var hasUnchecked = edges.some(function (e) { return e.d.relationship === 'unknown'; });
-        var message = hasUnchecked
-          ? 'No ghost wires among these relationships. Some links are unchecked because their imports could not be fully analyzed.'
-          : 'No ghost wires among these relationships: everything shown here is explained by imports or tests.';
-        if (data.classificationTruncated) message += ' Only the strongest relationships were classified.';
-        panel.appendChild(el('p', '', message));
-      }
-      return;
+      renderOverview();
     }
-    var clear = el('button', 'clear', 'Show overview');
-    clear.type = 'button';
-    clear.addEventListener('click', clearSelection);
-    panel.appendChild(clear);
   }
 
   // ---- start ---------------------------------------------------------------

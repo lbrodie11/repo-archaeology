@@ -20,6 +20,7 @@ import {
 import { RelationshipClassifier } from '../src/imports/classify.js';
 import { ImportResolver, type RepoFiles } from '../src/imports/resolve.js';
 import { countNonLiteralLoads } from '../src/imports/typescript.js';
+import { renderMapHtml } from '../src/map/template.js';
 import { CoChangeModel } from '../src/model/cochange.js';
 import { loadHistory } from '../src/model/history.js';
 import { FixtureRepo } from './helpers.js';
@@ -264,6 +265,69 @@ describe('review 3, explicit abstention when changes lack history', () => {
     } finally {
       console.log = origLog;
     }
+  });
+});
+
+describe('review 3, interactive map template and sidebar polish', () => {
+  it('renders fit-view control, copy finding export, and deduplicates basenames', () => {
+    const html = renderMapHtml({
+      meta: {
+        tool: 'repo-archaeology',
+        root: 'test-repo',
+        commitsRead: 5,
+        commitsAnalyzed: 5,
+        sweepsSkipped: 0,
+        subjectSkipped: 0,
+        renamesFollowed: 0,
+        files: 2,
+        settings: { maxCommits: 5, maxFilesPerCommit: 5, minShared: 1, minConfidence: 0.1, ignore: [], useDefaultIgnores: true },
+        warnings: [],
+      },
+      repoName: 'test-repo',
+      generatedAt: '2026-10-16T12:00:00Z',
+      counts: { ghost: 1, unknown: 0, indirect: 0, direct: 0, test: 0 },
+      classificationTruncated: false,
+      nodes: [
+        { path: 'app/waitlist/page.tsx', dir: 'app/waitlist', changes: 4 },
+        { path: 'app/blog/page.tsx', dir: 'app/blog', changes: 3 },
+      ],
+      edges: [
+        {
+          source: 0,
+          target: 1,
+          relationship: 'ghost',
+          why: 'no import link detected in the current code',
+          shared: 3,
+          fromChanges: 4,
+          toChanges: 3,
+          confidence: 0.75,
+          reverseConfidence: 1,
+          score: 0.8,
+          overviewPriority: 2,
+          weighted: false,
+          lastTogether: '2026-09-01T00:00:00Z',
+          crossesDirectories: true,
+          evidence: [{ hash: 'abcdef1234567890', date: '2026-09-01', subject: 'feat: connect waitlist and blog' }],
+        },
+      ],
+    });
+
+    // 1. Stage overlay with reset-view button
+    assert.match(html, /<button id="reset-view" class="map-btn"/);
+
+    // 2. Client script disambiguates identical basenames
+    assert.match(html, /getNodeLabel/);
+    assert.match(html, /baseCounts/);
+
+    // 3. Two-state inspector and tabs
+    assert.match(html, /renderOverview/);
+    assert.match(html, /renderSelectedEdge/);
+    assert.match(html, /renderSelectedNode/);
+    assert.match(html, /formatFindingMarkdown/);
+    assert.match(html, /Copy finding for PR/);
+
+    // 4. Directory color legend
+    assert.match(html, /renderFolderLegend/);
   });
 });
 
