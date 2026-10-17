@@ -80,3 +80,9 @@ export async function hasMergesInRange(root: string, base: string, head = 'HEAD'
   const out = await runGit(root, ['rev-list', '--merges', '--count', '--end-of-options', `${base}..${head}`]);
   return Number(out.trim()) > 0;
 }
+
+/** True when `sha` has at least one parent commit (i.e. is not a root commit). */
+export async function hasParentCommit(root: string, sha: string): Promise<boolean> {
+  if (sha.startsWith('-')) return false;
+  return gitSucceeds(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${sha}^^{commit}`]);
+}

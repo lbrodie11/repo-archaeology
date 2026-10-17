@@ -194,6 +194,58 @@ describe('co-change model', () => {
     assert.deepEqual(names({ minShared: 1, minConfidence: 0.5 }), ['b']);
     assert.deepEqual(names({ minShared: 1, minConfidence: 0 }), ['b', 'c']);
   });
+
+  it('produces identical companion stats when built incrementally via appendCommit and guards against half-life', () => {
+    const commits = [
+      commit(['a', 'b', 'c'], 1),
+      commit(['a', 'b'], 2),
+      commit(['b', 'c'], 3),
+      commit(['a', 'd'], 4),
+      commit(['a', 'b', 'd'], 5),
+      commit(['b', 'c', 'd'], 6),
+      commit(['a', 'c'], 7),
+    ];
+    const split = 3;
+    const incremental = new CoChangeModel(commits.slice(0, split));
+    for (const c of commits.slice(split)) {
+      incremental.appendCommit(c);
+    }
+    const batch = new CoChangeModel(commits);
+    assert.equal(incremental.fileCount, batch.fileCount);
+    assert.equal(incremental.commits.length, batch.commits.length);
+    for (const file of ['a', 'b', 'c', 'd']) {
+      const incId = incremental.id(file)!;
+      const batchId = batch.id(file)!;
+      assert.equal(incremental.changeCount[incId], batch.changeCount[batchId]);
+      assert.equal(incremental.changeWeight[incId], batch.changeWeight[batchId]);
+      const incCompanions = incremental
+        .companions(incId, { minShared: 1, minConfidence: 0 })
+        .map((c) => ({
+          to: incremental.path(c.to),
+          count: c.stat.count,
+          weight: c.stat.weight,
+          lastTime: c.stat.lastTime,
+          confidence: c.confidence,
+          reverseConfidence: c.reverseConfidence,
+          evidence: c.stat.evidence.map((idx) => incremental.commits[idx]!.hash),
+        }));
+      const batchCompanions = batch
+        .companions(batchId, { minShared: 1, minConfidence: 0 })
+        .map((c) => ({
+          to: batch.path(c.to),
+          count: c.stat.count,
+          weight: c.stat.weight,
+          lastTime: c.stat.lastTime,
+          confidence: c.confidence,
+          reverseConfidence: c.reverseConfidence,
+          evidence: c.stat.evidence.map((idx) => batch.commits[idx]!.hash),
+        }));
+      assert.deepEqual(incCompanions, batchCompanions);
+    }
+
+    const weighted = new CoChangeModel(commits.slice(0, 2), { halfLifeDays: 90 });
+    assert.throws(() => weighted.appendCommit(commits[2]!), /only supported for unweighted models/i);
+  });
 });
 
 describe('config', () => {

@@ -233,9 +233,87 @@ export function followUpBenchmarkCommits(
   }
   const initialTrainCommits = priorTrainCommits.length;
 
+  // Pass 1: collect all qualifying (i, j) candidate pairs using pre-commit availability and training-history sets.
+  interface CandidateEdge {
+    i: number;
+    j: number;
+    deltaSeconds: number;
+    initialLiveFiles: string[];
+    laterFiles: string[];
+    signals: FollowUpSignal[];
+    hasInitialHistory: boolean;
+  }
+
+  const availablePass1 = new Set(available);
+  const seenPass1 = new Set(seenInTraining);
+  const edgesByFollowUp = new Map<number, CandidateEdge[]>();
+
+  for (let i = splitIndex; i < chronological.length; i++) {
+    const initial = chronological[i]!;
+    const initialDeleted = new Set(initial.deleted ?? []);
+    const initialLiveFiles = initial.files.filter((f) => !initialDeleted.has(f));
+    const hasInitialHistory = initialLiveFiles.some((f) => seenPass1.has(f));
+
+    if (initial.files.length >= 1 && initial.files.length <= EVALUATION_MAX_FILES && initialLiveFiles.length > 0) {
+      const initialSet = new Set(initial.files);
+      for (let j = i + 1; j < chronological.length; j++) {
+        const followUp = chronological[j]!;
+        const deltaSeconds = followUp.commitTime - initial.commitTime;
+        if (deltaSeconds > windowSeconds) break;
+        if (followUp.files.length === 0 || followUp.files.length > EVALUATION_MAX_FILES) continue;
+        if (!sameAuthor(initial, followUp)) continue;
+
+        const followUpDeleted = new Set(followUp.deleted ?? []);
+        const laterFiles = followUp.files.filter(
+          (f) => !initialSet.has(f) && !followUpDeleted.has(f) && availablePass1.has(f),
+        );
+        if (laterFiles.length === 0) continue;
+
+        const signals: FollowUpSignal[] = [];
+        if (followUp.files.some((f) => initialSet.has(f))) {
+          signals.push('shared-file');
+        }
+        if (j === i + 1) {
+          signals.push('immediate-same-author');
+        }
+        if (signals.length === 0) continue;
+        if (FOLLOW_UP_SUBJECT_RE.test(followUp.subject)) {
+          signals.unshift('subject-cue');
+        }
+
+        let list = edgesByFollowUp.get(j);
+        if (!list) {
+          list = [];
+          edgesByFollowUp.set(j, list);
+        }
+        list.push({ i, j, deltaSeconds, initialLiveFiles, laterFiles, signals, hasInitialHistory });
+      }
+    }
+
+    updateAvailability(availablePass1, initial);
+    if (!left.has(initial)) {
+      for (const f of initial.files) seenPass1.add(f);
+    }
+  }
+
+  // Pass 2: visit follow-ups j in chronological order and assign each to the nearest
+  // earlier initial commit i that is still unpaired (preferring one with prior history).
+  const pairedInitials = new Set<number>();
+  const assignedByInitial = new Map<number, CandidateEdge>();
+  for (let j = splitIndex + 1; j < chronological.length; j++) {
+    const edges = edgesByFollowUp.get(j);
+    if (!edges || edges.length === 0) continue;
+    const unpaired = edges.filter((e) => !pairedInitials.has(e.i)).sort((a, b) => b.i - a.i);
+    if (unpaired.length === 0) continue;
+    const chosen = unpaired.find((e) => e.hasInitialHistory) ?? unpaired[0]!;
+    pairedInitials.add(chosen.i);
+    assignedByInitial.set(chosen.i, chosen);
+  }
+
   const useIncrementalModel = !(halfLifeDays && halfLifeDays > 0);
   const incrementalModel = useIncrementalModel ? new CoChangeModel(priorTrainCommits) : undefined;
   let modelsBuilt = incrementalModel ? 1 : 0;
+  let cachedWeightedModel: { count: number; model: CoChangeModel } | undefined;
 
   const strategyMeta: { name: string; description: string }[] = [
     {
@@ -271,63 +349,28 @@ export function followUpBenchmarkCommits(
   let totalLaterFiles = 0;
   let casesTruncated = 0;
   const cases: FollowUpCandidateCase[] = [];
-  const claimedFollowUps = new Set<string>();
 
+  // Pass 3: evaluate assigned pairs strictly against pre-initial training history.
   for (let i = splitIndex; i < chronological.length; i++) {
     const initial = chronological[i]!;
-    const initialDeleted = new Set(initial.deleted ?? []);
-    const initialLiveFiles = initial.files.filter((f) => !initialDeleted.has(f));
+    const assigned = assignedByInitial.get(i);
 
-    if (initial.files.length >= 1 && initial.files.length <= EVALUATION_MAX_FILES && initialLiveFiles.length > 0) {
-      for (let j = i + 1; j < chronological.length; j++) {
+    if (assigned) {
+      if (!assigned.hasInitialHistory) {
+        candidatesWithoutHistory++;
+      } else {
+        const { j, deltaSeconds, initialLiveFiles, laterFiles, signals } = assigned;
         const followUp = chronological[j]!;
-        const deltaSeconds = followUp.commitTime - initial.commitTime;
-        if (deltaSeconds > windowSeconds) break;
-        if (claimedFollowUps.has(followUp.hash)) continue;
-        if (followUp.files.length === 0 || followUp.files.length > EVALUATION_MAX_FILES) continue;
-        if (!sameAuthor(initial, followUp)) continue;
-
-        const followUpDeleted = new Set(followUp.deleted ?? []);
-        const initialSet = new Set(initial.files);
-        const laterFiles = followUp.files.filter(
-          (f) => !initialSet.has(f) && !followUpDeleted.has(f) && available.has(f),
-        );
-        if (laterFiles.length === 0) continue;
-
-        const signals: FollowUpSignal[] = [];
-        if (followUp.files.some((f) => initialSet.has(f))) {
-          signals.push('shared-file');
-        }
-        if (j === i + 1) {
-          signals.push('immediate-same-author');
-        }
-        if (signals.length === 0) continue;
-
-        // If a nearer initial commit k (i < k < j) by the same author also qualifies with
-        // this followUp and has not itself already been claimed as a follow-up, let the
-        // nearest earlier initial commit k claim `followUp`.
-        if (j > i + 1 && hasNearerQualifyingInitial(chronological, i, j, followUp, followUpDeleted, available, claimedFollowUps)) {
-          continue;
-        }
-
-        if (FOLLOW_UP_SUBJECT_RE.test(followUp.subject)) {
-          signals.unshift('subject-cue');
-        }
-
-        claimedFollowUps.add(followUp.hash);
-
-        // Check cheap training-file set before building or querying any model.
-        const hasInitialHistory = initialLiveFiles.some((f) => seenInTraining.has(f));
-        if (!hasInitialHistory) {
-          candidatesWithoutHistory++;
-          break;
-        }
-
         const model =
           incrementalModel ??
           (() => {
+            if (cachedWeightedModel && cachedWeightedModel.count === priorTrainCommits.length) {
+              return cachedWeightedModel.model;
+            }
             modelsBuilt++;
-            return new CoChangeModel(priorTrainCommits, { halfLifeDays });
+            const built = new CoChangeModel(priorTrainCommits, { halfLifeDays });
+            cachedWeightedModel = { count: priorTrainCommits.length, model: built };
+            return built;
           })();
 
         candidatesEvaluated++;
@@ -385,7 +428,6 @@ export function followUpBenchmarkCommits(
         } else {
           casesTruncated++;
         }
-        break;
       }
     }
 
@@ -415,6 +457,13 @@ export function followUpBenchmarkCommits(
     ]),
   ) as Record<FollowUpSignal, FollowUpSignalSummary>;
 
+  const limitations = [...FOLLOW_UP_LIMITATIONS];
+  if (halfLifeDays && halfLifeDays > 0 && modelsBuilt > 1) {
+    limitations.push(
+      `Recency weighting (--half-life ${halfLifeDays}) rebuilt the co-change model ${plural(modelsBuilt, 'time')} across the held-out window so decay weights remain relative to each candidate's pre-change timestamp.`,
+    );
+  }
+
   return {
     k: options.k,
     windowHours,
@@ -430,43 +479,8 @@ export function followUpBenchmarkCommits(
     cases,
     casesTruncated,
     methodology: FOLLOW_UP_METHODOLOGY,
-    limitations: [...FOLLOW_UP_LIMITATIONS],
+    limitations,
   };
-}
-
-function hasNearerQualifyingInitial(
-  chronological: readonly HistoryCommit[],
-  i: number,
-  j: number,
-  followUp: HistoryCommit,
-  followUpDeleted: ReadonlySet<string>,
-  availableAtI: ReadonlySet<string>,
-  claimedFollowUps: ReadonlySet<string>,
-): boolean {
-  const available = new Set(availableAtI);
-  for (let k = i; k < j; k++) {
-    const commit = chronological[k]!;
-    if (k > i) {
-      const kDeleted = new Set(commit.deleted ?? []);
-      const kLive = commit.files.filter((f) => !kDeleted.has(f));
-      if (
-        !claimedFollowUps.has(commit.hash) &&
-        commit.files.length >= 1 &&
-        commit.files.length <= EVALUATION_MAX_FILES &&
-        kLive.length > 0 &&
-        sameAuthor(commit, followUp)
-      ) {
-        const kSet = new Set(commit.files);
-        const kLater = followUp.files.filter((f) => !kSet.has(f) && !followUpDeleted.has(f) && available.has(f));
-        const qualifies = k + 1 === j || followUp.files.some((f) => kSet.has(f));
-        if (kLater.length > 0 && qualifies) {
-          return true;
-        }
-      }
-    }
-    updateAvailability(available, commit);
-  }
-  return false;
 }
 
 function recordTallies(

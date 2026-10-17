@@ -141,7 +141,9 @@ function explainSilence(
   const commitsAnalyzed = ctx.history?.commits.length ?? 0;
   const shallowHistory = ctx.shallow ?? (ctx.warnings ?? []).includes(SHALLOW_WARNING);
   const truncatedByMaxCommits = ctx.history?.stats?.truncated === true;
-  const limitedBySince = Boolean(ctx.settings?.since);
+  const limitedBySince = ctx.history?.stats?.truncatedBySince !== undefined
+    ? ctx.history.stats.truncatedBySince
+    : false;
   const insufficientRepoHistory = hasHistoryCount && commitsAnalyzed < thresholds.minShared;
   const thinRepoHistory =
     hasHistoryCount && commitsAnalyzed >= thresholds.minShared && commitsAnalyzed < MIN_FULL_HISTORY_COMMITS;

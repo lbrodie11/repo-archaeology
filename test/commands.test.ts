@@ -527,8 +527,15 @@ describe('explain my silence (diff diagnostics when 0 suggestions are produced)'
       assert.ok(truncatedRes.silence?.reasons.includes('limited_repo_history'));
       assert.ok(truncatedRes.silence?.details.some((d) => /--max-commits/i.test(d)));
 
-      // Limited by --since
-      const sinceCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, since: '2020-01-01' });
+      // --since before repo root excludes 0 commits -> not limited
+      const unTruncatedSinceCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, since: '2020-01-01' });
+      assert.equal(unTruncatedSinceCtx.history.stats.truncatedBySince, false);
+      const unTruncatedSinceRes = await diff(unTruncatedSinceCtx, { limit: 10, kinds: ['ghost'] });
+      assert.equal(unTruncatedSinceRes.silence?.limitedHistory, false);
+
+      // --since after repo root excludes earlier commits -> limitedHistory = true
+      const sinceCtx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4, since: '2024-02-01' });
+      assert.equal(sinceCtx.history.stats.truncatedBySince, true);
       const sinceRes = await diff(sinceCtx, { limit: 10, kinds: ['ghost'] });
       assert.equal(sinceRes.silence?.limitedHistory, true);
       assert.ok(sinceRes.silence?.reasons.includes('limited_repo_history'));
@@ -717,7 +724,7 @@ describe('follow-up fix benchmark', () => {
     assert.ok(report.limitations.some((l) => /not confirmed bug fixes or omissions/i.test(l)));
   });
 
-  it('requires same author (B1), never pairs a follow-up twice (B2), and matches recommendation budgets (B3)', () => {
+  it('requires same author (B1), pairs two-pass without dropping valid candidates (B2), and matches recommendation budgets (B3)', () => {
     // B1: Alice's commit followed by Bob's "fix" commit inside the window -> 0 candidates
     const b1Commits: HistoryCommit[] = [];
     let t = 1_700_000_000;
@@ -795,6 +802,58 @@ describe('follow-up fix benchmark', () => {
     assert.equal(b2Report.candidatesEvaluated, 1);
     assert.equal(b2Report.cases[0]?.initialCommit.hash, 'I2');
     assert.equal(b2Report.cases[0]?.followUpCommit.hash, 'F');
+
+    // Two-pass pairing regression (P1): when A[a,b,y] is followed by B[a,y], B2[z] (immediate-same-author for B),
+    // X(Bob)[m], and C[y,w] (sharing y with both A and B), B claims B2 and A still pairs with C (2 candidates total).
+    const p1Commits = b1Commits.slice(0, 8).map((c) => ({
+      ...c,
+      files: ['src/a.ts', 'src/b.ts', 'src/y.ts', 'src/z.ts', 'src/w.ts'],
+    }));
+    t += 3600;
+    p1Commits.push({ hash: 'A', author: 'Alice', time: t, commitTime: t, subject: 'feat: A', files: ['src/a.ts', 'src/b.ts', 'src/y.ts'] });
+    t += 60;
+    p1Commits.push({ hash: 'B', author: 'Alice', time: t, commitTime: t, subject: 'feat: B', files: ['src/a.ts', 'src/y.ts'] });
+    t += 60;
+    p1Commits.push({ hash: 'B2', author: 'Alice', time: t, commitTime: t, subject: 'chore: B2', files: ['src/z.ts'] });
+    t += 60;
+    p1Commits.push({ hash: 'X', author: 'Bob', time: t, commitTime: t, subject: 'feat: X', files: ['src/m.ts'] });
+    t += 60;
+    p1Commits.push({ hash: 'C', author: 'Alice', time: t, commitTime: t, subject: 'feat: C', files: ['src/y.ts', 'src/w.ts'] });
+    const p1Report = followUpBenchmarkCommits(p1Commits, { minShared: 3, minConfidence: 0.5 }, { testFraction: 5 / 13, k: 3 });
+    assert.equal(p1Report.candidatesEvaluated, 2);
+    assert.deepEqual(
+      p1Report.cases.map((c) => `${c.initialCommit.hash}->${c.followUpCommit.hash}`),
+      ['A->C', 'B->B2'],
+    );
+
+    // Weighted benchmark (--half-life): rebuilds model only when training history advances and discloses in limitations
+    const weightedReport = followUpBenchmarkCommits(
+      commitsWithTwoCandidates(),
+      { minShared: 3, minConfidence: 0.5 },
+      { testFraction: 4 / 12, k: 2 },
+      30,
+    );
+    assert.equal(weightedReport.candidatesEvaluated, 2);
+    assert.equal(weightedReport.modelsBuilt, 2);
+    assert.ok(weightedReport.limitations.some((l) => /--half-life/i.test(l)));
+
+    function commitsWithTwoCandidates(): HistoryCommit[] {
+      const list: HistoryCommit[] = [];
+      let ts = 1_700_000_000;
+      for (let i = 0; i < 8; i++) {
+        ts += 3600;
+        list.push({ hash: `w-tr-${i}`, author: 'Alice', time: ts, commitTime: ts, subject: `tr ${i}`, files: ['src/a.ts', 'src/b.ts'] });
+      }
+      ts += 3600;
+      list.push({ hash: 'w-i1', author: 'Alice', time: ts, commitTime: ts, subject: 'feat: 1', files: ['src/a.ts'] });
+      ts += 300;
+      list.push({ hash: 'w-f1', author: 'Alice', time: ts, commitTime: ts, subject: 'fix: 1', files: ['src/b.ts'] });
+      ts += 86400 * 5;
+      list.push({ hash: 'w-i2', author: 'Alice', time: ts, commitTime: ts, subject: 'feat: 2', files: ['src/a.ts'] });
+      ts += 300;
+      list.push({ hash: 'w-f2', author: 'Alice', time: ts, commitTime: ts, subject: 'fix: 2', files: ['src/b.ts'] });
+      return list;
+    }
 
     // B3 (F2 fixture): when k=3 and co-change makes 1 recommendation, `popularity, same changes`
     // is capped to 1 recommendation (not 3), so its precision equals its hit rate.

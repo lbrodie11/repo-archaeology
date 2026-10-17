@@ -1,4 +1,5 @@
 import { readLog, type LogOptions, type RawCommit } from '../git/log.js';
+import { hasParentCommit } from '../git/repo.js';
 import { PathMatcher } from '../util/glob.js';
 
 export interface HistoryCommit {
@@ -34,6 +35,8 @@ export interface HistoryStats {
   renamesFollowed: number;
   /** True when git had additional older commits beyond `maxCommits`. */
   truncated?: boolean;
+  /** True when `since` excluded older commits in the repository. */
+  truncatedBySince?: boolean;
   oldestTime?: number;
   newestTime?: number;
 }
@@ -190,6 +193,10 @@ export class HistoryBuilder {
     this.stats.truncated = true;
   }
 
+  markTruncatedBySince(truncated = true): void {
+    this.stats.truncatedBySince = truncated;
+  }
+
   finish(): History {
     this.stats.renamesFollowed = this.renames.renames;
     if (this.renames.hasRedirects) {
@@ -213,6 +220,7 @@ export async function loadHistory(root: string, options: HistoryOptions): Promis
   const builder = new HistoryBuilder(options);
   const limit = options.maxCommits && options.maxCommits > 0 ? Math.floor(options.maxCommits) : undefined;
   let seen = 0;
+  let oldestHash: string | undefined;
   await readLog(
     root,
     limit !== undefined ? { ...options, maxCommits: limit + 1 } : options,
@@ -222,8 +230,13 @@ export async function loadHistory(root: string, options: HistoryOptions): Promis
         builder.markTruncated();
         return;
       }
+      oldestHash = commit.hash;
       builder.add(commit);
     },
   );
+  if (options.since) {
+    const truncatedBySince = seen === 0 || (oldestHash !== undefined && (await hasParentCommit(root, oldestHash)));
+    builder.markTruncatedBySince(truncatedBySince);
+  }
   return builder.finish();
 }

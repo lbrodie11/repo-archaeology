@@ -63,22 +63,29 @@ export class CoChangeModel {
   private readonly adjacency: Map<number, PairStat>[] = [];
   private referenceTime: number;
   private readonly halfLifeSeconds?: number;
-  readonly commits: HistoryCommit[];
+  private readonly commitList: HistoryCommit[];
 
   constructor(
     commits: readonly HistoryCommit[],
     options: ModelOptions = {},
   ) {
-    this.commits = [...commits];
+    this.commitList = [...commits];
     this.referenceTime = commits.reduce((max, c) => Math.max(max, c.commitTime), 0);
     if (options.halfLifeDays && options.halfLifeDays > 0) this.halfLifeSeconds = options.halfLifeDays * 86400;
-    this.commits.forEach((commit, index) => this.addCommit(commit, index));
+    this.commitList.forEach((commit, index) => this.addCommit(commit, index));
+  }
+
+  get commits(): readonly HistoryCommit[] {
+    return this.commitList;
   }
 
   /** Incrementally adds a commit to an unweighted model. */
   appendCommit(commit: HistoryCommit): void {
-    const index = this.commits.length;
-    this.commits.push(commit);
+    if (this.halfLifeSeconds !== undefined) {
+      throw new Error('appendCommit is only supported for unweighted models');
+    }
+    const index = this.commitList.length;
+    this.commitList.push(commit);
     if (commit.commitTime > this.referenceTime) {
       this.referenceTime = commit.commitTime;
     }
