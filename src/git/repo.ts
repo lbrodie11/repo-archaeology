@@ -29,7 +29,27 @@ export async function isShallow(root: string): Promise<boolean> {
 
 export async function refExists(root: string, ref: string): Promise<boolean> {
   if (ref.startsWith('-')) return false;
-  return gitSucceeds(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+  return gitSucceeds(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]);
+}
+
+export async function resolveCommit(root: string, ref: string): Promise<string> {
+  if (ref.startsWith('-')) throw new GitError(`Invalid revision: ${ref}`);
+  return (await runGit(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`])).trim();
+}
+
+/**
+ * All optimal common ancestors between `a` and `b` (`git merge-base --all`).
+ * Returns `[]` when the revisions share no common history (e.g. orphan branch or shallow cutoff).
+ */
+export async function mergeBases(root: string, a: string, b = 'HEAD'): Promise<string[]> {
+  if (a.startsWith('-') || b.startsWith('-')) return [];
+  try {
+    const out = await runGit(root, ['merge-base', '--all', '--end-of-options', a, b]);
+    return out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  } catch (err) {
+    if (err instanceof GitError && err.exitCode === 1) return [];
+    throw err;
+  }
 }
 
 /**
@@ -45,4 +65,24 @@ export async function listCurrentFiles(root: string): Promise<Set<string>> {
   const files = new Set(splitNul(present));
   for (const path of splitNul(deleted)) files.delete(path);
   return files;
+}
+
+/** Files present in a commit tree (`git ls-tree -r --name-only -z`). */
+export async function listTreeFiles(root: string, rev = 'HEAD'): Promise<Set<string>> {
+  if (rev.startsWith('-')) throw new GitError(`Invalid revision: ${rev}`);
+  const out = await runGit(root, ['ls-tree', '-r', '--name-only', '-z', rev]);
+  return new Set(splitNul(out));
+}
+
+/** True when `base..head` contains at least one merge commit. */
+export async function hasMergesInRange(root: string, base: string, head = 'HEAD'): Promise<boolean> {
+  if (base.startsWith('-') || head.startsWith('-')) return false;
+  const out = await runGit(root, ['rev-list', '--merges', '--count', '--end-of-options', `${base}..${head}`]);
+  return Number(out.trim()) > 0;
+}
+
+/** True when `sha` has at least one parent commit (i.e. is not a root commit). */
+export async function hasParentCommit(root: string, sha: string): Promise<boolean> {
+  if (sha.startsWith('-')) return false;
+  return gitSucceeds(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${sha}^^{commit}`]);
 }
