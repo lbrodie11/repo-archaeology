@@ -2,12 +2,19 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, posix, resolve } from 'node:path';
 import type { Context } from '../context.js';
+import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js';
 import { runGit } from '../git/run.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
+import { resolveCommitFileChange } from '../model/history.js';
 import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
-import { c, terminalText } from '../util/term.js';
+import { c, isoDate, terminalText } from '../util/term.js';
+import { formatExplainCommand, MAX_COUNTEREXAMPLES_PER_SIDE } from './explain.js';
 import { classifiedPairs } from './scan.js';
+
+export const MAX_MAP_PATCH_EDGES = 20;
+export const MAX_MAP_COMMITS_PER_EDGE = 2;
+export const MAX_MAP_PATCH_TIME_MS = 5000;
 
 export interface MapOptions {
   /** Maximum number of relationships drawn. */
@@ -15,6 +22,8 @@ export interface MapOptions {
   kinds: Relationship[];
   /** Optional cap for unchecked relationships so they do not consume the map. */
   uncheckedCap?: number;
+  /** Opt-in: embed bounded git diff hunks for top relationships into the HTML file. */
+  includePatches?: boolean;
   out?: string;
   open: boolean;
 }
@@ -25,6 +34,26 @@ export interface MapNode {
   changes: number;
   topAuthor?: string;
   topAuthorShare?: number;
+}
+
+export interface MapEdgeEvidence {
+  hash: string;
+  date: string;
+  subject: string;
+  sourcePath?: string;
+  targetPath?: string;
+  sourceStatus?: string;
+  targetStatus?: string;
+  patches?: {
+    source: FilePatchEvidence;
+    target: FilePatchEvidence;
+  };
+}
+
+export interface MapCounterexample {
+  hash: string;
+  date: string;
+  subject: string;
 }
 
 export interface MapEdge {
@@ -44,7 +73,14 @@ export interface MapEdge {
   weighted: boolean;
   lastTogether: string;
   crossesDirectories: boolean;
-  evidence: { hash: string; date: string; subject: string }[];
+  evidence: MapEdgeEvidence[];
+  counterexamples?: {
+    fromOnlyTotal?: number;
+    toOnlyTotal?: number;
+    fromOnly: MapCounterexample[];
+    toOnly: MapCounterexample[];
+  };
+  explainCommand?: string;
 }
 
 export interface MapData {
@@ -53,6 +89,7 @@ export interface MapData {
   generatedAt: string;
   counts: Record<Relationship, number>;
   classificationTruncated: boolean;
+  patchesIncluded?: boolean;
   nodes: MapNode[];
   edges: MapEdge[];
 }
@@ -83,6 +120,44 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     return index;
   };
 
+  // Index commit indices by file ID (sorted newest first by author time) for fast counterexample lookup.
+  const commitsByFile: number[][] = Array.from({ length: ctx.model.fileCount }, () => []);
+  const commitFileSets: Set<number>[] = [];
+  const sortedCommitIndices = ctx.model.commits
+    .map((_, idx) => idx)
+    .sort((x, y) => {
+      const cx = ctx.model.commits[x]!;
+      const cy = ctx.model.commits[y]!;
+      return cy.time - cx.time || cy.commitTime - cx.commitTime || x - y;
+    });
+  for (let i = 0; i < ctx.model.commits.length; i++) {
+    const cIds = new Set<number>();
+    for (const f of ctx.model.commits[i]!.files) {
+      const fid = ctx.model.id(f);
+      if (fid !== undefined) cIds.add(fid);
+    }
+    commitFileSets.push(cIds);
+  }
+  for (const idx of sortedCommitIndices) {
+    for (const fid of commitFileSets[idx]!) {
+      commitsByFile[fid]!.push(idx);
+    }
+  }
+
+  const findCounterexamples = (fileId: number, otherId: number): { total: number; items: MapCounterexample[] } => {
+    const items: MapCounterexample[] = [];
+    let total = 0;
+    for (const idx of commitsByFile[fileId] ?? []) {
+      if (commitFileSets[idx]!.has(otherId)) continue;
+      total++;
+      if (items.length < MAX_COUNTEREXAMPLES_PER_SIDE) {
+        const commit = ctx.model.commits[idx]!;
+        items.push({ hash: commit.hash, date: isoDate(commit.time), subject: commit.subject });
+      }
+    }
+    return { total, items };
+  };
+
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
   let unchecked = 0;
@@ -96,6 +171,25 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     if (edges.length >= options.edges) continue;
     const view = toView(ctx, companion, relationship);
     if (relationship === 'unknown') unchecked++;
+
+    const evidence: MapEdgeEvidence[] = companion.stat.evidence.map((commitIdx) => {
+      const commit = ctx.model.commits[commitIdx]!;
+      const srcChange = resolveCommitFileChange(commit, view.from);
+      const tgtChange = resolveCommitFileChange(commit, view.to);
+      return {
+        hash: commit.hash,
+        date: isoDate(commit.time),
+        subject: commit.subject,
+        ...(srcChange.path !== view.from ? { sourcePath: srcChange.path } : {}),
+        ...(tgtChange.path !== view.to ? { targetPath: tgtChange.path } : {}),
+        ...(srcChange.status !== 'M' ? { sourceStatus: srcChange.status } : {}),
+        ...(tgtChange.status !== 'M' ? { targetStatus: tgtChange.status } : {}),
+      };
+    });
+
+    const cxFrom = findCounterexamples(companion.from, companion.to);
+    const cxTo = findCounterexamples(companion.to, companion.from);
+
     edges.push({
       source: nodeFor(view.from),
       target: nodeFor(view.to),
@@ -112,13 +206,65 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       weighted: view.weighted,
       lastTogether: view.lastTogether,
       crossesDirectories: view.crossesDirectories,
-      evidence: view.evidence.map((e) => ({ hash: e.hash, date: e.date, subject: e.subject })),
+      evidence,
+      counterexamples: {
+        fromOnlyTotal: cxFrom.total,
+        toOnlyTotal: cxTo.total,
+        fromOnly: cxFrom.items,
+        toOnly: cxTo.items,
+      },
+      explainCommand: formatExplainCommand(view.from, view.to, ctx.settings),
     });
   }
   const repoName = basename(ctx.root);
   // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
-  const meta = { ...buildMeta(ctx), root: repoName };
-  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, nodes, edges };
+  const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
+  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges };
+}
+
+/**
+ * Opt-in enrichment (`--include-patches`): embeds bounded git diff hunks for the highest-priority
+ * map relationships while enforcing strict commit, hunk, line, and wall-clock limits.
+ */
+export async function attachMapPatches(ctx: Context, data: MapData): Promise<void> {
+  const commitByHash = new Map(ctx.model.commits.map((c) => [c.hash, c]));
+  const prioritized = [...data.edges].sort((a, b) => {
+    const aGhost = a.relationship === 'ghost' ? 1 : 0;
+    const bGhost = b.relationship === 'ghost' ? 1 : 0;
+    return bGhost - aGhost || b.overviewPriority - a.overviewPriority || b.score - a.score || b.shared - a.shared;
+  });
+
+  const startMs = Date.now();
+  const deadlineMs = startMs + MAX_MAP_PATCH_TIME_MS;
+  for (const edge of prioritized.slice(0, MAX_MAP_PATCH_EDGES)) {
+    const fromPath = data.nodes[edge.source]?.path;
+    const toPath = data.nodes[edge.target]?.path;
+    if (!fromPath || !toPath) continue;
+    for (const ev of edge.evidence.slice(0, MAX_MAP_COMMITS_PER_EDGE)) {
+      const remainingMs = deadlineMs - Date.now();
+      if (remainingMs <= 0) break;
+      const commit = commitByHash.get(ev.hash);
+      if (!commit) continue;
+      const changeA = resolveCommitFileChange(commit, fromPath);
+      const changeB = resolveCommitFileChange(commit, toPath);
+      const { patchA, patchB } = await fetchPairCommitPatches(ctx.root, ev.hash, fromPath, changeA, toPath, changeB, {
+        contextLines: 1,
+        maxPatchBytes: 32 * 1024,
+        maxHunksPerFile: 2,
+        maxLinesPerHunk: 12,
+        timeoutMs: Math.min(2000, remainingMs),
+        deadlineMs,
+      });
+      ev.patches = { source: patchA, target: patchB };
+    }
+  }
+
+  data.patchesIncluded = true;
+  const privacyWarning =
+    'Bounded source-code patches are embedded in this report (--include-patches). Review before sharing externally.';
+  if (!data.meta.warnings.includes(privacyWarning)) {
+    data.meta.warnings.push(privacyWarning);
+  }
 }
 
 export function mapOverviewPriority(
@@ -148,6 +294,9 @@ export async function defaultMapPath(root: string): Promise<string> {
 
 export async function writeMap(ctx: Context, options: MapOptions): Promise<{ file: string; data: MapData }> {
   const data = buildMapData(ctx, options);
+  if (options.includePatches) {
+    await attachMapPatches(ctx, data);
+  }
   // --out is relative to where the command was run, even with --cwd.
   const file = options.out ? resolve(process.cwd(), options.out) : await defaultMapPath(ctx.root);
   mkdirSync(dirname(file), { recursive: true });

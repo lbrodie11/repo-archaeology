@@ -2,6 +2,15 @@ import { readLog, type LogOptions, type RawCommit } from '../git/log.js';
 import { hasParentCommit } from '../git/repo.js';
 import { PathMatcher } from '../util/glob.js';
 
+export interface CommitFileChange {
+  /** First letter of git's name-status code in this commit (A, M, D, R, C, T, etc.). */
+  status: string;
+  /** Historical path in this commit (the post-change path for renames and copies). */
+  path: string;
+  /** Previous path in this commit when status is R or C. */
+  oldPath?: string;
+}
+
 export interface HistoryCommit {
   hash: string;
   /** Position in git log output (0 is newest), used when timestamps tie. */
@@ -21,6 +30,8 @@ export interface HistoryCommit {
   files: string[];
   /** File identities deleted by this commit, used to replay historical availability. */
   deleted?: string[];
+  /** Per-identity historical path and change status in this commit. */
+  changesByIdentity?: Record<string, CommitFileChange>;
 }
 
 export interface HistoryStats {
@@ -69,6 +80,16 @@ const LIFETIME_SEPARATOR = '\u0000';
 export function pathOf(identity: string): string {
   const cut = identity.indexOf(LIFETIME_SEPARATOR);
   return cut === -1 ? identity : identity.slice(0, cut);
+}
+
+/** Resolves the historical path and status of `identity` at `commit`. */
+export function resolveCommitFileChange(commit: HistoryCommit, identity: string): CommitFileChange {
+  const map = commit.changesByIdentity;
+  if (map && Object.prototype.hasOwnProperty.call(map, identity)) {
+    return map[identity]!;
+  }
+  const status = commit.deleted?.includes(identity) ? 'D' : 'M';
+  return { status, path: pathOf(identity) };
 }
 
 /**
@@ -162,6 +183,17 @@ export class HistoryBuilder {
       stats.emptyAfterIgnores++;
       return;
     }
+    const fileSet = new Set(files);
+    const changesByIdentity: Record<string, CommitFileChange> = Object.create(null);
+    commit.changes.forEach((change, index) => {
+      const id = names[index]!;
+      if (!fileSet.has(id)) return;
+      changesByIdentity[id] = {
+        status: change.status,
+        path: change.path,
+        ...(change.oldPath !== undefined ? { oldPath: change.oldPath } : {}),
+      };
+    });
     const email = commit.authorEmail.trim().toLowerCase();
     const entry: HistoryCommit = {
       hash: commit.hash,
@@ -172,7 +204,8 @@ export class HistoryBuilder {
       commitTime: commit.commitTime,
       subject: commit.subject,
       files,
-      deleted: [...new Set(commit.changes.flatMap((change, index) => change.status === 'D' && files.includes(names[index]!) ? [names[index]!] : []))],
+      deleted: [...new Set(commit.changes.flatMap((change, index) => change.status === 'D' && fileSet.has(names[index]!) ? [names[index]!] : []))],
+      changesByIdentity,
     };
     if (files.length > this.options.maxFilesPerCommit) {
       stats.sweepsSkipped++;
@@ -204,6 +237,16 @@ export class HistoryBuilder {
         commit.files = [...new Set(commit.files.map((f) => this.renames.resolve(f)))];
         // A branch-side deletion of the old path does not delete the renamed file.
         if (commit.deleted) commit.deleted = commit.deleted.filter((f) => this.renames.resolve(f) === f);
+        if (commit.changesByIdentity) {
+          const remapped: Record<string, CommitFileChange> = Object.create(null);
+          for (const [id, info] of Object.entries(commit.changesByIdentity)) {
+            const resolved = this.renames.resolve(id);
+            if (!Object.prototype.hasOwnProperty.call(remapped, resolved)) {
+              remapped[resolved] = info;
+            }
+          }
+          commit.changesByIdentity = remapped;
+        }
       }
     }
     return { commits: this.commits, excluded: this.excluded, stats: this.stats };

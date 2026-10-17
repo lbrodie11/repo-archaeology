@@ -124,3 +124,112 @@ export function splitNul(output: string): string[] {
   if (parts[parts.length - 1] === '') parts.pop();
   return parts;
 }
+
+export interface BoundedGitOptions {
+  /** Maximum UTF-8 bytes of stdout to collect before truncating and stopping git. */
+  maxBytes: number;
+  /** Maximum execution time in milliseconds before stopping git. */
+  timeoutMs: number;
+  /** Treat all path arguments literally rather than as git pathspec globs/magic. */
+  literalPathspecs?: boolean;
+}
+
+export interface BoundedGitResult {
+  stdout: string;
+  truncated: boolean;
+  timedOut: boolean;
+  exitCode: number | null;
+  stderr: string;
+}
+
+/**
+ * Runs git with strict output-byte and execution-time bounds using argument-array
+ * subprocess execution (no shell). If stdout exceeds `maxBytes` or execution exceeds
+ * `timeoutMs`, the git process is terminated cleanly and the partial output is returned
+ * with `truncated` or `timedOut` set.
+ */
+export function runGitBounded(cwd: string, args: string[], options: BoundedGitOptions): Promise<BoundedGitResult> {
+  return new Promise((resolve, reject) => {
+    const fullArgs = options.literalPathspecs ? ['--literal-pathspecs', ...CONFIG_OVERRIDES, ...args] : [...CONFIG_OVERRIDES, ...args];
+    const child = spawn('git', fullArgs, {
+      cwd,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_OPTIONAL_LOCKS: '0',
+        GIT_PAGER: 'cat',
+        GIT_NO_REPLACE_OBJECTS: '1',
+        ...(options.literalPathspecs ? { GIT_LITERAL_PATHSPECS: '1' } : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    let bytesCollected = 0;
+    let truncated = false;
+    let timedOut = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const stopChild = () => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore if already exited
+      }
+      if (!killTimer) {
+        killTimer = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            // ignore
+          }
+        }, 200);
+        killTimer.unref?.();
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      stopChild();
+    }, Math.max(1, options.timeoutMs));
+    timeout.unref?.();
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      if (truncated || timedOut) return;
+      const chunkBytes = Buffer.byteLength(chunk, 'utf8');
+      if (bytesCollected + chunkBytes <= options.maxBytes) {
+        stdout += chunk;
+        bytesCollected += chunkBytes;
+      } else {
+        const remaining = Math.max(0, options.maxBytes - bytesCollected);
+        if (remaining > 0) {
+          stdout += Buffer.from(chunk, 'utf8').subarray(0, remaining).toString('utf8');
+          bytesCollected = options.maxBytes;
+        }
+        truncated = true;
+        stopChild();
+      }
+    });
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < MAX_STDERR) stderr += chunk;
+    });
+    child.on('error', (err: NodeJS.ErrnoException) => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      if (err.code === 'ENOENT') reject(new GitError('git was not found on your PATH. Install git and try again.'));
+      else reject(new GitError(`Failed to run git: ${err.message}`));
+    });
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      if ( code !== 0 && !truncated && !timedOut) {
+        reject(failure(args, { code, stderr }));
+        return;
+      }
+      resolve({ stdout, truncated, timedOut, exitCode: code, stderr });
+    });
+  });
+}

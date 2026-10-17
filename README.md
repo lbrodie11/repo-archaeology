@@ -110,6 +110,7 @@ Repo Archaeology inspects TypeScript ASTs for shared environment variables, even
 | `repo-archaeology` | If files changed, what might be missing? If clean, what are the strongest hidden relationships? |
 | `scan` | Which files in this repo are secretly coupled? |
 | `diff [--base main]` | I changed these files. What usually changes with them that I haven't touched? |
+| `explain <fileA> <fileB>` | What actually changed in the commits these two files share, and when did one change without the other? |
 | `file <path>` | What does history know about this file: churn, owners, companions? |
 | `map` | Show me the whole picture as an interactive map in the browser. |
 | `backtest` | How often would these suggestions have been right on recent history? |
@@ -125,9 +126,22 @@ repo-archaeology diff --base main
 repo-archaeology diff --exit-code   # exit 1 when something looks missed (for hooks/CI)
 ```
 
+### `explain`
+
+Inspects bounded Git diff hunks for two files across their most recent shared commits (following historical paths across renames) and lists recent counterexample commits where one file changed without the other:
+
+```bash
+repo-archaeology explain src/adapter/bun/serve-static.ts src/adapter/deno/serve-static.ts
+repo-archaeology explain <fileA> <fileB> --commits 5 --counterexamples -U 3
+```
+
+Historical patches show what changed in the same commit, not proof of why the files changed together or that future edits require both files.
+
 ### `map`
 
-Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file to see what moves with it and the commits behind each link. By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. The map includes file paths, author names and commit subjects, so treat it like the repository itself when sharing.
+Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command.
+
+By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. **Privacy when sharing:** source-code patches are omitted by default, but the HTML still contains repository file paths, author names, and commit subjects—treat it like repository metadata when sharing. Pass `--include-patches` (`repo-archaeology map --include-patches`) to embed bounded diff hunks for top relationships directly into the HTML file; because `--include-patches` embeds source-code lines, only share those reports with audiences who have access to the source code.
 
 The overview prioritizes pairs that changed together within the past year and meet `--min-confidence` in both directions. Independent folders receive priority over parent/child folders and possible parallel implementations. Wilson score orders findings within each group. This is a discovery heuristic, not a risk score; older and one-way links remain available, and `diff` ranking is unchanged.
 
