@@ -5,6 +5,11 @@ import type { HistoryCommit } from '../model/history.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
 import { ratio } from '../util/stats.js';
 import { c, isoDate, pct, plural } from '../util/term.js';
+import {
+  followUpBenchmarkCommits,
+  printFollowUpBenchmarkSection,
+  type FollowUpBenchmarkResult,
+} from './followup-benchmark.js';
 
 export interface BacktestOptions {
   /** Share of the newest commits held out for testing (0..1). */
@@ -17,6 +22,10 @@ export interface BacktestOptions {
    */
   before?: number;
   ghosts?: boolean;
+  /** Also evaluate candidate temporal follow-up commits in the held-out window. */
+  followUps?: boolean;
+  /** Maximum hours between an initial commit and a candidate follow-up commit (default 48). */
+  followUpWindowHours?: number;
 }
 
 export interface GhostDiagnostics {
@@ -63,6 +72,7 @@ export interface BacktestResult {
   strategies: StrategyScore[];
   notes: string[];
   ghostDiagnostics?: GhostDiagnostics;
+  followUpBenchmark?: Omit<FollowUpBenchmarkResult, 'meta'>;
 }
 
 type Recommender = (fileId: number) => number[];
@@ -105,6 +115,9 @@ export function backtestCommits(
   if (!(options.testFraction > 0 && options.testFraction < 1)) throw new UsageError('--test-fraction must be between 0 and 1.');
   if (!(Number.isInteger(options.k) && options.k >= 1)) throw new UsageError('--k must be a positive integer.');
   if (options.ghosts && !isGhost) throw new UsageError('Ghost diagnostics require a current-code classifier.');
+  if (options.followUpWindowHours !== undefined && !options.followUps) {
+    throw new UsageError('--follow-up-window requires --follow-ups.');
+  }
   if (options.before !== undefined) {
     const cutoff = options.before;
     commits = commits.filter((commit) => commit.commitTime < cutoff);
@@ -231,6 +244,20 @@ export function backtestCommits(
         caveat: 'Diagnostic subset of the original top-k suggestions, classified using current working-tree imports. This leaks future information (also with --before); missing files are excluded. Not an unbiased historical accuracy estimate or a ghost-only recommender.',
       }
     } : {}),
+    ...(options.followUps ? {
+      followUpBenchmark: followUpBenchmarkCommits(
+        commits,
+        thresholds,
+        {
+          testFraction: options.testFraction,
+          k: options.k,
+          windowHours: options.followUpWindowHours,
+          before: options.before,
+        },
+        halfLifeDays,
+        excluded,
+      ),
+    } : {}),
   };
 }
 
@@ -297,5 +324,9 @@ export function printBacktest(result: BacktestResult): void {
     if (ghosts.fired > 0) console.log(`Hit rate ${pct(ghosts.hitRate)} · precision ${pct(ghosts.precision)} · false alarms ${pct(ghosts.falseAlarmRate)}`);
     else console.log('No ghost suggestions to score.');
     console.log(c.dim(ghosts.caveat));
+  }
+  if (result.followUpBenchmark) {
+    console.log();
+    printFollowUpBenchmarkSection(result.followUpBenchmark);
   }
 }

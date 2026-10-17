@@ -25,6 +25,8 @@ export interface LogOptions {
   maxCommits?: number;
   since?: string;
   rev?: string;
+  topoOrder?: boolean;
+  reverse?: boolean;
 }
 
 const RS = '\u001e';
@@ -37,6 +39,8 @@ const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${US}%s`;
  */
 export function logArgs(options: LogOptions): string[] {
   const args = ['log', '--no-merges', '-z', '-M', '--name-status', '--no-ext-diff', FORMAT];
+  if (options.topoOrder) args.push('--topo-order');
+  if (options.reverse) args.push('--reverse');
   if (options.maxCommits && options.maxCommits > 0) args.push(`--max-count=${Math.floor(options.maxCommits)}`);
   if (options.since) args.push(`--since=${options.since}`);
   args.push('--end-of-options', options.rev ?? 'HEAD', '--');
