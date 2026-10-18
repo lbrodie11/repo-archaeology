@@ -110,7 +110,7 @@ function round(x: number): number {
   return Math.round(x * 1000) / 1000;
 }
 
-const UNSAFE_SHELL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/;
+const UNSAFE_SHELL_CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029]|\p{Bidi_Control}/u;
 
 function shellQuoteArg(arg: string): string {
   if (/^[a-zA-Z0-9._/@:-]+$/.test(arg) && !arg.startsWith('-')) {
@@ -127,11 +127,7 @@ function shellQuoteArg(arg: string): string {
       else if (ch === '\t') escaped += '\\t';
       else if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
         escaped += `\\x${code.toString(16).padStart(2, '0')}`;
-      } else if (
-        (code >= 0x200b && code <= 0x200f) ||
-        (code >= 0x202a && code <= 0x202e) ||
-        (code >= 0x2066 && code <= 0x2069)
-      ) {
+      } else if (UNSAFE_SHELL_CONTROL.test(ch)) {
         escaped += `\\u${code.toString(16).padStart(4, '0')}`;
       } else {
         escaped += ch;
@@ -143,7 +139,12 @@ function shellQuoteArg(arg: string): string {
 }
 
 /** Formats a safe, copyable CLI command for inspecting two repository-relative paths. */
-export function formatExplainCommand(fileA: string, fileB: string, settings?: Partial<Settings>): string {
+export function formatExplainCommand(
+  fileA: string,
+  fileB: string,
+  settings?: Partial<Settings>,
+  flagSettings?: Partial<Settings>,
+): string {
   const flagParts: string[] = [];
   if (settings) {
     if (settings.since !== undefined) {
@@ -161,6 +162,14 @@ export function formatExplainCommand(fileA: string, fileB: string, settings?: Pa
     if (settings.skipCommits !== undefined) {
       flagParts.push(`--skip-commits ${shellQuoteArg(settings.skipCommits)}`);
     }
+  }
+  const useDefaultIgnores = flagSettings ? flagSettings.useDefaultIgnores : settings?.useDefaultIgnores;
+  if (useDefaultIgnores === false) {
+    flagParts.push('--no-default-ignores');
+  }
+  const cliIgnores = flagSettings ? (flagSettings.ignore ?? []) : (settings?.ignore ?? []);
+  for (const pat of cliIgnores) {
+    flagParts.push(`--ignore ${shellQuoteArg(pat)}`);
   }
   const flagsStr = flagParts.length > 0 ? ` ${flagParts.join(' ')}` : '';
   const needsDoubleDash = fileA.startsWith('-') || fileB.startsWith('-');
@@ -446,7 +455,7 @@ export async function explain(
       outputTruncated,
       timedOut,
     },
-    cliCommand: formatExplainCommand(from, to, ctx.settings),
+    cliCommand: formatExplainCommand(from, to, ctx.settings, ctx.flagSettings),
     disclaimer: EXPLAIN_DISCLAIMER,
   };
 }
@@ -465,8 +474,8 @@ function formatHistoricalPathLabel(patch: FilePatchEvidence): string {
 }
 
 function hasUnexplainedTruncation(patch: FilePatchEvidence): boolean {
-  if (!patch.truncated && !patch.timedOut) return false;
-  if (patch.timedOut) return true;
+  if (!patch.truncated && !patch.timedOut && !patch.rawTruncated) return false;
+  if (patch.timedOut || patch.rawTruncated) return true;
   if (patch.omittedHunks === 0 && patch.omittedLines === 0) return true;
   return patch.hunks.some((h) => h.truncated && h.omittedLines === 0);
 }
@@ -494,7 +503,10 @@ function printFilePatch(patch: FilePatchEvidence, indent = '    '): void {
     }
   }
   if (patch.omittedHunks > 0) {
-    console.log(`${indent}  ${c.dim(`… (${plural(patch.omittedHunks, 'additional hunk')} omitted for this file)`)}`);
+    const hunkCountStr = patch.rawTruncated
+      ? `${patch.omittedHunks.toLocaleString('en-US')}+ ${patch.omittedHunks === 1 ? 'additional hunk' : 'additional hunks'}`
+      : plural(patch.omittedHunks, 'additional hunk');
+    console.log(`${indent}  ${c.dim(`… (${hunkCountStr} omitted for this file)`)}`);
   }
   if (hasUnexplainedTruncation(patch)) {
     const reason = patch.timedOut ? 'time limit' : 'byte/time limit';

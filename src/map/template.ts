@@ -1163,9 +1163,12 @@ const CLIENT = String.raw`
         wrap.appendChild(box);
       });
       if (patch.omittedHunks > 0) {
-        wrap.appendChild(el('div', 'patch-note', '… (' + plural(patch.omittedHunks, 'additional hunk') + ' omitted)'));
+        var hunkCountStr = patch.rawTruncated
+          ? patch.omittedHunks.toLocaleString('en-US') + '+ additional hunk' + (patch.omittedHunks === 1 ? '' : 's')
+          : plural(patch.omittedHunks, 'additional hunk');
+        wrap.appendChild(el('div', 'patch-note', '… (' + hunkCountStr + ' omitted)'));
       }
-      var unexplained = patch.timedOut || (patch.truncated && !patch.omittedHunks && (!patch.omittedLines || hasUnexplainedHunkTruncation));
+      var unexplained = patch.timedOut || patch.rawTruncated || (patch.truncated && !patch.omittedHunks && (!patch.omittedLines || hasUnexplainedHunkTruncation));
       if (unexplained) {
         var reason = patch.timedOut ? 'time limit' : 'byte/time limit';
         wrap.appendChild(el('div', 'patch-note', '… (patch truncated due to ' + reason + ')'));

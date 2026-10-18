@@ -213,7 +213,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         fromOnly: cxFrom.items,
         toOnly: cxTo.items,
       },
-      explainCommand: formatExplainCommand(view.from, view.to, ctx.settings),
+      explainCommand: formatExplainCommand(view.from, view.to, ctx.settings, ctx.flagSettings),
     });
   }
   const repoName = basename(ctx.root);

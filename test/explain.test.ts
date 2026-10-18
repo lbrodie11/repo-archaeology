@@ -3,10 +3,11 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import vm from 'node:vm';
 import { explain, formatExplainCommand, MAX_EXPLAIN_COMMITS, printExplain } from '../src/commands/explain.js';
 import { attachMapPatches, buildMapData, writeMap } from '../src/commands/map.js';
 import { loadContext, UsageError } from '../src/context.js';
-import { fetchPairCommitPatches, fetchSingleFilePatch } from '../src/git/patch.js';
+import { fetchPairCommitPatches, fetchSingleFilePatch, parseSingleFileDiff } from '../src/git/patch.js';
 import { runGitBounded } from '../src/git/run.js';
 import { renderMapHtml } from '../src/map/template.js';
 import { FixtureRepo } from './helpers.js';
@@ -397,12 +398,20 @@ describe('explain command & verifiable change evidence', () => {
       'Default map HTML should include honest privacy note about metadata',
     );
 
-    // Non-default history settings (--since, --half-life) are propagated into explainCommand
-    const customCtx = await loadContext(r.dir, { ...flags, since: '2024-01-01', halfLifeDays: 60 });
+    // Non-default history settings (--since, --half-life, --ignore, --no-default-ignores) are propagated into explainCommand,
+    // while config-file ignores are not duplicated.
+    writeFileSync(join(r.dir, '.repo-archaeology.json'), JSON.stringify({ ignore: ['from-config/**'] }), 'utf8');
+    const customCtx = await loadContext(r.dir, {
+      ...flags,
+      since: '2024-01-01',
+      halfLifeDays: 60,
+      useDefaultIgnores: false,
+      ignore: ['docs/**'],
+    });
     const customMapData = buildMapData(customCtx, { edges: 50, kinds: ['ghost', 'unknown', 'indirect', 'direct'] });
     assert.equal(
       customMapData.edges[0]?.explainCommand,
-      'npx repo-archaeology explain --since 2024-01-01 --half-life 60 src/serviceB.ts src/serviceA.ts',
+      "npx repo-archaeology explain --since 2024-01-01 --half-life 60 --no-default-ignores --ignore 'docs/**' src/serviceB.ts src/serviceA.ts",
     );
 
     // 2. Opt-in map (--include-patches): embeds bounded patches, escapes </script>, and adds warning
@@ -423,7 +432,34 @@ describe('explain command & verifiable change evidence', () => {
     assert.ok(!optInHtml.includes('</script><script>evil()'), 'Embedded patches must escape </script>');
   });
 
-  it('T1: attributes raw byte truncation to the last section output by git (sorted path order) and renders truncation notice', async () => {
+  it('reproduces map findings via explainCommand when --ignore excludes sweep files', async () => {
+    const r = createRepo();
+    // Create 4 commits, each touching a.ts, b.ts, and 24 files under docs/ (26 files total > default maxFilesPerCommit=25).
+    // Without --ignore 'docs/**', all 4 commits are skipped as sweeps; with --ignore 'docs/**', they are kept.
+    for (let c = 1; c <= 4; c++) {
+      const files: Record<string, string> = {
+        'a.ts': `export const a = ${c};\n`,
+        'b.ts': `export const b = ${c};\n`,
+      };
+      for (let d = 1; d <= 24; d++) {
+        files[`docs/doc${d}.md`] = `# doc ${d} v${c}\n`;
+      }
+      r.commit({ message: `commit ${c} with docs`, write: files });
+    }
+
+    const ctx = await loadContext(r.dir, { ...flags, ignore: ['docs/**'] });
+    const mapData = buildMapData(ctx, { edges: 50, kinds: ['ghost', 'unknown', 'indirect', 'direct'] });
+    assert.equal(mapData.edges.length, 1);
+    const explainCmd = mapData.edges[0]!.explainCommand!;
+    assert.equal(explainCmd, "npx repo-archaeology explain --ignore 'docs/**' a.ts b.ts");
+
+    // Running the CLI with the flags emitted in explainCommand succeeds instead of failing with "no usable history"
+    const cliRun = runCli(['explain', '--ignore', 'docs/**', 'a.ts', 'b.ts'], r.dir);
+    assert.equal(cliRun.code, 0, cliRun.stderr);
+    assert.match(cliRun.stdout, /Shared commits \(3 most recent of 4 shared commits\)/);
+  });
+
+  it('T1: attributes raw byte truncation to the last section output by git (sorted path order) and renders truncation notices in CLI and HTML', async () => {
     const r = createRepo();
 
     for (let i = 1; i <= 2; i++) {
@@ -456,8 +492,10 @@ describe('explain command & verifiable change evidence', () => {
     const sc = res.sharedCommits[0]!;
     assert.equal(sc.fileB.canonicalPath, 'src/a.ts');
     assert.equal(sc.fileB.truncated, false, 'src/a.ts was output first and completely before the byte limit');
+    assert.equal(sc.fileB.rawTruncated, undefined);
     assert.equal(sc.fileA.canonicalPath, 'src/z.ts');
     assert.equal(sc.fileA.truncated, true, 'src/z.ts was output last and cut off by maxPatchBytes');
+    assert.equal(sc.fileA.rawTruncated, true);
     assert.equal(sc.fileA.omittedHunks, 0);
     assert.equal(sc.fileA.omittedLines, 0);
 
@@ -473,9 +511,148 @@ describe('explain command & verifiable change evidence', () => {
     const printed = lines.join('\n');
     assert.match(printed, /patch truncated due to byte\/time limit/);
     assert.match(printed, /context lines clamped to 10/);
+
+    // Also test when rawTruncated=true AND omittedHunks > 0 (e.g. 6 hunks parsed before byte limit cut off the stream, with maxHunksPerFile: 4):
+    // Both the "2+ additional hunks omitted" notice AND the "patch truncated due to byte/time limit" notice must appear in CLI and HTML!
+    const sixHunksDiff = [
+      'diff --git a/src/z.ts b/src/z.ts',
+      '--- a/src/z.ts',
+      '+++ b/src/z.ts',
+      ...Array.from({ length: 6 }, (_, i) => `@@ -${i * 10 + 1},1 +${i * 10 + 1},1 @@\n-old${i}\n+new${i}`),
+    ].join('\n');
+    const multiHunkRawCut = parseSingleFileDiff(
+      sixHunksDiff,
+      'src/z.ts',
+      { status: 'M', path: 'src/z.ts' },
+      { maxHunksPerFile: 4 },
+      true,
+      false,
+    );
+    assert.equal(multiHunkRawCut.truncated, true);
+    assert.equal(multiHunkRawCut.rawTruncated, true);
+    assert.equal(multiHunkRawCut.omittedHunks, 2);
+
+    const syntheticRes = {
+      ...res,
+      sharedCommits: [{ ...sc, fileA: multiHunkRawCut }],
+    };
+    const multiLines: string[] = [];
+    console.log = (...args: unknown[]) => multiLines.push(args.map(String).join(' '));
+    try {
+      printExplain(syntheticRes);
+    } finally {
+      console.log = origLog;
+    }
+    const multiPrinted = multiLines.join('\n');
+    assert.match(multiPrinted, /2\+ additional hunks omitted for this file/);
+    assert.match(multiPrinted, /patch truncated due to byte\/time limit/);
+
+    // Verify the map HTML client script renders both notices in renderFilePatchBlock when an edge is selected
+    const mapData = buildMapData(ctx, { edges: 50, kinds: ['ghost', 'unknown', 'indirect', 'direct'] });
+    mapData.patchesIncluded = true;
+    mapData.edges[0]!.evidence[0]!.patches = {
+      source: multiHunkRawCut,
+      target: sc.fileB,
+    };
+    const html = renderMapHtml(mapData);
+    const dataMatch = html.match(/<script type="application\/json" id="ra-data">([\s\S]*?)<\/script>/);
+    const scriptMatch = html.match(/<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*<\/script>/);
+    assert.ok(dataMatch && scriptMatch, 'Expected embedded JSON and client script in map HTML');
+
+    class FakeElement {
+      tag: string;
+      className = '';
+      _text = '';
+      children: FakeElement[] = [];
+      listeners: Record<string, Array<(ev?: unknown) => void>> = {};
+      style: Record<string, string> = {};
+      dataset: Record<string, string> = {};
+      attributes: Record<string, string> = {};
+      type = '';
+      title = '';
+      value = '';
+      open = false;
+      constructor(tag: string) {
+        this.tag = tag;
+      }
+      get textContent(): string {
+        if (this.children.length === 0) return this._text;
+        return [this._text, ...this.children.map((c) => c.textContent)].filter(Boolean).join('\n');
+      }
+      set textContent(v: string) {
+        this._text = String(v);
+        this.children = [];
+      }
+      appendChild(child: FakeElement): FakeElement {
+        this.children.push(child);
+        return child;
+      }
+      addEventListener(type: string, fn: (ev?: unknown) => void): void {
+        (this.listeners[type] ??= []).push(fn);
+      }
+      setAttribute(k: string, v: string): void {
+        this.attributes[k] = v;
+      }
+      getBoundingClientRect() {
+        return { left: 0, top: 0, width: 800, height: 600 };
+      }
+      getContext() {
+        return new Proxy({}, { get: () => () => ({ width: 10 }) });
+      }
+      findAll(pred: (el: FakeElement) => boolean): FakeElement[] {
+        const out: FakeElement[] = [];
+        if (pred(this)) out.push(this);
+        for (const c of this.children) out.push(...c.findAll(pred));
+        return out;
+      }
+    }
+
+    const elementsById: Record<string, FakeElement> = {
+      'ra-data': new FakeElement('script'),
+      map: new FakeElement('canvas'),
+      tooltip: new FakeElement('div'),
+      panel: new FakeElement('div'),
+      search: new FakeElement('input'),
+      'reset-view': new FakeElement('button'),
+      'toggle-anim': new FakeElement('button'),
+      summary: new FakeElement('div'),
+      toggles: new FakeElement('div'),
+    };
+    elementsById['ra-data']!.textContent = dataMatch[1]!;
+
+    const sandboxWindow: Record<string, unknown> = {
+      devicePixelRatio: 1,
+      matchMedia: () => ({ matches: true }),
+      addEventListener: () => {},
+    };
+    const sandboxDocument = {
+      hidden: false,
+      body: new FakeElement('body'),
+      getElementById: (id: string) => elementsById[id] ?? new FakeElement('div'),
+      createElement: (tag: string) => new FakeElement(tag),
+      addEventListener: () => {},
+    };
+    vm.runInNewContext(scriptMatch[1]!, {
+      window: sandboxWindow,
+      document: sandboxDocument,
+      navigator: {},
+      performance: { now: () => 0 },
+      requestAnimationFrame: () => 0,
+      setTimeout,
+      clearTimeout,
+    });
+
+    // Click the first relationship card in the overview panel to trigger selectEdge -> renderSelectedEdge -> renderFilePatchBlock
+    const cards = elementsById.panel!.findAll((el) => el.className.includes('card interactive'));
+    assert.ok(cards.length > 0, 'Expected relationship card in overview panel');
+    cards[0]!.listeners.click?.[0]?.();
+
+    const panelText = elementsById.panel!.textContent;
+    assert.match(panelText, /2\+ additional hunks omitted/);
+    assert.match(panelText, /patch truncated due to byte\/time limit/);
   });
 
-  it('T2: handles C0 control characters in paths and custom diff.srcPrefix/dstPrefix without losing hunks', async () => {
+  it('T2: handles C0/bidi characters in paths, color.diff=always, and custom diff prefixes in a single git show call', async () => {
     const r = createRepo();
     const escFile = 'src/w\x1bx.ts';
     const normalFile = 'src/normal.ts';
@@ -491,7 +668,14 @@ describe('explain command & verifiable change evidence', () => {
         },
       });
     }
-    // Configure non-standard diff prefixes in git config to ensure --src-prefix=a/ --dst-prefix=b/ overrides them
+    // Configure settings that would break unguarded diff parsing across all Git versions:
+    // - color.diff=always and color.ui=always (injects ANSI escape sequences unless --no-color / color.diff=false is passed)
+    // - diff.mnemonicPrefix=true and diff.noprefix=true (supported on all Git versions; changes a/ and b/ prefixes)
+    // - diff.srcPrefix and diff.dstPrefix (Git 2.45+ custom prefixes)
+    r.git('config', 'color.diff', 'always');
+    r.git('config', 'color.ui', 'always');
+    r.git('config', 'diff.mnemonicPrefix', 'true');
+    r.git('config', 'diff.noprefix', 'true');
     r.git('config', 'diff.srcPrefix', 'custom-src/');
     r.git('config', 'diff.dstPrefix', 'custom-dst/');
 
@@ -512,23 +696,62 @@ describe('explain command & verifiable change evidence', () => {
       assert.ok(singleEsc.hunks.length > 0);
       assert.deepEqual(pairRes.patchA.hunks, singleEsc.hunks);
       assert.ok(pairRes.patchB.hunks.length > 0);
+
+      // Verify combined git show for normalFile + normalFile2 succeeds in a SINGLE git show process
+      // (without falling back to per-file fetches) even when mnemonicPrefix/noprefix/srcPrefix/color.diff=always are set.
+      const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+      const countBinDir = join(r.dir, '.git-count-bin');
+      const countLogFile = join(r.dir, 'git-prefix-calls.log');
+      mkdirSync(countBinDir, { recursive: true });
+      writeFileSync(countLogFile, '', 'utf8');
+      const wrapper = join(countBinDir, 'git');
+      writeFileSync(
+        wrapper,
+        `#!/bin/sh\necho "$@" >> "${countLogFile}"\nexec "${realGit}" "$@"\n`,
+        'utf8',
+      );
+      chmodSync(wrapper, 0o755);
+      const origPath = process.env.PATH;
+      process.env.PATH = `${countBinDir}${delimiter}${origPath ?? ''}`;
+      try {
+        const normalPair = await fetchPairCommitPatches(
+          r.dir,
+          headSha,
+          normalFile,
+          { status: 'M', path: normalFile },
+          normalFile2,
+          { status: 'M', path: normalFile2 },
+        );
+        assert.ok(normalPair.patchA.hunks.length > 0);
+        assert.ok(normalPair.patchB.hunks.length > 0);
+      } finally {
+        process.env.PATH = origPath;
+      }
+      const showCalls = readFileSync(countLogFile, 'utf8')
+        .split('\n')
+        .filter((line) => line.includes(' show '));
+      assert.equal(
+        showCalls.length,
+        1,
+        `Expected combined git show to match both files in 1 call without fallback, got ${showCalls.length} calls`,
+      );
+    } else {
+      const normalPair = await fetchPairCommitPatches(
+        r.dir,
+        headSha,
+        normalFile,
+        { status: 'M', path: normalFile },
+        normalFile2,
+        { status: 'M', path: normalFile2 },
+      );
+      assert.ok(normalPair.patchA.hunks.length > 0);
+      assert.ok(normalPair.patchB.hunks.length > 0);
     }
 
-    // Verify combined git show works for normal pairs when diff.srcPrefix/dstPrefix are customized
-    const normalPair = await fetchPairCommitPatches(
-      r.dir,
-      headSha,
-      normalFile,
-      { status: 'M', path: normalFile },
-      normalFile2,
-      { status: 'M', path: normalFile2 },
-    );
-    assert.ok(normalPair.patchA.hunks.length > 0);
-    assert.ok(normalPair.patchB.hunks.length > 0);
-
-    // formatExplainCommand uses ANSI-C $'...' quoting for paths with control characters so the path is not corrupted
-    const cmd = formatExplainCommand(escFile, normalFile);
-    assert.ok(cmd.includes("$'src/w\\x1bx.ts'"), `Expected ANSI-C escaped path in: ${cmd}`);
+    // formatExplainCommand uses ANSI-C $'...' quoting for paths with C0 control characters or any Bidi_Control (including U+061C)
+    const cmd = formatExplainCommand(escFile, 'src/a\u061Cb.ts');
+    assert.ok(cmd.includes("$'src/w\\x1bx.ts'"), `Expected ANSI-C escaped ESC in: ${cmd}`);
+    assert.ok(cmd.includes("$'src/a\\u061cb.ts'"), `Expected ANSI-C escaped U+061C in: ${cmd}`);
   });
 
   it('enforces runGitBounded byte/timeout bounds and prevents 3x fallback timeout overruns', async () => {
@@ -554,11 +777,13 @@ describe('explain command & verifiable change evidence', () => {
     // 2. Slow git wrapper on PATH to test timeout and shared deadlineMs across fallback calls (POSIX)
     if (process.platform !== 'win32') {
       const binDir = join(r.dir, '.fake-bin');
+      const invocationsFile = join(r.dir, 'slow-git-invocations.log');
       mkdirSync(binDir, { recursive: true });
+      writeFileSync(invocationsFile, '', 'utf8');
       const wrapperPath = join(binDir, 'git');
       writeFileSync(
         wrapperPath,
-        '#!/bin/sh\nsleep 2\n',
+        `#!/bin/sh\necho "call" >> "${invocationsFile}"\nsleep 2\n`,
         'utf8',
       );
       chmodSync(wrapperPath, 0o755);
@@ -570,7 +795,7 @@ describe('explain command & verifiable change evidence', () => {
         const pairTimedOut = await fetchPairCommitPatches(
           r.dir,
           headSha,
-          'src/w\x1bx.ts', // forces two per-file fetchSingleFilePatch calls
+          'src/w\x1bx.ts', // forces per-file fetchSingleFilePatch path
           { status: 'M', path: 'src/w\x1bx.ts' },
           'src/two.ts',
           { status: 'M', path: 'src/two.ts' },
@@ -582,7 +807,16 @@ describe('explain command & verifiable change evidence', () => {
         assert.equal(pairTimedOut.patchA.truncated, true);
         assert.equal(pairTimedOut.patchB.timedOut, true);
         assert.equal(pairTimedOut.patchB.truncated, true);
-        assert.ok(elapsed < 1000, `Expected shared deadline to abort quickly, took ${elapsed}ms`);
+
+        // Because patchA exhausted the 120ms shared deadline, patchB must skip spawning git altogether (only 1 invocation)
+        // and total elapsed time must be < 2 * timeoutMs (240ms).
+        const invocations = readFileSync(invocationsFile, 'utf8').trim().split('\n').filter(Boolean);
+        assert.equal(
+          invocations.length,
+          1,
+          `Expected shared deadline to skip the second git call after the first timed out, got ${invocations.length} calls`,
+        );
+        assert.ok(elapsed < 230, `Expected shared deadline to finish under 2x timeoutMs (230ms), took ${elapsed}ms`);
       } finally {
         process.env.PATH = origPath;
       }

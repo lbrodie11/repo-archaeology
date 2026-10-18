@@ -41,6 +41,8 @@ export interface FilePatchEvidence {
   emptyDiff: boolean;
   unsupportedPath: boolean;
   truncated: boolean;
+  /** True when the raw git diff output for this file was cut mid-stream by the byte limit. */
+  rawTruncated?: boolean;
   timedOut: boolean;
   omittedHunks: number;
   omittedLines: number;
@@ -220,6 +222,7 @@ export function parseSingleFileDiff(
     emptyDiff,
     unsupportedPath: false,
     truncated,
+    ...(rawTruncated ? { rawTruncated: true } : {}),
     timedOut,
     omittedHunks,
     omittedLines: totalOmittedLines,
@@ -269,6 +272,7 @@ export async function fetchSingleFilePatch(
     '--root',
     '--format=',
     '--patch',
+    '--no-color',
     '--no-ext-diff',
     '--no-textconv',
     '--src-prefix=a/',
@@ -377,6 +381,7 @@ export async function fetchPairCommitPatches(
     '--root',
     '--format=',
     '--patch',
+    '--no-color',
     '--no-ext-diff',
     '--no-textconv',
     '--src-prefix=a/',
