@@ -150,6 +150,7 @@ export interface BoundedGitResult {
  */
 export function runGitBounded(cwd: string, args: string[], options: BoundedGitOptions): Promise<BoundedGitResult> {
   return new Promise((resolve, reject) => {
+    const isPosix = process.platform !== 'win32';
     const fullArgs = options.literalPathspecs ? ['--literal-pathspecs', ...CONFIG_OVERRIDES, ...args] : [...CONFIG_OVERRIDES, ...args];
     const child = spawn('git', fullArgs, {
       cwd,
@@ -162,6 +163,7 @@ export function runGitBounded(cwd: string, args: string[], options: BoundedGitOp
         ...(options.literalPathspecs ? { GIT_LITERAL_PATHSPECS: '1' } : {}),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: isPosix,
       windowsHide: true,
     });
     let stdout = '';
@@ -169,21 +171,44 @@ export function runGitBounded(cwd: string, args: string[], options: BoundedGitOp
     let bytesCollected = 0;
     let truncated = false;
     let timedOut = false;
+    let settled = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const stopChild = () => {
+    const settle = (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      if (code !== 0 && !truncated && !timedOut) {
+        reject(failure(args, { code, stderr }));
+        return;
+      }
+      resolve({ stdout, truncated, timedOut, exitCode: code, stderr });
+    };
+
+    const signalChild = (signal: NodeJS.Signals) => {
+      if (isPosix && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, signal);
+        } catch {
+          // ignore if process group already exited
+        }
+      }
       try {
-        child.kill('SIGTERM');
+        child.kill(signal);
       } catch {
         // ignore if already exited
       }
+    };
+
+    const stopChild = () => {
+      child.stdout.destroy();
+      child.stderr.destroy();
+      signalChild('SIGTERM');
       if (!killTimer) {
         killTimer = setTimeout(() => {
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            // ignore
-          }
+          signalChild('SIGKILL');
+          settle(null);
         }, 200);
         killTimer.unref?.();
       }
@@ -217,19 +242,20 @@ export function runGitBounded(cwd: string, args: string[], options: BoundedGitOp
       if (stderr.length < MAX_STDERR) stderr += chunk;
     });
     child.on('error', (err: NodeJS.ErrnoException) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       if (killTimer) clearTimeout(killTimer);
       if (err.code === 'ENOENT') reject(new GitError('git was not found on your PATH. Install git and try again.'));
       else reject(new GitError(`Failed to run git: ${err.message}`));
     });
-    child.on('close', (code) => {
-      clearTimeout(timeout);
-      if (killTimer) clearTimeout(killTimer);
-      if ( code !== 0 && !truncated && !timedOut) {
-        reject(failure(args, { code, stderr }));
-        return;
+    child.on('exit', (code) => {
+      if (truncated || timedOut) {
+        settle(code);
       }
-      resolve({ stdout, truncated, timedOut, exitCode: code, stderr });
+    });
+    child.on('close', (code) => {
+      settle(code);
     });
   });
 }

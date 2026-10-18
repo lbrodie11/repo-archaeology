@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { explain, formatExplainCommand, MAX_EXPLAIN_COMMITS, printExplain } from '../src/commands/explain.js';
 import { attachMapPatches, buildMapData, writeMap } from '../src/commands/map.js';
@@ -285,8 +285,9 @@ describe('explain command & verifiable change evidence', () => {
     const r = createRepo();
 
     // Filenames with leading dash, spaces, quotes, and git pathspec glob characters
+    // (Windows NTFS forbids double quotes in filenames, so use single quotes on win32)
     const dashFile = '-leading-dash.ts';
-    const globFile = 'src/[glob] "quoted" file.ts';
+    const globFile = process.platform === 'win32' ? "src/[glob] 'quoted' file.ts" : 'src/[glob] "quoted" file.ts';
 
     for (let i = 1; i <= 3; i++) {
       r.commit({
@@ -344,7 +345,7 @@ describe('explain command & verifiable change evidence', () => {
 
     const ctx = await loadContext(r.dir, flags);
 
-    // 1. Default map: zero source patches embedded, secret sentinel never appears in HTML, updated privacy note present
+    // 1. Default map: zero source patches embedded, zero `git show` calls, secret sentinel never appears in HTML
     const defaultData = buildMapData(ctx, { edges: 50, kinds: ['ghost', 'unknown', 'indirect', 'direct'] });
     assert.equal(defaultData.patchesIncluded, false);
     assert.equal(defaultData.edges.length, 1);
@@ -356,6 +357,37 @@ describe('explain command & verifiable change evidence', () => {
     assert.equal(defaultData.edges[0]?.counterexamples?.toOnly.length, 1);
     assert.equal(defaultData.edges[0]?.counterexamples?.toOnlyTotal, 1);
     assert.equal(defaultData.edges[0]?.counterexamples?.fromOnlyTotal, 0);
+
+    if (process.platform !== 'win32') {
+      const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+      const logBinDir = join(r.dir, '.git-log-bin');
+      const gitLogFile = join(r.dir, 'git-calls.log');
+      mkdirSync(logBinDir, { recursive: true });
+      writeFileSync(gitLogFile, '', 'utf8');
+      const wrapper = join(logBinDir, 'git');
+      writeFileSync(
+        wrapper,
+        `#!/bin/sh\necho "$@" >> "${gitLogFile}"\nexec "${realGit}" "$@"\n`,
+        'utf8',
+      );
+      chmodSync(wrapper, 0o755);
+      const origPath = process.env.PATH;
+      process.env.PATH = `${logBinDir}${delimiter}${origPath ?? ''}`;
+      try {
+        await writeMap(ctx, {
+          edges: 50,
+          kinds: ['ghost', 'unknown', 'indirect', 'direct'],
+          out: join(r.dir, 'default-map.html'),
+          open: false,
+        });
+      } finally {
+        process.env.PATH = origPath;
+      }
+      const gitCalls = readFileSync(gitLogFile, 'utf8')
+        .split('\n')
+        .filter((line) => line.includes(' show '));
+      assert.equal(gitCalls.length, 0, `Expected 0 git show calls during default map, got: ${gitCalls.join('; ')}`);
+    }
 
     const defaultHtml = renderMapHtml(defaultData);
     assert.ok(!defaultHtml.includes(secretSentinel), 'Default map HTML must not contain source code');
@@ -447,13 +479,15 @@ describe('explain command & verifiable change evidence', () => {
     const r = createRepo();
     const escFile = 'src/w\x1bx.ts';
     const normalFile = 'src/normal.ts';
+    const normalFile2 = 'src/normal2.ts';
 
     for (let i = 1; i <= 2; i++) {
       r.commit({
-        message: `esc path commit ${i}`,
+        message: `custom prefix commit ${i}`,
         write: {
-          [escFile]: `export const escVal = ${i};\n`,
           [normalFile]: `export const normVal = ${i};\n`,
+          [normalFile2]: `export const normVal2 = ${i};\n`,
+          ...(process.platform !== 'win32' ? { [escFile]: `export const escVal = ${i};\n` } : {}),
         },
       });
     }
@@ -462,31 +496,35 @@ describe('explain command & verifiable change evidence', () => {
     r.git('config', 'diff.dstPrefix', 'custom-dst/');
 
     const headSha = r.git('rev-parse', 'HEAD').trim();
-    const singleEsc = await fetchSingleFilePatch(r.dir, headSha, escFile, { status: 'M', path: escFile });
-    const pairRes = await fetchPairCommitPatches(
-      r.dir,
-      headSha,
-      escFile,
-      { status: 'M', path: escFile },
-      normalFile,
-      { status: 'M', path: normalFile },
-    );
 
-    assert.equal(singleEsc.emptyDiff, false);
-    assert.ok(singleEsc.hunks.length > 0);
-    assert.deepEqual(pairRes.patchA.hunks, singleEsc.hunks);
-    assert.ok(pairRes.patchB.hunks.length > 0);
+    if (process.platform !== 'win32') {
+      const singleEsc = await fetchSingleFilePatch(r.dir, headSha, escFile, { status: 'M', path: escFile });
+      const pairRes = await fetchPairCommitPatches(
+        r.dir,
+        headSha,
+        escFile,
+        { status: 'M', path: escFile },
+        normalFile,
+        { status: 'M', path: normalFile },
+      );
 
-    // Also verify combined git show works for normal pairs when diff.srcPrefix/dstPrefix are customized
+      assert.equal(singleEsc.emptyDiff, false);
+      assert.ok(singleEsc.hunks.length > 0);
+      assert.deepEqual(pairRes.patchA.hunks, singleEsc.hunks);
+      assert.ok(pairRes.patchB.hunks.length > 0);
+    }
+
+    // Verify combined git show works for normal pairs when diff.srcPrefix/dstPrefix are customized
     const normalPair = await fetchPairCommitPatches(
       r.dir,
       headSha,
       normalFile,
       { status: 'M', path: normalFile },
-      normalFile,
-      { status: 'M', path: normalFile },
+      normalFile2,
+      { status: 'M', path: normalFile2 },
     );
     assert.ok(normalPair.patchA.hunks.length > 0);
+    assert.ok(normalPair.patchB.hunks.length > 0);
 
     // formatExplainCommand uses ANSI-C $'...' quoting for paths with control characters so the path is not corrupted
     const cmd = formatExplainCommand(escFile, normalFile);
@@ -513,39 +551,41 @@ describe('explain command & verifiable change evidence', () => {
     assert.equal(byteRes.timedOut, false);
     assert.ok(Buffer.byteLength(byteRes.stdout, 'utf8') <= 25);
 
-    // 2. Slow git wrapper on PATH to test timeout and shared deadlineMs across fallback calls
-    const binDir = join(r.dir, '.fake-bin');
-    mkdirSync(binDir, { recursive: true });
-    const wrapperPath = join(binDir, 'git');
-    writeFileSync(
-      wrapperPath,
-      '#!/bin/sh\nsleep 2\n',
-      'utf8',
-    );
-    chmodSync(wrapperPath, 0o755);
-
-    const origPath = process.env.PATH;
-    process.env.PATH = `${binDir}:${origPath ?? ''}`;
-    try {
-      const t0 = Date.now();
-      const pairTimedOut = await fetchPairCommitPatches(
-        r.dir,
-        headSha,
-        'src/w\x1bx.ts', // forces two per-file fetchSingleFilePatch calls
-        { status: 'M', path: 'src/w\x1bx.ts' },
-        'src/two.ts',
-        { status: 'M', path: 'src/two.ts' },
-        { timeoutMs: 120 },
+    // 2. Slow git wrapper on PATH to test timeout and shared deadlineMs across fallback calls (POSIX)
+    if (process.platform !== 'win32') {
+      const binDir = join(r.dir, '.fake-bin');
+      mkdirSync(binDir, { recursive: true });
+      const wrapperPath = join(binDir, 'git');
+      writeFileSync(
+        wrapperPath,
+        '#!/bin/sh\nsleep 2\n',
+        'utf8',
       );
-      const elapsed = Date.now() - t0;
-      assert.equal(pairTimedOut.timedOut, true);
-      assert.equal(pairTimedOut.patchA.timedOut, true);
-      assert.equal(pairTimedOut.patchA.truncated, true);
-      assert.equal(pairTimedOut.patchB.timedOut, true);
-      assert.equal(pairTimedOut.patchB.truncated, true);
-      assert.ok(elapsed < 1000, `Expected shared deadline to abort quickly, took ${elapsed}ms`);
-    } finally {
-      process.env.PATH = origPath;
+      chmodSync(wrapperPath, 0o755);
+
+      const origPath = process.env.PATH;
+      process.env.PATH = `${binDir}${delimiter}${origPath ?? ''}`;
+      try {
+        const t0 = Date.now();
+        const pairTimedOut = await fetchPairCommitPatches(
+          r.dir,
+          headSha,
+          'src/w\x1bx.ts', // forces two per-file fetchSingleFilePatch calls
+          { status: 'M', path: 'src/w\x1bx.ts' },
+          'src/two.ts',
+          { status: 'M', path: 'src/two.ts' },
+          { timeoutMs: 120 },
+        );
+        const elapsed = Date.now() - t0;
+        assert.equal(pairTimedOut.timedOut, true);
+        assert.equal(pairTimedOut.patchA.timedOut, true);
+        assert.equal(pairTimedOut.patchA.truncated, true);
+        assert.equal(pairTimedOut.patchB.timedOut, true);
+        assert.equal(pairTimedOut.patchB.truncated, true);
+        assert.ok(elapsed < 1000, `Expected shared deadline to abort quickly, took ${elapsed}ms`);
+      } finally {
+        process.env.PATH = origPath;
+      }
     }
   });
 });
