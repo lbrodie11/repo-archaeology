@@ -3,6 +3,7 @@ import { Command, InvalidArgumentError, Option } from 'commander';
 import { createRequire } from 'node:module';
 import { backtest, printBacktest } from './commands/backtest.js';
 import { diff, printDiff } from './commands/diff.js';
+import { explain, printExplain } from './commands/explain.js';
 import { fileReport, printFile } from './commands/file.js';
 import { openInBrowser, printMap, writeMap } from './commands/map.js';
 import { printScan, scan } from './commands/scan.js';
@@ -19,6 +20,12 @@ const { version } = require('../package.json') as { version: string };
 function positiveInt(value: string): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError('Expected a positive whole number.');
+  return n;
+}
+
+function nonNegativeInt(value: string): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw new InvalidArgumentError('Expected a whole number (0 or greater).');
   return n;
 }
 
@@ -157,6 +164,26 @@ program
   });
 
 program
+  .command('explain')
+  .description('inspect paired git diff hunks and counterexample commits for two files')
+  .argument('<fileA>', 'first file to inspect')
+  .argument('<fileB>', 'second file to inspect')
+  .option('-n, --commits <n>', 'how many recent shared commits to inspect (default 3, max 10)', positiveInt, 3)
+  .option('--counterexamples', 'also show patch hunks for commits where one file changed without the other')
+  .option('-U, --context <lines>', 'lines of unified diff context around each hunk (default 2, max 10)', nonNegativeInt, 2)
+  .action(async (fileA: string, fileB: string, opts: { commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
+    const global = cmd.optsWithGlobals<GlobalOptions>();
+    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const result = await explain(ctx, fileA, fileB, {
+      commits: opts.commits,
+      counterexamples: opts.counterexamples,
+      contextLines: opts.context,
+    });
+    if (global.json) printJson(result);
+    else printExplain(result);
+  });
+
+program
   .command('backtest')
   .description('measure how often suggestions would have been right on recent history')
   .option('--test-fraction <p>', 'share of the newest commits to replay (default 0.2)', fraction, 0.2)
@@ -182,8 +209,9 @@ program
   .option('-o, --out <file>', 'where to write the HTML (default: .git/repo-archaeology/map.html)')
   .option('--edges <n>', 'maximum relationships to draw', positiveInt, 150)
   .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'indirect', 'direct']))
+  .option('--include-patches', 'embed bounded git diff hunks for top relationships (opt-in; review before sharing externally)')
   .option('--no-open', 'write the file without opening a browser')
-  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; open: boolean }, cmd: Command) => {
+  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global));
     const options = {
@@ -193,7 +221,7 @@ program
     const { file, data } = await writeMap(ctx, options);
     const shouldOpen = opts.open && !global.json && process.stdout.isTTY === true;
     if (shouldOpen) openInBrowser(file);
-    if (global.json) printJson({ file, nodes: data.nodes.length, edges: data.edges.length, counts: data.counts });
+    if (global.json) printJson({ file, nodes: data.nodes.length, edges: data.edges.length, counts: data.counts, patchesIncluded: Boolean(data.patchesIncluded) });
     else printMap(file, data, shouldOpen);
   });
 

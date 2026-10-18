@@ -185,9 +185,34 @@ canvas.pointing { cursor: pointer; }
 .evidence-wrap { margin: 12px 0 0; color: var(--chalk-faded); font-size: 13px; }
 .evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); font-weight: 500; padding: 4px 0; }
 .evidence { margin: 8px 0 0; font-size: 13px; color: var(--chalk-faded); }
-.evidence li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; padding: 4px 0; border-top: 1px solid rgba(159, 180, 204, 0.1); }
-.evidence .hash { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); }
+.evidence li { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 6px 0; border-top: 1px solid rgba(159, 180, 204, 0.1); }
+.evidence .hash { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); height: fit-content; }
 .evidence .hash:hover { border-color: var(--tape); color: var(--tape); }
+.evidence-item-body { min-width: 0; }
+.evidence-rename { font-family: var(--code); font-size: 11.5px; color: var(--chalk-dim); margin-top: 2px; overflow-wrap: anywhere; }
+
+.patch-details { grid-column: 1 / -1; margin-top: 4px; background: rgba(10, 26, 46, 0.75); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 6px 10px; }
+.patch-details summary { font-size: 12px; color: #a0c8f0; cursor: pointer; font-weight: 500; padding: 2px 0; }
+.patch-file { margin-top: 8px; border-top: 1px solid rgba(159, 180, 204, 0.12); padding-top: 6px; }
+.patch-file-title { font-family: var(--code); font-size: 12px; font-weight: 600; color: var(--chalk); overflow-wrap: anywhere; }
+.patch-note { font-size: 12px; color: var(--chalk-dim); margin-top: 3px; }
+.patch-hunk { margin: 6px 0 0; padding: 6px 8px; background: rgba(7, 19, 34, 0.85); border-radius: 4px; overflow-x: auto; font: 11.5px/1.45 var(--code); }
+.patch-hunk-hdr { color: #a0c8f0; margin-bottom: 2px; white-space: pre; }
+.patch-line { white-space: pre; color: var(--chalk-faded); }
+.patch-line.add { color: var(--lichen); background: rgba(127, 209, 176, 0.08); }
+.patch-line.del { color: #ff8da1; background: rgba(255, 79, 154, 0.08); }
+
+.counterexample-group { margin-top: 8px; }
+.counterexample-title { font-size: 12px; font-weight: 600; color: var(--chalk); margin: 6px 0 4px; }
+
+.cli-box { margin-top: 12px; padding: 10px 12px; background: rgba(14, 37, 64, 0.85); border: 1px solid var(--border-subtle); border-radius: 6px; }
+.cli-box-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cli-box-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--chalk-faded); }
+.btn-cli-copy { padding: 3px 9px; border: 1px solid var(--border-active); border-radius: 4px; background: rgba(23, 59, 97, 0.65); color: var(--chalk); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-cli-copy:hover { border-color: var(--tape); color: #fff; }
+.btn-cli-copy.copied { background: rgba(127, 209, 176, 0.22); border-color: var(--lichen); color: var(--lichen); }
+.cli-code { display: block; font: 12px/1.45 var(--code); color: var(--chalk); overflow-wrap: anywhere; user-select: all; }
+.privacy-note { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--chalk-dim); }
 
 .btn-export { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 9px 16px; margin-top: 14px; background: rgba(255, 79, 154, 0.14); border: 1px solid rgba(255, 79, 154, 0.4); border-radius: 6px; color: var(--chalk); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
 .btn-export:hover { background: rgba(255, 79, 154, 0.25); border-color: var(--tape); }
@@ -795,23 +820,32 @@ const CLIENT = String.raw`
       .replace(/#([0-9]+)/g, '#\u200B$1');
   }
 
-  function formatFindingMarkdown(e) {
+  function mdCode(text) {
     var q = String.fromCharCode(96);
+    var s = sanitizeMarkdown(text).replace(/[\r\n]+/g, ' ');
+    var fence = q;
+    while (s.indexOf(fence) !== -1) fence += q;
+    var needsPad = s.charAt(0) === q || s.charAt(s.length - 1) === q || s.charAt(0) === ' ' || s.charAt(s.length - 1) === ' ';
+    var pad = needsPad ? ' ' : '';
+    return fence + pad + s + pad + fence;
+  }
+
+  function formatFindingMarkdown(e) {
     var labels = distinguishingPaths(e.s.path, e.t.path);
     var kindName = findingLabel(e);
     var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')
-      ? ' Connects different parts of the project (' + q + e.s.dir + q + ' and ' + q + e.t.dir + q + ').'
+      ? ' Connects different parts of the project (' + mdCode(e.s.dir) + ' and ' + mdCode(e.t.dir) + ').'
       : '';
     var lines = [
       '### 🔍 Repo Archaeology: File Relationship Finding',
       '',
-      '**Files:** ' + q + e.s.path + q + ' ↔ ' + q + e.t.path + q + '  ',
+      '**Files:** ' + mdCode(e.s.path) + ' ↔ ' + mdCode(e.t.path) + '  ',
       '**Relationship:** ' + kindName + ' (' + plural(e.d.shared, 'shared commit') + ')  ',
       '**Last Together:** ' + relativeDate(e.d.lastTogether) + '  ',
       '',
       '**Directional Co-Change:**',
-      '- ' + q + labels[0] + q + ' → ' + q + labels[1] + q + ': ' + directionEvidence(e, true),
-      '- ' + q + labels[1] + q + ' → ' + q + labels[0] + q + ': ' + directionEvidence(e, false),
+      '- ' + mdCode(labels[0]) + ' → ' + mdCode(labels[1]) + ': ' + directionEvidence(e, true),
+      '- ' + mdCode(labels[1]) + ' → ' + mdCode(labels[0]) + ': ' + directionEvidence(e, false),
       '',
       '**Why It Matters:**',
       '- ' + sanitizeMarkdown(capitalize(e.d.why)) + '.' + scope,
@@ -820,9 +854,11 @@ const CLIENT = String.raw`
     if (e.d.evidence && e.d.evidence.length > 0) {
       lines.push('', '**Supporting Commits:**');
       e.d.evidence.slice(0, 5).forEach(function (ev) {
-        lines.push('- ' + q + ev.hash.slice(0, 7) + q + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
+        lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
+    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
 
@@ -1094,6 +1130,52 @@ const CLIENT = String.raw`
     }
     panel.appendChild(callout);
 
+    function renderFilePatchBlock(patch) {
+      var wrap = el('div', 'patch-file');
+      var titleText = patch.canonicalPath;
+      if (patch.oldPath && patch.oldPath !== patch.path) {
+        titleText += ' [' + patch.status + ': ' + patch.oldPath + ' → ' + patch.path + ']';
+      } else if (patch.path && patch.path !== patch.canonicalPath) {
+        titleText += ' [' + patch.status + ' at ' + patch.path + ']';
+      } else if (patch.status) {
+        titleText += ' [' + patch.status + ']';
+      }
+      wrap.appendChild(el('div', 'patch-file-title', titleText));
+      if (!patch.hunks || patch.hunks.length === 0) {
+        wrap.appendChild(el('div', 'patch-note', patch.statusNote || 'No textual diff hunks'));
+        return wrap;
+      }
+      var hasUnexplainedHunkTruncation = false;
+      patch.hunks.forEach(function (hunk) {
+        var box = el('div', 'patch-hunk');
+        box.appendChild(el('div', 'patch-hunk-hdr', hunk.header));
+        hunk.lines.forEach(function (line) {
+          var cls = 'patch-line';
+          if (line.charAt(0) === '+') cls += ' add';
+          else if (line.charAt(0) === '-') cls += ' del';
+          box.appendChild(el('div', cls, line));
+        });
+        if (hunk.omittedLines > 0) {
+          box.appendChild(el('div', 'patch-note', '… (' + plural(hunk.omittedLines, 'line') + ' omitted in hunk)'));
+        } else if (hunk.truncated) {
+          hasUnexplainedHunkTruncation = true;
+        }
+        wrap.appendChild(box);
+      });
+      if (patch.omittedHunks > 0) {
+        var hunkCountStr = patch.rawTruncated
+          ? patch.omittedHunks.toLocaleString('en-US') + '+ additional hunk' + (patch.omittedHunks === 1 ? '' : 's')
+          : plural(patch.omittedHunks, 'additional hunk');
+        wrap.appendChild(el('div', 'patch-note', '… (' + hunkCountStr + ' omitted)'));
+      }
+      var unexplained = patch.timedOut || patch.rawTruncated || (patch.truncated && !patch.omittedHunks && (!patch.omittedLines || hasUnexplainedHunkTruncation));
+      if (unexplained) {
+        var reason = patch.timedOut ? 'time limit' : 'byte/time limit';
+        wrap.appendChild(el('div', 'patch-note', '… (patch truncated due to ' + reason + ')'));
+      }
+      return wrap;
+    }
+
     // Supporting Commits
     if (e.d.evidence && e.d.evidence.length > 0) {
       var details = el('details', 'evidence-wrap');
@@ -1106,12 +1188,80 @@ const CLIENT = String.raw`
         hash.type = 'button'; hash.title = 'Copy full commit hash';
         hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
         li.appendChild(hash);
-        li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+
+        var body = el('div', 'evidence-item-body');
+        body.appendChild(el('div', '', ev.date + '  ' + ev.subject));
+        var renameParts = [];
+        if (ev.sourcePath && ev.sourcePath !== e.s.path) renameParts.push(labels[0] + ' was ' + ev.sourcePath);
+        if (ev.targetPath && ev.targetPath !== e.t.path) renameParts.push(labels[1] + ' was ' + ev.targetPath);
+        if (renameParts.length > 0) {
+          body.appendChild(el('div', 'evidence-rename', 'Historical path: ' + renameParts.join(' · ')));
+        }
+        li.appendChild(body);
+
+        if (ev.patches && ev.patches.source && ev.patches.target) {
+          var patchDetails = el('details', 'patch-details');
+          patchDetails.appendChild(el('summary', '', 'Inspect bounded patch hunks'));
+          patchDetails.appendChild(renderFilePatchBlock(ev.patches.source));
+          patchDetails.appendChild(renderFilePatchBlock(ev.patches.target));
+          patchDetails.appendChild(el('div', 'patch-note', 'Historical patches show what changed in the same commit, not proof of why the files changed together.'));
+          li.appendChild(patchDetails);
+        }
         list.appendChild(li);
       });
       details.appendChild(list);
       panel.appendChild(details);
     }
+
+    // Counterexamples ("When one changed without the other")
+    var cx = e.d.counterexamples;
+    if (cx && ((cx.fromOnly && cx.fromOnly.length > 0) || (cx.toOnly && cx.toOnly.length > 0))) {
+      var cxDetails = el('details', 'evidence-wrap');
+      cxDetails.appendChild(el('summary', '', 'When one changed without the other'));
+      var appendCounterSide = function (titleText, items, total) {
+        if (!items || items.length === 0) return;
+        var countNum = typeof total === 'number' && total >= items.length ? total : items.length;
+        var suffix = countNum > items.length
+          ? ' (showing ' + items.length + ' of ' + countNum + ')'
+          : ' (' + plural(countNum, 'commit') + ')';
+        var grp = el('div', 'counterexample-group');
+        grp.appendChild(el('div', 'counterexample-title', titleText + suffix));
+        var ul = el('ul', 'evidence');
+        items.forEach(function (item) {
+          var li = el('li');
+          var hash = el('button', 'hash', item.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(item.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', item.date + '  ' + item.subject));
+          ul.appendChild(li);
+        });
+        grp.appendChild(ul);
+        cxDetails.appendChild(grp);
+      };
+      appendCounterSide(labels[0] + ' without ' + labels[1], cx.fromOnly, cx.fromOnlyTotal);
+      appendCounterSide(labels[1] + ' without ' + labels[0], cx.toOnly, cx.toOnlyTotal);
+      panel.appendChild(cxDetails);
+    }
+
+    // Copyable CLI explain command + privacy note
+    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliBox = el('div', 'cli-box');
+    var cliHead = el('div', 'cli-box-head');
+    cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
+    var copyCliBtn = el('button', 'btn-cli-copy', 'Copy CLI command');
+    copyCliBtn.type = 'button';
+    copyCliBtn.addEventListener('click', function () {
+      copyText(cliCmd, copyCliBtn, '✓ Copied');
+    });
+    cliHead.appendChild(copyCliBtn);
+    cliBox.appendChild(cliHead);
+    cliBox.appendChild(el('code', 'cli-code', cliCmd));
+    var privacyText = data.patchesIncluded
+      ? 'Historical patches show what changed in the same commit, not proof of why the files changed together.'
+      : 'Source-code patches are omitted by default. This file still contains file paths, commit subjects and author names. Run the CLI command above locally, or pass --include-patches when generating the map.';
+    cliBox.appendChild(el('div', 'privacy-note', privacyText));
+    panel.appendChild(cliBox);
 
     // Export button
     var exportBtn = el('button', 'btn-export', '📋 Copy finding for PR / discussion');

@@ -22,6 +22,8 @@ export interface Context {
   cwd: string;
   root: string;
   settings: Settings;
+  /** Command-line flag overrides passed to loadContext (excluding config-file defaults). */
+  flagSettings?: Partial<Settings>;
   history: History;
   model: CoChangeModel;
   /** Files that exist now (tracked + untracked, not ignored). */
@@ -123,6 +125,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     cwd,
     root,
     settings,
+    flagSettings: flags,
     history: trained.history,
     model: trained.model,
     currentFiles,
