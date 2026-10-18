@@ -138,6 +138,7 @@ canvas.pointing { cursor: pointer; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .badge.ghost { background: rgba(255, 79, 154, 0.15); color: var(--tape); border: 1px solid rgba(255, 79, 154, 0.35); }
 .badge.parallel { background: rgba(160, 200, 240, 0.12); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
+.badge.family { background: rgba(127, 209, 176, 0.16); color: var(--lichen); border: 1px solid rgba(127, 209, 176, 0.4); }
 .badge.unknown { background: rgba(227, 182, 91, 0.15); color: var(--ochre); border: 1px solid rgba(227, 182, 91, 0.35); }
 .badge.indirect { background: rgba(160, 200, 240, 0.15); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
 .badge.direct { background: rgba(232, 238, 245, 0.1); color: var(--chalk); border: 1px solid rgba(232, 238, 245, 0.25); }
@@ -153,22 +154,41 @@ canvas.pointing { cursor: pointer; }
 .card.interactive { cursor: pointer; font: inherit; }
 .card.interactive:hover { border-color: rgba(255, 79, 154, 0.5); background: var(--ground-card-hover); transform: translateY(-1px); }
 .card.selected { border-color: var(--tape); box-shadow: 0 0 14px var(--tape-glow); }
+.card.family-card { border-left: 3px solid var(--lichen); }
+.card.family-card.interactive:hover { border-color: rgba(127, 209, 176, 0.65); }
 
 .card-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
 .card-title { font-family: var(--code); font-size: 13.5px; font-weight: 600; color: var(--chalk); overflow-wrap: anywhere; }
 .card-sub { font-size: 12.5px; color: var(--chalk-faded); margin-top: 4px; }
+.family-variants { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
+.family-variant-pill { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(23, 59, 97, 0.7); border: 1px solid var(--border-subtle); font: 11.5px/1.4 var(--code); color: var(--chalk); }
 
 .file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; color: var(--chalk); }
 .file-link:hover { text-decoration-color: var(--tape); color: #fff; }
 
+.nav-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .back-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; margin-bottom: 8px; background: rgba(14, 37, 64, 0.6); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; width: fit-content; }
+.nav-row .back-btn { margin-bottom: 0; }
 .back-btn:hover { background: var(--ground-surface); border-color: var(--chalk); }
+.back-to-family-btn { border-color: rgba(127, 209, 176, 0.45); color: var(--lichen); }
+.back-to-family-btn:hover { border-color: var(--lichen); color: #fff; }
 
 .pair-container { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .pair-box { background: rgba(14, 37, 64, 0.85); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px; }
-.pair-box-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.pair-box-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .pair-dir { font-size: 12px; color: var(--chalk-dim); }
 .pair-wire { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--chalk-faded); padding: 2px 0; }
+
+.family-pair-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.family-pair-details { background: rgba(14, 37, 64, 0.78); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; }
+.family-pair-details[open] { border-color: var(--border-active); background: rgba(14, 37, 64, 0.92); }
+.family-pair-summary { cursor: pointer; font: 600 13px/1.4 var(--code); color: var(--chalk); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; }
+.family-pair-meta { font: 500 12px/1.3 var(--text); color: var(--chalk-faded); display: inline-flex; align-items: center; gap: 6px; }
+.family-pair-body { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(159, 180, 204, 0.14); font-size: 12.5px; color: var(--chalk-faded); }
+.family-pair-stat { margin: 3px 0; }
+.btn-inspect-pair { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 10px; background: rgba(23, 59, 97, 0.75); border: 1px solid var(--border-active); border-radius: 5px; color: var(--chalk); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-inspect-pair:hover { border-color: var(--tape); color: #fff; background: var(--ground-surface); }
+.evidence-scope-tag { display: inline-block; padding: 1px 6px; margin-right: 6px; border-radius: 4px; background: rgba(127, 209, 176, 0.14); border: 1px solid rgba(127, 209, 176, 0.32); font: 600 11px/1.3 var(--text); color: var(--lichen); }
 
 .cochange-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
 .cochange-card { background: rgba(14, 37, 64, 0.65); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 8px; text-align: center; }
@@ -327,6 +347,33 @@ const CLIENT = String.raw`
     return edge;
   });
 
+  function edgeKey(a, b) {
+    return a < b ? a + '\0' + b : b + '\0' + a;
+  }
+  var nodeByPath = Object.create(null);
+  nodes.forEach(function (n) { nodeByPath[n.path] = n; });
+  var edgeByPairKey = Object.create(null);
+  edges.forEach(function (e) { edgeByPairKey[edgeKey(e.s.path, e.t.path)] = e; });
+  var families = (data.families || []).map(function (f) {
+    var famEdges = [];
+    (f.edgeIndices || []).forEach(function (idx) {
+      if (edges[idx]) famEdges.push(edges[idx]);
+    });
+    var relList = f.relationships || f.pairs;
+    if (famEdges.length === 0 && relList) {
+      relList.forEach(function (p) {
+        var found = edgeByPairKey[edgeKey(p.from, p.to)];
+        if (found) famEdges.push(found);
+      });
+    }
+    var famNodes = [];
+    (f.members || []).forEach(function (m) {
+      var n = typeof m.nodeIndex === 'number' && nodes[m.nodeIndex] ? nodes[m.nodeIndex] : nodeByPath[m.path];
+      if (n) famNodes.push(n);
+    });
+    return { d: f, members: f.members || [], edges: famEdges, nodes: famNodes };
+  });
+
   // Disambiguate duplicate basenames (e.g. multiple page.tsx or route.ts)
   var baseCounts = Object.create(null);
   nodes.forEach(function (n) {
@@ -389,9 +436,11 @@ const CLIENT = String.raw`
       visible[kind] = !visible[kind];
       b.setAttribute('aria-pressed', String(visible[kind]));
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
+      if (selectedFamily && !resolveActiveFamilyView(selectedFamily)) selectedFamily = null;
+      if (returnToFamily && !resolveActiveFamilyView(returnToFamily)) returnToFamily = null;
       alpha = Math.max(alpha, 0.6);
       if (reduceMotion) { while (alpha > 0.02) tick(); }
-      if (!selectedNode && !selectedEdge && !userMoved) { flight = null; fit(); }
+      if (!selectedNode && !selectedEdge && !selectedFamily && !userMoved) { flight = null; fit(); }
       updateSummary();
       renderPanel();
       requestDraw();
@@ -491,22 +540,105 @@ const CLIENT = String.raw`
   }
 
   // ---- selection -----------------------------------------------------------
-  var selectedNode = null, selectedEdge = null, hoverNode = null, hoverEdge = null, matches = null;
+  var selectedNode = null, selectedEdge = null, selectedFamily = null, hoverNode = null, hoverEdge = null, hoverFamily = null, matches = null;
+  var returnToFamily = null, expandedFamilyPairKey = null;
   var overviewTab = 'ghost';
   var overviewExpanded = false;
   var animPaused = false;
 
   function isVisible(e) { return visible[e.d.relationship]; }
   function isActive(n) { return n.edges.some(isVisible); }
+
+  function getActiveFamilyViews(fam, allowedEdges) {
+    if (!fam) return [];
+    var allowedSet = allowedEdges ? new Set(allowedEdges) : null;
+    var activeEdges = fam.edges.filter(function (e) {
+      return isVisible(e) && (!allowedSet || allowedSet.has(e));
+    });
+    if (activeEdges.length < 2) return [];
+    var adj = Object.create(null);
+    fam.members.forEach(function (m) { adj[m.path] = []; });
+    activeEdges.forEach(function (e) {
+      if (adj[e.s.path] && adj[e.t.path]) {
+        adj[e.s.path].push(e.t.path);
+        adj[e.t.path].push(e.s.path);
+      }
+    });
+    var visited = Object.create(null);
+    var views = [];
+    fam.members.forEach(function (m) {
+      if (visited[m.path] || !adj[m.path] || adj[m.path].length === 0) return;
+      var compPaths = Object.create(null);
+      var queue = [m.path];
+      visited[m.path] = true;
+      compPaths[m.path] = true;
+      for (var q = 0; q < queue.length; q++) {
+        var cur = queue[q];
+        var nbrs = adj[cur] || [];
+        for (var k = 0; k < nbrs.length; k++) {
+          var nxt = nbrs[k];
+          if (!visited[nxt]) {
+            visited[nxt] = true;
+            compPaths[nxt] = true;
+            queue.push(nxt);
+          }
+        }
+      }
+      var compMembers = fam.members.filter(function (mem) { return Boolean(compPaths[mem.path]); });
+      if (compMembers.length < 3) return;
+      var compEdges = activeEdges.filter(function (e) { return Boolean(compPaths[e.s.path] && compPaths[e.t.path]); });
+      var compNodes = [];
+      compMembers.forEach(function (mem) {
+        var n = typeof mem.nodeIndex === 'number' && nodes[mem.nodeIndex] ? nodes[mem.nodeIndex] : nodeByPath[mem.path];
+        if (n) compNodes.push(n);
+      });
+      views.push({
+        id: fam.d.id + ':' + compMembers.map(function (mem) { return mem.path; }).join(','),
+        d: fam.d,
+        family: fam,
+        members: compMembers,
+        nodes: compNodes,
+        edges: compEdges,
+        qualifyingPairs: compEdges.length,
+        possiblePairs: (compMembers.length * (compMembers.length - 1)) / 2,
+        isSubset: compMembers.length < fam.members.length || compEdges.length < fam.edges.length
+      });
+    });
+    return views;
+  }
+
+  function resolveActiveFamilyView(sel) {
+    if (!sel) return null;
+    var baseFam = sel.family || sel;
+    var views = getActiveFamilyViews(baseFam);
+    if (views.length === 0) return null;
+    if (sel.id) {
+      for (var i = 0; i < views.length; i++) {
+        if (views[i].id === sel.id) return views[i];
+      }
+      if (sel.members && sel.members.length > 0) {
+        var targetPath = sel.members[0].path;
+        for (var j = 0; j < views.length; j++) {
+          if (views[j].members.some(function (m) { return m.path === targetPath; })) return views[j];
+        }
+      }
+    }
+    return views[0];
+  }
+
   function focusEdge(e) {
     if (selectedEdge) return e === selectedEdge;
     if (hoverEdge) return e === hoverEdge;
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (activeFam) return activeFam.edges.indexOf(e) >= 0;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
     return true;
   }
   function focusNode(n) {
     if (selectedEdge) return n === selectedEdge.s || n === selectedEdge.t;
     if (hoverEdge) return n === hoverEdge.s || n === hoverEdge.t;
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (activeFam) return activeFam.nodes.indexOf(n) >= 0;
     if (selectedNode) return n === selectedNode || n.edges.some(function (e) { return isVisible(e) && (e.s === selectedNode || e.t === selectedNode); });
     if (matches) return matches.indexOf(n) >= 0;
     return true;
@@ -523,7 +655,7 @@ const CLIENT = String.raw`
     drawQueued = false;
     if (alpha > 0.02) {
       tick(); tick();
-      if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge) fit();
+      if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
     }
     var flying = stepFlight(now || performance.now());
     var marching = !animPaused && !reduceMotion && !document.hidden && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
@@ -565,7 +697,7 @@ const CLIENT = String.raw`
         if (kind === 'ghost') {
           ctx.setLineDash([7 / k, 6 / k]);
           ctx.lineDashOffset = -dashPhase / k;
-          if (focused && (selectedEdge || selectedNode || hoverEdge)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
+          if (focused && (selectedEdge || selectedNode || selectedFamily || hoverEdge || hoverFamily)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
         } else if (kind === 'unknown') {
           ctx.setLineDash([2 / k, 5 / k]);
         } else if (kind === 'indirect') {
@@ -582,6 +714,7 @@ const CLIENT = String.raw`
     ctx.setLineDash([]);
     ctx.shadowBlur = 0;
 
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
     nodes.forEach(function (n) {
       if (!isActive(n)) return;
       var focused = focusNode(n);
@@ -592,7 +725,8 @@ const CLIENT = String.raw`
       ctx.fill();
       ctx.lineWidth = Math.max(1 / k, 1.2);
       var isTargetEndpoint = (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
-                             (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t));
+                             (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t)) ||
+                             (activeFam && activeFam.nodes.indexOf(n) >= 0);
       ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
       if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
       ctx.stroke();
@@ -604,9 +738,9 @@ const CLIENT = String.raw`
     ctx.lineJoin = 'round';
     var labelBoxes = [];
     nodes.forEach(function (n) {
-      var overview = !selectedNode && !selectedEdge && !hoverEdge && !matches;
+      var overview = !selectedNode && !selectedEdge && !selectedFamily && !hoverEdge && !hoverFamily && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge || hoverEdge) && focusNode(n)) ||
+        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
       var label = overviewLabelNodes[n.i] || getNodeLabel(n);
@@ -740,7 +874,14 @@ const CLIENT = String.raw`
   }, { passive: false });
 
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape') { clearSelection(); search.blur(); }
+    if (ev.key === 'Escape') {
+      if ((selectedEdge || selectedNode) && returnToFamily && resolveActiveFamilyView(returnToFamily)) {
+        selectFamily(returnToFamily, true);
+      } else {
+        clearSelection();
+      }
+      search.blur();
+    }
     if (ev.key === '/' && document.activeElement !== search) { ev.preventDefault(); search.focus(); }
   });
   search.addEventListener('input', function () {
@@ -755,8 +896,8 @@ const CLIENT = String.raw`
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
       userMoved = false; flight = null;
-      selectedNode = null; selectedEdge = null;
-      fit(); renderPanel(); requestDraw();
+      clearSelection();
+      fit(); requestDraw();
     });
   }
   var toggleAnimBtn = document.getElementById('toggle-anim');
@@ -768,20 +909,46 @@ const CLIENT = String.raw`
     });
   }
 
-  function selectNode(n) {
-    selectedNode = n; selectedEdge = null; matches = null; search.value = '';
+  function selectNode(n, fromFamily) {
+    if (fromFamily !== undefined) {
+      returnToFamily = fromFamily;
+    } else if (selectedFamily) {
+      var activeView = resolveActiveFamilyView(selectedFamily);
+      returnToFamily = activeView && activeView.nodes.indexOf(n) >= 0 ? activeView : null;
+    } else if (returnToFamily) {
+      var prevView = resolveActiveFamilyView(returnToFamily);
+      returnToFamily = prevView && prevView.nodes.indexOf(n) >= 0 ? prevView : null;
+    }
+    selectedNode = n; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
     var group = [n];
     n.edges.forEach(function (e) { if (isVisible(e)) group.push(e.s === n ? e.t : e.s); });
     flyTo(group);
     renderPanel(); requestDraw();
   }
-  function selectEdge(e) {
-    selectedEdge = e; selectedNode = null; matches = null; search.value = '';
+  function selectEdge(e, fromFamily) {
+    if (fromFamily !== undefined) {
+      returnToFamily = fromFamily;
+    } else if (selectedFamily) {
+      var activeView = resolveActiveFamilyView(selectedFamily);
+      returnToFamily = activeView && activeView.edges.indexOf(e) >= 0 ? activeView : null;
+    } else if (returnToFamily) {
+      var prevView = resolveActiveFamilyView(returnToFamily);
+      returnToFamily = prevView && prevView.edges.indexOf(e) >= 0 ? prevView : null;
+    }
+    selectedEdge = e; selectedNode = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
     flyTo([e.s, e.t]);
     renderPanel(); requestDraw();
   }
+  function selectFamily(fam, keepExpandedPair) {
+    var view = resolveActiveFamilyView(fam);
+    if (!view) return;
+    selectedFamily = view; selectedNode = null; selectedEdge = null; returnToFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    if (!keepExpandedPair) expandedFamilyPairKey = null;
+    flyTo(view.nodes);
+    renderPanel(); requestDraw();
+  }
   function clearSelection() {
-    selectedNode = null; selectedEdge = null;
+    selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
     renderPanel(); requestDraw();
   }
 
@@ -862,6 +1029,32 @@ const CLIENT = String.raw`
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
 
+  function formatFamilyMarkdown(view) {
+    var lines = [
+      '### 🔍 Repo Archaeology: Related Implementation Family',
+      '',
+      '**Pattern:** ' + mdCode(view.d.label || view.d.id) + '  ',
+      '**Members (' + view.members.length + ' files):** ' + view.members.map(function (m) { return mdCode(m.path); }).join(', ') + '  ',
+      '**Pairwise Links:** ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed thresholds  ',
+      '**Family-Wide Commits:** ' + plural(view.d.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.d.commitsTouchingAll, 'commit') + ' touched all ' + view.d.members.length + ')  ',
+      '**Last Together:** ' + relativeDate(view.d.lastTogether) + '  ',
+      '',
+      '**Qualifying Pairwise Relationships:**'
+    ];
+    view.edges.forEach(function (e) {
+      var labels = distinguishingPaths(e.s.path, e.t.path);
+      lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(e.d.shared, 'shared commit') + ' (' + directionEvidence(e, true) + '; reverse ' + directionEvidence(e, false) + ')');
+    });
+    if (view.d.evidence && view.d.evidence.length > 0) {
+      lines.push('', '**Family-Wide Supporting Commits (2+ members):**');
+      view.d.evidence.slice(0, 5).forEach(function (ev) {
+        var scopeTag = ev.touchesAllMembers ? 'all ' + ev.totalMembers + ' members' : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
+        lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + ', ' + scopeTag + '): ' + sanitizeMarkdown(ev.subject));
+      });
+    }
+    return lines.join('\n');
+  }
+
   function directionEvidence(e, fromSource) {
     var total = fromSource ? e.d.fromChanges : e.d.toChanges;
     var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
@@ -874,29 +1067,35 @@ const CLIENT = String.raw`
   }
 
   // ---- panel rendering -----------------------------------------------------
-  function getTopFindings(list, maxCount) {
-    var result = [];
-    var seenParallel = new Set();
-    for (var i = 0; i < list.length; i++) {
-      var item = list[i];
-      var isParallel = item.d.hiddenBridge && item.d.hiddenBridge.signal === 'parallel-implementation';
-      if (isParallel) {
-        var baseName = base(item.s.path);
-        if (seenParallel.has(baseName)) continue;
-        seenParallel.add(baseName);
-      }
-      result.push(item);
-      if (result.length >= maxCount) break;
-    }
-    if (result.length < maxCount) {
-      for (var j = 0; j < list.length; j++) {
-        if (result.indexOf(list[j]) === -1) {
-          result.push(list[j]);
-          if (result.length >= maxCount) break;
+  function buildOverviewItems(listData) {
+    var edgeToFamilyView = new Map();
+    families.forEach(function (fam) {
+      var views = getActiveFamilyViews(fam, listData);
+      views.forEach(function (view) {
+        view.edges.forEach(function (e) {
+          edgeToFamilyView.set(e, view);
+        });
+      });
+    });
+    var items = [];
+    var emittedViews = new Set();
+    for (var i = 0; i < listData.length; i++) {
+      var e = listData[i];
+      var famView = edgeToFamilyView.get(e);
+      if (famView) {
+        if (!emittedViews.has(famView.id)) {
+          emittedViews.add(famView.id);
+          items.push({ kind: 'family', view: famView });
         }
+      } else {
+        items.push({ kind: 'edge', edge: e });
       }
     }
-    return result;
+    return items;
+  }
+
+  function getTopFindings(items, maxCount) {
+    return items.slice(0, maxCount);
   }
 
   function renderOverview() {
@@ -947,15 +1146,21 @@ const CLIENT = String.raw`
       panel.appendChild(el('p', '', 'No relationships found for this filter.'));
     } else {
       panel.appendChild(el('p', 'card-hint', 'Select a card or line to inspect directional stats & commits'));
-      var displayCards = overviewExpanded ? listData : getTopFindings(listData, 3);
+      var overviewItems = buildOverviewItems(listData);
+      var displayItems = overviewExpanded ? overviewItems : getTopFindings(overviewItems, 3);
       var cardsContainer = el('div');
-      for (var idx = 0; idx < displayCards.length; idx++) {
-        cardsContainer.appendChild(relationshipCard(displayCards[idx]));
+      for (var idx = 0; idx < displayItems.length; idx++) {
+        var item = displayItems[idx];
+        if (item.kind === 'family') {
+          cardsContainer.appendChild(familyCard(item.view));
+        } else {
+          cardsContainer.appendChild(relationshipCard(item.edge));
+        }
       }
       panel.appendChild(cardsContainer);
 
-      if (listData.length > 3) {
-        var viewAllBtn = el('button', 'view-all-btn', overviewExpanded ? 'Show top 3 findings' : 'View all ' + listData.length + ' findings');
+      if (overviewItems.length > 3) {
+        var viewAllBtn = el('button', 'view-all-btn', overviewExpanded ? 'Show top 3 findings' : 'View all ' + overviewItems.length + ' findings');
         viewAllBtn.type = 'button';
         viewAllBtn.addEventListener('click', function () {
           overviewExpanded = !overviewExpanded;
@@ -993,6 +1198,46 @@ const CLIENT = String.raw`
       legend.appendChild(item);
     });
     panel.appendChild(legend);
+  }
+
+  function familyCard(view) {
+    var card = el('button', 'card interactive family-card');
+    card.type = 'button';
+    var head = el('div', 'card-header');
+    head.appendChild(el('span', 'badge family', 'Related family · ' + view.members.length + ' files'));
+    head.appendChild(el('span', 'card-sub', plural(view.d.commitsTouchingTwoOrMore, 'commit') + ' (2+ files) · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' pairs'));
+    card.appendChild(head);
+
+    var title = el('div', 'card-title', view.d.label || view.d.id);
+    card.appendChild(title);
+
+    var variants = el('div', 'family-variants');
+    view.members.forEach(function (m) {
+      variants.appendChild(el('span', 'family-variant-pill', m.variant));
+    });
+    card.appendChild(variants);
+
+    var note = el('div', 'card-sub');
+    var pairSummary = view.qualifyingPairs === view.possiblePairs
+      ? 'All ' + view.possiblePairs + ' pairwise links across ' + view.members.length + ' sibling directories passed thresholds.'
+      : view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairwise links passed thresholds across ' + view.members.length + ' sibling directories.';
+    note.textContent = pairSummary + ' ' + plural(view.d.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.d.commitsTouchingAll, 'commit') + ' touched all ' + view.d.members.length + ').';
+    card.appendChild(note);
+
+    card.addEventListener('pointerenter', function () {
+      hoverFamily = view;
+      requestDraw();
+    });
+    card.addEventListener('pointerleave', function () {
+      if (hoverFamily === view) {
+        hoverFamily = null;
+        requestDraw();
+      }
+    });
+    card.addEventListener('click', function () {
+      selectFamily(view);
+    });
+    return card;
   }
 
   function relationshipCard(e) {
@@ -1038,11 +1283,192 @@ const CLIENT = String.raw`
     return card;
   }
 
-  function renderSelectedEdge(e) {
+  function renderSelectedFamily(sel) {
+    var view = resolveActiveFamilyView(sel);
+    if (!view) {
+      clearSelection();
+      return;
+    }
+
     var backBtn = el('button', 'back-btn', '← Back to overview');
     backBtn.type = 'button';
     backBtn.addEventListener('click', clearSelection);
     panel.appendChild(backBtn);
+
+    var head = el('div');
+    head.appendChild(el('span', 'badge family', 'Related implementation family'));
+    head.appendChild(el('h2', '', view.d.label || view.d.id));
+    head.appendChild(el('p', 'card-sub', view.members.length + ' sibling files · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' qualifying pairs · Last together ' + relativeDate(view.d.lastTogether)));
+    panel.appendChild(head);
+
+    var grid = el('div', 'cochange-grid');
+    var card1 = el('div', 'cochange-card');
+    card1.appendChild(el('div', 'cochange-pct', String(view.d.commitsTouchingTwoOrMore)));
+    card1.appendChild(el('div', 'cochange-label', 'Unique commits touching 2+ family members (not a pairwise sum)'));
+    grid.appendChild(card1);
+
+    var card2 = el('div', 'cochange-card');
+    card2.appendChild(el('div', 'cochange-pct', String(view.d.commitsTouchingAll)));
+    card2.appendChild(el('div', 'cochange-label', 'Commits touching all ' + view.d.members.length + ' family members together'));
+    grid.appendChild(card2);
+    panel.appendChild(grid);
+
+    var callout = el('div', 'callout indirect');
+    callout.appendChild(el('div', 'callout-title', 'Why these files are grouped'));
+    var p1 = el('p');
+    var parentDesc = view.d.parentDir === '.' ? 'the repository root' : view.d.parentDir;
+    p1.textContent = 'These ' + view.members.length + ' files share the same stem (' + view.d.stem + ') in sibling directories under ' + parentDesc + ' and are connected by qualifying parallel-implementation relationships.';
+    callout.appendChild(p1);
+
+    var p2 = el('p');
+    if (view.qualifyingPairs < view.possiblePairs) {
+      p2.textContent = 'Incomplete relationship graph: ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed the current thresholds. Only qualifying pairwise links are drawn on the map and listed below; missing pairs are never fabricated.';
+    } else {
+      p2.textContent = 'Complete relationship graph: all ' + view.possiblePairs + ' possible pairs across the ' + view.members.length + ' files passed the current thresholds.';
+    }
+    callout.appendChild(p2);
+    panel.appendChild(callout);
+
+    panel.appendChild(el('h3', '', 'Member files (' + view.members.length + ')'));
+    var memberContainer = el('div', 'pair-container');
+    view.members.forEach(function (m) {
+      var mNode = typeof m.nodeIndex === 'number' && nodes[m.nodeIndex] ? nodes[m.nodeIndex] : nodeByPath[m.path];
+      var box = el('div', 'pair-box');
+      var boxHead = el('div', 'pair-box-head');
+      var link = el('button', 'file-link', m.path);
+      link.type = 'button';
+      if (mNode) {
+        link.addEventListener('click', function () { selectNode(mNode, view); });
+      }
+      boxHead.appendChild(link);
+      boxHead.appendChild(el('span', 'family-variant-pill', m.variant));
+      box.appendChild(boxHead);
+      box.appendChild(el('div', 'pair-dir', 'Folder: ' + m.directory + ' · Changed in ' + plural(m.changes, 'commit') + (m.topAuthor ? ' · Top author: ' + m.topAuthor : '')));
+      memberContainer.appendChild(box);
+    });
+    panel.appendChild(memberContainer);
+
+    panel.appendChild(el('h3', '', 'Qualifying pairwise relationships (' + view.edges.length + ' of ' + view.possiblePairs + ' possible)'));
+    var pairList = el('div', 'family-pair-list');
+    view.edges.forEach(function (e, idx) {
+      var pKey = edgeKey(e.s.path, e.t.path);
+      var details = el('details', 'family-pair-details');
+      if (expandedFamilyPairKey ? expandedFamilyPairKey === pKey : idx === 0) {
+        details.open = true;
+      }
+      details.addEventListener('toggle', function () {
+        if (details.open) expandedFamilyPairKey = pKey;
+      });
+      details.addEventListener('pointerenter', function () {
+        hoverEdge = e;
+        requestDraw();
+      });
+      details.addEventListener('pointerleave', function () {
+        if (hoverEdge === e) {
+          hoverEdge = null;
+          requestDraw();
+        }
+      });
+
+      var summary = el('summary', 'family-pair-summary');
+      var labels = distinguishingPaths(e.s.path, e.t.path);
+      summary.appendChild(el('span', '', labels[0] + ' ↔ ' + labels[1]));
+      var meta = el('span', 'family-pair-meta');
+      meta.appendChild(el('span', 'badge ' + e.d.relationship, KINDS[e.d.relationship].label.replace(/s$/, '')));
+      var peakPct = pct(Math.max(e.d.confidence, e.d.reverseConfidence));
+      meta.appendChild(el('span', '', plural(e.d.shared, 'shared commit') + ' · ' + peakPct));
+      summary.appendChild(meta);
+      details.appendChild(summary);
+
+      var body = el('div', 'family-pair-body');
+      body.appendChild(el('div', 'family-pair-stat', e.s.path + ' ↔ ' + e.t.path));
+      body.appendChild(el('div', 'family-pair-stat', labels[0] + ' → ' + labels[1] + ': ' + directionEvidence(e, true)));
+      body.appendChild(el('div', 'family-pair-stat', labels[1] + ' → ' + labels[0] + ': ' + directionEvidence(e, false)));
+
+      if (e.d.evidence && e.d.evidence.length > 0) {
+        var evList = el('ul', 'evidence');
+        e.d.evidence.slice(0, 3).forEach(function (ev) {
+          var li = el('li');
+          var hash = el('button', 'hash', ev.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+          evList.appendChild(li);
+        });
+        body.appendChild(evList);
+      }
+
+      var inspectBtn = el('button', 'btn-inspect-pair', 'Inspect paired diff & evidence →');
+      inspectBtn.type = 'button';
+      inspectBtn.addEventListener('click', function () {
+        expandedFamilyPairKey = pKey;
+        selectEdge(e, view);
+      });
+      body.appendChild(inspectBtn);
+      details.appendChild(body);
+      pairList.appendChild(details);
+    });
+    panel.appendChild(pairList);
+
+    if (view.d.evidence && view.d.evidence.length > 0) {
+      var evDetails = el('details', 'evidence-wrap');
+      evDetails.open = true;
+      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.d.evidence.length + ' of ' + view.d.commitsTouchingTwoOrMore + ' touching 2+ members)'));
+      var list = el('ul', 'evidence');
+      view.d.evidence.forEach(function (ev) {
+        var li = el('li');
+        var hash = el('button', 'hash', ev.hash.slice(0, 7));
+        hash.type = 'button'; hash.title = 'Copy full commit hash';
+        hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+        li.appendChild(hash);
+
+        var body = el('div', 'evidence-item-body');
+        var topLine = el('div');
+        var tagText = ev.touchesAllMembers
+          ? 'All ' + ev.totalMembers + ' members'
+          : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
+        topLine.appendChild(el('span', 'evidence-scope-tag', tagText));
+        topLine.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+        body.appendChild(topLine);
+        if (ev.memberPaths && ev.memberPaths.length > 0 && !ev.touchesAllMembers) {
+          body.appendChild(el('div', 'evidence-rename', 'Touched: ' + ev.memberPaths.join(', ')));
+        }
+        li.appendChild(body);
+        list.appendChild(li);
+      });
+      evDetails.appendChild(list);
+      panel.appendChild(evDetails);
+    }
+
+    var exportBtn = el('button', 'btn-export', '📋 Copy finding for PR / discussion');
+    exportBtn.type = 'button';
+    exportBtn.addEventListener('click', function () {
+      var markdown = formatFamilyMarkdown(view);
+      copyText(markdown, exportBtn, '✓ Copied finding to clipboard');
+    });
+    panel.appendChild(exportBtn);
+  }
+
+  function renderSelectedEdge(e) {
+    var activeReturnFam = resolveActiveFamilyView(returnToFamily);
+    if (activeReturnFam) {
+      var navRow = el('div', 'nav-row');
+      var backFamBtn = el('button', 'back-btn back-to-family-btn', '← Back to family (' + (activeReturnFam.d.label || activeReturnFam.d.id) + ')');
+      backFamBtn.type = 'button';
+      backFamBtn.addEventListener('click', function () { selectFamily(activeReturnFam, true); });
+      navRow.appendChild(backFamBtn);
+      var backOverviewBtn = el('button', 'back-btn', 'Overview');
+      backOverviewBtn.type = 'button';
+      backOverviewBtn.addEventListener('click', clearSelection);
+      navRow.appendChild(backOverviewBtn);
+      panel.appendChild(navRow);
+    } else {
+      var backBtn = el('button', 'back-btn', '← Back to overview');
+      backBtn.type = 'button';
+      backBtn.addEventListener('click', clearSelection);
+      panel.appendChild(backBtn);
+    }
 
     var head = el('div');
     var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
@@ -1061,7 +1487,7 @@ const CLIENT = String.raw`
     var boxAHead = el('div', 'pair-box-head');
     var linkA = el('button', 'file-link', e.s.path);
     linkA.type = 'button';
-    linkA.addEventListener('click', function () { selectNode(e.s); });
+    linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
     boxAHead.appendChild(linkA);
     boxA.appendChild(boxAHead);
     var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : ''));
@@ -1078,7 +1504,7 @@ const CLIENT = String.raw`
     var boxBHead = el('div', 'pair-box-head');
     var linkB = el('button', 'file-link', e.t.path);
     linkB.type = 'button';
-    linkB.addEventListener('click', function () { selectNode(e.t); });
+    linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
     boxBHead.appendChild(linkB);
     boxB.appendChild(boxBHead);
     var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : ''));
@@ -1274,10 +1700,24 @@ const CLIENT = String.raw`
   }
 
   function renderSelectedNode(n) {
-    var backBtn = el('button', 'back-btn', '← Back to overview');
-    backBtn.type = 'button';
-    backBtn.addEventListener('click', clearSelection);
-    panel.appendChild(backBtn);
+    var activeReturnFam = resolveActiveFamilyView(returnToFamily);
+    if (activeReturnFam) {
+      var navRow = el('div', 'nav-row');
+      var backFamBtn = el('button', 'back-btn back-to-family-btn', '← Back to family (' + (activeReturnFam.d.label || activeReturnFam.d.id) + ')');
+      backFamBtn.type = 'button';
+      backFamBtn.addEventListener('click', function () { selectFamily(activeReturnFam, true); });
+      navRow.appendChild(backFamBtn);
+      var backOverviewBtn = el('button', 'back-btn', 'Overview');
+      backOverviewBtn.type = 'button';
+      backOverviewBtn.addEventListener('click', clearSelection);
+      navRow.appendChild(backOverviewBtn);
+      panel.appendChild(navRow);
+    } else {
+      var backBtn = el('button', 'back-btn', '← Back to overview');
+      backBtn.type = 'button';
+      backBtn.addEventListener('click', clearSelection);
+      panel.appendChild(backBtn);
+    }
 
     panel.appendChild(el('h2', '', base(n.path)));
     panel.appendChild(el('p', 'path', n.path));
@@ -1304,6 +1744,8 @@ const CLIENT = String.raw`
       renderSelectedNode(selectedNode);
     } else if (selectedEdge) {
       renderSelectedEdge(selectedEdge);
+    } else if (selectedFamily) {
+      renderSelectedFamily(selectedFamily);
     } else {
       renderOverview();
     }

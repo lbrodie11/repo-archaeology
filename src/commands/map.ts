@@ -6,9 +6,10 @@ import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js'
 import { runGit } from '../git/run.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
+import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
 import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
-import { c, isoDate, terminalText } from '../util/term.js';
+import { c, isoDate, plural, terminalText } from '../util/term.js';
 import { formatExplainCommand, MAX_COUNTEREXAMPLES_PER_SIDE } from './explain.js';
 import { classifiedPairs } from './scan.js';
 
@@ -83,6 +84,15 @@ export interface MapEdge {
   explainCommand?: string;
 }
 
+export interface MapFamily extends Omit<FindingFamilyView, 'relationships'> {
+  /** Indices into `data.nodes` corresponding to `members`. */
+  nodeIndices: number[];
+  /** Indices into `data.edges` for the qualifying pairwise edges in this family. */
+  edgeIndices: number[];
+  /** Highest `overviewPriority` among `edgeIndices`. */
+  overviewPriority: number;
+}
+
 export interface MapData {
   meta: Meta;
   repoName: string;
@@ -92,6 +102,7 @@ export interface MapData {
   patchesIncluded?: boolean;
   nodes: MapNode[];
   edges: MapEdge[];
+  families?: MapFamily[];
 }
 
 export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
@@ -160,6 +171,8 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
 
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
+  const edgeViews: RelationshipView[] = [];
+  const edgeIndexByPairKey = new Map<string, number>();
   let unchecked = 0;
   const classified = classifiedPairs(ctx);
   const hasPrimary = classified.entries.some(({ relationship }) => relationship !== 'unknown' && options.kinds.includes(relationship));
@@ -190,6 +203,11 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     const cxFrom = findCounterexamples(companion.from, companion.to);
     const cxTo = findCounterexamples(companion.to, companion.from);
 
+    const edgeIndex = edges.length;
+    const [u, v] = view.from < view.to ? [view.from, view.to] : [view.to, view.from];
+    edgeIndexByPairKey.set(`${u}\u0000${v}`, edgeIndex);
+    edgeViews.push(view);
+
     edges.push({
       source: nodeFor(view.from),
       target: nodeFor(view.to),
@@ -216,10 +234,30 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       explainCommand: formatExplainCommand(view.from, view.to, ctx.settings, ctx.flagSettings),
     });
   }
+
+  const rawFamilies = buildFindingFamilies(ctx, edgeViews);
+  const families: MapFamily[] = rawFamilies.map((fam) => {
+    const nodeIndices = fam.members.map((m) => nodeFor(m.path));
+    const edgeIndices: number[] = [];
+    for (const rel of fam.relationships) {
+      const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
+      const eIdx = edgeIndexByPairKey.get(`${u}\u0000${v}`);
+      if (eIdx !== undefined) edgeIndices.push(eIdx);
+    }
+    const overviewPriority = Math.max(0, ...edgeIndices.map((idx) => edges[idx]?.overviewPriority ?? 0));
+    const { relationships: _relationships, ...famBase } = fam;
+    return {
+      ...famBase,
+      nodeIndices,
+      edgeIndices,
+      overviewPriority,
+    };
+  });
+
   const repoName = basename(ctx.root);
   // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
   const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
-  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges };
+  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges, families };
 }
 
 /**
@@ -321,12 +359,14 @@ export function openInBrowser(file: string): void {
 
 export function printMap(file: string, data: MapData, opened: boolean): void {
   const ghosts = data.edges.filter((e) => e.relationship === 'ghost').length;
+  const familyCount = data.families?.length ?? 0;
+  const familyNote = familyCount > 0 ? `, ${plural(familyCount, 'finding family')}` : '';
   console.log(`${c.bold('Repo Archaeology')} ${c.dim('·')} map`);
   for (const warning of data.meta.warnings) console.log(c.yellow(`! ${terminalText(warning)}`));
   if (data.edges.length === 0) {
     console.log('No relationships passed the thresholds, so the map is empty. Try --min-shared 2 or --min-confidence 0.3.');
   } else {
-    console.log(`Drew ${data.edges.length} relationships between ${data.nodes.length} files (${ghosts} ghost wires).`);
+    console.log(`Drew ${data.edges.length} relationships between ${data.nodes.length} files (${ghosts} ghost wires${familyNote}).`);
   }
   if (data.classificationTruncated) console.log(c.yellow('Only the strongest relationships were classified; additional relationship kinds may exist.'));
   console.log(`${opened ? 'Opened' : 'Wrote'} ${c.bold(terminalText(file))}`);
