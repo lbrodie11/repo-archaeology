@@ -97,6 +97,7 @@ export interface MapUndrawnPair {
   score: number;
   weighted: boolean;
   lastTogether: string;
+  evidence: { hash: string; date: string; subject: string }[];
   explainCommand: string;
 }
 
@@ -289,6 +290,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
           score: rel.score,
           weighted: rel.weighted,
           lastTogether: rel.lastTogether,
+          evidence: rel.evidence.slice(0, 3).map((ev) => ({ hash: ev.hash, date: ev.date, subject: ev.subject })),
           explainCommand: formatExplainCommand(rel.from, rel.to, ctx.settings, ctx.flagSettings),
         });
       }

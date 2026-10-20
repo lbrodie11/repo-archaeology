@@ -90,6 +90,12 @@ export interface BuildFindingFamiliesOptions {
   commitMemberIndicesByFamily?: Map<string, number[][]>;
 }
 
+const EXTENDED_FAMILY_CONFIG = /^[\w.-]+\.config-[\w.-]+\.[cm]?[jt]s$/i;
+
+function isFamilyConfig(path: string): boolean {
+  return isProjectConfig(path) || EXTENDED_FAMILY_CONFIG.test(posix.basename(path));
+}
+
 /**
  * Evaluates whether two parallel-implementation paths qualify in either direction (`A -> B` or `B -> A`)
  * against `ctx.model` and `ctx.thresholds`, returning the canonical `RelationshipView` when they do.
@@ -101,7 +107,7 @@ export function evaluateParallelPair(
   allowedKinds?: readonly Relationship[],
   historyPathByMember?: ReadonlyMap<string, string>,
 ): RelationshipView | undefined {
-  if (isProjectConfig(pathA) || isProjectConfig(pathB)) return undefined;
+  if (isFamilyConfig(pathA) || isFamilyConfig(pathB)) return undefined;
   if (!parallelImplementation(pathA, pathB)) return undefined;
   const { model, thresholds } = ctx;
   const histA = historyPathByMember?.get(pathA) ?? pathA;
@@ -206,7 +212,7 @@ export function buildFindingFamilies(
   // 1. Deduplicate qualifying parallel-implementation pairs by unordered file pair.
   const bestPairByKey = new Map<string, RelationshipView>();
   for (const rel of relationships) {
-    if (isProjectConfig(rel.from) || isProjectConfig(rel.to)) continue;
+    if (isFamilyConfig(rel.from) || isFamilyConfig(rel.to)) continue;
     if (!parallelImplementation(rel.from, rel.to)) continue;
     if (allowedKinds && !allowedKinds.includes(rel.relationship)) continue;
     const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];

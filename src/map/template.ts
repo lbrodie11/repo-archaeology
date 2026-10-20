@@ -662,6 +662,9 @@ const CLIENT = String.raw`
         compEdges.forEach(function (e) {
           (e.d.evidence || []).forEach(function (ev) { collectEv(ev, [e.s.path, e.t.path]); });
         });
+        compUndrawn.forEach(function (up) {
+          (up.evidence || []).forEach(function (ev) { collectEv(ev, [up.from, up.to]); });
+        });
 
         var filteredEv = [];
         evOrder.forEach(function (rec) {
@@ -1013,8 +1016,8 @@ const CLIENT = String.raw`
         selectFamily(returnToFamily, true);
       } else {
         clearSelection();
+        search.blur();
       }
-      search.blur();
     }
     if (ev.key === '/' && document.activeElement !== search) { ev.preventDefault(); search.focus(); }
   });
@@ -1079,7 +1082,12 @@ const CLIENT = String.raw`
     selectedFamily = view; selectedNode = null; selectedEdge = null; returnToFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
     if (!keepExpandedPair) expandedFamilyPairKey = null;
     flyTo(view.nodes);
-    renderPanel(); requestDraw();
+    renderPanel();
+    if (keepExpandedPair) {
+      var targetFocus = panel._expandedPairSummary || panel._familyHeading;
+      if (targetFocus && typeof targetFocus.focus === 'function') targetFocus.focus();
+    }
+    requestDraw();
   }
   function clearSelection() {
     selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
@@ -1459,7 +1467,11 @@ const CLIENT = String.raw`
 
     var head = el('div');
     head.appendChild(el('span', 'badge family', 'Related implementation family'));
-    head.appendChild(el('h2', '', view.d.label || view.d.id));
+    var familyHeading = el('h2', '', view.d.label || view.d.id);
+    familyHeading.tabIndex = -1;
+    head.appendChild(familyHeading);
+    panel._familyHeading = familyHeading;
+    panel._expandedPairSummary = null;
     var subsetNote = view.isSubset && view.members.length < view.d.members.length
       ? ' (filtered from ' + view.d.members.length + ' family members)'
       : '';
@@ -1544,6 +1556,7 @@ const CLIENT = String.raw`
       meta.appendChild(el('span', '', plural(e.d.shared, 'shared commit') + ' · ' + peakPct));
       summary.appendChild(meta);
       details.appendChild(summary);
+      if (details.open && !panel._expandedPairSummary) panel._expandedPairSummary = summary;
 
       var body = el('div', 'family-pair-body');
       body.appendChild(el('div', 'family-pair-stat', e.s.path + ' ↔ ' + e.t.path));
@@ -1593,6 +1606,7 @@ const CLIENT = String.raw`
       meta.appendChild(el('span', '', plural(up.shared, 'shared commit') + ' · ' + peakPct));
       summary.appendChild(meta);
       details.appendChild(summary);
+      if (details.open && !panel._expandedPairSummary) panel._expandedPairSummary = summary;
 
       var body = el('div', 'family-pair-body');
       body.appendChild(el('div', 'family-pair-stat', up.from + ' ↔ ' + up.to));
@@ -1600,6 +1614,19 @@ const CLIENT = String.raw`
       body.appendChild(el('div', 'family-pair-stat', labels[0] + ' → ' + labels[1] + ': ' + directionEvidence(pseudoEdge, true)));
       body.appendChild(el('div', 'family-pair-stat', labels[1] + ' → ' + labels[0] + ': ' + directionEvidence(pseudoEdge, false)));
       body.appendChild(el('div', 'family-pair-stat', 'Qualifies (not drawn on canvas due to map display cap).'));
+      if (up.evidence && up.evidence.length > 0) {
+        var evList = el('ul', 'evidence');
+        up.evidence.slice(0, 3).forEach(function (ev) {
+          var li = el('li');
+          var hash = el('button', 'hash', ev.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+          evList.appendChild(li);
+        });
+        body.appendChild(evList);
+      }
       if (up.explainCommand) {
         var cmdBtn = el('button', 'btn-inspect-pair', 'Copy CLI command: ' + up.explainCommand);
         cmdBtn.type = 'button';

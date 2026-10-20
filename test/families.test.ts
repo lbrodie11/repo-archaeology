@@ -52,8 +52,13 @@ class FakeElement {
   private _text = '';
   canvasOps: Array<{ op: string; args: unknown[] }> = [];
 
-  constructor(tagName: string) {
+  onFocus?: (el: FakeElement) => void;
+  onBlur?: (el: FakeElement) => void;
+
+  constructor(tagName: string, onFocus?: (el: FakeElement) => void, onBlur?: (el: FakeElement) => void) {
     this.tagName = tagName.toUpperCase();
+    this.onFocus = onFocus;
+    this.onBlur = onBlur;
   }
   get textContent(): string {
     return [this._text, ...this.children.map((c) => c.textContent)].filter(Boolean).join('\n');
@@ -68,8 +73,12 @@ class FakeElement {
   }
   remove(): void {}
   select(): void {}
-  blur(): void {}
-  focus(): void {}
+  blur(): void {
+    this.onBlur?.(this);
+  }
+  focus(): void {
+    this.onFocus?.(this);
+  }
   addEventListener(type: string, fn: (ev?: unknown) => void): void {
     (this.listeners[type] ??= []).push(fn);
   }
@@ -131,16 +140,40 @@ function mountMapDom(html: string) {
     matchMedia: () => ({ matches: true }),
     addEventListener: () => {},
   };
-  const sandboxDocument = {
+  const sandboxDocument: {
+    hidden: boolean;
+    activeElement: FakeElement | null;
+    body: FakeElement;
+    getElementById: (id: string) => FakeElement;
+    createElement: (tag: string) => FakeElement;
+    addEventListener: (type: string, fn: (ev?: unknown) => void) => void;
+    execCommand: () => boolean;
+  } = {
     hidden: false,
     activeElement: null,
     body: new FakeElement('body'),
     getElementById: (id: string) => elementsById[id] ?? new FakeElement('div'),
-    createElement: (tag: string) => new FakeElement(tag),
+    createElement: (tag: string) =>
+      new FakeElement(
+        tag,
+        (el) => {
+          sandboxDocument.activeElement = el;
+        },
+        (el) => {
+          if (sandboxDocument.activeElement === el) sandboxDocument.activeElement = sandboxDocument.body;
+        },
+      ),
     addEventListener: (type: string, fn: (ev?: unknown) => void) => {
       (docListeners[type] ??= []).push(fn);
     },
     execCommand: () => true,
+  };
+  sandboxDocument.activeElement = sandboxDocument.body;
+  elementsById.search!.onFocus = (el) => {
+    sandboxDocument.activeElement = el;
+  };
+  elementsById.search!.onBlur = (el) => {
+    if (sandboxDocument.activeElement === el) sandboxDocument.activeElement = sandboxDocument.body;
   };
   const sandboxNavigator = {
     clipboard: {
@@ -168,6 +201,7 @@ function mountMapDom(html: string) {
     elementsById,
     docListeners,
     getCopiedText: () => copiedClipboardText,
+    getActiveElement: () => sandboxDocument.activeElement,
   };
 }
 
@@ -313,6 +347,7 @@ describe('Stage 2 Feature 2: Finding Families', () => {
           'playground/alpha/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
           'playground/beta/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
           'playground/gamma/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
+          'playground/alpha/__tests__/relative-base.spec.ts': `export const spec = ${i};\n`,
           // Same-name index.ts at different hierarchy depths
           'src/index.ts': `export const rootIdx = ${i};\n`,
           'src/router/index.ts': `export const routerIdx = ${i};\n`,
@@ -351,6 +386,15 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     );
     assert.ok(viteConfigRel, 'Expected sibling vite.config.ts pair in relationships');
     assert.notEqual(viteConfigRel.hiddenBridge?.signal, 'parallel-implementation');
+
+    // *.config-*.js is excluded from forming families while preserving pairwise `test` classification against spec files
+    assert.equal(
+      ctx.classifier.classify(
+        'playground/alpha/vite.config-relative-base.js',
+        'playground/alpha/__tests__/relative-base.spec.ts',
+      ),
+      'test',
+    );
 
     // Yet the 2-file parallel pair (bun/ssg.ts <-> deno/ssg.ts) is still preserved in relationships
     const ssgRel = result.relationships.find(
@@ -741,7 +785,7 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.doesNotMatch(defaultHtml, /SECRET_CF_PATCH_/);
 
     // Mount the default map DOM and verify interactive family workflow
-    const { elementsById, docListeners, getCopiedText } = mountMapDom(defaultHtml);
+    const { elementsById, docListeners, getCopiedText, getActiveElement } = mountMapDom(defaultHtml);
 
     // Overview replaces the individual parallel cards with 1 keyboard-accessible family button card
     const cards = elementsById.panel!.findAll((el) => el.className.includes('card interactive'));
@@ -795,19 +839,24 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.ok(backToFamBtn, 'Expected Back to family button when viewing a pair from a family');
     assert.match(backToFamBtn.textContent, /← Back to family \(proxy\.ts across src\/adapter\/\*\)/);
 
-    // Clicking "← Back to family" returns to the family view and keeps the second pair expanded!
+    // Clicking "← Back to family" returns to the family view, keeps the second pair expanded, and focuses its <summary>!
     backToFamBtn.listeners.click?.[0]?.();
     assert.match(elementsById.panel!.textContent, /Related implementation family/);
     const pairDetailsAfterReturn = elementsById.panel!.findAll((el) => el.className.includes('family-pair-details'));
     assert.equal(pairDetailsAfterReturn[1]!.open, true, 'Expected second pair to remain expanded on return to family');
+    const secondSummary = pairDetailsAfterReturn[1]!.children.find((c) => c.tagName === 'SUMMARY');
+    assert.equal(getActiveElement(), secondSummary, 'Expected focus on expanded pair summary after Back to family');
 
-    // Also verify Escape key returns from pair view to family view, and a second Escape returns to overview
+    // Also verify Escape key returns from pair view to family view (focusing the expanded pair's summary), and a second Escape returns to overview
     const firstPairInspectBtn = pairDetailsAfterReturn[0]!.findAll((el) => el.className.includes('btn-inspect-pair'))[0]!;
     firstPairInspectBtn.listeners.click?.[0]?.();
     assert.match(elementsById.panel!.textContent, /Connection worth checking/);
 
     docListeners.keydown?.[0]?.({ key: 'Escape' });
     assert.match(elementsById.panel!.textContent, /Related implementation family/);
+    const pairDetailsAfterEsc = elementsById.panel!.findAll((el) => el.className.includes('family-pair-details'));
+    const firstSummary = pairDetailsAfterEsc[0]!.children.find((c) => c.tagName === 'SUMMARY');
+    assert.equal(getActiveElement(), firstSummary, 'Expected focus on expanded pair summary after Escape from Inspect');
 
     docListeners.keydown?.[0]?.({ key: 'Escape' });
     assert.match(elementsById.panel!.textContent, /Explore file relationships/);
@@ -1048,6 +1097,11 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     const undrawnDetailText = zeroDrawnEls.panel!.textContent;
     assert.match(undrawnDetailText, /Qualifying pairwise relationships \(6 of 6 possible\)/);
     assert.match(undrawnDetailText, /qualifies \(not drawn\)/);
+    const undrawnPairDetails = zeroDrawnEls.panel!.findAll((el) => el.className.includes('family-pair-details'));
+    assert.equal(undrawnPairDetails.length, 6);
+    assert.equal(undrawnPairDetails[0]!.open, true);
+    const undrawnEvItems = undrawnPairDetails[0]!.findAll((el) => el.tagName === 'LI');
+    assert.equal(undrawnEvItems.length, 3, 'Expected expanded undrawn pair to render 3 supporting commit items');
   });
 
   it('18. P2 regression: diff detects a family when two members are edited and one changed member qualifies only in the reverse direction', async () => {

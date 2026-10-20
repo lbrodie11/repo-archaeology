@@ -351,7 +351,7 @@ export function testCovers(test: string, subject: string): boolean {
   return outer.split('/').length >= 2 && inner.startsWith(`${outer}/`);
 }
 
-const PROJECT_CONFIG = /^(?:package\.json|tsconfig[\w.-]*\.json|jsconfig\.json|[\w.-]+\.config(?:-[\w.-]+)?\.[cm]?[jt]s|\.[\w.-]*rc(?:\.[\w]+)?|dockerfile|makefile|[\w.-]+\.ya?ml|[\w.-]+\.lock)$/i;
+const PROJECT_CONFIG = /^(?:package\.json|tsconfig[\w.-]*\.json|jsconfig\.json|[\w.-]+\.config\.[cm]?[jt]s|\.[\w.-]*rc(?:\.[\w]+)?|dockerfile|makefile|[\w.-]+\.ya?ml|[\w.-]+\.lock)$/i;
 
 /** Manifests and tooling configuration: they change with everything for mechanical reasons. */
 export function isProjectConfig(path: string): boolean {
