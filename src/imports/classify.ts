@@ -276,8 +276,9 @@ export class RelationshipClassifier {
   }
 }
 
-function parallelImplementation(a: string, b: string): HiddenBridge | undefined {
+export function parallelImplementation(a: string, b: string): HiddenBridge | undefined {
   // Compare names without the extension: `react-ts/App.tsx` and `react/App.jsx` are the same component.
+  if (isProjectConfig(a) || isProjectConfig(b)) return undefined;
   const name = posix.basename(a);
   const stem = (path: string) => posix.basename(path).replace(/\.[^.]+$/, '');
   if (stem(a) === '' || stem(a) !== stem(b) || /^index(?:\.[^.]+)+$/i.test(name)) return undefined;

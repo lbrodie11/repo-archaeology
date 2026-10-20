@@ -1,8 +1,9 @@
 import type { Context } from '../context.js';
-import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
+import { parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
+import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
-import { c, pct, terminalText } from '../util/term.js';
+import { c, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 /** Upper bound on relationships classified (each needs the files' imports parsed). */
 export const MAX_CLASSIFIED = 5000;
@@ -26,6 +27,8 @@ export interface ScanResult {
   classified: number;
   truncated: boolean;
   relationships: RelationshipView[];
+  /** Parallel-implementation finding families (3+ related files) among the reported relationships. */
+  families: FindingFamilyView[];
 }
 
 export interface ClassifiedCompanion {
@@ -72,6 +75,15 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
     const filler = room > 0 ? pending.filter((e) => e.relationship === 'unknown').slice(0, room) : [];
     for (const entry of [...checked, ...filler]) selected.push(toView(ctx, entry.companion, entry.relationship));
   }
+  const familyCandidates: RelationshipView[] = [];
+  for (const entry of pending) {
+    const fromPath = ctx.model.path(entry.companion.from);
+    const toPath = ctx.model.path(entry.companion.to);
+    if (parallelImplementation(fromPath, toPath) !== undefined) {
+      familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
+    }
+  }
+  const families = buildFindingFamilies(ctx, familyCandidates, { allowedKinds: options.kinds }).slice(0, options.limit);
   return {
     meta: buildMeta(ctx),
     counts,
@@ -79,6 +91,7 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
     classified: classified.entries.length,
     truncated: classified.truncated,
     relationships: selected,
+    families,
   };
 }
 
@@ -102,6 +115,32 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
       ? 'Nothing of the selected kinds was found within the classification limit.'
       : 'Nothing of the selected kinds. Everything that changes together is explained by imports (direct or one step removed) or tests.');
     return;
+  }
+  if (result.families && result.families.length > 0) {
+    console.log(c.bold(`Finding families (${result.families.length})`));
+    console.log();
+    result.families.forEach((fam, idx) => {
+      const n = c.dim(`${String(idx + 1).padStart(2)}.`);
+      const variants = fam.members.map((m) => terminalText(m.variant)).join(' · ');
+      const kinds = fam.relationshipKinds.map((k) => relationshipLabel(k)).join(c.dim(', '));
+      console.log(`${n} ${c.bold(terminalText(fam.label))}  ${c.cyan(`${fam.members.length} related implementations`)} ${c.dim('·')} ${kinds}`);
+      console.log(`    members: ${variants}`);
+      const pairNote = fam.complete
+        ? `all ${fam.possiblePairs} pairwise links met thresholds`
+        : `${fam.qualifyingPairs} of ${fam.possiblePairs} pairwise links met thresholds`;
+      console.log(
+        `    ${plural(fam.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair) · ${plural(fam.commitsTouchingAll, 'commit')} touched all ${fam.members.length} · ${pairNote} · last together ${timeAgo(Date.parse(fam.lastTogether) / 1000)}`,
+      );
+      for (const ev of fam.evidence) {
+        const scope = ev.touchesAllMembers
+          ? `all ${ev.totalMembers} members`
+          : `${ev.membersTouched} of ${ev.totalMembers} members`;
+        console.log(`    ${c.gray(shortHash(ev.hash))} ${c.dim(ev.date)}  ${terminalText(ev.subject)} ${c.dim(`[${scope}]`)}`);
+      }
+      console.log();
+    });
+    console.log(c.bold(`Individual relationships (${result.relationships.length})`));
+    console.log();
   }
   result.relationships.forEach((view, i) => {
     const n = c.dim(`${String(i + 1).padStart(2)}.`);

@@ -90,10 +90,10 @@ export function buildMeta(ctx: Context): Meta {
   };
 }
 
-export function toView(ctx: Context, companion: Companion, relationship: Relationship, fromPath?: string): RelationshipView {
+export function toView(ctx: Context, companion: Companion, relationship: Relationship, fromPath?: string, toPath?: string): RelationshipView {
   const { model } = ctx;
   const from = fromPath ?? model.path(companion.from);
-  const to = model.path(companion.to);
+  const to = toPath ?? model.path(companion.to);
   const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(from, to) : undefined;
   return {
     from,

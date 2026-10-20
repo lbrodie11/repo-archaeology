@@ -1,7 +1,8 @@
 import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, type Context } from '../context.js';
 import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
-import type { Relationship } from '../imports/classify.js';
+import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
+import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } from '../model/families.js';
 import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
 import { c, pct, plural, terminalText } from '../util/term.js';
 
@@ -25,6 +26,13 @@ export interface ChangedFileView extends ChangedFile {
 export interface Suggestion extends RelationshipView {
   /** Other changed files that also point at this suggestion. */
   alsoLinkedFrom: string[];
+}
+
+export interface DiffFamilyView extends FindingFamilyView {
+  /** Family member paths that were modified in the current changeset. */
+  changedMembers: string[];
+  /** Untouched family member paths recommended by `diff`. */
+  suggestedMembers: string[];
 }
 
 export type SilenceReason =
@@ -97,6 +105,8 @@ export interface DiffResult {
   evaluation?: DiffEvaluation;
   changed: ChangedFileView[];
   suggestions: Suggestion[];
+  /** Parallel-implementation finding families formed by the current changeset and qualifying suggestions. */
+  families?: DiffFamilyView[];
   /** Present when `suggestions.length === 0`, explaining why no recommendations were emitted. */
   silence?: SilenceDiagnostics;
 }
@@ -378,12 +388,65 @@ function explainSilence(
   };
 }
 
+function buildDiffFamilies(
+  ctx: Context,
+  changed: ChangedFileView[],
+  allSuggestedPaths: readonly string[],
+  kinds: Relationship[],
+): DiffFamilyView[] {
+  if (allSuggestedPaths.length === 0) return [];
+
+  const historyPathByMember = new Map<string, string>();
+  const changedSet = new Set<string>();
+  for (const f of changed) {
+    if (f.deleted || !f.hasHistory || !f.historyPath) continue;
+    changedSet.add(f.path);
+    historyPathByMember.set(f.path, f.historyPath);
+  }
+  const suggestedSet = new Set<string>();
+  for (const sPath of allSuggestedPaths) {
+    suggestedSet.add(sPath);
+    if (!historyPathByMember.has(sPath)) {
+      historyPathByMember.set(sPath, sPath);
+    }
+  }
+
+  const candidateMembers = [...new Set([...changedSet, ...suggestedSet])];
+  if (candidateMembers.length < 3) return [];
+
+  // Evaluate all parallel-implementation pairs among changed + suggested members in either direction.
+  const candidateViews: RelationshipView[] = [];
+  for (let i = 0; i < candidateMembers.length; i++) {
+    for (let j = i + 1; j < candidateMembers.length; j++) {
+      const pathA = candidateMembers[i]!;
+      const pathB = candidateMembers[j]!;
+      const view = evaluateParallelPair(ctx, pathA, pathB, kinds, historyPathByMember);
+      if (view) candidateViews.push(view);
+    }
+  }
+  if (candidateViews.length < 2) return [];
+
+  const rawFamilies = buildFindingFamilies(ctx, candidateViews, { historyPathByMember, allowedKinds: kinds });
+  const diffFamilies: DiffFamilyView[] = [];
+  for (const fam of rawFamilies) {
+    const changedMembers = fam.members.map((m) => m.path).filter((p) => changedSet.has(p));
+    const suggestedMembers = fam.members.map((m) => m.path).filter((p) => suggestedSet.has(p));
+    if (changedMembers.length === 0 || suggestedMembers.length === 0) continue;
+    diffFamilies.push({
+      ...fam,
+      changedMembers,
+      suggestedMembers,
+    });
+  }
+  return diffFamilies;
+}
+
 /** Pure part of `diff`: given the changed files, find historically related files left untouched. */
 export function suggestMissing(
   ctx: Context,
   changes: ChangedFile[],
   options: Pick<DiffOptions, 'base' | 'limit' | 'kinds'>,
-): { changed: ChangedFileView[]; suggestions: Suggestion[]; silence?: SilenceDiagnostics } {
+): { changed: ChangedFileView[]; suggestions: Suggestion[]; families: DiffFamilyView[]; silence?: SilenceDiagnostics } {
   const { model } = ctx;
   const touched = new Set<string>();
   for (const f of changes) {
@@ -394,7 +457,15 @@ export function suggestMissing(
   const changed: ChangedFileView[] = [];
   // Classify and filter every (changed file, partner) link *before* picking the strongest
   // per partner: otherwise a strong import link could hide a weaker but qualifying ghost wire.
-  const best = new Map<number, { companion: Companion; fromPath: string; relationship: Relationship; linkedFrom: Set<string> }>();
+  const best = new Map<
+    number,
+    {
+      companion: Companion;
+      fromPath: string;
+      relationship: Relationship;
+      linkedFrom: Set<string>;
+    }
+  >();
   for (const file of changes) {
     // The model represents the pre-change baseline (merge-base for `--base`, or `HEAD` for
     // working-tree checks). Any path with `added: true` was created after the baseline: it
@@ -412,7 +483,12 @@ export function suggestMissing(
       if (!options.kinds.includes(relationship)) continue;
       const existing = best.get(companion.to);
       if (!existing) {
-        best.set(companion.to, { companion, fromPath: file.path, relationship, linkedFrom: new Set([file.path]) });
+        best.set(companion.to, {
+          companion,
+          fromPath: file.path,
+          relationship,
+          linkedFrom: new Set([file.path]),
+        });
       } else {
         existing.linkedFrom.add(file.path);
         if (compareCompanions(companion, existing.companion) < 0) {
@@ -424,15 +500,16 @@ export function suggestMissing(
     }
   }
 
-  const suggestions: Suggestion[] = [...best.values()]
-    .sort((x, y) => compareCompanions(x.companion, y.companion))
-    .slice(0, options.limit)
-    .map((entry) => ({
-      ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
-      alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
-    }));
+  const allEntries = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
+  const topEntries = allEntries.slice(0, options.limit);
+  const suggestions: Suggestion[] = topEntries.map((entry) => ({
+    ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
+    alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
+  }));
+  const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
+  const families = buildDiffFamilies(ctx, changed, allSuggestedPaths, options.kinds);
   const silence = suggestions.length === 0 ? explainSilence(ctx, changed, touched, options) : undefined;
-  return { changed, suggestions, ...(silence ? { silence } : {}) };
+  return { changed, suggestions, families, ...(silence ? { silence } : {}) };
 }
 
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
@@ -440,7 +517,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
   const localWarnings = [...isolatedCtx.warnings];
   const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
   changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
-  const { changed, suggestions, silence } = suggestMissing(effectiveCtx, changes, options);
+  const { changed, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
   const meta = buildMeta(effectiveCtx);
   const baselineSha = effectiveCtx.mergeBaseSha ?? effectiveCtx.headSha;
   const evaluation: DiffEvaluation = {
@@ -465,6 +542,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
     evaluation,
     changed,
     suggestions,
+    families,
     ...(silence ? { silence } : {}),
   };
 }
@@ -498,6 +576,22 @@ export function printDiff(result: DiffResult): void {
       console.log(c.dim('Silence means no untouched file met the active historical criteria; it does not guarantee the change is complete.'));
     }
     return;
+  }
+  if (result.families && result.families.length > 0) {
+    const shownSuggested = new Set(result.suggestions.map((s) => s.to));
+    console.log(c.bold(`Finding families (${result.families.length})`));
+    for (const fam of result.families) {
+      const pairNote = fam.complete
+        ? `all ${fam.possiblePairs} pairwise links met thresholds`
+        : `${fam.qualifyingPairs} of ${fam.possiblePairs} pairwise links met thresholds`;
+      const suggestedLabels = fam.suggestedMembers.map((p) =>
+        shownSuggested.has(p) ? c.bold(terminalText(p)) : `${c.bold(terminalText(p))} ${c.dim('(beyond --limit)')}`,
+      );
+      console.log(
+        `  ${c.bold(terminalText(fam.label))} — changed ${fam.changedMembers.map(terminalText).join(', ')}; check ${suggestedLabels.join(', ')} ${c.dim(`(${pairNote} · ${plural(fam.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair))`)}`,
+      );
+    }
+    console.log();
   }
   console.log(c.bold(`Possibly missed (${result.suggestions.length})`));
   console.log();
