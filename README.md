@@ -68,6 +68,12 @@ $ npx repo-archaeology diff --base main
 
 You changed 1 file.
 
+Related families (1)
+
+  serve-static.ts across src/adapter/*  3 files · 3 of 3 pairs · 16 commits (2+ files; 9 all 3)
+    Changed (1): bun
+    Check (2): cloudflare-workers, deno
+
 Possibly missed (2)
 
   src/adapter/deno/serve-static.ts  ghost wire
@@ -94,6 +100,12 @@ Run `scan` to audit hidden coupling and ghost wires across your entire repositor
 ```text
 $ npx repo-archaeology scan
 
+Related families (3)
+
+  serve-static.ts across src/adapter/*  3 files · 3 of 3 pairs · 16 commits (2+ files; 9 all 3)
+    bun, cloudflare-workers, deno
+    All 3 pairwise links across 3 sibling directories passed thresholds. 16 supporting commits (2+ members via a qualifying pair; 9 commits touched all 3).
+
 Top relationships in hono (2,757 commits analyzed):
   1. src/adapter/bun/serve-static.ts ↔ src/adapter/deno/serve-static.ts
      Parallel implementations · 12 shared commits · 63% → / 52% ←
@@ -101,7 +113,7 @@ Top relationships in hono (2,757 commits analyzed):
      Ghost wire (no import link) · 7 shared commits · 87% → / 38% ←
 ```
 
-Repo Archaeology inspects TypeScript ASTs for shared environment variables, event names, or route patterns to give you evidence of why they might be coupled.
+When three or more sibling parallel implementations form a connected co-change group, `scan` summarizes them as a **Related family** above the individual pairs, distinguishing complete families from partial connected components. Repo Archaeology also inspects TypeScript ASTs for shared environment variables, event names, or route patterns to give you evidence of why files might be coupled.
 
 ## Commands
 
@@ -119,7 +131,9 @@ Every command accepts `--json`. Run `repo-archaeology --help` for all options.
 
 ### `diff`
 
-Looks at staged, unstaged and untracked changes (renames included). With `--base main`, it also includes the commits on your branch since it forked from `main`, so it works as a pre-PR check.
+Looks at staged, unstaged and untracked changes (renames included). With `--base main`, it also includes the commits on your branch since it forked from `main`, so it works as a pre-PR check. When `--base <ref>` is passed, co-change history is trained strictly at the merge-base (`git merge-base HEAD <ref>`) rather than `HEAD`, preventing commits already on your feature branch from self-reinforcing baseline statistics while still bridging branch-local renames.
+
+When three or more sibling parallel implementations form a connected co-change group and your change touches part of the family, `diff` surfaces a **Related families** summary (`Changed` vs `Check` members) above the individual pairwise suggestions. If `diff` finds changed files in history but zero suggestions pass thresholds, it prints an **Explain My Silence** breakdown showing why (for example, files are new or only appeared in skipped sweep commits, all historical companions are already in your change, or the closest companions fell below `--min-shared` or `--min-confidence`).
 
 ```bash
 repo-archaeology diff --base main
@@ -139,7 +153,7 @@ Historical patches show what changed in the same commit, not proof of why the fi
 
 ### `map`
 
-Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command.
+Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command. When three or more sibling parallel implementations move together, the overview groups them into a **Related family** card with member coverage, supporting commit counts (`2+ files` vs `all N`), active filter updates, and per-pair inspection (including undrawn pairs when capped or filtered).
 
 By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. **Privacy when sharing:** source-code patches are omitted by default, but the HTML still contains repository file paths, author names, and commit subjects—treat it like repository metadata when sharing. Pass `--include-patches` (`repo-archaeology map --include-patches`) to embed bounded diff hunks for top relationships directly into the HTML file; because `--include-patches` embeds source-code lines, only share those reports with audiences who have access to the source code.
 
@@ -160,6 +174,8 @@ popularity, same changes         65%     13%          5%            87%       3%
 Use it to choose thresholds for your repo. To avoid fooling yourself, tune with `--before <date>` (an older window) and look at the final score once without it.
 
 `repo-archaeology backtest --ghosts` adds a diagnostic breakdown of the original top-k suggestions that are ghost wires in today's working tree. It reports raw query/suggestion counts, hit rate and precision without altering the main scores. **Current imports leak future information**, including with `--before`; missing current files are excluded. This is neither an unbiased historical ghost-accuracy estimate nor a simulation of filtering to ghosts before ranking.
+
+`repo-archaeology backtest --follow-ups [--follow-up-window <commits>]` evaluates multi-commit omissions by checking whether files suggested for a commit were untouched in that commit, then subsequently modified by the same author in a likely follow-up fix commit (`fix`, `bug`, `hotfix`, `revert`, `forgot`, `missed`, `followup`, etc.) within the next `N` commits (default `5`). Follow-up matches are heuristic proxies for multi-commit follow-ups, not proof of prevented bugs.
 
 ## How to read the results
 
@@ -243,7 +259,7 @@ Known limits:
 
 ## Project status
 
-The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.2 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), Explain My Silence diagnostics, the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), and Finding Families across `scan`, `diff`, and `map`. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 
