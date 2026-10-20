@@ -66,22 +66,33 @@ You fix a bug or add an option to `src/adapter/bun/serve-static.ts`. Did you rem
 ```text
 $ npx repo-archaeology diff --base main
 
+Repo Archaeology · diff (main...HEAD + uncommitted changes)
+2,757 commits analyzed from 2021-12-14 to 2026-10-16, 34 sweeping commits skipped
+
 You changed 1 file.
 
-Possibly missed (2)
+Finding families (1)
+  serve-static.ts across src/adapter/* — changed src/adapter/bun/serve-static.ts; check src/adapter/cloudflare-workers/serve-static.ts, src/adapter/deno/serve-static.ts (all 3 pairwise links met thresholds · 16 supporting commits (2+ members via a qualifying pair))
+
+Possibly missed (3)
 
   src/adapter/deno/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 12 of 19 commits (63%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 12 of 20 commits (60%) · last together 5 months ago
     possible parallel implementations: serve-static.ts appears in sibling folders
     26f8c33 2026-05-16  fix(serveStatic): make options parameter optional in all adapters (#4934)
     1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291)
     246a06a 2024-09-24  feat(serve-static): support absolute root (#3420)
 
   src/adapter/cloudflare-workers/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 10 of 19 commits (53%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 11 of 20 commits (55%) · last together 5 months ago
+    possible parallel implementations: serve-static.ts appears in sibling folders
+
+  runtime-tests/bun/index.test.tsx  test link
+    changed with src/adapter/bun/serve-static.ts in 10 of 20 commits (50%) · last together 14 months ago
+    a test that changes with this code
 ```
 
-*(Verified output from [honojs/hono](https://github.com/honojs/hono) after editing the Bun adapter.)*
+*(Verified output from [honojs/hono](https://github.com/honojs/hono) at `08807ce1` after editing the Bun adapter.)*
 
 **The decision it prompts:** Parallel implementations aren't bugs—they're expected sibling patterns. `diff` gives you the commit evidence so you can review the other adapters and decide whether the new behavior should stay consistent across platforms.
 
@@ -94,14 +105,33 @@ Run `scan` to audit hidden coupling and ghost wires across your entire repositor
 ```text
 $ npx repo-archaeology scan
 
-Top relationships in hono (2,757 commits analyzed):
-  1. src/adapter/bun/serve-static.ts ↔ src/adapter/deno/serve-static.ts
-     Parallel implementations · 12 shared commits · 63% → / 52% ←
-  2. src/helper/streaming/stream.ts ↔ src/helper/streaming/sse.ts
-     Ghost wire (no import link) · 7 shared commits · 87% → / 38% ←
+Repo Archaeology · scan
+2,757 commits analyzed from 2021-12-14 to 2026-10-16, 34 sweeping commits skipped
+
+342 relationships above the thresholds: 21 ghost wire · 56 unchecked · 10 indirect import · 53 import link · 202 test link
+Showing ghost wire, unchecked. Change with --kinds ghost,unknown,indirect,direct,test.
+
+Finding families (3)
+
+ 1. serve-static.ts across src/adapter/*  3 related implementations · ghost wire
+    members: bun · cloudflare-workers · deno
+    16 supporting commits (2+ members via a qualifying pair) · 9 commits touched all 3 · all 3 pairwise links met thresholds · last together 5 months ago
+    26f8c33 2026-05-16  fix(serveStatic): make options parameter optional in all adapters (#4934) [all 3 members]
+    1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291) [2 of 3 members]
+    246a06a 2024-09-24  feat(serve-static): support absolute root (#3420) [2 of 3 members]
+
+Individual relationships (15)
+
+ 1. src/preset/tiny.ts → src/preset/quick.ts  ghost wire
+    when src/preset/tiny.ts changed, src/preset/quick.ts changed too in 9 of 9 commits (100%) · last together 2.4 years ago
+    reverse: 90% · no import link detected in the current code
+
+ 2. src/helper/streaming/stream.ts → src/helper/streaming/sse.ts  ghost wire
+    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) · last together 1.7 years ago
+    reverse: 38% · no import link detected in the current code
 ```
 
-Repo Archaeology inspects TypeScript ASTs for shared environment variables, event names, or route patterns to give you evidence of why they might be coupled.
+When three or more sibling parallel implementations form a connected co-change group, `scan` summarizes them under **Finding families** above the individual pairs, distinguishing complete families from partial connected components. Repo Archaeology also inspects TypeScript ASTs for shared environment variables, event names, or route patterns to give you evidence of why files might be coupled.
 
 ## Commands
 
@@ -119,7 +149,9 @@ Every command accepts `--json`. Run `repo-archaeology --help` for all options.
 
 ### `diff`
 
-Looks at staged, unstaged and untracked changes (renames included). With `--base main`, it also includes the commits on your branch since it forked from `main`, so it works as a pre-PR check.
+Looks at staged, unstaged and untracked changes (renames included). With `--base main`, it also includes the commits on your branch since it forked from `main`, so it works as a pre-PR check. When `--base <ref>` is passed, co-change history is trained strictly at the merge-base (`git merge-base HEAD <ref>`) rather than `HEAD`, preventing commits already on your feature branch from self-reinforcing baseline statistics while still bridging branch-local renames.
+
+When three or more sibling parallel implementations form a connected co-change group and your change touches part of the family, `diff` surfaces a **Finding families** summary (`changed …; check …`) above the individual pairwise suggestions. If `diff` finds changed files in history but zero suggestions pass thresholds, it prints a `"No suggestions after evaluating …"` breakdown showing why (for example, files are new or only appeared in skipped sweep commits, all historical companions are already in your change, or the closest companions fell below `--min-shared` or `--min-confidence`).
 
 ```bash
 repo-archaeology diff --base main
@@ -139,7 +171,7 @@ Historical patches show what changed in the same commit, not proof of why the fi
 
 ### `map`
 
-Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command.
+Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command. When three or more sibling parallel implementations move together, the overview groups **finding families** into unified cards with member coverage, supporting commit counts (`2+ files` vs `all N`), active filter updates, and per-pair inspection (including undrawn pairs when capped or filtered).
 
 By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. **Privacy when sharing:** source-code patches are omitted by default, but the HTML still contains repository file paths, author names, and commit subjects—treat it like repository metadata when sharing. Pass `--include-patches` (`repo-archaeology map --include-patches`) to embed bounded diff hunks for top relationships directly into the HTML file; because `--include-patches` embeds source-code lines, only share those reports with audiences who have access to the source code.
 
@@ -160,6 +192,8 @@ popularity, same changes         65%     13%          5%            87%       3%
 Use it to choose thresholds for your repo. To avoid fooling yourself, tune with `--before <date>` (an older window) and look at the final score once without it.
 
 `repo-archaeology backtest --ghosts` adds a diagnostic breakdown of the original top-k suggestions that are ghost wires in today's working tree. It reports raw query/suggestion counts, hit rate and precision without altering the main scores. **Current imports leak future information**, including with `--before`; missing current files are excluded. This is neither an unbiased historical ghost-accuracy estimate nor a simulation of filtering to ghosts before ranking.
+
+`repo-archaeology backtest --follow-ups [--follow-up-window <hours>]` evaluates multi-commit omissions by checking whether files suggested for a commit were untouched in that commit, then subsequently modified by the same author within the time window (`48` hours by default) in a commit that either shares a modified file with the original commit or is immediately consecutive. Subject cues (`fix`/`fixed`/`fixup`, `forgot`, `missed`/`missing`, `follow-up`, `oops`, `amend`, `repair`, `patch`, `sync`, `companion`) are reported as an optional signal label (`subject-cue`), not a requirement. Follow-up matches are heuristic proxies for multi-commit follow-ups, not proof of prevented bugs.
 
 ## How to read the results
 
@@ -243,7 +277,7 @@ Known limits:
 
 ## Project status
 
-The v0.1 implementation is complete and tested, but the product hypothesis is not yet validated. The built-in `backtest` measures suggestion quality; the remaining question is whether developers choose to run `diff` again after trying it. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.2 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), and finding families across `scan`, `diff`, and `map`. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 
