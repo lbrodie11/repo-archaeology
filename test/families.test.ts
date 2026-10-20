@@ -310,6 +310,9 @@ describe('Stage 2 Feature 2: Finding Families', () => {
           'packages/alpha/vite.config.ts': `export default { define: { V: ${i} } };\n`,
           'packages/beta/vite.config.ts': `export default { define: { V: ${i} } };\n`,
           'packages/gamma/vite.config.ts': `export default { define: { V: ${i} } };\n`,
+          'playground/alpha/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
+          'playground/beta/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
+          'playground/gamma/vite.config-relative-base.js': `export default { base: "./${i}" };\n`,
           // Same-name index.ts at different hierarchy depths
           'src/index.ts': `export const rootIdx = ${i};\n`,
           'src/router/index.ts': `export const routerIdx = ${i};\n`,
@@ -684,6 +687,12 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     try {
       printScan(scanRes, scanOpts);
       printDiff({ meta: scanRes.meta, ...suggestRes });
+      const cappedDiff = suggestMissing(
+        ctx,
+        [{ path: 'src/adapter/bun/logger.ts', deleted: false, sources: ['unstaged'] }],
+        { ...diffOpts, limit: 1 },
+      );
+      printDiff({ meta: scanRes.meta, ...cappedDiff });
       printMap('/tmp/logger-map.html', mapData, false);
       printMap('/tmp/two-families-map.html', { ...mapData, families: [mapData.families![0]!, mapData.families![0]!] }, false);
     } finally {
@@ -693,6 +702,8 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.match(output, /Finding families \(1\)/);
     assert.match(output, /logger\.ts across src\/adapter\/\*/);
     assert.match(output, /all 3 pairwise links met thresholds/);
+    assert.match(output, /3 supporting commits \(2\+ members via a qualifying pair\)/);
+    assert.match(output, /\(beyond --limit\)/);
     assert.match(output, /1 finding family/);
     assert.match(output, /2 finding families/);
     assert.doesNotMatch(output, /familys/);
@@ -951,12 +962,19 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     // Create 4 sibling Python drivers (6 'unknown' pairs) + 1 checked TS ghost pair so hasPrimary is true
     for (let i = 1; i <= 5; i++) {
       r.commit({
-        message: `sync 4 python drivers and 1 ts ghost pair ${i}`,
+        message: `sync 4 python drivers ${i}`,
         write: {
           'drivers/postgres/client.py': `VERSION = ${i}\n`,
           'drivers/mysql/client.py': `VERSION = ${i}\n`,
           'drivers/sqlite/client.py': `VERSION = ${i}\n`,
           'drivers/duckdb/client.py': `VERSION = ${i}\n`,
+        },
+      });
+    }
+    for (let i = 1; i <= 6; i++) {
+      r.commit({
+        message: `sync ts ghost pair ${i}`,
+        write: {
           'src/a/service.ts': `export const sA = ${i};\n`,
           'src/b/worker.ts': `export const wB = ${i};\n`,
         },
@@ -1009,6 +1027,27 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     const detailText = elementsById.panel!.textContent;
     assert.match(detailText, /Qualifying pairwise relationships \(6 of 6 possible\)/);
     assert.match(detailText, /qualifies \(not drawn\)/);
+    assert.match(detailText, /Supporting commits \(2\+ members via a qualifying pair\)/);
+
+    // P2 regression: when edges: 1 leaves the family with 0 drawn edges (all 6 pairs undrawn),
+    // mounting the page and enabling all kinds still renders a reachable .family-card that opens to undrawn pairs!
+    const zeroDrawnFamilyMap = buildMapData(ctx, { edges: 1, kinds: scanOpts.kinds });
+    assert.equal(zeroDrawnFamilyMap.edges.length, 1);
+    assert.equal(zeroDrawnFamilyMap.families?.length, 1);
+    assert.equal(zeroDrawnFamilyMap.families![0]!.edgeIndices.length, 0);
+    assert.equal(zeroDrawnFamilyMap.families![0]!.undrawnPairs?.length, 6);
+
+    const zeroDrawnHtml = renderMapHtml(zeroDrawnFamilyMap);
+    const { elementsById: zeroDrawnEls } = mountMapDom(zeroDrawnHtml);
+    for (const btn of zeroDrawnEls.toggles!.findAll((el) => el.className.includes('toggle'))) {
+      if (btn.attributes['aria-pressed'] === 'false') btn.listeners.click?.[0]?.();
+    }
+    const undrawnFamCard = zeroDrawnEls.panel!.findAll((el) => el.className.includes('family-card'))[0];
+    assert.ok(undrawnFamCard, 'Expected reachable .family-card even when family has 0 drawn edges');
+    undrawnFamCard.listeners.click?.[0]?.();
+    const undrawnDetailText = zeroDrawnEls.panel!.textContent;
+    assert.match(undrawnDetailText, /Qualifying pairwise relationships \(6 of 6 possible\)/);
+    assert.match(undrawnDetailText, /qualifies \(not drawn\)/);
   });
 
   it('18. P2 regression: diff detects a family when two members are edited and one changed member qualifies only in the reverse direction', async () => {

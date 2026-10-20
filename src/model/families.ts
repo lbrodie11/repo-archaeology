@@ -45,7 +45,10 @@ export interface FindingFamilyView {
   why: string;
   /** Member files (always >= 3), deterministically ordered by `path`. */
   members: FindingFamilyMember[];
-  /** Unique historical commits in the analyzed model touching at least 2 member files. */
+  /**
+   * Unique historical commits in the analyzed model supporting the family
+   * (touching at least 2 member files that form a qualifying pair).
+   */
   commitsTouchingTwoOrMore: number;
   /** Unique historical commits in the analyzed model touching all member files. */
   commitsTouchingAll: number;
@@ -483,7 +486,7 @@ export function buildFindingFamilies(
     const pairsPhrase = complete
       ? `all ${possiblePairs} pairwise links meet thresholds`
       : `${qualifyingPairs} of ${possiblePairs} pairwise links meet thresholds`;
-    const commitsPhrase = `${plural(st.commitsTouchingTwoOrMore, 'commit')} touched 2+ files, ${st.commitsTouchingAll} touched all ${totalMembers}`;
+    const commitsPhrase = `${plural(st.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair), ${st.commitsTouchingAll} touched all ${totalMembers}`;
     const why = `${totalMembers} parallel implementations of ${fileName} in sibling folders (${variantsList}); ${pairsPhrase} (${commitsPhrase})`;
 
     const presentKinds = new Set<Relationship>(cand.pairs.map((p) => p.relationship));

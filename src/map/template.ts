@@ -265,13 +265,19 @@ const CLIENT = String.raw`
     test: { label: 'Test links', color: '#7fd1b0' }
   };
   var ORDER = ['ghost', 'unknown', 'indirect', 'direct', 'test'];
+  function hasKindInData(kind) {
+    if (data.edges.some(function (e) { return e.relationship === kind; })) return true;
+    return (data.families || []).some(function (f) {
+      return (f.undrawnPairs || []).some(function (up) { return up.relationship === kind; });
+    });
+  }
   var hasPrimary = data.edges.some(function (e) { return e.relationship !== 'unknown'; });
   var visible = {
-    ghost: data.edges.some(function (e) { return e.relationship === 'ghost'; }),
-    unknown: !hasPrimary && data.edges.some(function (e) { return e.relationship === 'unknown'; }),
-    indirect: data.edges.some(function (e) { return e.relationship === 'indirect'; }),
-    direct: data.edges.some(function (e) { return e.relationship === 'direct'; }),
-    test: data.edges.some(function (e) { return e.relationship === 'test'; })
+    ghost: hasKindInData('ghost'),
+    unknown: !hasPrimary && hasKindInData('unknown'),
+    indirect: hasKindInData('indirect'),
+    direct: hasKindInData('direct'),
+    test: hasKindInData('test')
   };
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -424,7 +430,7 @@ const CLIENT = String.raw`
   var toggles = document.getElementById('toggles');
   ORDER.forEach(function (kind) {
     var shown = edges.filter(function (e) { return e.d.relationship === kind; }).length;
-    if (shown === 0) return;
+    if (shown === 0 && !hasKindInData(kind)) return;
     var b = el('button', 'toggle');
     b.type = 'button';
     b.setAttribute('aria-pressed', String(visible[kind]));
@@ -1170,7 +1176,7 @@ const CLIENT = String.raw`
       '**Pattern:** ' + mdCode(view.d.label || view.d.id) + '  ',
       '**Members (' + view.members.length + ' files):** ' + view.members.map(function (m) { return mdCode(m.path); }).join(', ') + '  ',
       '**Pairwise Links:** ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed thresholds  ',
-      '**Family-Wide Commits:** ' + plural(view.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ')  ',
+      '**Family-Wide Commits:** ' + plural(view.commitsTouchingTwoOrMore, 'supporting commit') + ' (2+ members via a qualifying pair; ' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ')  ',
       '**Last Together:** ' + relativeDate(view.lastTogether) + '  ',
       '',
       '**Qualifying Pairwise Relationships:**'
@@ -1184,7 +1190,7 @@ const CLIENT = String.raw`
       lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(up.shared, 'shared commit') + ' (qualifies, not drawn)');
     });
     if (view.evidence && view.evidence.length > 0) {
-      lines.push('', '**Family-Wide Supporting Commits (2+ members):**');
+      lines.push('', '**Family-Wide Supporting Commits (2+ members via a qualifying pair):**');
       view.evidence.slice(0, 5).forEach(function (ev) {
         var scopeTag = ev.touchesAllMembers ? 'all ' + ev.totalMembers + ' members' : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + ', ' + scopeTag + '): ' + sanitizeMarkdown(ev.subject));
@@ -1207,9 +1213,11 @@ const CLIENT = String.raw`
   // ---- panel rendering -----------------------------------------------------
   function buildOverviewItems(listData) {
     var edgeToFamilyView = new Map();
+    var allActiveViews = [];
     families.forEach(function (fam) {
       var views = getActiveFamilyViews(fam);
       views.forEach(function (view) {
+        allActiveViews.push(view);
         view.edges.forEach(function (e) {
           edgeToFamilyView.set(e, view);
         });
@@ -1229,11 +1237,27 @@ const CLIENT = String.raw`
         items.push({ kind: 'edge', edge: e });
       }
     }
+    if (overviewTab !== 'surprising') {
+      allActiveViews.forEach(function (view) {
+        if (emittedViews.has(view.id)) return;
+        var matchesTab = overviewTab === 'all'
+          || view.edges.length === 0
+          || view.edges.some(function (e) { return e.d.relationship === 'ghost'; })
+          || (view.undrawnPairs || []).some(function (up) { return up.relationship === 'ghost'; });
+        if (!matchesTab) return;
+        emittedViews.add(view.id);
+        items.push({ kind: 'family', view: view });
+      });
+    }
     return items;
   }
 
   function getTopFindings(items, maxCount) {
-    return items.slice(0, maxCount);
+    var top = items.slice(0, maxCount);
+    for (var i = maxCount; i < items.length; i++) {
+      if (items[i].kind === 'family') top.push(items[i]);
+    }
+    return top;
   }
 
   function renderOverview() {
@@ -1280,11 +1304,11 @@ const CLIENT = String.raw`
 
     panel.appendChild(el('h3', '', titleText));
 
-    if (listData.length === 0) {
+    var overviewItems = buildOverviewItems(listData);
+    if (overviewItems.length === 0) {
       panel.appendChild(el('p', '', 'No relationships found for this filter.'));
     } else {
       panel.appendChild(el('p', 'card-hint', 'Select a card or line to inspect directional stats & commits'));
-      var overviewItems = buildOverviewItems(listData);
       var displayItems = overviewExpanded ? overviewItems : getTopFindings(overviewItems, 3);
       var cardsContainer = el('div');
       for (var idx = 0; idx < displayItems.length; idx++) {
@@ -1297,7 +1321,7 @@ const CLIENT = String.raw`
       }
       panel.appendChild(cardsContainer);
 
-      if (overviewItems.length > 3) {
+      if (overviewItems.length > displayItems.length || (overviewExpanded && overviewItems.length > 3)) {
         var viewAllBtn = el('button', 'view-all-btn', overviewExpanded ? 'Show top 3 findings' : 'View all ' + overviewItems.length + ' findings');
         viewAllBtn.type = 'button';
         viewAllBtn.addEventListener('click', function () {
@@ -1359,7 +1383,7 @@ const CLIENT = String.raw`
     var pairSummary = view.qualifyingPairs === view.possiblePairs
       ? 'All ' + view.possiblePairs + ' pairwise links across ' + view.members.length + ' sibling directories passed thresholds.'
       : view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairwise links passed thresholds across ' + view.members.length + ' sibling directories.';
-    note.textContent = pairSummary + ' ' + plural(view.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ').';
+    note.textContent = pairSummary + ' ' + plural(view.commitsTouchingTwoOrMore, 'supporting commit') + ' (2+ members via a qualifying pair; ' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ').';
     card.appendChild(note);
 
     card.addEventListener('pointerenter', function () {
@@ -1445,7 +1469,7 @@ const CLIENT = String.raw`
     var grid = el('div', 'cochange-grid');
     var card1 = el('div', 'cochange-card');
     card1.appendChild(el('div', 'cochange-pct', String(view.commitsTouchingTwoOrMore)));
-    card1.appendChild(el('div', 'cochange-label', 'Unique commits touching 2+ family members (not a pairwise sum)'));
+    card1.appendChild(el('div', 'cochange-label', 'Supporting commits (2+ members via a qualifying pair)'));
     grid.appendChild(card1);
 
     var card2 = el('div', 'cochange-card');
@@ -1590,7 +1614,7 @@ const CLIENT = String.raw`
     if (view.evidence && view.evidence.length > 0) {
       var evDetails = el('details', 'evidence-wrap');
       evDetails.open = true;
-      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.evidence.length + ' of ' + view.commitsTouchingTwoOrMore + ' touching 2+ members)'));
+      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.evidence.length + ' of ' + view.commitsTouchingTwoOrMore + ' touching 2+ members via a qualifying pair)'));
       var list = el('ul', 'evidence');
       view.evidence.forEach(function (ev) {
         var li = el('li');

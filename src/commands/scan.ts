@@ -129,7 +129,7 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
         ? `all ${fam.possiblePairs} pairwise links met thresholds`
         : `${fam.qualifyingPairs} of ${fam.possiblePairs} pairwise links met thresholds`;
       console.log(
-        `    ${plural(fam.commitsTouchingTwoOrMore, 'commit')} touched 2+ members · ${plural(fam.commitsTouchingAll, 'commit')} touched all ${fam.members.length} · ${pairNote} · last together ${timeAgo(Date.parse(fam.lastTogether) / 1000)}`,
+        `    ${plural(fam.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair) · ${plural(fam.commitsTouchingAll, 'commit')} touched all ${fam.members.length} · ${pairNote} · last together ${timeAgo(Date.parse(fam.lastTogether) / 1000)}`,
       );
       for (const ev of fam.evidence) {
         const scope = ev.touchesAllMembers

@@ -578,13 +578,17 @@ export function printDiff(result: DiffResult): void {
     return;
   }
   if (result.families && result.families.length > 0) {
+    const shownSuggested = new Set(result.suggestions.map((s) => s.to));
     console.log(c.bold(`Finding families (${result.families.length})`));
     for (const fam of result.families) {
       const pairNote = fam.complete
         ? `all ${fam.possiblePairs} pairwise links met thresholds`
         : `${fam.qualifyingPairs} of ${fam.possiblePairs} pairwise links met thresholds`;
+      const suggestedLabels = fam.suggestedMembers.map((p) =>
+        shownSuggested.has(p) ? c.bold(terminalText(p)) : `${c.bold(terminalText(p))} ${c.dim('(beyond --limit)')}`,
+      );
       console.log(
-        `  ${c.bold(terminalText(fam.label))} — changed ${fam.changedMembers.map(terminalText).join(', ')}; check ${c.bold(fam.suggestedMembers.map(terminalText).join(', '))} ${c.dim(`(${pairNote} · ${plural(fam.commitsTouchingTwoOrMore, 'commit')})`)}`,
+        `  ${c.bold(terminalText(fam.label))} — changed ${fam.changedMembers.map(terminalText).join(', ')}; check ${suggestedLabels.join(', ')} ${c.dim(`(${pairNote} · ${plural(fam.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair))`)}`,
       );
     }
     console.log();
