@@ -66,31 +66,24 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
     counts[entry.relationship]++;
     if (options.kinds.includes(entry.relationship)) pending.push(entry);
   }
-  let candidateEntries: ClassifiedCompanion[];
   if (options.uncheckedCap === undefined) {
-    candidateEntries = pending;
     for (const entry of pending.slice(0, options.limit)) selected.push(toView(ctx, entry.companion, entry.relationship));
   } else {
     // Checked results first; unchecked ones only fill the remaining space, up to the cap.
-    const checkedAll = pending.filter((e) => e.relationship !== 'unknown');
-    const checked = checkedAll.slice(0, options.limit);
+    const checked = pending.filter((e) => e.relationship !== 'unknown').slice(0, options.limit);
     const room = Math.min(options.uncheckedCap, options.limit - checked.length);
     const filler = room > 0 ? pending.filter((e) => e.relationship === 'unknown').slice(0, room) : [];
     for (const entry of [...checked, ...filler]) selected.push(toView(ctx, entry.companion, entry.relationship));
-    candidateEntries = [
-      ...checkedAll,
-      ...pending.filter((e) => e.relationship === 'unknown').slice(0, options.uncheckedCap),
-    ];
   }
   const familyCandidates: RelationshipView[] = [];
-  for (const entry of candidateEntries) {
+  for (const entry of pending) {
     const fromPath = ctx.model.path(entry.companion.from);
     const toPath = ctx.model.path(entry.companion.to);
     if (parallelImplementation(fromPath, toPath) !== undefined) {
       familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
     }
   }
-  const families = buildFindingFamilies(ctx, familyCandidates).slice(0, options.limit);
+  const families = buildFindingFamilies(ctx, familyCandidates, { allowedKinds: options.kinds }).slice(0, options.limit);
   return {
     meta: buildMeta(ctx),
     counts,

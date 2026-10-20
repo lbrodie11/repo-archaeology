@@ -4,7 +4,7 @@ import { basename, dirname, join, posix, resolve } from 'node:path';
 import type { Context } from '../context.js';
 import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js';
 import { runGit } from '../git/run.js';
-import type { HiddenBridge, Relationship } from '../imports/classify.js';
+import { parallelImplementation, type HiddenBridge, type Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
@@ -84,11 +84,31 @@ export interface MapEdge {
   explainCommand?: string;
 }
 
+export interface MapUndrawnPair {
+  from: string;
+  to: string;
+  relationship: Relationship;
+  why: string;
+  shared: number;
+  fromChanges: number;
+  toChanges: number;
+  confidence: number;
+  reverseConfidence: number;
+  score: number;
+  weighted: boolean;
+  lastTogether: string;
+  explainCommand: string;
+}
+
 export interface MapFamily extends Omit<FindingFamilyView, 'relationships'> {
-  /** Indices into `data.nodes` corresponding to `members`. */
+  /** Indices into `data.nodes` corresponding to `members` (`-1` when a member has no drawn edges). */
   nodeIndices: number[];
-  /** Indices into `data.edges` for the qualifying pairwise edges in this family. */
+  /** Indices into `data.edges` for the qualifying pairwise edges in this family that were drawn. */
   edgeIndices: number[];
+  /** Qualifying pairwise relationships in this family that met thresholds but were omitted from `data.edges` by display caps. */
+  undrawnPairs?: MapUndrawnPair[];
+  /** Sorted member index arrays for every qualifying commit in this family, enabling exact active-member stats when filtered. */
+  commitMemberIndices?: number[][];
   /** Highest `overviewPriority` among `edgeIndices`. */
   overviewPriority: number;
 }
@@ -171,7 +191,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
 
   const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
   const edges: MapEdge[] = [];
-  const edgeViews: RelationshipView[] = [];
+  const familyCandidates: RelationshipView[] = [];
   const edgeIndexByPairKey = new Map<string, number>();
   let unchecked = 0;
   const classified = classifiedPairs(ctx);
@@ -180,9 +200,16 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
   for (const { companion, relationship } of classified.entries) {
     counts[relationship]++;
     if (!options.kinds.includes(relationship)) continue;
+    const fromPath = ctx.model.path(companion.from);
+    const toPath = ctx.model.path(companion.to);
+    let cachedView: RelationshipView | undefined;
+    if (parallelImplementation(fromPath, toPath) !== undefined) {
+      cachedView = toView(ctx, companion, relationship, fromPath, toPath);
+      familyCandidates.push(cachedView);
+    }
     if (relationship === 'unknown' && uncheckedCap !== undefined && unchecked >= uncheckedCap) continue;
     if (edges.length >= options.edges) continue;
-    const view = toView(ctx, companion, relationship);
+    const view = cachedView ?? toView(ctx, companion, relationship, fromPath, toPath);
     if (relationship === 'unknown') unchecked++;
 
     const evidence: MapEdgeEvidence[] = companion.stat.evidence.map((commitIdx) => {
@@ -206,7 +233,6 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     const edgeIndex = edges.length;
     const [u, v] = view.from < view.to ? [view.from, view.to] : [view.to, view.from];
     edgeIndexByPairKey.set(`${u}\u0000${v}`, edgeIndex);
-    edgeViews.push(view);
 
     edges.push({
       source: nodeFor(view.from),
@@ -235,21 +261,47 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     });
   }
 
-  const rawFamilies = buildFindingFamilies(ctx, edgeViews);
+  const commitMemberIndicesByFamily = new Map<string, number[][]>();
+  const rawFamilies = buildFindingFamilies(ctx, familyCandidates, {
+    allowedKinds: options.kinds,
+    commitMemberIndicesByFamily,
+  });
   const families: MapFamily[] = rawFamilies.map((fam) => {
-    const nodeIndices = fam.members.map((m) => nodeFor(m.path));
+    const nodeIndices = fam.members.map((m) => nodeIndex.get(m.path) ?? -1);
     const edgeIndices: number[] = [];
+    const undrawnPairs: MapUndrawnPair[] = [];
     for (const rel of fam.relationships) {
       const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
       const eIdx = edgeIndexByPairKey.get(`${u}\u0000${v}`);
-      if (eIdx !== undefined) edgeIndices.push(eIdx);
+      if (eIdx !== undefined) {
+        edgeIndices.push(eIdx);
+      } else {
+        undrawnPairs.push({
+          from: rel.from,
+          to: rel.to,
+          relationship: rel.relationship,
+          why: rel.why,
+          shared: rel.shared,
+          fromChanges: rel.fromChanges,
+          toChanges: rel.toChanges,
+          confidence: rel.confidence,
+          reverseConfidence: rel.reverseConfidence,
+          score: rel.score,
+          weighted: rel.weighted,
+          lastTogether: rel.lastTogether,
+          explainCommand: formatExplainCommand(rel.from, rel.to, ctx.settings, ctx.flagSettings),
+        });
+      }
     }
     const overviewPriority = Math.max(0, ...edgeIndices.map((idx) => edges[idx]?.overviewPriority ?? 0));
+    const commitMemberIndices = commitMemberIndicesByFamily.get(fam.id);
     const { relationships: _relationships, ...famBase } = fam;
     return {
       ...famBase,
       nodeIndices,
       edgeIndices,
+      ...(undrawnPairs.length > 0 ? { undrawnPairs } : {}),
+      ...(commitMemberIndices ? { commitMemberIndices } : {}),
       overviewPriority,
     };
   });
@@ -360,7 +412,7 @@ export function openInBrowser(file: string): void {
 export function printMap(file: string, data: MapData, opened: boolean): void {
   const ghosts = data.edges.filter((e) => e.relationship === 'ghost').length;
   const familyCount = data.families?.length ?? 0;
-  const familyNote = familyCount > 0 ? `, ${plural(familyCount, 'finding family')}` : '';
+  const familyNote = familyCount > 0 ? `, ${plural(familyCount, 'finding family', 'finding families')}` : '';
   console.log(`${c.bold('Repo Archaeology')} ${c.dim('·')} map`);
   for (const warning of data.meta.warnings) console.log(c.yellow(`! ${terminalText(warning)}`));
   if (data.edges.length === 0) {

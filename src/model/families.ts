@@ -1,8 +1,9 @@
 import { posix } from 'node:path';
 import type { Context } from '../context.js';
-import { parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
-import { EVIDENCE_LIMIT } from './cochange.js';
-import type { EvidenceView, RelationshipView } from '../report/views.js';
+import { isProjectConfig, parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
+import { EVIDENCE_LIMIT, type Companion } from './cochange.js';
+import { toView, type EvidenceView, type RelationshipView } from '../report/views.js';
+import { wilsonLowerBound } from '../util/stats.js';
 import { isoDate, plural } from '../util/term.js';
 
 export interface FamilyEvidenceView extends EvidenceView {
@@ -76,6 +77,53 @@ export interface BuildFindingFamiliesOptions {
    * (used by `diff` when a file was renamed on a branch or in the working tree).
    */
   historyPathByMember?: ReadonlyMap<string, string>;
+  /**
+   * Optional allowed relationship kinds when completing missing member pairs against `ctx.model`.
+   */
+  allowedKinds?: readonly Relationship[];
+  /**
+   * Optional map populated with the sorted member index arrays for every qualifying commit per family ID.
+   */
+  commitMemberIndicesByFamily?: Map<string, number[][]>;
+}
+
+/**
+ * Evaluates whether two parallel-implementation paths qualify in either direction (`A -> B` or `B -> A`)
+ * against `ctx.model` and `ctx.thresholds`, returning the canonical `RelationshipView` when they do.
+ */
+export function evaluateParallelPair(
+  ctx: Context,
+  pathA: string,
+  pathB: string,
+  allowedKinds?: readonly Relationship[],
+  historyPathByMember?: ReadonlyMap<string, string>,
+): RelationshipView | undefined {
+  if (isProjectConfig(pathA) || isProjectConfig(pathB)) return undefined;
+  if (!parallelImplementation(pathA, pathB)) return undefined;
+  const { model, thresholds } = ctx;
+  const histA = historyPathByMember?.get(pathA) ?? pathA;
+  const histB = historyPathByMember?.get(pathB) ?? pathB;
+  const idA = model.id(histA);
+  const idB = model.id(histB);
+  if (idA === undefined || idB === undefined || idA === idB) return undefined;
+  const stat = model.pair(idA, idB);
+  if (!stat || stat.count < thresholds.minShared) return undefined;
+  const confAB = model.confidence(stat, idA);
+  const confBA = model.confidence(stat, idB);
+  const passAB = confAB >= thresholds.minConfidence;
+  const passBA = confBA >= thresholds.minConfidence;
+  if (!passAB && !passBA) return undefined;
+  const rel = ctx.classifier.classify(pathA, pathB);
+  if (allowedKinds && !allowedKinds.includes(rel)) return undefined;
+
+  const scoreAB = wilsonLowerBound(confAB, model.effectiveChanges(idA));
+  const scoreBA = wilsonLowerBound(confBA, model.effectiveChanges(idB));
+  const forward = passAB && (!passBA || scoreAB > scoreBA || (scoreAB === scoreBA && confAB >= confBA));
+  const companion: Companion = forward
+    ? { from: idA, to: idB, stat, confidence: confAB, reverseConfidence: confBA, score: scoreAB }
+    : { from: idB, to: idA, stat, confidence: confBA, reverseConfidence: confAB, score: scoreBA };
+  const [fromPath, toPath] = forward ? [pathA, pathB] : [pathB, pathA];
+  return toView(ctx, companion, rel, fromPath, toPath);
 }
 
 function fileStem(path: string): string {
@@ -140,17 +188,24 @@ interface RankedCommitEvidence {
  *   in a single pass over `ctx.model.commits` rather than summing pairwise counts.
  */
 export function buildFindingFamilies(
-  ctx: Pick<Context, 'model'>,
+  ctx: Pick<Context, 'model'> & Partial<Pick<Context, 'thresholds' | 'classifier' | 'settings'>>,
   relationships: readonly RelationshipView[],
   options: BuildFindingFamiliesOptions = {},
 ): FindingFamilyView[] {
   const { model } = ctx;
-  const { historyPathByMember } = options;
+  const { historyPathByMember, allowedKinds, commitMemberIndicesByFamily } = options;
+  const canEvaluateModelPairs =
+    allowedKinds !== undefined
+    && ctx.thresholds !== undefined
+    && ctx.classifier !== undefined
+    && ctx.settings !== undefined;
 
   // 1. Deduplicate qualifying parallel-implementation pairs by unordered file pair.
   const bestPairByKey = new Map<string, RelationshipView>();
   for (const rel of relationships) {
+    if (isProjectConfig(rel.from) || isProjectConfig(rel.to)) continue;
     if (!parallelImplementation(rel.from, rel.to)) continue;
+    if (allowedKinds && !allowedKinds.includes(rel.relationship)) continue;
     const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
     const key = `${u}\u0000${v}`;
     const existing = bestPairByKey.get(key);
@@ -220,9 +275,26 @@ export function buildFindingFamilies(
       if (compNodes.length < 3 || distinctDirs.size < 3) continue;
 
       const nodeSet = new Set(compNodes);
-      const compPairs = bucket.pairs
-        .filter((rel) => nodeSet.has(rel.from) && nodeSet.has(rel.to))
-        .sort(compareRelationshipViews);
+      const compPairs = bucket.pairs.filter((rel) => nodeSet.has(rel.from) && nodeSet.has(rel.to));
+      if (canEvaluateModelPairs) {
+        const existingPairKeys = new Set(
+          compPairs.map((r) => (r.from < r.to ? `${r.from}\u0000${r.to}` : `${r.to}\u0000${r.from}`)),
+        );
+        for (let i = 0; i < compNodes.length; i++) {
+          for (let j = i + 1; j < compNodes.length; j++) {
+            const pathA = compNodes[i]!;
+            const pathB = compNodes[j]!;
+            const key = `${pathA}\u0000${pathB}`;
+            if (existingPairKeys.has(key)) continue;
+            const extraView = evaluateParallelPair(ctx as Context, pathA, pathB, allowedKinds, historyPathByMember);
+            if (extraView) {
+              compPairs.push(extraView);
+              existingPairKeys.add(key);
+            }
+          }
+        }
+      }
+      compPairs.sort(compareRelationshipViews);
       if (compPairs.length < 2) continue;
       bucketComponents.push({ memberPaths: compNodes, pairs: compPairs });
     }
@@ -262,9 +334,9 @@ export function buildFindingFamilies(
     return {
       commitsTouchingTwoOrMore: 0,
       commitsTouchingAll: 0,
-      lastSharedTime: 0,
       lastQualifyingTime: 0,
       qualifyingMemberPairs,
+      commitMemberIndices: [] as number[][],
       topEvidence: [] as RankedCommitEvidence[],
       topAllMemberEvidence: [] as RankedCommitEvidence[],
     };
@@ -336,8 +408,6 @@ export function buildFindingFamilies(
         memberIndices.sort((a, b) => a - b);
         const st = statsByFamily[familyIdx]!;
         const cand = candidates[familyIdx]!;
-        st.commitsTouchingTwoOrMore++;
-        st.lastSharedTime = Math.max(st.lastSharedTime, commit.time);
 
         let touchesQualifyingPair = false;
         for (let i = 0; i < memberIndices.length && !touchesQualifyingPair; i++) {
@@ -348,9 +418,11 @@ export function buildFindingFamilies(
             }
           }
         }
-        if (touchesQualifyingPair) {
-          st.lastQualifyingTime = Math.max(st.lastQualifyingTime, commit.time);
-        }
+        if (!touchesQualifyingPair) continue;
+
+        st.commitsTouchingTwoOrMore++;
+        st.lastQualifyingTime = Math.max(st.lastQualifyingTime, commit.time);
+        st.commitMemberIndices.push(memberIndices);
 
         const entry: RankedCommitEvidence = { commitIdx, memberIndices };
         insertEvidence(st.topEvidence, entry);
@@ -365,6 +437,7 @@ export function buildFindingFamilies(
   // 5. Build deterministic `FindingFamilyView` objects.
   const results: FindingFamilyView[] = candidates.map((cand, familyIdx) => {
     const st = statsByFamily[familyIdx]!;
+    commitMemberIndicesByFamily?.set(cand.id, st.commitMemberIndices);
     const totalMembers = cand.memberPaths.length;
     const possiblePairs = (totalMembers * (totalMembers - 1)) / 2;
     const qualifyingPairs = cand.pairs.length;
@@ -420,9 +493,7 @@ export function buildFindingFamilies(
     const maxPairShared = Math.max(...cand.pairs.map((p) => p.shared), 0);
     const lastTogether = st.lastQualifyingTime > 0
       ? isoDate(st.lastQualifyingTime)
-      : st.lastSharedTime > 0
-        ? isoDate(st.lastSharedTime)
-        : (cand.pairs[0]?.lastTogether ?? '');
+      : (cand.pairs[0]?.lastTogether ?? '');
 
     const toFamilyEvidence = (entry: RankedCommitEvidence): FamilyEvidenceView => {
       const commit = commits[entry.commitIdx]!;

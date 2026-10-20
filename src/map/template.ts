@@ -371,7 +371,7 @@ const CLIENT = String.raw`
       var n = typeof m.nodeIndex === 'number' && nodes[m.nodeIndex] ? nodes[m.nodeIndex] : nodeByPath[m.path];
       if (n) famNodes.push(n);
     });
-    return { d: f, members: f.members || [], edges: famEdges, nodes: famNodes };
+    return { d: f, members: f.members || [], edges: famEdges, undrawnPairs: f.undrawnPairs || [], nodes: famNodes };
   });
 
   // Disambiguate duplicate basenames (e.g. multiple page.tsx or route.ts)
@@ -549,13 +549,13 @@ const CLIENT = String.raw`
   function isVisible(e) { return visible[e.d.relationship]; }
   function isActive(n) { return n.edges.some(isVisible); }
 
-  function getActiveFamilyViews(fam, allowedEdges) {
+  function getActiveFamilyViews(fam) {
     if (!fam) return [];
-    var allowedSet = allowedEdges ? new Set(allowedEdges) : null;
-    var activeEdges = fam.edges.filter(function (e) {
-      return isVisible(e) && (!allowedSet || allowedSet.has(e));
+    var activeEdges = fam.edges.filter(isVisible);
+    var activeUndrawn = (fam.undrawnPairs || []).filter(function (up) {
+      return Boolean(visible[up.relationship]);
     });
-    if (activeEdges.length < 2) return [];
+    if (activeEdges.length + activeUndrawn.length < 2) return [];
     var adj = Object.create(null);
     fam.members.forEach(function (m) { adj[m.path] = []; });
     activeEdges.forEach(function (e) {
@@ -564,6 +564,15 @@ const CLIENT = String.raw`
         adj[e.t.path].push(e.s.path);
       }
     });
+    activeUndrawn.forEach(function (up) {
+      if (adj[up.from] && adj[up.to]) {
+        adj[up.from].push(up.to);
+        adj[up.to].push(up.from);
+      }
+    });
+    var memberIdxByPath = Object.create(null);
+    fam.members.forEach(function (m, idx) { memberIdxByPath[m.path] = idx; });
+
     var visited = Object.create(null);
     var views = [];
     fam.members.forEach(function (m) {
@@ -587,11 +596,125 @@ const CLIENT = String.raw`
       var compMembers = fam.members.filter(function (mem) { return Boolean(compPaths[mem.path]); });
       if (compMembers.length < 3) return;
       var compEdges = activeEdges.filter(function (e) { return Boolean(compPaths[e.s.path] && compPaths[e.t.path]); });
+      var compUndrawn = activeUndrawn.filter(function (up) { return Boolean(compPaths[up.from] && compPaths[up.to]); });
+      var qualifyingPairs = compEdges.length + compUndrawn.length;
+      if (qualifyingPairs < 2) return;
+      var possiblePairs = (compMembers.length * (compMembers.length - 1)) / 2;
+      var isSubset = compMembers.length < fam.members.length || qualifyingPairs < fam.d.qualifyingPairs;
+
       var compNodes = [];
       compMembers.forEach(function (mem) {
         var n = typeof mem.nodeIndex === 'number' && nodes[mem.nodeIndex] ? nodes[mem.nodeIndex] : nodeByPath[mem.path];
         if (n) compNodes.push(n);
       });
+
+      var commitsTouchingTwoOrMore = fam.d.commitsTouchingTwoOrMore;
+      var commitsTouchingAll = fam.d.commitsTouchingAll;
+      var lastTogether = fam.d.lastTogether;
+      var activeEvidence = fam.d.evidence || [];
+
+      if (isSubset) {
+        var compIdxSet = Object.create(null);
+        compMembers.forEach(function (mem) {
+          var mi = memberIdxByPath[mem.path];
+          if (typeof mi === 'number') compIdxSet[mi] = true;
+        });
+        var activePairIdxSet = Object.create(null);
+        var activePairPathSet = Object.create(null);
+        function addActivePair(pA, pB) {
+          activePairPathSet[edgeKey(pA, pB)] = true;
+          var ia = memberIdxByPath[pA];
+          var ib = memberIdxByPath[pB];
+          if (typeof ia === 'number' && typeof ib === 'number') {
+            var lo = ia < ib ? ia : ib;
+            var hi = ia < ib ? ib : ia;
+            activePairIdxSet[lo + ':' + hi] = true;
+          }
+        }
+        compEdges.forEach(function (e) { addActivePair(e.s.path, e.t.path); });
+        compUndrawn.forEach(function (up) { addActivePair(up.from, up.to); });
+
+        var evByHash = Object.create(null);
+        var evOrder = [];
+        function collectEv(ev, extraPaths) {
+          if (!ev || !ev.hash) return;
+          var rec = evByHash[ev.hash];
+          if (!rec) {
+            rec = { hash: ev.hash, date: ev.date || '', author: ev.author || '', subject: ev.subject || '', pathMap: Object.create(null) };
+            evByHash[ev.hash] = rec;
+            evOrder.push(rec);
+          }
+          (ev.memberPaths || []).forEach(function (p) {
+            if (compPaths[p]) rec.pathMap[p] = true;
+          });
+          (extraPaths || []).forEach(function (p) {
+            if (compPaths[p]) rec.pathMap[p] = true;
+          });
+        }
+        (fam.d.evidence || []).forEach(function (ev) { collectEv(ev); });
+        (fam.d.allMemberEvidence || []).forEach(function (ev) { collectEv(ev); });
+        compEdges.forEach(function (e) {
+          (e.d.evidence || []).forEach(function (ev) { collectEv(ev, [e.s.path, e.t.path]); });
+        });
+
+        var filteredEv = [];
+        evOrder.forEach(function (rec) {
+          var paths = compMembers.map(function (mem) { return mem.path; }).filter(function (p) { return Boolean(rec.pathMap[p]); });
+          if (paths.length < 2) return;
+          var hasActivePair = false;
+          for (var a = 0; a < paths.length && !hasActivePair; a++) {
+            for (var b = a + 1; b < paths.length; b++) {
+              if (activePairPathSet[edgeKey(paths[a], paths[b])]) {
+                hasActivePair = true;
+                break;
+              }
+            }
+          }
+          if (!hasActivePair) return;
+          filteredEv.push({
+            hash: rec.hash,
+            date: rec.date,
+            author: rec.author,
+            subject: rec.subject,
+            membersTouched: paths.length,
+            totalMembers: compMembers.length,
+            touchesAllMembers: paths.length === compMembers.length,
+            memberPaths: paths
+          });
+        });
+        filteredEv.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+        activeEvidence = filteredEv.slice(0, 5);
+
+        if (fam.d.commitMemberIndices && fam.d.commitMemberIndices.length > 0) {
+          commitsTouchingTwoOrMore = 0;
+          commitsTouchingAll = 0;
+          fam.d.commitMemberIndices.forEach(function (mIndices) {
+            var activeIdxs = (mIndices || []).filter(function (idx) { return Boolean(compIdxSet[idx]); });
+            if (activeIdxs.length < 2) return;
+            var hasPair = false;
+            for (var i = 0; i < activeIdxs.length && !hasPair; i++) {
+              for (var j = i + 1; j < activeIdxs.length; j++) {
+                var lo = activeIdxs[i] < activeIdxs[j] ? activeIdxs[i] : activeIdxs[j];
+                var hi = activeIdxs[i] < activeIdxs[j] ? activeIdxs[j] : activeIdxs[i];
+                if (activePairIdxSet[lo + ':' + hi]) {
+                  hasPair = true;
+                  break;
+                }
+              }
+            }
+            if (!hasPair) return;
+            commitsTouchingTwoOrMore++;
+            if (activeIdxs.length === compMembers.length) commitsTouchingAll++;
+          });
+        } else {
+          commitsTouchingTwoOrMore = filteredEv.length;
+          commitsTouchingAll = filteredEv.filter(function (ev) { return ev.touchesAllMembers; }).length;
+        }
+        if (activeEvidence.length > 0 && activeEvidence[0].date) {
+          lastTogether = activeEvidence[0].date;
+        }
+      }
+
       views.push({
         id: fam.d.id + ':' + compMembers.map(function (mem) { return mem.path; }).join(','),
         d: fam.d,
@@ -599,9 +722,14 @@ const CLIENT = String.raw`
         members: compMembers,
         nodes: compNodes,
         edges: compEdges,
-        qualifyingPairs: compEdges.length,
-        possiblePairs: (compMembers.length * (compMembers.length - 1)) / 2,
-        isSubset: compMembers.length < fam.members.length || compEdges.length < fam.edges.length
+        undrawnPairs: compUndrawn,
+        qualifyingPairs: qualifyingPairs,
+        possiblePairs: possiblePairs,
+        commitsTouchingTwoOrMore: commitsTouchingTwoOrMore,
+        commitsTouchingAll: commitsTouchingAll,
+        lastTogether: lastTogether,
+        evidence: activeEvidence,
+        isSubset: isSubset
       });
     });
     return views;
@@ -981,15 +1109,21 @@ const CLIENT = String.raw`
     fallback();
   }
 
-  function sanitizeMarkdown(text) {
+  function defuseMentions(text) {
     return String(text)
       .replace(/@([a-zA-Z0-9_-]+)/g, '@\u200B$1')
       .replace(/#([0-9]+)/g, '#\u200B$1');
   }
 
+  function sanitizeMarkdown(text) {
+    return defuseMentions(text)
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
+  }
+
   function mdCode(text) {
     var q = String.fromCharCode(96);
-    var s = sanitizeMarkdown(text).replace(/[\r\n]+/g, ' ');
+    var s = defuseMentions(text).replace(/[\r\n]+/g, ' ');
     var fence = q;
     while (s.indexOf(fence) !== -1) fence += q;
     var needsPad = s.charAt(0) === q || s.charAt(s.length - 1) === q || s.charAt(0) === ' ' || s.charAt(s.length - 1) === ' ';
@@ -1036,8 +1170,8 @@ const CLIENT = String.raw`
       '**Pattern:** ' + mdCode(view.d.label || view.d.id) + '  ',
       '**Members (' + view.members.length + ' files):** ' + view.members.map(function (m) { return mdCode(m.path); }).join(', ') + '  ',
       '**Pairwise Links:** ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed thresholds  ',
-      '**Family-Wide Commits:** ' + plural(view.d.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.d.commitsTouchingAll, 'commit') + ' touched all ' + view.d.members.length + ')  ',
-      '**Last Together:** ' + relativeDate(view.d.lastTogether) + '  ',
+      '**Family-Wide Commits:** ' + plural(view.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ')  ',
+      '**Last Together:** ' + relativeDate(view.lastTogether) + '  ',
       '',
       '**Qualifying Pairwise Relationships:**'
     ];
@@ -1045,9 +1179,13 @@ const CLIENT = String.raw`
       var labels = distinguishingPaths(e.s.path, e.t.path);
       lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(e.d.shared, 'shared commit') + ' (' + directionEvidence(e, true) + '; reverse ' + directionEvidence(e, false) + ')');
     });
-    if (view.d.evidence && view.d.evidence.length > 0) {
+    (view.undrawnPairs || []).forEach(function (up) {
+      var labels = distinguishingPaths(up.from, up.to);
+      lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(up.shared, 'shared commit') + ' (qualifies, not drawn)');
+    });
+    if (view.evidence && view.evidence.length > 0) {
       lines.push('', '**Family-Wide Supporting Commits (2+ members):**');
-      view.d.evidence.slice(0, 5).forEach(function (ev) {
+      view.evidence.slice(0, 5).forEach(function (ev) {
         var scopeTag = ev.touchesAllMembers ? 'all ' + ev.totalMembers + ' members' : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + ', ' + scopeTag + '): ' + sanitizeMarkdown(ev.subject));
       });
@@ -1070,7 +1208,7 @@ const CLIENT = String.raw`
   function buildOverviewItems(listData) {
     var edgeToFamilyView = new Map();
     families.forEach(function (fam) {
-      var views = getActiveFamilyViews(fam, listData);
+      var views = getActiveFamilyViews(fam);
       views.forEach(function (view) {
         view.edges.forEach(function (e) {
           edgeToFamilyView.set(e, view);
@@ -1205,7 +1343,7 @@ const CLIENT = String.raw`
     card.type = 'button';
     var head = el('div', 'card-header');
     head.appendChild(el('span', 'badge family', 'Related family · ' + view.members.length + ' files'));
-    head.appendChild(el('span', 'card-sub', plural(view.d.commitsTouchingTwoOrMore, 'commit') + ' (2+ files) · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' pairs'));
+    head.appendChild(el('span', 'card-sub', plural(view.commitsTouchingTwoOrMore, 'commit') + ' (2+ files) · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' pairs'));
     card.appendChild(head);
 
     var title = el('div', 'card-title', view.d.label || view.d.id);
@@ -1221,7 +1359,7 @@ const CLIENT = String.raw`
     var pairSummary = view.qualifyingPairs === view.possiblePairs
       ? 'All ' + view.possiblePairs + ' pairwise links across ' + view.members.length + ' sibling directories passed thresholds.'
       : view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairwise links passed thresholds across ' + view.members.length + ' sibling directories.';
-    note.textContent = pairSummary + ' ' + plural(view.d.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.d.commitsTouchingAll, 'commit') + ' touched all ' + view.d.members.length + ').';
+    note.textContent = pairSummary + ' ' + plural(view.commitsTouchingTwoOrMore, 'unique commit') + ' touched 2+ members (' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ').';
     card.appendChild(note);
 
     card.addEventListener('pointerenter', function () {
@@ -1298,18 +1436,21 @@ const CLIENT = String.raw`
     var head = el('div');
     head.appendChild(el('span', 'badge family', 'Related implementation family'));
     head.appendChild(el('h2', '', view.d.label || view.d.id));
-    head.appendChild(el('p', 'card-sub', view.members.length + ' sibling files · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' qualifying pairs · Last together ' + relativeDate(view.d.lastTogether)));
+    var subsetNote = view.isSubset && view.members.length < view.d.members.length
+      ? ' (filtered from ' + view.d.members.length + ' family members)'
+      : '';
+    head.appendChild(el('p', 'card-sub', view.members.length + ' sibling files' + subsetNote + ' · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' qualifying pairs · Last together ' + relativeDate(view.lastTogether)));
     panel.appendChild(head);
 
     var grid = el('div', 'cochange-grid');
     var card1 = el('div', 'cochange-card');
-    card1.appendChild(el('div', 'cochange-pct', String(view.d.commitsTouchingTwoOrMore)));
+    card1.appendChild(el('div', 'cochange-pct', String(view.commitsTouchingTwoOrMore)));
     card1.appendChild(el('div', 'cochange-label', 'Unique commits touching 2+ family members (not a pairwise sum)'));
     grid.appendChild(card1);
 
     var card2 = el('div', 'cochange-card');
-    card2.appendChild(el('div', 'cochange-pct', String(view.d.commitsTouchingAll)));
-    card2.appendChild(el('div', 'cochange-label', 'Commits touching all ' + view.d.members.length + ' family members together'));
+    card2.appendChild(el('div', 'cochange-pct', String(view.commitsTouchingAll)));
+    card2.appendChild(el('div', 'cochange-label', 'Commits touching all ' + view.members.length + ' family members together'));
     grid.appendChild(card2);
     panel.appendChild(grid);
 
@@ -1343,12 +1484,12 @@ const CLIENT = String.raw`
       boxHead.appendChild(link);
       boxHead.appendChild(el('span', 'family-variant-pill', m.variant));
       box.appendChild(boxHead);
-      box.appendChild(el('div', 'pair-dir', 'Folder: ' + m.directory + ' · Changed in ' + plural(m.changes, 'commit') + (m.topAuthor ? ' · Top author: ' + m.topAuthor : '')));
+      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + (m.topAuthor ? ' · Top author: ' + m.topAuthor : '')));
       memberContainer.appendChild(box);
     });
     panel.appendChild(memberContainer);
 
-    panel.appendChild(el('h3', '', 'Qualifying pairwise relationships (' + view.edges.length + ' of ' + view.possiblePairs + ' possible)'));
+    panel.appendChild(el('h3', '', 'Qualifying pairwise relationships (' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible)'));
     var pairList = el('div', 'family-pair-list');
     view.edges.forEach(function (e, idx) {
       var pKey = edgeKey(e.s.path, e.t.path);
@@ -1409,14 +1550,49 @@ const CLIENT = String.raw`
       details.appendChild(body);
       pairList.appendChild(details);
     });
+    (view.undrawnPairs || []).forEach(function (up, uIdx) {
+      var pKey = edgeKey(up.from, up.to);
+      var details = el('details', 'family-pair-details');
+      if (expandedFamilyPairKey ? expandedFamilyPairKey === pKey : (view.edges.length === 0 && uIdx === 0)) {
+        details.open = true;
+      }
+      details.addEventListener('toggle', function () {
+        if (details.open) expandedFamilyPairKey = pKey;
+      });
+      var summary = el('summary', 'family-pair-summary');
+      var labels = distinguishingPaths(up.from, up.to);
+      summary.appendChild(el('span', '', labels[0] + ' ↔ ' + labels[1]));
+      var meta = el('span', 'family-pair-meta');
+      meta.appendChild(el('span', 'badge ' + up.relationship, KINDS[up.relationship].label.replace(/s$/, '')));
+      meta.appendChild(el('span', 'badge unknown', 'qualifies (not drawn)'));
+      var peakPct = pct(Math.max(up.confidence, up.reverseConfidence));
+      meta.appendChild(el('span', '', plural(up.shared, 'shared commit') + ' · ' + peakPct));
+      summary.appendChild(meta);
+      details.appendChild(summary);
+
+      var body = el('div', 'family-pair-body');
+      body.appendChild(el('div', 'family-pair-stat', up.from + ' ↔ ' + up.to));
+      var pseudoEdge = { d: up };
+      body.appendChild(el('div', 'family-pair-stat', labels[0] + ' → ' + labels[1] + ': ' + directionEvidence(pseudoEdge, true)));
+      body.appendChild(el('div', 'family-pair-stat', labels[1] + ' → ' + labels[0] + ': ' + directionEvidence(pseudoEdge, false)));
+      body.appendChild(el('div', 'family-pair-stat', 'Qualifies (not drawn on canvas due to map display cap).'));
+      if (up.explainCommand) {
+        var cmdBtn = el('button', 'btn-inspect-pair', 'Copy CLI command: ' + up.explainCommand);
+        cmdBtn.type = 'button';
+        cmdBtn.addEventListener('click', function () { copyText(up.explainCommand, cmdBtn, 'Copied command'); });
+        body.appendChild(cmdBtn);
+      }
+      details.appendChild(body);
+      pairList.appendChild(details);
+    });
     panel.appendChild(pairList);
 
-    if (view.d.evidence && view.d.evidence.length > 0) {
+    if (view.evidence && view.evidence.length > 0) {
       var evDetails = el('details', 'evidence-wrap');
       evDetails.open = true;
-      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.d.evidence.length + ' of ' + view.d.commitsTouchingTwoOrMore + ' touching 2+ members)'));
+      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.evidence.length + ' of ' + view.commitsTouchingTwoOrMore + ' touching 2+ members)'));
       var list = el('ul', 'evidence');
-      view.d.evidence.forEach(function (ev) {
+      view.evidence.forEach(function (ev) {
         var li = el('li');
         var hash = el('button', 'hash', ev.hash.slice(0, 7));
         hash.type = 'button'; hash.title = 'Copy full commit hash';

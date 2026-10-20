@@ -1,11 +1,10 @@
 import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, type Context } from '../context.js';
 import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
-import { parallelImplementation, type Relationship } from '../imports/classify.js';
+import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
-import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
+import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } from '../model/families.js';
 import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
-import { wilsonLowerBound } from '../util/stats.js';
-import { c, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
+import { c, pct, plural, terminalText } from '../util/term.js';
 
 export interface DiffOptions {
   /** Compare the branch against this ref (merge-base) in addition to uncommitted changes. */
@@ -392,12 +391,10 @@ function explainSilence(
 function buildDiffFamilies(
   ctx: Context,
   changed: ChangedFileView[],
-  suggestions: Suggestion[],
-  extraParallelSuggestionViews: RelationshipView[],
+  allSuggestedPaths: readonly string[],
   kinds: Relationship[],
 ): DiffFamilyView[] {
-  if (suggestions.length === 0) return [];
-  const { model, thresholds } = ctx;
+  if (allSuggestedPaths.length === 0) return [];
 
   const historyPathByMember = new Map<string, string>();
   const changedSet = new Set<string>();
@@ -407,62 +404,29 @@ function buildDiffFamilies(
     historyPathByMember.set(f.path, f.historyPath);
   }
   const suggestedSet = new Set<string>();
-  for (const s of suggestions) {
-    suggestedSet.add(s.to);
-    if (!historyPathByMember.has(s.to)) {
-      historyPathByMember.set(s.to, s.to);
+  for (const sPath of allSuggestedPaths) {
+    suggestedSet.add(sPath);
+    if (!historyPathByMember.has(sPath)) {
+      historyPathByMember.set(sPath, sPath);
     }
   }
 
-  // Seed with qualifying parallel-implementation suggestion links (`changedFile -> suggestedFile`).
+  const candidateMembers = [...new Set([...changedSet, ...suggestedSet])];
+  if (candidateMembers.length < 3) return [];
+
+  // Evaluate all parallel-implementation pairs among changed + suggested members in either direction.
   const candidateViews: RelationshipView[] = [];
-  const activeParallelMembers = new Set<string>();
-  for (const rel of [...suggestions, ...extraParallelSuggestionViews]) {
-    if (!parallelImplementation(rel.from, rel.to)) continue;
-    candidateViews.push(rel);
-    activeParallelMembers.add(rel.from);
-    activeParallelMembers.add(rel.to);
-  }
-  if (activeParallelMembers.size < 3) return [];
-
-  // Among members already participating in qualifying parallel recommendations, also include
-  // qualifying parallel links between two suggested members or two changed members.
-  const activeList = [...activeParallelMembers];
-  for (let i = 0; i < activeList.length; i++) {
-    for (let j = i + 1; j < activeList.length; j++) {
-      const pathA = activeList[i]!;
-      const pathB = activeList[j]!;
-      const bothChanged = changedSet.has(pathA) && changedSet.has(pathB);
-      const bothSuggested = suggestedSet.has(pathA) && suggestedSet.has(pathB);
-      if (!bothChanged && !bothSuggested) continue;
-      if (!parallelImplementation(pathA, pathB)) continue;
-      const histA = historyPathByMember.get(pathA) ?? pathA;
-      const histB = historyPathByMember.get(pathB) ?? pathB;
-      const idA = model.id(histA);
-      const idB = model.id(histB);
-      if (idA === undefined || idB === undefined || idA === idB) continue;
-      const stat = model.pair(idA, idB);
-      if (!stat || stat.count < thresholds.minShared) continue;
-      const confAB = model.confidence(stat, idA);
-      const confBA = model.confidence(stat, idB);
-      const passAB = confAB >= thresholds.minConfidence;
-      const passBA = confBA >= thresholds.minConfidence;
-      if (!passAB && !passBA) continue;
-      const rel = ctx.classifier.classify(pathA, pathB);
-      if (!kinds.includes(rel)) continue;
-
-      const scoreAB = wilsonLowerBound(confAB, model.effectiveChanges(idA));
-      const scoreBA = wilsonLowerBound(confBA, model.effectiveChanges(idB));
-      const forward = passAB && (!passBA || scoreAB > scoreBA || (scoreAB === scoreBA && confAB >= confBA));
-      const companion: Companion = forward
-        ? { from: idA, to: idB, stat, confidence: confAB, reverseConfidence: confBA, score: scoreAB }
-        : { from: idB, to: idA, stat, confidence: confBA, reverseConfidence: confAB, score: scoreBA };
-      const [fromPath, toPath] = forward ? [pathA, pathB] : [pathB, pathA];
-      candidateViews.push(toView(ctx, companion, rel, fromPath, toPath));
+  for (let i = 0; i < candidateMembers.length; i++) {
+    for (let j = i + 1; j < candidateMembers.length; j++) {
+      const pathA = candidateMembers[i]!;
+      const pathB = candidateMembers[j]!;
+      const view = evaluateParallelPair(ctx, pathA, pathB, kinds, historyPathByMember);
+      if (view) candidateViews.push(view);
     }
   }
+  if (candidateViews.length < 2) return [];
 
-  const rawFamilies = buildFindingFamilies(ctx, candidateViews, { historyPathByMember });
+  const rawFamilies = buildFindingFamilies(ctx, candidateViews, { historyPathByMember, allowedKinds: kinds });
   const diffFamilies: DiffFamilyView[] = [];
   for (const fam of rawFamilies) {
     const changedMembers = fam.members.map((m) => m.path).filter((p) => changedSet.has(p));
@@ -500,7 +464,6 @@ export function suggestMissing(
       fromPath: string;
       relationship: Relationship;
       linkedFrom: Set<string>;
-      allLinks: Array<{ companion: Companion; fromPath: string; relationship: Relationship }>;
     }
   >();
   for (const file of changes) {
@@ -525,11 +488,9 @@ export function suggestMissing(
           fromPath: file.path,
           relationship,
           linkedFrom: new Set([file.path]),
-          allLinks: [{ companion, fromPath: file.path, relationship }],
         });
       } else {
         existing.linkedFrom.add(file.path);
-        existing.allLinks.push({ companion, fromPath: file.path, relationship });
         if (compareCompanions(companion, existing.companion) < 0) {
           existing.companion = companion;
           existing.fromPath = file.path;
@@ -539,24 +500,14 @@ export function suggestMissing(
     }
   }
 
-  const topEntries = [...best.values()]
-    .sort((x, y) => compareCompanions(x.companion, y.companion))
-    .slice(0, options.limit);
+  const allEntries = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
+  const topEntries = allEntries.slice(0, options.limit);
   const suggestions: Suggestion[] = topEntries.map((entry) => ({
     ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
     alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
   }));
-  const extraParallelSuggestionViews: RelationshipView[] = [];
-  for (const entry of topEntries) {
-    const target = model.path(entry.companion.to);
-    for (const link of entry.allLinks) {
-      if (link.fromPath === entry.fromPath) continue;
-      if (parallelImplementation(link.fromPath, target)) {
-        extraParallelSuggestionViews.push(toView(ctx, link.companion, link.relationship, link.fromPath));
-      }
-    }
-  }
-  const families = buildDiffFamilies(ctx, changed, suggestions, extraParallelSuggestionViews, options.kinds);
+  const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
+  const families = buildDiffFamilies(ctx, changed, allSuggestedPaths, options.kinds);
   const silence = suggestions.length === 0 ? explainSilence(ctx, changed, touched, options) : undefined;
   return { changed, suggestions, families, ...(silence ? { silence } : {}) };
 }
@@ -628,25 +579,15 @@ export function printDiff(result: DiffResult): void {
   }
   if (result.families && result.families.length > 0) {
     console.log(c.bold(`Finding families (${result.families.length})`));
-    console.log();
     for (const fam of result.families) {
-      const kinds = fam.relationshipKinds.map((k) => relationshipLabel(k)).join(c.dim(', '));
-      console.log(`  ${c.bold(terminalText(fam.label))}  ${c.cyan(`${fam.members.length} related implementations`)} ${c.dim('·')} ${kinds}`);
-      console.log(`    changed: ${fam.changedMembers.map(terminalText).join(', ')}`);
-      console.log(`    untouched in family: ${fam.suggestedMembers.map(terminalText).join(', ')}`);
+      const pairNote = fam.complete
+        ? `all ${fam.possiblePairs} pairwise links met thresholds`
+        : `${fam.qualifyingPairs} of ${fam.possiblePairs} pairwise links met thresholds`;
       console.log(
-        c.dim(
-          `    ${plural(fam.commitsTouchingTwoOrMore, 'commit')} touched 2+ members · ${plural(fam.commitsTouchingAll, 'commit')} touched all ${fam.members.length} · last together ${timeAgo(Date.parse(fam.lastTogether) / 1000)}`,
-        ),
+        `  ${c.bold(terminalText(fam.label))} — changed ${fam.changedMembers.map(terminalText).join(', ')}; check ${c.bold(fam.suggestedMembers.map(terminalText).join(', '))} ${c.dim(`(${pairNote} · ${plural(fam.commitsTouchingTwoOrMore, 'commit')})`)}`,
       );
-      for (const ev of fam.evidence) {
-        const scope = ev.touchesAllMembers
-          ? `all ${ev.totalMembers} members`
-          : `${ev.membersTouched} of ${ev.totalMembers} members`;
-        console.log(`    ${c.gray(shortHash(ev.hash))} ${c.dim(ev.date)}  ${terminalText(ev.subject)} ${c.dim(`[${scope}]`)}`);
-      }
-      console.log();
     }
+    console.log();
   }
   console.log(c.bold(`Possibly missed (${result.suggestions.length})`));
   console.log();

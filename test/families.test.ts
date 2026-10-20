@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import vm from 'node:vm';
@@ -255,6 +255,14 @@ describe('Stage 2 Feature 2: Finding Families', () => {
         },
       });
     }
+    // 1 single commit touching A (bun) and C (cloudflare-workers) -> below minShared (2), so A-C does NOT qualify
+    r.commit({
+      message: 'isolated below-threshold bun + cf commit',
+      write: {
+        'src/adapter/bun/websocket.ts': 'export const bunWs = 999;\n',
+        'src/adapter/cloudflare-workers/websocket.ts': 'export const cfWs = 999;\n',
+      },
+    });
 
     const ctx = await loadContext(r.dir, { minShared: 2, minConfidence: 0.4 });
     const result = scan(ctx, scanOpts);
@@ -275,21 +283,33 @@ describe('Stage 2 Feature 2: Finding Families', () => {
       'src/adapter/cloudflare-workers/websocket.ts <-> src/adapter/deno/websocket.ts',
     ]);
 
-    // Check family-wide commit counts: 6 unique commits touched >= 2 members; 0 touched all 3
+    // Check family-wide commit counts: only the 6 commits touching a qualifying pair are counted (never the 1 A-C commit)
     assert.equal(fam.commitsTouchingTwoOrMore, 6);
     assert.equal(fam.commitsTouchingAll, 0);
     assert.equal(fam.allMemberEvidence.length, 0);
+    assert.ok(fam.evidence.every((ev) => ev.subject !== 'isolated below-threshold bun + cf commit'));
   });
 
-  it('4, 5 & 6. rejects same-name files in unrelated directories, high-churn hubs, and 2-file pairs', async () => {
+  it('4, 5 & 6. rejects same-name files in unrelated directories, project config files, high-churn hubs, and 2-file pairs', async () => {
     const r = createRepo();
     for (let i = 1; i <= 4; i++) {
       r.commit({
-        message: `unrelated files, hub, and 2-file pair ${i}`,
+        message: `unrelated files, hub, configs, and 2-file pair ${i}`,
         write: {
           // High-churn hub files
           'package.json': `{"name":"test","version":"0.0.${i}"}\n`,
           'src/types.ts': `export type V = ${i};\n`,
+          // Sibling project configuration files (must never form implementation families)
+          'packages/alpha/package.json': `{"name":"alpha","version":"0.0.${i}"}\n`,
+          'packages/beta/package.json': `{"name":"beta","version":"0.0.${i}"}\n`,
+          'packages/gamma/package.json': `{"name":"gamma","version":"0.0.${i}"}\n`,
+          'packages/delta/package.json': `{"name":"delta","version":"0.0.${i}"}\n`,
+          'packages/alpha/tsconfig.json': `{"compilerOptions":{"strict":true},"include":["src-${i}"]}\n`,
+          'packages/beta/tsconfig.json': `{"compilerOptions":{"strict":true},"include":["src-${i}"]}\n`,
+          'packages/gamma/tsconfig.json': `{"compilerOptions":{"strict":true},"include":["src-${i}"]}\n`,
+          'packages/alpha/vite.config.ts': `export default { define: { V: ${i} } };\n`,
+          'packages/beta/vite.config.ts': `export default { define: { V: ${i} } };\n`,
+          'packages/gamma/vite.config.ts': `export default { define: { V: ${i} } };\n`,
           // Same-name index.ts at different hierarchy depths
           'src/index.ts': `export const rootIdx = ${i};\n`,
           'src/router/index.ts': `export const routerIdx = ${i};\n`,
@@ -306,10 +326,28 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     }
 
     const ctx = await loadContext(r.dir, { minShared: 2, minConfidence: 0.4 });
-    const result = scan(ctx, scanOpts);
+    const result = scan(ctx, { ...scanOpts, limit: 300 });
 
     // None of these should form a >=3-member Finding Family!
     assert.equal(result.families.length, 0);
+
+    // Sibling project configuration files must never be classified as parallel-implementation
+    const pkgConfigRel = result.relationships.find(
+      (rel) =>
+        (rel.from === 'packages/alpha/package.json' && rel.to === 'packages/beta/package.json') ||
+        (rel.from === 'packages/beta/package.json' && rel.to === 'packages/alpha/package.json'),
+    );
+    assert.ok(pkgConfigRel, 'Expected sibling package.json pair in relationships');
+    assert.equal(pkgConfigRel.why, 'involves project configuration, which code uses without importing');
+    assert.equal(pkgConfigRel.hiddenBridge, undefined);
+
+    const viteConfigRel = result.relationships.find(
+      (rel) =>
+        (rel.from === 'packages/alpha/vite.config.ts' && rel.to === 'packages/beta/vite.config.ts') ||
+        (rel.from === 'packages/beta/vite.config.ts' && rel.to === 'packages/alpha/vite.config.ts'),
+    );
+    assert.ok(viteConfigRel, 'Expected sibling vite.config.ts pair in relationships');
+    assert.notEqual(viteConfigRel.hiddenBridge?.signal, 'parallel-implementation');
 
     // Yet the 2-file parallel pair (bun/ssg.ts <-> deno/ssg.ts) is still preserved in relationships
     const ssgRel = result.relationships.find(
@@ -321,25 +359,38 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.equal(ssgRel.hiddenBridge?.signal, 'parallel-implementation');
   });
 
-  it('7. handles mixed relationship classifications inside a family and adapts map overview to active filters', async () => {
+  it('7. handles mixed relationship classifications inside a family and recomputes active-member stats when filtered in map', async () => {
     const r = createRepo();
-    // 3 sibling files where deno/etag.ts directly imports bun/etag.ts,
-    // while node/etag.ts has no import link to either (ghost wire with deno/etag.ts only).
+    // 4-member family: bun, deno, and node are connected by ghost wires (all 3 pairs),
+    // while cf is connected to bun via a direct import.
+    // - 1 commit touches all 4 (bun, deno, node, cf)
+    r.commit({
+      message: 'etag all 4 members',
+      write: {
+        'src/adapter/bun/etag.ts': 'export const baseEtag = 1;\n',
+        'src/adapter/deno/etag.ts': 'export const denoEtag = 1;\n',
+        'src/adapter/node/etag.ts': 'export const nodeEtag = 1;\n',
+        'src/adapter/cf/etag.ts': "import { baseEtag } from '../bun/etag.js';\nexport const cfEtag = baseEtag + 1;\n",
+      },
+    });
+    // - 3 commits touch bun, deno, and node (ghost triangle)
     for (let i = 1; i <= 3; i++) {
       r.commit({
-        message: `bun + deno direct import ${i}`,
+        message: `etag ghost trio ${i}`,
         write: {
-          'src/adapter/bun/etag.ts': `export const baseEtag = ${i};\n`,
-          'src/adapter/deno/etag.ts': `import { baseEtag } from '../bun/etag.js';\nexport const denoEtag = baseEtag + ${i};\n`,
+          'src/adapter/bun/etag.ts': `export const baseEtag = ${10 + i};\n`,
+          'src/adapter/deno/etag.ts': `export const denoEtag = ${10 + i};\n`,
+          'src/adapter/node/etag.ts': `export const nodeEtag = ${10 + i};\n`,
         },
       });
     }
-    for (let i = 1; i <= 3; i++) {
+    // - 2 commits touch only bun and cf (direct import link)
+    for (let i = 1; i <= 2; i++) {
       r.commit({
-        message: `deno + node ghost wire ${i}`,
+        message: `etag bun + cf direct ${i}`,
         write: {
-          'src/adapter/deno/etag.ts': `import { baseEtag } from '../bun/etag.js';\nexport const denoEtag = baseEtag + ${10 + i};\n`,
-          'src/adapter/node/etag.ts': `export const nodeEtag = ${i};\n`,
+          'src/adapter/bun/etag.ts': `export const baseEtag = ${20 + i};\n`,
+          'src/adapter/cf/etag.ts': `import { baseEtag } from '../bun/etag.js';\nexport const cfEtag = baseEtag + ${20 + i};\n`,
         },
       });
     }
@@ -349,35 +400,44 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.equal(result.families.length, 1);
     const fam = result.families[0]!;
     assert.deepEqual(fam.relationshipKinds, ['ghost', 'direct']);
-    assert.equal(fam.members.length, 3);
-    assert.equal(fam.qualifyingPairs, 2);
+    assert.equal(fam.members.length, 4);
+    assert.equal(fam.qualifyingPairs, 4);
+    assert.equal(fam.commitsTouchingTwoOrMore, 6);
+    assert.equal(fam.commitsTouchingAll, 1);
 
-    // In the map:
-    // - On the default "Ghost wires" tab, only the 1 ghost edge (deno <-> node) is in the tab list,
-    //   which connects only 2 files, so it must render as a normal 2-file card (NOT a 3-file family card).
-    // - On the "All links" tab, both the ghost edge and direct edge are in the list, connecting all 3 files,
-    //   so it must render as a 3-file family card!
     const mapData = buildMapData(ctx, mapOpts);
     const html = renderMapHtml(mapData);
     const { elementsById } = mountMapDom(html);
 
-    // Default tab is 'ghost' -> only 1 ghost edge (2 files), so 0 family cards and 1 normal card
+    // When both ghost and direct links are visible, the overview card shows all 4 members and 6 commits (1 touching all 4)
     let familyCards = elementsById.panel!.findAll((el) => el.className.includes('family-card'));
-    let normalCards = elementsById.panel!.findAll(
-      (el) => el.className.includes('card interactive') && !el.className.includes('family-card'),
-    );
-    assert.equal(familyCards.length, 0, 'Ghost tab with only 1 ghost edge must not claim a 3-file family');
-    assert.equal(normalCards.length, 1, 'Ghost tab should still show the 2-file ghost relationship card');
+    assert.equal(familyCards.length, 1);
+    assert.match(familyCards[0]!.textContent, /Related family · 4 files/);
+    assert.match(familyCards[0]!.textContent, /6 commits \(2\+ files\) · 4 of 6 pairs/);
+    assert.match(familyCards[0]!.textContent, /1 commit touched all 4/);
 
-    // Click "All links" tab -> both edges (ghost + direct) are included -> 1 family card!
-    const tabBtns = elementsById.panel!.findAll((el) => el.className.includes('tab-btn'));
-    const allTabBtn = tabBtns.find((b) => b.textContent.includes('All links'));
-    assert.ok(allTabBtn, 'Expected All links tab button');
-    allTabBtn.listeners.click?.[0]?.();
+    // Now click the "Import links" toggle button in #toggles to hide `direct` links (`src/adapter/cf/etag.ts`)
+    const toggleBtns = elementsById.toggles!.findAll((el) => el.className.includes('toggle'));
+    const directToggle = toggleBtns.find((b) => b.textContent.includes('Import links'));
+    assert.ok(directToggle, 'Expected Import links toggle button');
+    directToggle.listeners.click?.[0]?.();
 
+    // Overview card now reflects the 3 active members (bun, deno, node) and recomputes stats:
+    // 4 commits touched 2+ of the 3 active members, and all 4 touched all 3 active members!
     familyCards = elementsById.panel!.findAll((el) => el.className.includes('family-card'));
-    assert.equal(familyCards.length, 1, 'All links tab should group the 3 connected files into a family card');
+    assert.equal(familyCards.length, 1);
     assert.match(familyCards[0]!.textContent, /Related family · 3 files/);
+    assert.match(familyCards[0]!.textContent, /4 commits \(2\+ files\) · 3 of 3 pairs/);
+    assert.match(familyCards[0]!.textContent, /4 commits touched all 3/);
+    assert.doesNotMatch(familyCards[0]!.textContent, /touched all 4/);
+
+    // Open the filtered family detail panel and verify stat cards + supporting commits exclude `cf/etag.ts`
+    familyCards[0]!.listeners.click?.[0]?.();
+    const detailText = elementsById.panel!.textContent;
+    assert.match(detailText, /3 sibling files \(filtered from 4 family members\) · 3 of 3 qualifying pairs/);
+    assert.match(detailText, /Commits touching all 3 family members together/);
+    assert.doesNotMatch(detailText, /Commits touching all 4 family members together/);
+    assert.doesNotMatch(detailText, /src\/adapter\/cf\/etag\.ts/);
   });
 
   it('8. calculates true unique family-level commit counts instead of summing pairwise shared counts', async () => {
@@ -625,6 +685,7 @@ describe('Stage 2 Feature 2: Finding Families', () => {
       printScan(scanRes, scanOpts);
       printDiff({ meta: scanRes.meta, ...suggestRes });
       printMap('/tmp/logger-map.html', mapData, false);
+      printMap('/tmp/two-families-map.html', { ...mapData, families: [mapData.families![0]!, mapData.families![0]!] }, false);
     } finally {
       console.log = origLog;
     }
@@ -633,6 +694,8 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.match(output, /logger\.ts across src\/adapter\/\*/);
     assert.match(output, /all 3 pairwise links met thresholds/);
     assert.match(output, /1 finding family/);
+    assert.match(output, /2 finding families/);
+    assert.doesNotMatch(output, /familys/);
   });
 
   it('13 & 14. supports interactive family inspection, incomplete-triangle canvas accuracy, Evidence Explorer round-trip, and patch privacy', async () => {
@@ -750,7 +813,7 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     const r = createRepo();
     for (let i = 1; i <= 3; i++) {
       r.commit({
-        message: `commit with </script> & @user #123 ${i}`,
+        message: `commit with </script> <b>bold</b> [x](javascript:alert(1)) & @user #123 ${i}`,
         write: {
           'src/adapter/a&b/widget.ts': `export const a = ${i};\n`,
           'src/adapter/c#123/widget.ts': `export const b = ${i};\n`,
@@ -778,9 +841,13 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     // @user and #123 must be defused with zero-width space in Markdown export
     assert.ok(!md.includes('@user') || md.includes('@\u200Buser'));
     assert.ok(!md.includes('#123') || md.includes('#\u200B123'));
+    // Raw HTML tags and markdown links in commit subjects must be backslash-escaped
+    assert.ok(md.includes('\\<b\\>bold\\</b\\>'), 'Expected <b> tags to be escaped in Markdown export');
+    assert.ok(md.includes('\\[x\\]\\(javascript:alert\\(1\\)\\)'), 'Expected markdown links to be escaped in Markdown export');
+    assert.ok(md.includes('\\</script\\>'), 'Expected </script> to be escaped in Markdown export');
   });
 
-  it('16. real-world Hono smoke test: groups serve-static (3/3), websocket (2/3), and router (6/10) while keeping 2-file ssg as a pair', async () => {
+  it('16. models multi-family adapter and router topologies (serve-static 3/3, websocket 2/3, router 4/10, and 2-file ssg pair)', async () => {
     const r = createRepo();
     // 1. serve-static.ts: 3-way complete triangle (bun, cloudflare-workers, deno)
     for (let i = 1; i <= 6; i++) {
@@ -812,26 +879,19 @@ describe('Stage 2 Feature 2: Finding Families', () => {
         },
       });
     }
-    // 3. router.ts: 5-way incomplete graph (linear, pattern, reg-exp, smart, trie -> 6 of 10 pairs)
-    for (let i = 1; i <= 3; i++) {
-      r.commit({
-        message: `feat(router): core routers ${i}`,
-        write: {
-          'src/router/linear-router/router.ts': `export const lin = ${i};\n`,
-          'src/router/reg-exp-router/router.ts': `export const reg = ${i};\n`,
-          'src/router/smart-router/router.ts': `export const smt = ${i};\n`,
-          'src/router/trie-router/router.ts': `export const tri = ${i};\n`,
-        },
-      });
-    }
-    for (let i = 1; i <= 3; i++) {
-      r.commit({
-        message: `feat(router): linear and pattern ${i}`,
-        write: {
-          'src/router/linear-router/router.ts': `export const lin = ${10 + i};\n`,
-          'src/router/pattern-router/router.ts': `export const pat = ${i};\n`,
-        },
-      });
+    // 3. router.ts: 5-way incomplete graph matching Hono's 4 of 10 qualifying pairs
+    // (linear <-> reg-exp, linear <-> smart, linear <-> trie, linear <-> pattern)
+    const routerSiblings = ['reg-exp-router', 'smart-router', 'trie-router', 'pattern-router'];
+    for (const sib of routerSiblings) {
+      for (let i = 1; i <= 3; i++) {
+        r.commit({
+          message: `feat(router): linear and ${sib} ${i}`,
+          write: {
+            'src/router/linear-router/router.ts': `export const lin = "${sib}-${i}";\n`,
+            [`src/router/${sib}/router.ts`]: `export const r = ${i};\n`,
+          },
+        });
+      }
     }
     // 4. ssg.ts: 2-file pair (bun <-> deno)
     for (let i = 1; i <= 4; i++) {
@@ -873,7 +933,7 @@ describe('Stage 2 Feature 2: Finding Families', () => {
         {
           id: 'src/router/*/router',
           members: 5,
-          qualifyingPairs: 7,
+          qualifyingPairs: 4,
           possiblePairs: 10,
           complete: false,
         },
@@ -884,15 +944,124 @@ describe('Stage 2 Feature 2: Finding Families', () => {
       mapData.families?.map((f) => f.id),
       scanRes.families.map((f) => f.id),
     );
+  });
 
-    if (existsSync('/tmp/hono-map.html')) {
-      const rawHtml = readFileSync('/tmp/hono-map.html', 'utf8');
-      const m = rawHtml.match(/<script type="application\/json" id="ra-data">([\s\S]*?)<\/script>/);
-      if (m) {
-        const honoData = JSON.parse(m[1]!);
-        assert.equal(honoData.nodes.length, 105);
-        assert.equal(honoData.edges.length, 99);
-      }
+  it('17. P1 regression: builds complete families even when uncheckedCap or map --edges truncates displayed pairwise edges', async () => {
+    const r = createRepo();
+    // Create 4 sibling Python drivers (6 'unknown' pairs) + 1 checked TS ghost pair so hasPrimary is true
+    for (let i = 1; i <= 5; i++) {
+      r.commit({
+        message: `sync 4 python drivers and 1 ts ghost pair ${i}`,
+        write: {
+          'drivers/postgres/client.py': `VERSION = ${i}\n`,
+          'drivers/mysql/client.py': `VERSION = ${i}\n`,
+          'drivers/sqlite/client.py': `VERSION = ${i}\n`,
+          'drivers/duckdb/client.py': `VERSION = ${i}\n`,
+          'src/a/service.ts': `export const sA = ${i};\n`,
+          'src/b/worker.ts': `export const wB = ${i};\n`,
+        },
+      });
     }
+
+    const ctx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.4 });
+    const uncappedScan = scan(ctx, { limit: 20, kinds: scanOpts.kinds });
+    const cappedScan = scan(ctx, { limit: 20, kinds: scanOpts.kinds, uncheckedCap: 2 });
+
+    // Even with uncheckedCap: 2 (which cuts displayed unknown relationships to 2),
+    // the family itself must report all 4 members and all 6 of 6 qualifying pairs!
+    assert.equal(cappedScan.relationships.filter((rel) => rel.relationship === 'unknown').length, 2);
+    assert.equal(cappedScan.families.length, 1);
+    assert.deepEqual(cappedScan.families[0], uncappedScan.families[0]);
+    assert.equal(cappedScan.families[0]!.members.length, 4);
+    assert.equal(cappedScan.families[0]!.qualifyingPairs, 6);
+    assert.equal(cappedScan.families[0]!.possiblePairs, 6);
+    assert.equal(cappedScan.families[0]!.complete, true);
+
+    // Similarly, when buildMapData is called with edges: 3 (1 ghost + 2 unknown drawn out of 6 in the family),
+    // the family still reports 4 members and 6 of 6 qualifying pairs (2 drawn + 4 undrawn).
+    const cappedMapData = buildMapData(ctx, { edges: 3, kinds: scanOpts.kinds, uncheckedCap: 2 });
+    assert.equal(cappedMapData.edges.length, 3);
+    assert.equal(cappedMapData.families?.length, 1);
+    const mapFam = cappedMapData.families![0]!;
+    assert.equal(mapFam.members.length, 4);
+    assert.equal(mapFam.qualifyingPairs, 6);
+    assert.equal(mapFam.possiblePairs, 6);
+    assert.equal(mapFam.complete, true);
+    assert.equal(mapFam.edgeIndices.length, 2);
+    assert.equal(mapFam.undrawnPairs?.length, 4);
+
+    // Mount the map HTML, enable unknown links, select the family, and verify undrawn pairs are labelled "qualifies (not drawn)"
+    const html = renderMapHtml(cappedMapData);
+    const { elementsById } = mountMapDom(html);
+    const unknownToggle = elementsById.toggles!.findAll((el) => el.className.includes('toggle')).find((b) => b.textContent.includes('Unchecked'));
+    assert.ok(unknownToggle);
+    unknownToggle.listeners.click?.[0]?.();
+
+    const allTabBtn = elementsById.panel!.findAll((el) => el.className.includes('tab-btn')).find((b) => b.textContent.includes('All links'));
+    allTabBtn?.listeners.click?.[0]?.();
+
+    const famCard = elementsById.panel!.findAll((el) => el.className.includes('family-card'))[0];
+    assert.ok(famCard, 'Expected family card even when only 2 of 6 pairs were drawn');
+    assert.match(famCard.textContent, /Related family · 4 files/);
+    assert.match(famCard.textContent, /6 of 6 pairs/);
+
+    famCard.listeners.click?.[0]?.();
+    const detailText = elementsById.panel!.textContent;
+    assert.match(detailText, /Qualifying pairwise relationships \(6 of 6 possible\)/);
+    assert.match(detailText, /qualifies \(not drawn\)/);
+  });
+
+  it('18. P2 regression: diff detects a family when two members are edited and one changed member qualifies only in the reverse direction', async () => {
+    const r = createRepo();
+    // All 3 sibling handlers p/{a,b,c}/h.ts change together in 4 commits
+    for (let i = 1; i <= 4; i++) {
+      r.commit({
+        message: `all three handlers ${i}`,
+        write: {
+          'p/a/h.ts': `export const a = ${i};\n`,
+          'p/b/h.ts': `export const b = ${i};\n`,
+          'p/c/h.ts': `export const c = ${i};\n`,
+        },
+      });
+    }
+    // p/a/h.ts also changes on its own in 8 solo commits:
+    // - conf(a -> c) = 4 / 12 = 0.333 (< 0.5, so a does NOT suggest c in forward direction)
+    // - conf(c -> a) = 4 / 4 = 1.0 (>= 0.5, so (a, c) DOES qualify in reverse direction!)
+    // - conf(b -> c) = 4 / 4 = 1.0 (>= 0.5, so b DOES suggest c!)
+    // - conf(b -> a) = 4 / 4 = 1.0 (>= 0.5, so (a, b) DOES qualify!)
+    for (let i = 1; i <= 8; i++) {
+      r.commit({
+        message: `solo a ${i}`,
+        write: {
+          'p/a/h.ts': `export const a = ${100 + i};\n`,
+        },
+      });
+    }
+
+    const ctx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.5 });
+    const scanRes = scan(ctx, scanOpts);
+    assert.equal(scanRes.families.length, 1);
+    assert.equal(scanRes.families[0]!.qualifyingPairs, 3);
+    assert.equal(scanRes.families[0]!.possiblePairs, 3);
+    assert.equal(scanRes.families[0]!.complete, true);
+
+    // Edit both `p/a/h.ts` and `p/b/h.ts`: `diff` suggests `p/c/h.ts` AND must surface the 3-member family!
+    const diffRes = suggestMissing(
+      ctx,
+      [
+        { path: 'p/a/h.ts', deleted: false, sources: ['unstaged'] },
+        { path: 'p/b/h.ts', deleted: false, sources: ['unstaged'] },
+      ],
+      diffOpts,
+    );
+    assert.equal(diffRes.suggestions.length, 1);
+    assert.equal(diffRes.suggestions[0]!.to, 'p/c/h.ts');
+    assert.equal(diffRes.families.length, 1, 'Expected diff to report the 3-member family when 2 of 3 members are edited');
+    assert.equal(diffRes.families[0]!.id, 'p/*/h');
+    assert.deepEqual(diffRes.families[0]!.changedMembers, ['p/a/h.ts', 'p/b/h.ts']);
+    assert.deepEqual(diffRes.families[0]!.suggestedMembers, ['p/c/h.ts']);
+    assert.equal(diffRes.families[0]!.qualifyingPairs, 3);
+    assert.equal(diffRes.families[0]!.possiblePairs, 3);
+    assert.equal(diffRes.families[0]!.complete, true);
   });
 });
