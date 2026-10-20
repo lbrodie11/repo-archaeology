@@ -120,7 +120,7 @@ Finding families (3)
     1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291) [2 of 3 members]
     246a06a 2024-09-24  feat(serve-static): support absolute root (#3420) [2 of 3 members]
 
-Individual relationships (20)
+Individual relationships (15)
 
  1. src/preset/tiny.ts → src/preset/quick.ts  ghost wire
     when src/preset/tiny.ts changed, src/preset/quick.ts changed too in 9 of 9 commits (100%) · last together 2.4 years ago
