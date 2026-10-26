@@ -18,6 +18,8 @@ Analysis runs entirely locally against your `.git` repository. Once installed or
 
 *The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with default thresholds.*
 
+**Not just shared commit counts:** Repo Archaeology measures how often each file changes, ranks relationships by statistical evidence, and filters out common sources of noisy Git history.
+
 ## Quick start
 
 Requires Node.js 22+ and Git 2.24+. Run it inside any Git repository:
@@ -41,6 +43,44 @@ Or install it globally:
 ```bash
 npm install -g repo-archaeology
 ```
+
+## How Repo Archaeology avoids misleading results
+
+Two files changing together doesn't necessarily mean they're connected. Repo Archaeology uses several safeguards to separate meaningful patterns from coincidental changes.
+
+### 1. It considers how often each file changes
+
+Imagine `auth.ts` and `permissions.ts` changed together in 9 commits. That number alone doesn't tell the whole story:
+
+| Historical behavior | Result |
+| --- | --- |
+| `auth.ts` changed 12 times, and `permissions.ts` changed alongside it 9 times | **75%** |
+| `permissions.ts` changed 30 times, and `auth.ts` changed alongside it 9 times | **30%** |
+
+Both directions matter. Repo Archaeology calculates these percentages separately and uses a statistical confidence adjustment (Wilson score lower bound) when ranking findings. That means a relationship based on 3 shared changes out of 3 doesn't automatically outrank one backed by 40 out of 50.
+
+By default, findings require at least **3 shared commits** and **40% directional confidence**.
+
+### 2. It filters out common sources of noise
+
+Large formatting operations, generated files, and automated maintenance can make unrelated files appear connected. Repo Archaeology reduces this noise automatically:
+
+- **Large commits:** Skips commits touching more than 25 files by default.
+- **Generated artifacts:** Ignores common lockfiles, build output, snapshots, changelogs, and minified bundles.
+- **Custom exclusions:** Lets you exclude additional files (`--ignore`) and commits matching specific subject patterns (`--skip-commits` or `.repo-archaeology.json`).
+- **Single-file changes:** Keeps them in the history so relationship percentages aren't artificially inflated.
+
+You can customize these protections:
+
+```bash
+# Ignore commits touching more than 15 files
+npx repo-archaeology scan --max-files 15
+
+# Exclude commits whose subject begins with "style:"
+npx repo-archaeology scan --skip-commits '^style:'
+```
+
+These safeguards reduce false positives, but cannot eliminate them entirely. For example, a smaller formatting-only commit may still contribute to a relationship if it touches 25 or fewer files and doesn't match your subject filters. Every finding is a historical clue, not proof of a dependency—you can inspect the supporting commits and diffs (`explain`) to decide whether the relationship matters.
 
 ## Real-world workflows
 
