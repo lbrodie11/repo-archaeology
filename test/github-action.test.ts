@@ -341,7 +341,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
 
       // Scenario 9c: Symlink inside workspace pointing outside
       const symlinkPath = join(repo.dir, 'evil-link');
-      symlinkSync(outsideDir, symlinkPath);
+      symlinkSync(outsideDir, symlinkPath, 'dir');
       const symlinkRun = harness.run({
         INPUT_BASE: baseSha,
         INPUT_HEAD: headSha,
@@ -382,8 +382,8 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       const bashScript = [
         'if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then',
         '  node "$GITHUB_ACTION_PATH/dist/action/runner.js"',
-        'elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/loader.mjs" ]; then',
-        '  node --import "$GITHUB_ACTION_PATH/node_modules/tsx/dist/loader.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"',
+        'elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then',
+        '  node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'elif node --experimental-strip-types -e "" >/dev/null 2>&1; then',
         '  node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'else',
@@ -391,7 +391,10 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         'fi',
       ].join('\n');
 
-      const shellRes = spawnSync('bash', ['-e', '-c', bashScript], {
+      const gitBashWin = 'C:\\Program Files\\Git\\bin\\bash.exe';
+      const bashBin =
+        process.platform === 'win32' && existsSync(gitBashWin) ? gitBashWin : 'bash';
+      const shellRes = spawnSync(bashBin, ['-e', '-c', bashScript], {
         cwd: repo.dir,
         encoding: 'utf8',
         env: {

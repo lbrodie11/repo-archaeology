@@ -69,8 +69,8 @@ runs:
       run: |
         if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then
           node "$GITHUB_ACTION_PATH/dist/action/runner.js"
-        elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/loader.mjs" ]; then
-          node --import "$GITHUB_ACTION_PATH/node_modules/tsx/dist/loader.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"
+        elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then
+          node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"
         elif node --experimental-strip-types -e "" >/dev/null 2>&1; then
           node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"
         else

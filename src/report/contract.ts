@@ -1,5 +1,5 @@
 import { lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { UsageError } from '../context.js';
 
 export const JSON_SCHEMA_VERSION = 1 as const;
@@ -59,7 +59,7 @@ function nearestExistingAncestor(targetPath: string): string {
 
 function isInsideDir(childPath: string, parentDir: string): boolean {
   const rel = relative(parentDir, childPath);
-  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..');
+  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
 }
 
 function assertNotProtectedGitPath(targetPath: string): void {
@@ -99,14 +99,14 @@ export function validateJsonOutPath(rawPath: string, options: WriteJsonOutOption
   }
 
   const ancestor = nearestExistingAncestor(dirname(targetPath));
-  const resolvedAncestor = realpathSync(ancestor);
+  const resolvedAncestor = realpathSync.native(ancestor);
   const relativeRemainder = relative(ancestor, targetPath);
   const canonicalTarget = resolve(resolvedAncestor, relativeRemainder);
   assertNotProtectedGitPath(canonicalTarget);
 
   const allowedRoot = options.allowedRoot ?? process.env.REPO_ARCHAEOLOGY_JSON_OUT_ROOT;
   if (allowedRoot && allowedRoot.trim() !== '') {
-    const resolvedAllowedRoot = realpathSync(resolve(baseDir, allowedRoot));
+    const resolvedAllowedRoot = realpathSync.native(resolve(baseDir, allowedRoot));
     if (!isInsideDir(canonicalTarget, resolvedAllowedRoot)) {
       throw new UsageError(`--json-out path must stay within ${resolvedAllowedRoot}.`);
     }
@@ -126,7 +126,7 @@ export function writeJsonContractFile<T extends object>(
   const targetPath = validateJsonOutPath(rawPath, options);
   const parentDir = dirname(targetPath);
   mkdirSync(parentDir, { recursive: true });
-  const parentReal = realpathSync(parentDir);
+  const parentReal = realpathSync.native(parentDir);
   assertNotProtectedGitPath(join(parentReal, 'out.json'));
 
   const tmpPath = join(

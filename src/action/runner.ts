@@ -2,8 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PINNED_ACTION_PACKAGE = 'repo-archaeology@0.3.0';
 
@@ -23,7 +23,7 @@ const VALID_KINDS = new Set(['ghost', 'unknown', 'indirect', 'direct', 'test', '
 
 function isInsideDir(childPath: string, parentDir: string): boolean {
   const rel = relative(parentDir, childPath);
-  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..');
+  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
 }
 
 function writeGitHubOutputs(outputFile: string | undefined, entries: Record<string, string>): void {
@@ -169,21 +169,24 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     if (!existsSync(workspaceRaw)) {
       return failWith(`GITHUB_WORKSPACE does not exist: ${workspaceRaw}`);
     }
-    const workspaceReal = realpathSync(resolve(workspaceRaw));
+    const workspaceReal = realpathSync.native(resolve(workspaceRaw));
 
     const workingDirInput = (env.INPUT_WORKING_DIRECTORY ?? '.').trim() || '.';
     if (CONTROL_CHAR_RE.test(workingDirInput)) {
       return failWith("Invalid 'working-directory' input: contains control characters.");
     }
     const candidateWorkingDir = resolve(workspaceReal, workingDirInput);
-    if (!existsSync(candidateWorkingDir)) {
+    const workingDirStat = lstatSync(candidateWorkingDir, { throwIfNoEntry: false });
+    if (!workingDirStat) {
       return failWith(`working-directory '${workingDirInput}' does not exist inside GITHUB_WORKSPACE.`);
     }
-    const workingDirStat = lstatSync(candidateWorkingDir);
     if (workingDirStat.isSymbolicLink()) {
       return failWith(`working-directory '${workingDirInput}' must not be a symbolic link.`);
     }
-    const workingDirReal = realpathSync(candidateWorkingDir);
+    if (!workingDirStat.isDirectory()) {
+      return failWith(`working-directory '${workingDirInput}' is not a directory.`);
+    }
+    const workingDirReal = realpathSync.native(candidateWorkingDir);
     if (!isInsideDir(workingDirReal, workspaceReal)) {
       return failWith(`working-directory '${workingDirInput}' escapes GITHUB_WORKSPACE.`);
     }
@@ -222,7 +225,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     if (topLevel.status !== 0 || !topLevel.stdout) {
       return failWith('Unable to resolve Git repository top-level directory.');
     }
-    const topLevelReal = realpathSync(resolve(workingDirReal, topLevel.stdout));
+    const topLevelReal = realpathSync.native(resolve(workingDirReal, topLevel.stdout));
     if (!isInsideDir(topLevelReal, workspaceReal)) {
       return failWith('Git repository root resolves outside GITHUB_WORKSPACE.');
     }
@@ -338,7 +341,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     const tempBase =
       env.RUNNER_TEMP && env.RUNNER_TEMP.trim() !== '' ? resolve(env.RUNNER_TEMP.trim()) : tmpdir();
     mkdirSync(tempBase, { recursive: true });
-    const tempReal = realpathSync(tempBase);
+    const tempReal = realpathSync.native(tempBase);
     const jsonPath = join(
       tempReal,
       `repo-archaeology-diff-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}.json`,
@@ -378,7 +381,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       env.GITHUB_ACTION_PATH && env.GITHUB_ACTION_PATH.trim() !== ''
         ? resolve(env.GITHUB_ACTION_PATH.trim())
         : defaultActionRoot;
-    const actionPathReal = existsSync(actionPathRaw) ? realpathSync(actionPathRaw) : '';
+    const actionPathReal = existsSync(actionPathRaw) ? realpathSync.native(actionPathRaw) : '';
     const localBuiltCli = actionPathReal ? join(actionPathReal, 'dist', 'cli.js') : '';
     const localSrcCli = actionPathReal ? join(actionPathReal, 'src', 'cli.ts') : '';
     const localTsxLoader = actionPathReal
@@ -393,6 +396,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       existsSync(localSrcCli) &&
       existsSync(localTsxLoader) &&
       lstatSync(localSrcCli).isFile();
+    const localTsxLoaderUrl = hasSrcCliWithTsx ? pathToFileURL(localTsxLoader).href : '';
 
     const childEnv: NodeJS.ProcessEnv = {
       ...env,
@@ -401,7 +405,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
 
     const execResult =
       runningFromTs && hasSrcCliWithTsx
-        ? spawnSync(process.execPath, ['--import', localTsxLoader, localSrcCli, ...cliArgs], {
+        ? spawnSync(process.execPath, ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs], {
             cwd: workingDirReal,
             env: childEnv,
             encoding: 'utf8',
@@ -417,7 +421,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
               timeout: 120_000,
             })
           : hasSrcCliWithTsx
-            ? spawnSync(process.execPath, ['--import', localTsxLoader, localSrcCli, ...cliArgs], {
+            ? spawnSync(process.execPath, ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs], {
                 cwd: workingDirReal,
                 env: childEnv,
                 encoding: 'utf8',
@@ -493,7 +497,7 @@ const isMain =
   process.argv[1] !== undefined &&
   (() => {
     try {
-      return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
+      return realpathSync.native(resolve(process.argv[1])) === realpathSync.native(fileURLToPath(import.meta.url));
     } catch {
       return false;
     }
