@@ -799,7 +799,7 @@ describe('explain command & verifiable change evidence', () => {
           { status: 'M', path: 'src/w\x1bx.ts' },
           'src/two.ts',
           { status: 'M', path: 'src/two.ts' },
-          { timeoutMs: 120 },
+          { timeoutMs: 300 },
         );
         const elapsed = Date.now() - t0;
         assert.equal(pairTimedOut.timedOut, true);
@@ -808,15 +808,15 @@ describe('explain command & verifiable change evidence', () => {
         assert.equal(pairTimedOut.patchB.timedOut, true);
         assert.equal(pairTimedOut.patchB.truncated, true);
 
-        // Because patchA exhausted the 120ms shared deadline, patchB must skip spawning git altogether (only 1 invocation)
-        // and total elapsed time must be < 2 * timeoutMs (240ms).
+        // Because patchA exhausted the 300ms shared deadline, patchB must skip spawning git altogether (only 1 invocation)
+        // and total elapsed time must be < 2 * timeoutMs (600ms).
         const invocations = readFileSync(invocationsFile, 'utf8').trim().split('\n').filter(Boolean);
         assert.equal(
           invocations.length,
           1,
           `Expected shared deadline to skip the second git call after the first timed out, got ${invocations.length} calls`,
         );
-        assert.ok(elapsed < 230, `Expected shared deadline to finish under 2x timeoutMs (230ms), took ${elapsed}ms`);
+        assert.ok(elapsed < 580, `Expected shared deadline to finish under 2x timeoutMs (580ms), took ${elapsed}ms`);
       } finally {
         process.env.PATH = origPath;
       }

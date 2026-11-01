@@ -1,0 +1,504 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/common.schema.json",
+  "title": "Repo Archaeology Common Definitions (v1)",
+  "description": "Shared JSON Schema definitions for Repo Archaeology CLI v1 JSON outputs.",
+  "$defs": {
+    "SchemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Major version of the Repo Archaeology JSON output contract."
+    },
+    "ToolInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "repo-archaeology"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Installed repo-archaeology package version (semver)."
+        }
+      }
+    },
+    "Relationship": {
+      "type": "string",
+      "enum": ["ghost", "unknown", "indirect", "direct", "test"]
+    },
+    "BridgeSignal": {
+      "type": "string",
+      "enum": [
+        "parallel-implementation",
+        "shared-environment",
+        "shared-api-route",
+        "shared-event",
+        "shared-export"
+      ]
+    },
+    "HiddenBridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal", "value", "filesUsing"],
+      "properties": {
+        "signal": { "$ref": "#/$defs/BridgeSignal" },
+        "value": { "type": "string" },
+        "filesUsing": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "Settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxCommits",
+        "maxFilesPerCommit",
+        "minShared",
+        "minConfidence",
+        "ignore",
+        "useDefaultIgnores"
+      ],
+      "properties": {
+        "maxCommits": { "type": "integer", "minimum": 1 },
+        "since": { "type": "string" },
+        "maxFilesPerCommit": { "type": "integer", "minimum": 1 },
+        "minShared": { "type": "integer", "minimum": 1 },
+        "minConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "halfLifeDays": { "type": "number", "exclusiveMinimum": 0 },
+        "skipCommits": { "type": "string" },
+        "ignore": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "useDefaultIgnores": { "type": "boolean" }
+      }
+    },
+    "Meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "root",
+        "commitsRead",
+        "commitsAnalyzed",
+        "sweepsSkipped",
+        "subjectSkipped",
+        "renamesFollowed",
+        "files",
+        "settings",
+        "warnings"
+      ],
+      "properties": {
+        "tool": { "type": "string", "const": "repo-archaeology" },
+        "root": { "type": "string", "minLength": 1 },
+        "commitsRead": { "type": "integer", "minimum": 0 },
+        "commitsAnalyzed": { "type": "integer", "minimum": 0 },
+        "sweepsSkipped": { "type": "integer", "minimum": 0 },
+        "subjectSkipped": { "type": "integer", "minimum": 0 },
+        "renamesFollowed": { "type": "integer", "minimum": 0 },
+        "files": { "type": "integer", "minimum": 0 },
+        "oldestCommit": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "newestCommit": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "settings": { "$ref": "#/$defs/Settings" },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "EvidenceView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hash", "date", "author", "subject"],
+      "properties": {
+        "hash": { "type": "string", "minLength": 1 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "author": { "type": "string" },
+        "subject": { "type": "string" }
+      }
+    },
+    "RelationshipView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "relationship",
+        "why",
+        "shared",
+        "fromChanges",
+        "toChanges",
+        "confidence",
+        "reverseConfidence",
+        "score",
+        "weighted",
+        "lastTogether",
+        "crossesDirectories",
+        "evidence"
+      ],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "relationship": { "$ref": "#/$defs/Relationship" },
+        "why": { "type": "string" },
+        "hiddenBridge": { "$ref": "#/$defs/HiddenBridge" },
+        "shared": { "type": "integer", "minimum": 0 },
+        "fromChanges": { "type": "integer", "minimum": 0 },
+        "toChanges": { "type": "integer", "minimum": 0 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reverseConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weighted": { "type": "boolean" },
+        "lastTogether": { "type": "string" },
+        "crossesDirectories": { "type": "boolean" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceView" }
+        }
+      }
+    },
+    "FamilyEvidenceView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hash",
+        "date",
+        "author",
+        "subject",
+        "membersTouched",
+        "totalMembers",
+        "touchesAllMembers",
+        "memberPaths"
+      ],
+      "properties": {
+        "hash": { "type": "string", "minLength": 1 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "author": { "type": "string" },
+        "subject": { "type": "string" },
+        "membersTouched": { "type": "integer", "minimum": 2 },
+        "totalMembers": { "type": "integer", "minimum": 3 },
+        "touchesAllMembers": { "type": "boolean" },
+        "memberPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "FindingFamilyMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "dir", "variant", "changes", "connections"],
+      "properties": {
+        "path": { "type": "string" },
+        "dir": { "type": "string" },
+        "variant": { "type": "string" },
+        "changes": { "type": "integer", "minimum": 0 },
+        "connections": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "FindingFamilyView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "stem",
+        "fileName",
+        "parentDir",
+        "why",
+        "members",
+        "commitsTouchingTwoOrMore",
+        "commitsTouchingAll",
+        "lastTogether",
+        "qualifyingPairs",
+        "possiblePairs",
+        "complete",
+        "relationshipKinds",
+        "peakScore",
+        "maxPairShared",
+        "evidence",
+        "allMemberEvidence",
+        "relationships"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "stem": { "type": "string" },
+        "fileName": { "type": "string" },
+        "parentDir": { "type": "string" },
+        "why": { "type": "string" },
+        "members": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/FindingFamilyMember" }
+        },
+        "commitsTouchingTwoOrMore": { "type": "integer", "minimum": 0 },
+        "commitsTouchingAll": { "type": "integer", "minimum": 0 },
+        "lastTogether": { "type": "string" },
+        "qualifyingPairs": { "type": "integer", "minimum": 2 },
+        "possiblePairs": { "type": "integer", "minimum": 3 },
+        "complete": { "type": "boolean" },
+        "relationshipKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Relationship" }
+        },
+        "peakScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxPairShared": { "type": "integer", "minimum": 0 },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FamilyEvidenceView" }
+        },
+        "allMemberEvidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FamilyEvidenceView" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RelationshipView" }
+        }
+      }
+    },
+    "RelationshipCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ghost", "unknown", "indirect", "direct", "test"],
+      "properties": {
+        "ghost": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "indirect": { "type": "integer", "minimum": 0 },
+        "direct": { "type": "integer", "minimum": 0 },
+        "test": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ChangeSource": {
+      "type": "string",
+      "enum": ["branch", "staged", "unstaged", "untracked"]
+    },
+    "ChangedFileView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "deleted", "sources", "hasHistory"],
+      "properties": {
+        "path": { "type": "string" },
+        "oldPath": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "added": { "type": "boolean" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChangeSource" }
+        },
+        "historyPath": { "type": "string" },
+        "hasHistory": { "type": "boolean" }
+      }
+    },
+    "DiffEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commitsAnalyzed", "effectiveOptions"],
+      "properties": {
+        "targetBranchRef": { "type": "string" },
+        "headSha": { "type": "string" },
+        "mergeBaseSha": { "type": "string" },
+        "baselineSha": { "type": "string" },
+        "commitsAnalyzed": { "type": "integer", "minimum": 0 },
+        "effectiveOptions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minShared",
+            "minConfidence",
+            "maxCommits",
+            "maxFilesPerCommit"
+          ],
+          "properties": {
+            "minShared": { "type": "integer", "minimum": 1 },
+            "minConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "maxCommits": { "type": "integer", "minimum": 1 },
+            "maxFilesPerCommit": { "type": "integer", "minimum": 1 },
+            "halfLifeDays": { "type": "number", "exclusiveMinimum": 0 },
+            "since": { "type": "string" },
+            "skipCommits": { "type": "string" }
+          }
+        }
+      }
+    },
+    "DiffSuggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "relationship",
+        "why",
+        "shared",
+        "fromChanges",
+        "toChanges",
+        "confidence",
+        "reverseConfidence",
+        "score",
+        "weighted",
+        "lastTogether",
+        "crossesDirectories",
+        "evidence",
+        "alsoLinkedFrom"
+      ],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "relationship": { "$ref": "#/$defs/Relationship" },
+        "why": { "type": "string" },
+        "hiddenBridge": { "$ref": "#/$defs/HiddenBridge" },
+        "shared": { "type": "integer", "minimum": 0 },
+        "fromChanges": { "type": "integer", "minimum": 0 },
+        "toChanges": { "type": "integer", "minimum": 0 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reverseConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weighted": { "type": "boolean" },
+        "lastTogether": { "type": "string" },
+        "crossesDirectories": { "type": "boolean" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceView" }
+        },
+        "alsoLinkedFrom": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "DiffFamilyView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "stem",
+        "fileName",
+        "parentDir",
+        "why",
+        "members",
+        "commitsTouchingTwoOrMore",
+        "commitsTouchingAll",
+        "lastTogether",
+        "qualifyingPairs",
+        "possiblePairs",
+        "complete",
+        "relationshipKinds",
+        "peakScore",
+        "maxPairShared",
+        "evidence",
+        "allMemberEvidence",
+        "relationships",
+        "changedMembers",
+        "suggestedMembers"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "stem": { "type": "string" },
+        "fileName": { "type": "string" },
+        "parentDir": { "type": "string" },
+        "why": { "type": "string" },
+        "members": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/FindingFamilyMember" }
+        },
+        "commitsTouchingTwoOrMore": { "type": "integer", "minimum": 0 },
+        "commitsTouchingAll": { "type": "integer", "minimum": 0 },
+        "lastTogether": { "type": "string" },
+        "qualifyingPairs": { "type": "integer", "minimum": 2 },
+        "possiblePairs": { "type": "integer", "minimum": 3 },
+        "complete": { "type": "boolean" },
+        "relationshipKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Relationship" }
+        },
+        "peakScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxPairShared": { "type": "integer", "minimum": 0 },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FamilyEvidenceView" }
+        },
+        "allMemberEvidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FamilyEvidenceView" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RelationshipView" }
+        },
+        "changedMembers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "suggestedMembers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "SilenceReason": {
+      "type": "string",
+      "enum": [
+        "no_changed_files",
+        "limited_repo_history",
+        "no_history_for_changed_files",
+        "no_cochange_partners",
+        "all_companions_touched",
+        "filtered_by_thresholds",
+        "filtered_by_kinds"
+      ]
+    },
+    "SilenceDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primaryReason",
+        "reasons",
+        "changedFiles",
+        "changedWithHistory",
+        "changedInsufficientHistory",
+        "rawCompanions",
+        "qualifyingCompanions",
+        "touchedCompanions",
+        "filteredByThreshold",
+        "filteredByKind",
+        "deletedCompanions",
+        "shallowHistory",
+        "limitedHistory",
+        "commitsAnalyzed",
+        "details"
+      ],
+      "properties": {
+        "primaryReason": { "$ref": "#/$defs/SilenceReason" },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SilenceReason" }
+        },
+        "changedFiles": { "type": "integer", "minimum": 0 },
+        "changedWithHistory": { "type": "integer", "minimum": 0 },
+        "changedInsufficientHistory": { "type": "integer", "minimum": 0 },
+        "rawCompanions": { "type": "integer", "minimum": 0 },
+        "qualifyingCompanions": { "type": "integer", "minimum": 0 },
+        "touchedCompanions": { "type": "integer", "minimum": 0 },
+        "filteredByThreshold": { "type": "integer", "minimum": 0 },
+        "filteredByKind": { "type": "integer", "minimum": 0 },
+        "deletedCompanions": { "type": "integer", "minimum": 0 },
+        "shallowHistory": { "type": "boolean" },
+        "limitedHistory": { "type": "boolean" },
+        "commitsAnalyzed": { "type": "integer", "minimum": 0 },
+        "details": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

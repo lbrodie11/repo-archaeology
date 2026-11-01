@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/scan.schema.json",
+  "title": "Repo Archaeology Scan Result (v1)",
+  "description": "JSON output contract for `repo-archaeology scan --json`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "tool",
+    "meta",
+    "counts",
+    "qualifying",
+    "classified",
+    "truncated",
+    "relationships",
+    "families"
+  ],
+  "properties": {
+    "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+    "tool": { "$ref": "common.schema.json#/$defs/ToolInfo" },
+    "meta": { "$ref": "common.schema.json#/$defs/Meta" },
+    "counts": { "$ref": "common.schema.json#/$defs/RelationshipCounts" },
+    "qualifying": { "type": "integer", "minimum": 0 },
+    "classified": { "type": "integer", "minimum": 0 },
+    "truncated": { "type": "boolean" },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/RelationshipView" }
+    },
+    "families": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/FindingFamilyView" }
+    }
+  }
+}

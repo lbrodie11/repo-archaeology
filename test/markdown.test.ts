@@ -1,0 +1,264 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import type { DiffResult } from '../src/commands/diff.js';
+import {
+  escapeMarkdownInline,
+  FEEDBACK_ISSUE_URL,
+  formatMarkdownCode,
+  renderDiffMarkdown,
+} from '../src/report/markdown.js';
+
+function createBaseDiffResult(overrides: Partial<DiffResult> = {}): DiffResult {
+  return {
+    meta: {
+      tool: 'repo-archaeology',
+      root: '/workspace/repo',
+      commitsRead: 120,
+      commitsAnalyzed: 115,
+      sweepsSkipped: 4,
+      subjectSkipped: 1,
+      renamesFollowed: 2,
+      files: 40,
+      oldestCommit: '2025-01-01',
+      newestCommit: '2026-10-15',
+      settings: {
+        maxCommits: 5000,
+        maxFilesPerCommit: 25,
+        minShared: 3,
+        minConfidence: 0.4,
+        ignore: [],
+        useDefaultIgnores: true,
+      },
+      warnings: [],
+    },
+    base: 'main',
+    evaluation: {
+      targetBranchRef: 'main',
+      headSha: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+      mergeBaseSha: '00112233445566778899aabbccddeeff00112233',
+      baselineSha: '00112233445566778899aabbccddeeff00112233',
+      commitsAnalyzed: 115,
+      effectiveOptions: {
+        minShared: 3,
+        minConfidence: 0.4,
+        maxCommits: 5000,
+        maxFilesPerCommit: 25,
+      },
+    },
+    changed: [
+      {
+        path: 'src/adapter/bun/serve-static.ts',
+        deleted: false,
+        added: false,
+        sources: ['branch'],
+        historyPath: 'src/adapter/bun/serve-static.ts',
+        hasHistory: true,
+      },
+    ],
+    suggestions: [
+      {
+        from: 'src/adapter/bun/serve-static.ts',
+        to: 'src/adapter/deno/serve-static.ts',
+        relationship: 'ghost',
+        why: 'possible parallel implementations: serve-static.ts appears in sibling folders',
+        hiddenBridge: {
+          signal: 'parallel-implementation',
+          value: 'serve-static.ts',
+          filesUsing: 3,
+        },
+        shared: 12,
+        fromChanges: 20,
+        toChanges: 18,
+        confidence: 0.6,
+        reverseConfidence: 0.667,
+        score: 0.387,
+        weighted: false,
+        lastTogether: '2026-05-16',
+        crossesDirectories: true,
+        evidence: [
+          {
+            hash: '26f8c33000000000000000000000000000000000',
+            date: '2026-05-16',
+            author: 'Alice',
+            subject: 'fix(serveStatic): make options parameter optional in all adapters',
+          },
+          {
+            hash: '1196f14000000000000000000000000000000000',
+            date: '2025-08-07',
+            author: 'Bob',
+            subject: 'feat(serve-static): use join to correct path resolution',
+          },
+          {
+            hash: '246a06a000000000000000000000000000000000',
+            date: '2024-09-24',
+            author: 'Carol',
+            subject: 'feat(serve-static): support absolute root',
+          },
+          {
+            hash: '9999999000000000000000000000000000000000',
+            date: '2024-01-10',
+            author: 'Dan',
+            subject: 'fourth commit that should be capped at 3 in summary',
+          },
+        ],
+        alsoLinkedFrom: ['src/adapter/cloudflare/serve-static.ts'],
+      },
+    ],
+    families: [
+      {
+        id: 'src/adapter/*/serve-static',
+        label: 'serve-static.ts across src/adapter/*',
+        stem: 'serve-static',
+        fileName: 'serve-static.ts',
+        parentDir: 'src/adapter',
+        why: '3 parallel implementations of serve-static.ts in sibling folders',
+        members: [
+          { path: 'src/adapter/bun/serve-static.ts', dir: 'src/adapter/bun', variant: 'bun', changes: 20, connections: 2 },
+          { path: 'src/adapter/cloudflare/serve-static.ts', dir: 'src/adapter/cloudflare', variant: 'cloudflare', changes: 19, connections: 2 },
+          { path: 'src/adapter/deno/serve-static.ts', dir: 'src/adapter/deno', variant: 'deno', changes: 18, connections: 2 },
+        ],
+        commitsTouchingTwoOrMore: 16,
+        commitsTouchingAll: 9,
+        lastTogether: '2026-05-16',
+        qualifyingPairs: 3,
+        possiblePairs: 3,
+        complete: true,
+        relationshipKinds: ['ghost'],
+        peakScore: 0.387,
+        maxPairShared: 12,
+        evidence: [],
+        allMemberEvidence: [],
+        relationships: [],
+        changedMembers: ['src/adapter/bun/serve-static.ts'],
+        suggestedMembers: ['src/adapter/deno/serve-static.ts', 'src/adapter/cloudflare/serve-static.ts'],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
+  it('renders suggestions, finding families, 3-commit evidence cap, explain command, and feedback link', () => {
+    const md = renderDiffMarkdown(createBaseDiffResult());
+
+    assert.match(md, /^## Repo Archaeology/m);
+    assert.match(md, /prompts for review, not proof of a bug/);
+    assert.match(md, /Evaluated \*\*1 changed file\*\* against base `main` \(merge-base `0011223` → `a1b2c3d`\)/);
+    assert.match(md, /### Finding families \(1\)/);
+    assert.match(md, /`src\/adapter\/cloudflare\/serve-static\.ts` _\(beyond --limit\)_/);
+    assert.match(md, /### Possibly missed \(1\)/);
+    assert.match(md, /1\. \*\*`src\/adapter\/deno\/serve-static\.ts`\*\* — `ghost wire`/);
+    assert.match(
+      md,
+      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits \(60%\)\*\* · reverse \*\*66%\*\* \(12\/18\) · last together 2026-05-16 \(also linked to `src\/adapter\/cloudflare\/serve-static\.ts`\)/,
+    );
+    assert.match(md, /`26f8c33` \(2026-05-16\)/);
+    assert.match(md, /`1196f14` \(2025-08-07\)/);
+    assert.match(md, /`246a06a` \(2024-09-24\)/);
+    assert.doesNotMatch(md, /9999999/, 'must cap supporting commit evidence at 3 commits per suggestion');
+    assert.match(
+      md,
+      /Verify: `npx repo-archaeology explain src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
+    );
+    assert.ok(md.includes(FEEDBACK_ISSUE_URL));
+  });
+
+  it('explicitly labels recency-weighted percentages while keeping raw commit counts when weighted=true', () => {
+    const base = createBaseDiffResult();
+    base.meta.settings.halfLifeDays = 90;
+    base.suggestions[0]!.weighted = true;
+    base.suggestions[0]!.confidence = 0.72;
+    base.suggestions[0]!.reverseConfidence = 0.55;
+
+    const md = renderDiffMarkdown(base);
+    assert.match(md, /recency half-life 90d/);
+    assert.match(
+      md,
+      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits\*\* \(\*\*72%\*\* recency-weighted · reverse \*\*55%\*\* recency-weighted across 12\/18 raw commits\)/,
+    );
+  });
+
+  it('renders honest empty/silence states for every primaryReason without claiming the change is safe', () => {
+    const reasons = [
+      'no_changed_files',
+      'limited_repo_history',
+      'no_history_for_changed_files',
+      'all_companions_touched',
+      'no_cochange_partners',
+      'filtered_by_thresholds',
+      'filtered_by_kinds',
+    ] as const;
+
+    for (const reason of reasons) {
+      const md = renderDiffMarkdown(
+        createBaseDiffResult({
+          suggestions: [],
+          families: [],
+          silence: {
+            primaryReason: reason,
+            reasons: [reason],
+            changedFiles: reason === 'no_changed_files' ? 0 : 1,
+            changedWithHistory: reason === 'no_history_for_changed_files' ? 0 : 1,
+            changedInsufficientHistory: 0,
+            rawCompanions: 2,
+            qualifyingCompanions: 0,
+            touchedCompanions: 1,
+            filteredByThreshold: 1,
+            filteredByKind: 0,
+            deletedCompanions: 0,
+            shallowHistory: reason === 'limited_repo_history',
+            limitedHistory: reason === 'limited_repo_history',
+            commitsAnalyzed: 115,
+            details: [`Detail for ${reason}`],
+          },
+        }),
+      );
+      assert.match(md, /### No companion suggestions/);
+      assert.ok(md.includes(escapeMarkdownInline(`Detail for ${reason}`)));
+      assert.match(md, /not that this change is guaranteed free of omissions/);
+      assert.doesNotMatch(md, /\bsafe to merge\b|\bno bugs\b/i);
+    }
+  });
+
+  it('escapes hostile commit subjects, paths, HTML tags, @mentions, #123 autolinks, and bidi controls', () => {
+    const hostileSubject =
+      '<script>alert(1)</script> <!-- comment --> [click](https://evil.example) @octocat @org/team #123 GH-456 | `code` \n\r\u202e';
+    const escaped = escapeMarkdownInline(hostileSubject, 300);
+
+    assert.doesNotMatch(escaped, /<script>|<!--/);
+    assert.match(escaped, /&lt;script&gt;alert\\\(1\\\)&lt;\/script&gt;/);
+    assert.doesNotMatch(escaped, /(?<!&#64;)@octocat|(?<!&#64;)@org\/team/);
+    assert.match(escaped, /&#64;octocat/);
+    assert.doesNotMatch(escaped, /(?<!&#35;)#123/);
+    assert.match(escaped, /&#35;123/);
+    assert.match(escaped, /GH&#45;456/);
+    assert.match(escaped, /https&#58;\/\/evil\.example/);
+    assert.doesNotMatch(escaped, /[\n\r\u202e]/);
+    assert.match(escaped, /\\\\n\\\\r\\\\u202e/);
+
+    const codeSpan = formatMarkdownCode('src/weird`file|name<test>\n.ts');
+    assert.equal(codeSpan, "`src/weird'file∣name＜test＞\\n.ts`");
+  });
+
+  it('enforces UTF-8 maxBytes ceiling and emits an explicit omission notice when truncated', () => {
+    const manySuggestions = Array.from({ length: 12 }, (_, idx) => ({
+      ...createBaseDiffResult().suggestions[0]!,
+      to: `src/adapter/platform-${idx}/serve-static.ts`,
+      alsoLinkedFrom: [],
+    }));
+    const result = createBaseDiffResult({ suggestions: manySuggestions });
+    const fullMd = renderDiffMarkdown(result);
+    const fullBytes = Buffer.byteLength(fullMd, 'utf8');
+
+    const tightBudget = Math.floor(fullBytes * 0.45);
+    const truncatedMd = renderDiffMarkdown(result, { maxBytes: tightBudget });
+    const truncatedBytes = Buffer.byteLength(truncatedMd, 'utf8');
+
+    assert.ok(
+      truncatedBytes <= tightBudget,
+      `expected truncated markdown (${truncatedBytes} B) <= maxBytes (${tightBudget} B)`,
+    );
+    assert.match(truncatedMd, /### Possibly missed \(showing \d+ of 12\)/);
+    assert.match(truncatedMd, /Output truncated to stay within the summary size limit \(omitted \d+ suggestions?\)/);
+  });
+});

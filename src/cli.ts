@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { createRequire } from 'node:module';
 import { backtest, printBacktest } from './commands/backtest.js';
 import { diff, printDiff } from './commands/diff.js';
 import { explain, printExplain } from './commands/explain.js';
@@ -12,10 +11,11 @@ import { loadContext, UsageError } from './context.js';
 import { workingTreeChanges } from './git/changes.js';
 import { GitError } from './git/run.js';
 import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
+import { formatJsonContract, getToolVersion, validateJsonOutPath, writeJsonContractFile } from './report/contract.js';
+import { renderDiffMarkdown } from './report/markdown.js';
 import { c, terminalText } from './util/term.js';
 
-const require = createRequire(import.meta.url);
-const { version } = require('../package.json') as { version: string };
+const version = getToolVersion();
 
 function positiveInt(value: string): number {
   const n = Number(value);
@@ -95,8 +95,8 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
   };
 }
 
-function printJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+function printJson(value: object): void {
+  process.stdout.write(formatJsonContract(value));
 }
 
 const program = new Command();
@@ -140,15 +140,41 @@ program
   .option('-b, --base <ref>', 'also include commits on this branch since it forked from <ref> (e.g. main)')
   .option('-n, --limit <n>', 'how many suggestions to show', positiveInt, 10)
   .addOption(kindsOption('relationship kinds to report', [...RELATIONSHIPS]))
+  .addOption(new Option('--format <format>', 'output format for stdout').choices(['text', 'markdown']).default('text'))
+  .option('--json-out <file>', 'also write the versioned JSON result to <file> in the same run')
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
-  .action(async (opts: { base?: string; limit: number; kinds: Relationship[]; exitCode?: boolean }, cmd: Command) => {
-    const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
-    const result = await diff(ctx, opts);
-    if (global.json) printJson(result);
-    else printDiff(result);
-    if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
-  });
+  .action(
+    async (
+      opts: {
+        base?: string;
+        limit: number;
+        kinds: Relationship[];
+        format: 'text' | 'markdown';
+        jsonOut?: string;
+        exitCode?: boolean;
+      },
+      cmd: Command,
+    ) => {
+      const global = cmd.optsWithGlobals<GlobalOptions>();
+      if (global.json && opts.format === 'markdown') {
+        throw new UsageError(
+          '--json and --format markdown cannot be used together on stdout; use --format markdown --json-out <file> instead.',
+        );
+      }
+      if (opts.jsonOut !== undefined) {
+        validateJsonOutPath(opts.jsonOut);
+      }
+      const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
+      const result = await diff(ctx, opts);
+      if (opts.jsonOut !== undefined) {
+        writeJsonContractFile(opts.jsonOut, result);
+      }
+      if (global.json) printJson(result);
+      else if (opts.format === 'markdown') process.stdout.write(renderDiffMarkdown(result));
+      else printDiff(result);
+      if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
+    },
+  );
 
 program
   .command('file')

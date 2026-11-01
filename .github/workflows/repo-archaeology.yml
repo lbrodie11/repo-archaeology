@@ -1,0 +1,38 @@
+name: Repo Archaeology
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  archaeology:
+    name: Companion File Summary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR head with full history
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install and build local CLI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Repo Archaeology Action
+        id: archaeology
+        uses: ./
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          limit: '5'
