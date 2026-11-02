@@ -143,6 +143,8 @@ function renderSuggestionBlock(
   settings?: Partial<Settings>,
   flagSettings?: Partial<Settings>,
   repoUrl?: string,
+  baselineRef?: string,
+  fromHistoryPath?: string,
 ): string {
   const lines: string[] = [];
   const kindLabel = NAMES[s.relationship];
@@ -160,7 +162,14 @@ function renderSuggestionBlock(
     lines.push(` ${formatCommitEvidenceLine(ev, repoUrl)}`);
   }
 
-  const explainCmd = formatExplainCommand(s.from, s.to, settings, flagSettings);
+  const explainFrom = fromHistoryPath ?? s.from;
+  const explainCmd = formatExplainCommand(
+    explainFrom,
+    s.to,
+    settings,
+    flagSettings,
+    baselineRef ? { base: baselineRef } : undefined,
+  );
   lines.push(`   - Verify: ${formatMarkdownCode(explainCmd, Number.POSITIVE_INFINITY)}`);
   return lines.join('\n');
 }
@@ -321,8 +330,32 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
 
   // Non-empty suggestions state: precompute blocks and prefix byte sums so truncation runs in O(N + log N) time.
   const families = result.families ?? [];
+  const baselineRef =
+    result.base !== undefined
+      ? evaluation?.baselineSha
+        ? shortHash(evaluation.baselineSha)
+        : evaluation?.mergeBaseSha
+          ? shortHash(evaluation.mergeBaseSha)
+          : FULL_HEX_SHA_RE.test(result.base)
+            ? shortHash(result.base)
+            : result.base
+      : undefined;
+  const historyPathByCurrentPath = new Map<string, string>();
+  for (const ch of result.changed) {
+    if (ch.historyPath && ch.historyPath.trim() !== '') {
+      historyPathByCurrentPath.set(ch.path, ch.historyPath);
+    }
+  }
   const suggestionBlocks = result.suggestions.map((s, idx) =>
-    renderSuggestionBlock(s, idx, effectiveSettings, options.flagSettings, repoUrl),
+    renderSuggestionBlock(
+      s,
+      idx,
+      effectiveSettings,
+      options.flagSettings,
+      repoUrl,
+      baselineRef,
+      historyPathByCurrentPath.get(s.from),
+    ),
   );
   const totalSuggestions = Math.max(result.totalSuggestions ?? suggestionBlocks.length, suggestionBlocks.length);
 
@@ -335,7 +368,7 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
 
   const headerText = headerLines.join('\n');
   const footerText = footerLines.join('\n');
-  const baseWrapperBytes = Buffer.byteLength(`${headerText}${footerText}\n`, 'utf8');
+  const baseWrapperBytes = Buffer.byteLength(`${headerText}\n${footerText}\n`, 'utf8');
 
   const formatMiddlePrefixAndSuffix = (
     includedFamilies: number,

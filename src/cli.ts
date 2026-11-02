@@ -205,12 +205,13 @@ program
   .description('inspect paired git diff hunks and counterexample commits for two files')
   .argument('<fileA>', 'first file to inspect')
   .argument('<fileB>', 'second file to inspect')
+  .option('-b, --base <ref>', 'inspect pre-change baseline history up to the merge-base with <ref>')
   .option('-n, --commits <n>', 'how many recent shared commits to inspect (default 3, max 10)', positiveInt, 3)
   .option('--counterexamples', 'also show patch hunks for commits where one file changed without the other')
   .option('-U, --context <lines>', 'lines of unified diff context around each hunk (default 2, max 10)', nonNegativeInt, 2)
-  .action(async (fileA: string, fileB: string, opts: { commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
+  .action(async (fileA: string, fileB: string, opts: { base?: string; commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
     const result = await explain(ctx, fileA, fileB, {
       commits: opts.commits,
       counterexamples: opts.counterexamples,

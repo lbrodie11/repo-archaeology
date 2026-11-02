@@ -158,9 +158,36 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.doesNotMatch(md, /9999999/, 'must cap supporting commit evidence at 3 commits per suggestion');
     assert.match(
       md,
-      /Verify: `npx repo-archaeology explain src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
+      /Verify: `npx repo-archaeology explain --base 0011223 src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
     );
     assert.ok(md.includes(FEEDBACK_ISSUE_URL));
+
+    // When a changed file was renamed on the branch, Verify uses its baseline historyPath
+    const renamedMd = renderDiffMarkdown(
+      createBaseDiffResult({
+        changed: [
+          {
+            path: 'src/adapter/bun/static-handler.ts',
+            oldPath: 'src/adapter/bun/serve-static.ts',
+            deleted: false,
+            added: false,
+            sources: ['branch'],
+            historyPath: 'src/adapter/bun/serve-static.ts',
+            hasHistory: true,
+          },
+        ],
+        suggestions: [
+          {
+            ...createBaseDiffResult().suggestions[0]!,
+            from: 'src/adapter/bun/static-handler.ts',
+          },
+        ],
+      }),
+    );
+    assert.match(
+      renamedMd,
+      /Verify: `npx repo-archaeology explain --base 0011223 src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
+    );
   });
 
   it('explicitly labels recency-weighted percentages while keeping raw commit counts when weighted=true', () => {
@@ -299,6 +326,24 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.match(fullMd, /### Possibly missed \(showing 12 of 25\)/);
 
     const fullBytes = Buffer.byteLength(fullMd, 'utf8');
+
+    // Exact byte-budget boundary assertions: fullBytes + 1, fullBytes, and fullBytes - 1
+    const aboveExact = renderDiffMarkdown(result, { maxBytes: fullBytes + 1 });
+    assert.equal(Buffer.byteLength(aboveExact, 'utf8'), fullBytes);
+    assert.doesNotMatch(aboveExact, /Output truncated/);
+
+    const atExact = renderDiffMarkdown(result, { maxBytes: fullBytes });
+    assert.equal(Buffer.byteLength(atExact, 'utf8'), fullBytes);
+    assert.doesNotMatch(atExact, /Output truncated/);
+
+    const belowExact = renderDiffMarkdown(result, { maxBytes: fullBytes - 1 });
+    const belowExactBytes = Buffer.byteLength(belowExact, 'utf8');
+    assert.ok(
+      belowExactBytes <= fullBytes - 1,
+      `expected budget fullBytes - 1 (${fullBytes - 1} B) to truncate, got ${belowExactBytes} B`,
+    );
+    assert.match(belowExact, /Output truncated to stay within the summary size limit/);
+
     const tightBudget = Math.floor(fullBytes * 0.45);
     const truncatedMd = renderDiffMarkdown(result, { maxBytes: tightBudget });
     const truncatedBytes = Buffer.byteLength(truncatedMd, 'utf8');

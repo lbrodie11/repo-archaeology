@@ -68,11 +68,10 @@ runs:
         INPUT_FAIL_ON_SUGGESTIONS: ${{ inputs.fail-on-suggestions }}
       run: |
         if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then
-          node "$GITHUB_ACTION_PATH/dist/action/runner.js"
-        elif node --experimental-strip-types -e "" >/dev/null 2>&1; then
-          node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"
-        elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then
-          node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"
+          NODE_OPTIONS="" node "$GITHUB_ACTION_PATH/dist/action/runner.js"
+        elif NODE_OPTIONS="" node --experimental-strip-types -e "" >/dev/null 2>&1; then
+          NODE_OPTIONS="" node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"
         else
-          npx --yes tsx@4.19.0 "$GITHUB_ACTION_PATH/src/action/runner.ts"
+          echo "error: Repo Archaeology GitHub Action requires Node.js >= 22.6 on PATH (found $(node -v 2>/dev/null || echo 'none'))." >&2
+          exit 2
         fi

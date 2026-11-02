@@ -96,6 +96,11 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       /\$\{\{\s*inputs\./,
       'action.yml run block must never interpolate ${{ inputs.* }} directly into shell commands',
     );
+    assert.doesNotMatch(
+      runBlock,
+      /\bnpx\b|\btsx\b/,
+      'action.yml run block must never invoke npx or tsx from the workspace before runner isolation',
+    );
   });
 
   it('covers PR scenarios 1-4, 8, and 10: suggestions, all-companions-touched, new files, 0 changes, branch renames, and fail-on-suggestions', () => {
@@ -474,18 +479,56 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       rmSync(join(repo.dir, 'node_modules'), { recursive: true, force: true });
       rmSync(join(repo.dir, 'package.json'), { force: true });
 
+      // Invalid .repo-archaeology.json regression test:
+      // 1. Escapes Markdown links, images, and @mentions in the error summary
+      // 2. Renders '> **Error:**' (not 'Skipped:')
+      // 3. Does not double-prefix 'error: error:' on stderr
+      const hostileConfigKey = '![tracker](https://evil.example/p.png) [click](https://evil.example) @octocat #123';
+      writeFileSync(
+        join(repo.dir, '.repo-archaeology.json'),
+        JSON.stringify({ [hostileConfigKey]: true }),
+        'utf8',
+      );
+      const invalidConfigRun = harness.run({
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      rmSync(join(repo.dir, '.repo-archaeology.json'), { force: true });
+      assert.equal(invalidConfigRun.res.exitCode, 2);
+      assert.match(invalidConfigRun.res.stderr, /^error: \.repo-archaeology\.json:/);
+      assert.doesNotMatch(invalidConfigRun.res.stderr, /^error:\s*error:/i);
+      assert.match(invalidConfigRun.summary, /> \*\*Error:\*\*/);
+      assert.doesNotMatch(invalidConfigRun.summary, /!\[tracker\]\(|\[click\]\(https:\/\/|(?<!&#64;)@octocat/);
+      assert.match(invalidConfigRun.summary, /\\!\\\[tracker\\\]\\\(https&#58;\/\/evil\.example\/p\.png\\\)/);
+      assert.match(invalidConfigRun.summary, /&#64;octocat/);
+
       // Scenario 12: Execute the actual bash snippet from action.yml end-to-end
+      // even when a malicious node_modules/tsx is planted in GITHUB_WORKSPACE
+      const tsxPoisonMarker = join(outsideDir, 'workspace-tsx-executed.txt');
+      const fakeTsxDir = join(repo.dir, 'node_modules', 'tsx');
+      mkdirSync(fakeTsxDir, { recursive: true });
+      writeFileSync(
+        join(fakeTsxDir, 'package.json'),
+        JSON.stringify({ name: 'tsx', version: '4.19.0', bin: './cli.js' }),
+        'utf8',
+      );
+      writeFileSync(
+        join(fakeTsxDir, 'cli.js'),
+        `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(tsxPoisonMarker)}, 'pwned');\nprocess.exit(0);\n`,
+        { encoding: 'utf8', mode: 0o755 },
+      );
+
       writeFileSync(harness.summaryFile, '', 'utf8');
       writeFileSync(harness.outputFile, '', 'utf8');
       const bashScript = [
         'if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then',
-        '  node "$GITHUB_ACTION_PATH/dist/action/runner.js"',
-        'elif node --experimental-strip-types -e "" >/dev/null 2>&1; then',
-        '  node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"',
-        'elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then',
-        '  node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"',
+        '  NODE_OPTIONS="" node "$GITHUB_ACTION_PATH/dist/action/runner.js"',
+        'elif NODE_OPTIONS="" node --experimental-strip-types -e "" >/dev/null 2>&1; then',
+        '  NODE_OPTIONS="" node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'else',
-        '  npx --yes tsx@4.19.0 "$GITHUB_ACTION_PATH/src/action/runner.ts"',
+        '  echo "error: Repo Archaeology GitHub Action requires Node.js >= 22.6 on PATH." >&2',
+        '  exit 2',
         'fi',
       ].join('\n');
 
@@ -511,6 +554,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         },
       });
       assert.equal(shellRes.status, 0, shellRes.stderr);
+      assert.equal(existsSync(tsxPoisonMarker), false, 'workspace tsx package must never be executed');
       const shellOutputs = parseGitHubOutputFile(readFileSync(harness.outputFile, 'utf8'));
       assert.equal(shellOutputs['analysis-status'], 'analyzed');
       assert.equal(shellOutputs['suggestion-count'], '1');

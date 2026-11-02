@@ -103,6 +103,9 @@ export function validateJsonOutPath(rawPath: string, options: WriteJsonOutOption
   if (existingStat?.isDirectory()) {
     throw new UsageError('--json-out path points to a directory, not a file.');
   }
+  if (existingStat && !existingStat.isFile()) {
+    throw new UsageError('--json-out target must be a regular file.');
+  }
 
   const ancestor = nearestExistingAncestor(dirname(targetPath));
   const resolvedAncestor = realpathSync.native(ancestor);

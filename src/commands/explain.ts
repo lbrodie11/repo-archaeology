@@ -2,6 +2,7 @@ import { posix } from 'node:path';
 import { DEFAULT_SETTINGS, type Settings } from '../config.js';
 import type { Context } from '../context.js';
 import { toRepoPath, UsageError } from '../context.js';
+import { branchChanges, mergeChanges, workingTreeChanges } from '../git/changes.js';
 import {
   DEFAULT_CONTEXT_LINES,
   DEFAULT_MAX_HUNKS_PER_FILE,
@@ -138,14 +139,22 @@ function shellQuoteArg(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
+export interface FormatExplainCommandOptions {
+  base?: string;
+}
+
 /** Formats a safe, copyable CLI command for inspecting two repository-relative paths. */
 export function formatExplainCommand(
   fileA: string,
   fileB: string,
   settings?: Partial<Settings>,
   flagSettings?: Partial<Settings>,
+  options?: FormatExplainCommandOptions,
 ): string {
   const flagParts: string[] = [];
+  if (options?.base !== undefined && options.base.trim() !== '') {
+    flagParts.push(`--base ${shellQuoteArg(options.base.trim())}`);
+  }
   if (settings) {
     if (settings.since !== undefined) {
       flagParts.push(`--since ${shellQuoteArg(settings.since)}`);
@@ -253,14 +262,31 @@ function ensureFileInHistory(ctx: Context, path: string): number {
   return id;
 }
 
+async function resolveBaselinePathForExplain(ctx: Context, repoPath: string): Promise<string> {
+  if (ctx.model.id(repoPath) !== undefined || !ctx.mergeBaseSha) {
+    return repoPath;
+  }
+  const changes = mergeChanges(
+    await branchChanges(ctx.root, ctx.mergeBaseSha),
+    await workingTreeChanges(ctx.root),
+  );
+  const match = changes.find((c) => c.path === repoPath && c.oldPath);
+  if (match?.oldPath && ctx.model.id(match.oldPath) !== undefined) {
+    return match.oldPath;
+  }
+  return repoPath;
+}
+
 export async function explain(
   ctx: Context,
   inputA: string,
   inputB: string,
   options: ExplainOptions = {},
 ): Promise<ExplainResult> {
-  const from = toRepoPath(ctx, inputA);
-  const to = toRepoPath(ctx, inputB);
+  const rawFrom = toRepoPath(ctx, inputA);
+  const rawTo = toRepoPath(ctx, inputB);
+  const from = await resolveBaselinePathForExplain(ctx, rawFrom);
+  const to = await resolveBaselinePathForExplain(ctx, rawTo);
   if (from === to) {
     throw new UsageError('Please provide two different files to explain.');
   }
@@ -455,7 +481,13 @@ export async function explain(
       outputTruncated,
       timedOut,
     },
-    cliCommand: formatExplainCommand(from, to, ctx.settings, ctx.flagSettings),
+    cliCommand: formatExplainCommand(
+      from,
+      to,
+      ctx.settings,
+      ctx.flagSettings,
+      ctx.base ? { base: ctx.base } : undefined,
+    ),
     disclaimer: EXPLAIN_DISCLAIMER,
   };
 }

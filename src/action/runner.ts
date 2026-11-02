@@ -41,7 +41,46 @@ export interface ActionRunResult {
 }
 
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
+const ACTION_CONTROL_AND_BIDI_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]|\p{Bidi_Control}/gu;
 const VALID_KINDS = new Set(['ghost', 'unknown', 'indirect', 'direct', 'test', 'all']);
+
+function stripLeadingErrorPrefix(message: string): string {
+  return message.trim().replace(/^(?:error:\s*)+/i, '');
+}
+
+function sanitizeActionControlChars(value: string, maxChars = 360): string {
+  const cleaned = value.replace(ACTION_CONTROL_AND_BIDI_RE, (ch) => {
+    if (ch === '\n' || ch === '\r' || ch === '\t') return ' ';
+    const code = ch.codePointAt(0)!;
+    return code <= 0xff
+      ? `\\x${code.toString(16).padStart(2, '0')}`
+      : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function escapeActionMarkdownInline(value: string, maxChars = 360): string {
+  const sanitized = sanitizeActionControlChars(value, maxChars);
+  return sanitized
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\*/g, '\\*')
+    .replace(/_/g, '\\_')
+    .replace(/~/g, '\\~')
+    .replace(/!/g, '\\!')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\|/g, '\\|')
+    .replace(/[@#]/g, (ch) => (ch === '@' ? '&#64;' : '&#35;'))
+    .replace(/\b(GH)-(\d+)\b/gi, '$1&#45;$2')
+    .replace(/\b(https?):\/\//gi, '$1&#58;//');
+}
 
 function isInsideDir(childPath: string, parentDir: string): boolean {
   const rel = relative(parentDir, childPath);
@@ -172,13 +211,9 @@ function buildInsufficientCommitsMarkdown(commitCount: number): string {
   ].join('\n');
 }
 
-function buildSkippedErrorMarkdown(message: string): string {
-  const safeMsg = message
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return ['## Repo Archaeology', '', `> **Skipped:** ${safeMsg}`, ''].join('\n');
+function buildErrorMarkdown(message: string): string {
+  const safeMsg = escapeActionMarkdownInline(stripLeadingErrorPrefix(message), 360);
+  return ['## Repo Archaeology', '', `> **Error:** ${safeMsg}`, ''].join('\n');
 }
 
 /**
@@ -227,8 +262,9 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
   const outputFile = env.GITHUB_OUTPUT;
 
   const failWith = (message: string, exitCode = 2): ActionRunResult => {
-    const cleanMsg = `error: ${message}`;
-    const errMd = buildSkippedErrorMarkdown(message);
+    const normalized = stripLeadingErrorPrefix(message);
+    const cleanMsg = `error: ${normalized}`;
+    const errMd = buildErrorMarkdown(normalized);
     writeStepSummary(summaryFile, errMd);
     writeGitHubOutputs(outputFile, {
       'suggestion-count': '0',
@@ -607,13 +643,17 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
 
     const parsedJson = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
       schemaVersion?: unknown;
+      totalSuggestions?: unknown;
       suggestions?: unknown[];
     };
     if (parsedJson.schemaVersion !== 1 || !Array.isArray(parsedJson.suggestions)) {
       return failWith('Generated JSON output did not match schemaVersion 1.');
     }
 
-    const suggestionCount = parsedJson.suggestions.length;
+    const suggestionCount =
+      typeof parsedJson.totalSuggestions === 'number' && Number.isFinite(parsedJson.totalSuggestions)
+        ? Math.max(parsedJson.totalSuggestions, parsedJson.suggestions.length)
+        : parsedJson.suggestions.length;
     writeStepSummary(summaryFile, cliStdout);
     writeGitHubOutputs(outputFile, {
       'suggestion-count': String(suggestionCount),

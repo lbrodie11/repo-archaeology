@@ -439,6 +439,14 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
         /--json-out refuses to write through a symbolic link/,
       );
 
+      // Rejects existing non-regular files (e.g. character devices like /dev/null on POSIX)
+      if (process.platform !== 'win32' && existsSync('/dev/null')) {
+        assert.throws(
+          () => validateJsonOutPath('/dev/null'),
+          /--json-out target must be a regular file/,
+        );
+      }
+
       // Enforces REPO_ARCHAEOLOGY_JSON_OUT_ROOT / allowedRoot containment
       const subAllowed = join(tmpOutDir, 'allowed');
       mkdirSync(subAllowed, { recursive: true });
