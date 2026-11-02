@@ -1,10 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/backtest.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/backtest.schema.json",
   "title": "Repo Archaeology Backtest Result (v1)",
   "description": "JSON output contract for `repo-archaeology backtest --json` (including `--ghosts` and `--follow-ups`).",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "schemaVersion",
     "tool",
@@ -18,40 +17,79 @@
     "notes"
   ],
   "properties": {
-    "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-    "tool": { "$ref": "common.schema.json#/$defs/ToolInfo" },
-    "meta": { "$ref": "common.schema.json#/$defs/Meta" },
-    "k": { "type": "integer", "minimum": 1 },
-    "train": { "$ref": "#/$defs/CommitWindow" },
-    "test": { "$ref": "#/$defs/CommitWindow" },
-    "queries": { "type": "integer", "minimum": 0 },
-    "before": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-    "soloQueries": { "type": "integer", "minimum": 0 },
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/SchemaVersion"
+    },
+    "tool": {
+      "$ref": "common.schema.json#/$defs/ToolInfo"
+    },
+    "meta": {
+      "$ref": "common.schema.json#/$defs/Meta"
+    },
+    "k": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "train": {
+      "$ref": "#/$defs/CommitWindow"
+    },
+    "test": {
+      "$ref": "#/$defs/CommitWindow"
+    },
+    "queries": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "before": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "soloQueries": {
+      "type": "integer",
+      "minimum": 0
+    },
     "strategies": {
       "type": "array",
-      "items": { "$ref": "#/$defs/StrategyScore" }
+      "items": {
+        "$ref": "#/$defs/StrategyScore"
+      }
     },
     "notes": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
-    "ghostDiagnostics": { "$ref": "#/$defs/GhostDiagnostics" },
-    "followUpBenchmark": { "$ref": "#/$defs/FollowUpBenchmarkResult" }
+    "ghostDiagnostics": {
+      "$ref": "#/$defs/GhostDiagnostics"
+    },
+    "followUpBenchmark": {
+      "$ref": "#/$defs/FollowUpBenchmarkResult"
+    }
   },
   "$defs": {
     "CommitWindow": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["commits"],
+      "required": [
+        "commits"
+      ],
       "properties": {
-        "commits": { "type": "integer", "minimum": 0 },
-        "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+        "commits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
       }
     },
     "StrategyScore": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "name",
         "description",
@@ -63,19 +101,45 @@
         "recall"
       ],
       "properties": {
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "fired": { "type": "integer", "minimum": 0 },
-        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
-        "precision": { "type": "number", "minimum": 0, "maximum": 1 },
-        "hitRate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "falseAlarmRate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "recall": { "type": "number", "minimum": 0, "maximum": 1 }
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "falseAlarmRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "GhostDiagnostics": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "classification",
         "queries",
@@ -89,25 +153,61 @@
         "caveat"
       ],
       "properties": {
-        "classification": { "type": "string", "const": "current-code" },
-        "queries": { "type": "integer", "minimum": 0 },
-        "fired": { "type": "integer", "minimum": 0 },
-        "suggestions": { "type": "integer", "minimum": 0 },
-        "correct": { "type": "integer", "minimum": 0 },
-        "coverage": { "type": "number", "minimum": 0, "maximum": 1 },
-        "hitRate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "precision": { "type": "number", "minimum": 0, "maximum": 1 },
-        "falseAlarmRate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "caveat": { "type": "string" }
+        "classification": {
+          "type": "string",
+          "const": "current-code"
+        },
+        "queries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suggestions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "correct": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "falseAlarmRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "caveat": {
+          "type": "string"
+        }
       }
     },
     "FollowUpSignal": {
       "type": "string",
-      "enum": ["subject-cue", "shared-file", "immediate-same-author"]
+      "enum": [
+        "subject-cue",
+        "shared-file",
+        "immediate-same-author"
+      ]
     },
     "FollowUpStrategyScore": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "name",
         "description",
@@ -126,40 +226,120 @@
         "recall"
       ],
       "properties": {
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "candidates": { "type": "integer", "minimum": 0 },
-        "triggered": { "type": "integer", "minimum": 0 },
-        "coverage": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "recommendations": { "type": "integer", "minimum": 0 },
-        "correctMatches": { "type": "integer", "minimum": 0 },
-        "falsePositives": { "type": "integer", "minimum": 0 },
-        "hitCandidates": { "type": "integer", "minimum": 0 },
-        "falseAlarmCandidates": { "type": "integer", "minimum": 0 },
-        "hitRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "precision": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "falsePositiveRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "falseAlarmRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "triggered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recommendations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "correctMatches": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "falsePositives": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hitCandidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "falseAlarmCandidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hitRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "falsePositiveRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "falseAlarmRate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recall": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "FollowUpSignalSummary": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["signal", "candidates", "totalLaterFiles", "strategies"],
+      "required": [
+        "signal",
+        "candidates",
+        "totalLaterFiles",
+        "strategies"
+      ],
       "properties": {
-        "signal": { "$ref": "#/$defs/FollowUpSignal" },
-        "candidates": { "type": "integer", "minimum": 0 },
-        "totalLaterFiles": { "type": "integer", "minimum": 0 },
+        "signal": {
+          "$ref": "#/$defs/FollowUpSignal"
+        },
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalLaterFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
         "strategies": {
           "type": "array",
-          "items": { "$ref": "#/$defs/FollowUpStrategyScore" }
+          "items": {
+            "$ref": "#/$defs/FollowUpStrategyScore"
+          }
         }
       }
     },
     "FollowUpCandidateCase": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "initialCommit",
         "followUpCommit",
@@ -173,43 +353,105 @@
       "properties": {
         "initialCommit": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["hash", "date", "author", "subject", "files"],
+          "required": [
+            "hash",
+            "date",
+            "author",
+            "subject",
+            "files"
+          ],
           "properties": {
-            "hash": { "type": "string", "minLength": 1 },
-            "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-            "author": { "type": "string" },
-            "subject": { "type": "string" },
-            "files": { "type": "array", "items": { "type": "string" } }
+            "hash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "author": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "followUpCommit": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["hash", "date", "author", "subject", "laterFiles"],
+          "required": [
+            "hash",
+            "date",
+            "author",
+            "subject",
+            "laterFiles"
+          ],
           "properties": {
-            "hash": { "type": "string", "minLength": 1 },
-            "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-            "author": { "type": "string" },
-            "subject": { "type": "string" },
-            "laterFiles": { "type": "array", "items": { "type": "string" } }
+            "hash": {
+              "type": "string",
+              "minLength": 1
+            },
+            "date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "author": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "laterFiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
-        "deltaMinutes": { "type": "integer", "minimum": 0 },
+        "deltaMinutes": {
+          "type": "integer",
+          "minimum": 0
+        },
         "signals": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/FollowUpSignal" }
+          "items": {
+            "$ref": "#/$defs/FollowUpSignal"
+          }
         },
-        "trainingCommitsBefore": { "type": "integer", "minimum": 0 },
-        "recommended": { "type": "array", "items": { "type": "string" } },
-        "matched": { "type": "array", "items": { "type": "string" } },
-        "falsePositives": { "type": "array", "items": { "type": "string" } }
+        "trainingCommitsBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recommended": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "matched": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "falsePositives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "FollowUpBenchmarkResult": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "k",
         "windowHours",
@@ -227,36 +469,86 @@
         "limitations"
       ],
       "properties": {
-        "k": { "type": "integer", "minimum": 1 },
-        "windowHours": { "type": "number", "exclusiveMinimum": 0 },
-        "initialTrainCommits": { "type": "integer", "minimum": 0 },
-        "heldOutCommits": { "type": "integer", "minimum": 0 },
-        "before": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "modelsBuilt": { "type": "integer", "minimum": 0 },
-        "candidatesEvaluated": { "type": "integer", "minimum": 0 },
-        "candidatesWithoutHistory": { "type": "integer", "minimum": 0 },
-        "totalLaterFiles": { "type": "integer", "minimum": 0 },
+        "k": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "windowHours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "initialTrainCommits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "heldOutCommits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "before": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "modelsBuilt": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidatesEvaluated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidatesWithoutHistory": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalLaterFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
         "strategies": {
           "type": "array",
-          "items": { "$ref": "#/$defs/FollowUpStrategyScore" }
+          "items": {
+            "$ref": "#/$defs/FollowUpStrategyScore"
+          }
         },
         "bySignal": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["subject-cue", "shared-file", "immediate-same-author"],
+          "required": [
+            "subject-cue",
+            "shared-file",
+            "immediate-same-author"
+          ],
           "properties": {
-            "subject-cue": { "$ref": "#/$defs/FollowUpSignalSummary" },
-            "shared-file": { "$ref": "#/$defs/FollowUpSignalSummary" },
-            "immediate-same-author": { "$ref": "#/$defs/FollowUpSignalSummary" }
+            "subject-cue": {
+              "$ref": "#/$defs/FollowUpSignalSummary"
+            },
+            "shared-file": {
+              "$ref": "#/$defs/FollowUpSignalSummary"
+            },
+            "immediate-same-author": {
+              "$ref": "#/$defs/FollowUpSignalSummary"
+            }
           }
         },
         "cases": {
           "type": "array",
-          "items": { "$ref": "#/$defs/FollowUpCandidateCase" }
+          "items": {
+            "$ref": "#/$defs/FollowUpCandidateCase"
+          }
         },
-        "casesTruncated": { "type": "integer", "minimum": 0 },
-        "methodology": { "type": "string" },
-        "limitations": { "type": "array", "items": { "type": "string" } }
+        "casesTruncated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "methodology": {
+          "type": "string"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   }

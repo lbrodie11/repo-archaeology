@@ -30,17 +30,20 @@ Last updated: November 2026
 
 ## Upcoming Milestones
 
-### Milestone 1: Coding-Agent Recipes & MCP Server
+### Milestone 1: Coding-Agent Recipes, Pre-Change Briefing & MCP Server
 - **CLI/JSON Agent Hook Recipes:** Documented, zero-dependency integration recipes for Claude Code, Cursor, Windsurf, and GitHub Copilot built on the `schemaVersion: 1` JSON contract.
+- **10-Second Pre-Change Briefing (`file <path>`):** Concise pre-edit file briefing surfacing top historical companions, Finding Family siblings, associated test files, recent commits, and the last shared co-change commit.
 - **Model Context Protocol Server (`repo-archaeology mcp`):** A read-only MCP server exposing structured co-change and evidence tools (`find_related_files`, `explain_relationship`, `check_changeset`) over `stdio`.
 
-### Milestone 2: Verified Open-Source Gallery & Multi-Repo Benchmark
-- **Interactive Showcase Gallery:** Public interactive HTML maps and verified finding walk-throughs for flagship open-source repositories.
+### Milestone 2: Verified Open-Source Gallery, "Beat the Archaeologist" & Multi-Repo Benchmark
+- **Interactive Showcase Gallery & "Beat the Archaeologist" Challenge:** Public interactive HTML maps, verified finding walk-throughs, and a 5-round historical prediction challenge (`backtest --quiz`) built on real held-out commits from flagship open-source repositories.
+- **CodeTour Export (`.tours/`):** Export high-confidence ghost wires and Finding Families to VS Code / GitHub Codespaces `.tour` files backed by real commit citations.
 - **Held-Out Multi-Repository Benchmark:** Transparent accuracy, coverage, and follow-up evaluation across diverse open-source repositories.
 
-### Milestone 3: Relationship Verdicts, Architecture Evolution & Noise Controls
-- **Relationship Verdicts (`.repo-archaeology.verdicts.json`):** Repo-committed configuration for silencing expected mechanical relationships (with optional reasons and expiration dates) and annotating confirmed hidden dependencies for teammates and coding agents.
-- **Stateless Architecture Evolution (`evolution --from <ref> --to <ref>`):** Compare co-change models across Git tags or releases (with cross-revision rename lineage mapping) to spot newly emerged or strengthening ghost wires.
+### Milestone 3: PR-Time Coupling Signals, Relationship Verdicts & Architecture Evolution
+- **"✓ Already Updated" Companions & New Coupling Signals in `diff`:** Positive confirmation when a PR already updates expected historical companions, plus early surfacing when a branch introduces or strengthens hidden coupling.
+- **Relationship Verdicts (`.repo-archaeology.verdicts.json`):** Repo-committed configuration for silencing expected mechanical relationships (with optional reasons and expiration dates) and annotating confirmed hidden dependencies for teammates and coding agents without altering underlying historical scores.
+- **Stateless Architecture Evolution (`evolution --from <ref> --to <ref>`):** Compare co-change models across Git tags or releases (keyed by cross-revision rename lineage over a fixed commit range) to spot newly emerged or strengthening ghost wires.
 - **Formatting-Only Commit Filter:** Optional whitespace-aware filtering (`git diff -w`) so small formatting-only commits do not inflate co-change counts.
 
 ### Milestone 4: Contract-Aware Relationships (`--contracts`)

@@ -170,8 +170,19 @@ program
         writeJsonContractFile(opts.jsonOut, result);
       }
       if (global.json) printJson(result);
-      else if (opts.format === 'markdown') process.stdout.write(renderDiffMarkdown(result));
-      else printDiff(result);
+      else if (opts.format === 'markdown') {
+        const repoUrl =
+          process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+            ? `${process.env.GITHUB_SERVER_URL.replace(/\/+$/, '')}/${process.env.GITHUB_REPOSITORY}`
+            : undefined;
+        process.stdout.write(
+          renderDiffMarkdown(result, {
+            settings: ctx.settings,
+            flagSettings: ctx.flagSettings,
+            repoUrl,
+          }),
+        );
+      } else printDiff(result);
       if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
     },
   );

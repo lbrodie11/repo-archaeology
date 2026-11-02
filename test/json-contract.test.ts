@@ -263,6 +263,11 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     for (const file of schemaFiles) {
       const schema = loadSchema(file);
       assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema', `${file} must declare Draft 2020-12`);
+      assert.equal(
+        schema.$id,
+        `https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v${pkgVersion}/schema/${file}`,
+        `${file} must use a stable versioned raw $id URI`,
+      );
       assert.ok(schema.title, `${file} must have a title`);
     }
     const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8')) as {
@@ -351,13 +356,20 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       // Edit one member of the 3-way family -> diff --json and bare default command ('diff' mode)
       repo.write('src/adapter/bun/serve-static.ts', 'export const bunServe = 999;\n');
 
-      const activeDiffRes = runCli(['diff', '--json'], repo.dir);
+      const activeDiffRes = runCli(['diff', '--limit', '1', '--json'], repo.dir);
       assert.equal(activeDiffRes.code, 0, activeDiffRes.stderr);
       const activeDiffJson = JSON.parse(activeDiffRes.stdout);
-      assert.ok(activeDiffJson.suggestions.length >= 2);
+      assert.equal(activeDiffJson.suggestions.length, 1);
+      assert.equal(activeDiffJson.totalSuggestions, 2);
       assert.ok(activeDiffJson.families.length >= 1);
       assert.equal(activeDiffJson.silence, undefined);
       assertMatchesSchema(activeDiffJson, 'diff.schema.json');
+
+      // Forward-compatibility: additive fields keep schemaVersion: 1 valid
+      assertMatchesSchema(
+        { ...activeDiffJson, futureAdditiveField: 'allowed-in-v1' },
+        'diff.schema.json',
+      );
 
       const defaultDiffRes = runCli(['--json'], repo.dir);
       assert.equal(defaultDiffRes.code, 0, defaultDiffRes.stderr);
@@ -406,6 +418,10 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       );
       assert.throws(
         () => validateJsonOutPath(join(repo.dir, '.git', 'hooks', 'pre-commit')),
+        /--json-out cannot write directly into \.git internal directories/,
+      );
+      assert.throws(
+        () => validateJsonOutPath(join(repo.dir, '.GIT', 'config')),
         /--json-out cannot write directly into \.git internal directories/,
       );
 

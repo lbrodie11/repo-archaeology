@@ -1,5 +1,6 @@
 import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
+import type { Settings } from '../config.js';
 import { NAMES } from './views.js';
 import { pct, plural, shortHash } from '../util/term.js';
 
@@ -15,9 +16,24 @@ export const FEEDBACK_ISSUE_URL =
 export interface RenderDiffMarkdownOptions {
   /** Maximum UTF-8 byte length of the returned Markdown document (default 512 KiB). */
   maxBytes?: number;
+  /** Optional analysis settings overrides to preserve in rendered `explain` commands. */
+  settings?: Partial<Settings>;
+  /** Optional CLI flag-only settings (e.g. explicit `--ignore` patterns) for `explain` commands. */
+  flagSettings?: Partial<Settings>;
+  /** Optional HTTPS repository URL (e.g. `https://github.com/owner/repo`) to link evidence commit SHAs. */
+  repoUrl?: string;
 }
 
 const CONTROL_AND_BIDI_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]|\p{Bidi_Control}/gu;
+const SAFE_REPO_URL_RE = /^https?:\/\/[a-zA-Z0-9.-]+(?::\d+)?\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+const HEX_SHA_RE = /^[0-9a-f]{7,64}$/i;
+const FULL_HEX_SHA_RE = /^[0-9a-f]{40,64}$/i;
+
+function normalizeRepoUrl(repoUrl?: string): string | undefined {
+  if (!repoUrl) return undefined;
+  const trimmed = repoUrl.trim().replace(/\/+$/, '');
+  return SAFE_REPO_URL_RE.test(trimmed) ? trimmed : undefined;
+}
 
 /**
  * Neutralizes C0/C1 control characters, newlines, and Unicode bidi overrides
@@ -67,21 +83,36 @@ export function escapeMarkdownInline(value: string, maxChars = 200): string {
 }
 
 /**
- * Formats an untrusted repository path or identifier as a safe GFM inline code span.
- * Backticks inside the string are replaced and HTML/table chars are kept inert so
- * the code span can never be broken out of.
+ * Formats an untrusted repository path, identifier, or shell command as a safe
+ * CommonMark/GFM inline code span without altering printable characters (`\``, `|`, `<`, `>`).
+ * Uses a backtick fence longer than any embedded backtick run so the code span
+ * can never be broken out of and shell quoting is preserved verbatim.
  */
 export function formatMarkdownCode(value: string, maxChars = 240): string {
-  const sanitized = sanitizeMarkdownControlChars(value, maxChars)
-    .replace(/`/g, "'")
-    .replace(/\|/g, '\u2223')
-    .replace(/</g, '\uFF1C')
-    .replace(/>/g, '\uFF1E');
-  return `\`${sanitized || ' '}\``;
+  const sanitized = sanitizeMarkdownControlChars(value, maxChars);
+  if (sanitized.length === 0) {
+    return '` `';
+  }
+  let fence = '`';
+  while (sanitized.includes(fence)) {
+    fence += '`';
+  }
+  const needsSpacePadding =
+    sanitized.startsWith('`') ||
+    sanitized.endsWith('`') ||
+    sanitized.startsWith(' ') ||
+    sanitized.endsWith(' ');
+  const pad = needsSpacePadding ? ' ' : '';
+  return `${fence}${pad}${sanitized}${pad}${fence}`;
 }
 
-function formatCommitEvidenceLine(ev: { hash: string; date: string; subject: string }): string {
-  const sha = formatMarkdownCode(shortHash(ev.hash), 16);
+function formatCommitEvidenceLine(
+  ev: { hash: string; date: string; subject: string },
+  repoUrl?: string,
+): string {
+  const shaCode = formatMarkdownCode(shortHash(ev.hash), 16);
+  const sha =
+    repoUrl && HEX_SHA_RE.test(ev.hash) ? `[${shaCode}](${repoUrl}/commit/${ev.hash})` : shaCode;
   const date = escapeMarkdownInline(ev.date, 16);
   const subject = escapeMarkdownInline(ev.subject, 160);
   return `  - ${sha} (${date}) — ${subject}`;
@@ -106,7 +137,13 @@ function formatDirectionalEvidence(s: Suggestion): string {
   );
 }
 
-function renderSuggestionBlock(s: Suggestion, index: number): string {
+function renderSuggestionBlock(
+  s: Suggestion,
+  index: number,
+  settings?: Partial<Settings>,
+  flagSettings?: Partial<Settings>,
+  repoUrl?: string,
+): string {
   const lines: string[] = [];
   const kindLabel = NAMES[s.relationship];
   const alsoNote =
@@ -120,11 +157,11 @@ function renderSuggestionBlock(s: Suggestion, index: number): string {
 
   const topCommits = s.evidence.slice(0, 3);
   for (const ev of topCommits) {
-    lines.push(` ${formatCommitEvidenceLine(ev)}`);
+    lines.push(` ${formatCommitEvidenceLine(ev, repoUrl)}`);
   }
 
-  const explainCmd = formatExplainCommand(s.from, s.to);
-  lines.push(`   - Verify: ${formatMarkdownCode(explainCmd, 300)}`);
+  const explainCmd = formatExplainCommand(s.from, s.to, settings, flagSettings);
+  lines.push(`   - Verify: ${formatMarkdownCode(explainCmd, Number.POSITIVE_INFINITY)}`);
   return lines.join('\n');
 }
 
@@ -195,6 +232,11 @@ function renderSilenceSection(result: DiffResult, silence: SilenceDiagnostics): 
  */
 export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdownOptions = {}): string {
   const maxBytes = options.maxBytes ?? DEFAULT_MARKDOWN_MAX_BYTES;
+  const repoUrl = normalizeRepoUrl(options.repoUrl);
+  const effectiveSettings: Partial<Settings> = {
+    ...result.meta.settings,
+    ...options.settings,
+  };
   const headerLines: string[] = [];
 
   headerLines.push('## Repo Archaeology');
@@ -211,14 +253,15 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
   const scopeParts: string[] = [];
   scopeParts.push(`Evaluated **${plural(result.changed.length, 'changed file')}**${historyNote}`);
   if (result.base) {
+    const baseDisplay = FULL_HEX_SHA_RE.test(result.base) ? shortHash(result.base) : result.base;
     const mergeShort = evaluation?.mergeBaseSha
       ? shortHash(evaluation.mergeBaseSha)
       : evaluation?.baselineSha
         ? shortHash(evaluation.baselineSha)
-        : result.base;
+        : baseDisplay;
     const headShort = evaluation?.headSha ? shortHash(evaluation.headSha) : 'HEAD';
     scopeParts.push(
-      `against base ${formatMarkdownCode(result.base, 80)} (merge-base ${formatMarkdownCode(mergeShort, 16)} → ${formatMarkdownCode(headShort, 16)})`,
+      `against base ${formatMarkdownCode(baseDisplay, 80)} (merge-base ${formatMarkdownCode(mergeShort, 16)} → ${formatMarkdownCode(headShort, 16)})`,
     );
   }
   const range =
@@ -247,13 +290,7 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
     }
   }
 
-  const footerLines: string[] = [
-    '',
-    '---',
-    `Was a suggestion useful or noisy? [Share feedback](${FEEDBACK_ISSUE_URL}) _(please avoid posting private paths or source code)_.`,
-  ];
-
-  // Empty / silence state
+  // Empty / silence state (omit feedback footer when there are no suggestions)
   if (result.suggestions.length === 0) {
     const silence: SilenceDiagnostics = result.silence ?? {
       primaryReason: result.changed.length === 0 ? 'no_changed_files' : 'no_cochange_partners',
@@ -273,76 +310,135 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
       details: [],
     };
     const bodyLines = ['', ...renderSilenceSection(result, silence)];
-    return clampMarkdownToByteBudget(headerLines, bodyLines, footerLines, maxBytes);
+    return clampMarkdownToByteBudget(headerLines, bodyLines, [], maxBytes);
   }
 
-  // Non-empty suggestions state: enforce byte budget by progressively fitting families and suggestions.
-  const families = result.families ?? [];
-  const suggestionBlocks = result.suggestions.map((s, idx) => renderSuggestionBlock(s, idx));
+  const footerLines: string[] = [
+    '',
+    '---',
+    `Was a suggestion useful or noisy? [Share feedback](${FEEDBACK_ISSUE_URL}) _(please avoid posting private paths or source code)_.`,
+  ];
 
-  const buildDocument = (includedFamilies: number, includedSuggestions: number): string => {
-    const mid: string[] = [];
+  // Non-empty suggestions state: precompute blocks and prefix byte sums so truncation runs in O(N + log N) time.
+  const families = result.families ?? [];
+  const suggestionBlocks = result.suggestions.map((s, idx) =>
+    renderSuggestionBlock(s, idx, effectiveSettings, options.flagSettings, repoUrl),
+  );
+  const totalSuggestions = Math.max(result.totalSuggestions ?? suggestionBlocks.length, suggestionBlocks.length);
+
+  // sugPrefixBytes[k] = UTF-8 bytes of suggestionBlocks[0..k-1] joined by '\n\n'
+  const sugPrefixBytes = new Float64Array(suggestionBlocks.length + 1);
+  for (let i = 0; i < suggestionBlocks.length; i++) {
+    const blockBytes = Buffer.byteLength(suggestionBlocks[i]!, 'utf8');
+    sugPrefixBytes[i + 1] = sugPrefixBytes[i]! + (i > 0 ? 2 : 0) + blockBytes;
+  }
+
+  const headerText = headerLines.join('\n');
+  const footerText = footerLines.join('\n');
+  const baseWrapperBytes = Buffer.byteLength(`${headerText}${footerText}\n`, 'utf8');
+
+  const formatMiddlePrefixAndSuffix = (
+    includedFamilies: number,
+    includedSuggestions: number,
+  ): { prefixLines: string[]; suffixLines: string[] } => {
+    const prefixLines: string[] = [];
     const shownSuggested = new Set(result.suggestions.slice(0, includedSuggestions).map((s) => s.to));
     if (includedFamilies > 0) {
-      mid.push('');
+      prefixLines.push('');
       const famHeading =
         includedFamilies < families.length
           ? `### Finding families (showing ${includedFamilies} of ${families.length})`
           : `### Finding families (${families.length})`;
-      mid.push(famHeading);
-      mid.push('');
+      prefixLines.push(famHeading);
+      prefixLines.push('');
       for (let i = 0; i < includedFamilies; i++) {
-        mid.push(renderFamilyBlock(families[i]!, shownSuggested));
+        prefixLines.push(renderFamilyBlock(families[i]!, shownSuggested));
       }
     }
 
-    mid.push('');
+    prefixLines.push('');
     const sugHeading =
-      includedSuggestions < suggestionBlocks.length
-        ? `### Possibly missed (showing ${includedSuggestions} of ${suggestionBlocks.length})`
-        : `### Possibly missed (${suggestionBlocks.length})`;
-    mid.push(sugHeading);
-    mid.push('');
-    for (let i = 0; i < includedSuggestions; i++) {
-      if (i > 0) mid.push('');
-      mid.push(suggestionBlocks[i]!);
-    }
+      includedSuggestions < totalSuggestions
+        ? `### Possibly missed (showing ${includedSuggestions} of ${totalSuggestions})`
+        : `### Possibly missed (${totalSuggestions})`;
+    prefixLines.push(sugHeading);
+    prefixLines.push('');
 
+    const suffixLines: string[] = [];
     const omittedSuggestions = suggestionBlocks.length - includedSuggestions;
     const omittedFamilies = families.length - includedFamilies;
     if (omittedSuggestions > 0 || omittedFamilies > 0) {
       const parts: string[] = [];
       if (omittedSuggestions > 0) parts.push(plural(omittedSuggestions, 'suggestion'));
       if (omittedFamilies > 0) parts.push(plural(omittedFamilies, 'finding family', 'finding families'));
-      mid.push('');
-      mid.push(
+      suffixLines.push('');
+      suffixLines.push(
         `> _Output truncated to stay within the summary size limit (omitted ${parts.join(' and ')}). Run \`npx repo-archaeology diff\` locally or inspect \`--json-out\` for the full results._`,
       );
     }
+    return { prefixLines, suffixLines };
+  };
 
+  // Compute exact UTF-8 byte length without joining suggestionBlocks.
+  const measureCandidateBytes = (includedFamilies: number, includedSuggestions: number): number => {
+    const { prefixLines, suffixLines } = formatMiddlePrefixAndSuffix(
+      includedFamilies,
+      includedSuggestions,
+    );
+    const prefixBytes = Buffer.byteLength(`\n${prefixLines.join('\n')}`, 'utf8');
+    const sugSectionBytes =
+      includedSuggestions > 0 ? 1 + sugPrefixBytes[includedSuggestions]! : 0;
+    const suffixBytes =
+      suffixLines.length > 0 ? Buffer.byteLength(`\n${suffixLines.join('\n')}`, 'utf8') : 0;
+    return baseWrapperBytes + prefixBytes + sugSectionBytes + suffixBytes;
+  };
+
+  const buildDocument = (includedFamilies: number, includedSuggestions: number): string => {
+    const { prefixLines, suffixLines } = formatMiddlePrefixAndSuffix(
+      includedFamilies,
+      includedSuggestions,
+    );
+    const mid: string[] = [...prefixLines];
+    for (let i = 0; i < includedSuggestions; i++) {
+      if (i > 0) mid.push('');
+      mid.push(suggestionBlocks[i]!);
+    }
+    mid.push(...suffixLines);
     return [...headerLines, ...mid, ...footerLines].join('\n') + '\n';
   };
 
-  const fullDoc = buildDocument(families.length, suggestionBlocks.length);
-  if (Buffer.byteLength(fullDoc, 'utf8') <= maxBytes) {
-    return fullDoc;
+  if (measureCandidateBytes(families.length, suggestionBlocks.length) <= maxBytes) {
+    return buildDocument(families.length, suggestionBlocks.length);
   }
 
-  // Fit as many suggestions and families as possible under maxBytes.
-  let bestFamilies = families.length;
-  let bestSuggestions = suggestionBlocks.length;
-  while (bestSuggestions > 0 || bestFamilies > 0) {
-    if (bestSuggestions > 1) {
-      bestSuggestions--;
-    } else if (bestFamilies > 0) {
-      bestFamilies--;
+  // Map monotonic step index in [0, families.length + suggestionBlocks.length] to (includedFamilies, includedSuggestions):
+  // - Drop suggestions down to 1 first while keeping all families,
+  // - Then drop families down to 0 while keeping 1 suggestion,
+  // - Finally drop the last suggestion to 0.
+  const totalSteps = families.length + suggestionBlocks.length;
+  const stepToCounts = (step: number): [number, number] => {
+    if (step <= 0) return [0, 0];
+    if (step <= families.length) return [step - 1, 1];
+    return [families.length, step - families.length];
+  };
+
+  let lo = 0;
+  let hi = totalSteps - 1;
+  let bestStep = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const [famCount, sugCount] = stepToCounts(mid);
+    if (measureCandidateBytes(famCount, sugCount) <= maxBytes) {
+      bestStep = mid;
+      lo = mid + 1;
     } else {
-      bestSuggestions = 0;
+      hi = mid - 1;
     }
-    const candidate = buildDocument(bestFamilies, bestSuggestions);
-    if (Buffer.byteLength(candidate, 'utf8') <= maxBytes) {
-      return candidate;
-    }
+  }
+
+  if (bestStep >= 0) {
+    const [bestFamilies, bestSuggestions] = stepToCounts(bestStep);
+    return buildDocument(bestFamilies, bestSuggestions);
   }
 
   return clampMarkdownToByteBudget(headerLines, [], footerLines, maxBytes);

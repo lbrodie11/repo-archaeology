@@ -1,13 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/default.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/default.schema.json",
   "title": "Repo Archaeology Default Command Result (v1)",
   "description": "JSON output contract for bare `repo-archaeology --json` (discriminated by `mode`: `'diff'` or `'scan'`).",
   "oneOf": [
     {
       "title": "Default Command in Diff Mode",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "schemaVersion",
         "tool",
@@ -15,6 +14,7 @@
         "meta",
         "evaluation",
         "changed",
+        "totalSuggestions",
         "suggestions",
         "families"
       ],
@@ -28,6 +28,11 @@
         "changed": {
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/ChangedFileView" }
+        },
+        "totalSuggestions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of qualifying companion suggestions before `--limit` truncation."
         },
         "suggestions": {
           "type": "array",
@@ -43,7 +48,6 @@
     {
       "title": "Default Command in Scan Mode",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "schemaVersion",
         "tool",

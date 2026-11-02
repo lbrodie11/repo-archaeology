@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/diff.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/diff.schema.json",
   "title": "Repo Archaeology Diff Result (v1)",
   "description": "JSON output contract for `repo-archaeology diff --json` and `repo-archaeology diff --json-out <file>`.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "schemaVersion",
     "tool",
     "meta",
     "evaluation",
     "changed",
+    "totalSuggestions",
     "suggestions",
     "families"
   ],
@@ -23,6 +23,11 @@
     "changed": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/ChangedFileView" }
+    },
+    "totalSuggestions": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of qualifying companion suggestions before `--limit` truncation."
     },
     "suggestions": {
       "type": "array",

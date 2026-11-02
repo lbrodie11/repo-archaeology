@@ -1,10 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/lbrodie11/repo-archaeology/blob/main/schema/map.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/map.schema.json",
   "title": "Repo Archaeology Map Result (v1)",
   "description": "JSON output contract for `repo-archaeology map --json`.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "schemaVersion",
     "tool",
@@ -15,12 +14,29 @@
     "patchesIncluded"
   ],
   "properties": {
-    "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-    "tool": { "$ref": "common.schema.json#/$defs/ToolInfo" },
-    "file": { "type": "string", "minLength": 1 },
-    "nodes": { "type": "integer", "minimum": 0 },
-    "edges": { "type": "integer", "minimum": 0 },
-    "counts": { "$ref": "common.schema.json#/$defs/RelationshipCounts" },
-    "patchesIncluded": { "type": "boolean" }
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/SchemaVersion"
+    },
+    "tool": {
+      "$ref": "common.schema.json#/$defs/ToolInfo"
+    },
+    "file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "edges": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "counts": {
+      "$ref": "common.schema.json#/$defs/RelationshipCounts"
+    },
+    "patchesIncluded": {
+      "type": "boolean"
+    }
   }
 }

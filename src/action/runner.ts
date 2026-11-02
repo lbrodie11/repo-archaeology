@@ -1,11 +1,33 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const PINNED_ACTION_PACKAGE = 'repo-archaeology@0.3.0';
+function readPackageVersion(): string {
+  try {
+    const pkgPath = new URL('../../package.json', import.meta.url);
+    const parsed = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: unknown };
+    if (typeof parsed.version === 'string' && parsed.version.trim() !== '') {
+      return parsed.version.trim();
+    }
+  } catch {
+    // Fallback if package.json cannot be read relative to runner
+  }
+  return '0.3.0';
+}
+
+export const PINNED_ACTION_PACKAGE = `repo-archaeology@${readPackageVersion()}`;
 
 export type AnalysisStatus = 'analyzed' | 'insufficient-history' | 'skipped';
 
@@ -31,10 +53,10 @@ function writeGitHubOutputs(outputFile: string | undefined, entries: Record<stri
   const lines: string[] = [];
   for (const [key, rawValue] of Object.entries(entries)) {
     const value = String(rawValue ?? '').replace(/[\r\n]+/g, ' ');
-    const delimiter = `ghadelim_${randomBytes(12).toString('hex')}`;
-    lines.push(`${key}<<${delimiter}`);
+    const delim = `ghadelim_${randomBytes(12).toString('hex')}`;
+    lines.push(`${key}<<${delim}`);
     lines.push(value);
-    lines.push(delimiter);
+    lines.push(delim);
   }
   appendFileSync(outputFile, `${lines.join('\n')}\n`, 'utf8');
 }
@@ -141,12 +163,73 @@ function buildShallowCloneMarkdown(): string {
   ].join('\n');
 }
 
+function buildInsufficientCommitsMarkdown(commitCount: number): string {
+  return [
+    '## Repo Archaeology',
+    '',
+    `> **Skipped (insufficient commit history):** Repo Archaeology requires at least 2 commits in repository history to compare changes against a baseline, but only ${commitCount} commit${commitCount === 1 ? ' was' : 's were'} found at \`HEAD\`.`,
+    '',
+  ].join('\n');
+}
+
+function buildSkippedErrorMarkdown(message: string): string {
+  const safeMsg = message
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return ['## Repo Archaeology', '', `> **Skipped:** ${safeMsg}`, ''].join('\n');
+}
+
+/**
+ * Resolves the absolute path to Node/npm's `npx-cli.js` entry point so external
+ * package execution can be launched directly via `process.execPath` (`shell: false`)
+ * across Windows, macOS, and Linux without invoking `.cmd` batch scripts.
+ */
+export function resolveNpxCliJs(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const explicitOverride = env.REPO_ARCHAEOLOGY_NPX_CLI_JS?.trim();
+  if (explicitOverride && existsSync(explicitOverride)) {
+    return resolve(explicitOverride);
+  }
+
+  const execDir = dirname(process.execPath);
+  const candidates: string[] = [
+    join(execDir, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+    join(execDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+  ];
+
+  if (env.npm_execpath && env.npm_execpath.trim() !== '') {
+    candidates.push(join(dirname(env.npm_execpath.trim()), 'npx-cli.js'));
+  }
+
+  const pathVar = env.PATH ?? env.Path ?? '';
+  for (const dir of pathVar.split(delimiter)) {
+    const trimmed = dir.trim();
+    if (!trimmed) continue;
+    candidates.push(join(trimmed, 'node_modules', 'npm', 'bin', 'npx-cli.js'));
+    candidates.push(join(trimmed, '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js'));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (existsSync(candidate) && lstatSync(candidate).isFile()) {
+        return realpathSync.native(candidate);
+      }
+    } catch {
+      // continue searching
+    }
+  }
+  return undefined;
+}
+
 export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRunResult {
   const summaryFile = env.GITHUB_STEP_SUMMARY;
   const outputFile = env.GITHUB_OUTPUT;
 
   const failWith = (message: string, exitCode = 2): ActionRunResult => {
     const cleanMsg = `error: ${message}`;
+    const errMd = buildSkippedErrorMarkdown(message);
+    writeStepSummary(summaryFile, errMd);
     writeGitHubOutputs(outputFile, {
       'suggestion-count': '0',
       'json-path': '',
@@ -157,7 +240,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       suggestionCount: 0,
       jsonPath: '',
       analysisStatus: 'skipped',
-      summaryMarkdown: '',
+      summaryMarkdown: errMd,
       stderr: cleanMsg,
     };
   };
@@ -234,6 +317,27 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     const shallowCheck = runGitSync(workingDirReal, ['rev-parse', '--is-shallow-repository']);
     if (shallowCheck.status === 0 && shallowCheck.stdout === 'true') {
       const md = buildShallowCloneMarkdown();
+      writeStepSummary(summaryFile, md);
+      writeGitHubOutputs(outputFile, {
+        'suggestion-count': '0',
+        'json-path': '',
+        'analysis-status': 'insufficient-history',
+      });
+      return {
+        exitCode: 0,
+        suggestionCount: 0,
+        jsonPath: '',
+        analysisStatus: 'insufficient-history',
+        summaryMarkdown: md,
+        stderr: '',
+      };
+    }
+
+    // Check bounded commit count at HEAD (< 2 commits -> insufficient-history, exit code 0).
+    const commitCountCheck = runGitSync(workingDirReal, ['rev-list', '--count', '-n', '2', 'HEAD']);
+    const commitCount = commitCountCheck.status === 0 ? Number.parseInt(commitCountCheck.stdout, 10) : 0;
+    if (!Number.isFinite(commitCount) || commitCount < 2) {
+      const md = buildInsufficientCommitsMarkdown(Number.isFinite(commitCount) ? commitCount : 0);
       writeStepSummary(summaryFile, md);
       writeGitHubOutputs(outputFile, {
         'suggestion-count': '0',
@@ -373,7 +477,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     // Determine CLI entrypoint:
     // - When running from src/action/runner.ts (e.g. during `npm test`), prefer src/cli.ts via tsx so a stale dist/ build is never used.
     // - When running from dist/action/runner.js (or when dist/cli.js is built), use dist/cli.js.
-    // - Otherwise execute the pinned npm package repo-archaeology@0.3.0 in external repositories.
+    // - Otherwise execute the pinned npm package in an isolated temporary directory outside GITHUB_WORKSPACE.
     const selfPath = fileURLToPath(import.meta.url);
     const runningFromTs = selfPath.endsWith('.ts');
     const defaultActionRoot = resolve(dirname(selfPath), '..', '..');
@@ -403,46 +507,95 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       REPO_ARCHAEOLOGY_JSON_OUT_ROOT: tempReal,
     };
 
-    const execResult =
-      runningFromTs && hasSrcCliWithTsx
-        ? spawnSync(process.execPath, ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs], {
-            cwd: workingDirReal,
-            env: childEnv,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            timeout: 120_000,
-          })
-        : hasBuiltCli
-          ? spawnSync(process.execPath, [localBuiltCli, ...cliArgs], {
-              cwd: workingDirReal,
-              env: childEnv,
-              encoding: 'utf8',
-              stdio: ['ignore', 'pipe', 'pipe'],
-              timeout: 120_000,
-            })
-          : hasSrcCliWithTsx
-            ? spawnSync(process.execPath, ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs], {
-                cwd: workingDirReal,
-                env: childEnv,
+    let execResult: ReturnType<typeof spawnSync>;
+    if (runningFromTs && hasSrcCliWithTsx) {
+      execResult = spawnSync(
+        process.execPath,
+        ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs],
+        {
+          cwd: workingDirReal,
+          env: childEnv,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 120_000,
+        },
+      );
+    } else if (hasBuiltCli) {
+      execResult = spawnSync(process.execPath, [localBuiltCli, ...cliArgs], {
+        cwd: workingDirReal,
+        env: childEnv,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120_000,
+      });
+    } else if (hasSrcCliWithTsx) {
+      execResult = spawnSync(
+        process.execPath,
+        ['--import', localTsxLoaderUrl, localSrcCli, ...cliArgs],
+        {
+          cwd: workingDirReal,
+          env: childEnv,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 120_000,
+        },
+      );
+    } else {
+      // External consumer path: execute in a clean, isolated temp directory outside GITHUB_WORKSPACE
+      // so the target repository's package.json, node_modules/.bin, or .npmrc can never hijack resolution.
+      const isolatedExecDir = join(
+        tempReal,
+        `repo-arch-exec-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`,
+      );
+      mkdirSync(isolatedExecDir, { recursive: true });
+      const emptyNpmrc = join(isolatedExecDir, '.npmrc');
+      writeFileSync(join(isolatedExecDir, 'package.json'), '{"private":true}\n', 'utf8');
+      writeFileSync(emptyNpmrc, '', 'utf8');
+
+      const isolatedEnv: NodeJS.ProcessEnv = {
+        ...childEnv,
+        NPM_CONFIG_USERCONFIG: emptyNpmrc,
+        npm_config_userconfig: emptyNpmrc,
+      };
+      delete isolatedEnv.NODE_OPTIONS;
+
+      const npxCliJs = resolveNpxCliJs(env);
+      try {
+        execResult = npxCliJs
+          ? spawnSync(
+              process.execPath,
+              [npxCliJs, '--yes', `--prefix=${isolatedExecDir}`, PINNED_ACTION_PACKAGE, ...cliArgs],
+              {
+                cwd: isolatedExecDir,
+                env: isolatedEnv,
                 encoding: 'utf8',
                 stdio: ['ignore', 'pipe', 'pipe'],
-                timeout: 120_000,
-              })
-            : spawnSync(
-                process.platform === 'win32' ? 'npx.cmd' : 'npx',
-                ['--yes', PINNED_ACTION_PACKAGE, ...cliArgs],
-                {
-                  cwd: workingDirReal,
-                  env: childEnv,
-                  encoding: 'utf8',
-                  stdio: ['ignore', 'pipe', 'pipe'],
-                  timeout: 180_000,
-                },
-              );
+                timeout: 180_000,
+              },
+            )
+          : spawnSync(
+              'npx',
+              ['--yes', `--prefix=${isolatedExecDir}`, PINNED_ACTION_PACKAGE, ...cliArgs],
+              {
+                cwd: isolatedExecDir,
+                env: isolatedEnv,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'pipe'],
+                timeout: 180_000,
+              },
+            );
+      } finally {
+        try {
+          rmSync(isolatedExecDir, { recursive: true, force: true });
+        } catch {
+          // ignore cleanup failure
+        }
+      }
+    }
 
     const cliStatus = execResult.status ?? 1;
-    const cliStdout = execResult.stdout ?? '';
-    const cliStderr = (execResult.stderr ?? '').trim();
+    const cliStdout = String(execResult.stdout ?? '');
+    const cliStderr = String(execResult.stderr ?? '').trim();
 
     if (cliStatus !== 0) {
       return failWith(cliStderr || `repo-archaeology diff exited with status ${cliStatus}`, cliStatus);

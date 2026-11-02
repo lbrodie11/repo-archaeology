@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { describe, it } from 'node:test';
-import { PINNED_ACTION_PACKAGE, runGitHubAction } from '../src/action/runner.js';
+import { pathToFileURL } from 'node:url';
+import { PINNED_ACTION_PACKAGE, resolveNpxCliJs, runGitHubAction } from '../src/action/runner.js';
 import { FixtureRepo } from './helpers.js';
 
 const ROOT_DIR = join(import.meta.dirname, '..');
@@ -80,7 +81,8 @@ function createActionHarness(workspaceDir: string) {
 describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
   it('verifies action.yml metadata, pinned version, and zero direct input interpolations in run scripts', () => {
     const actionYml = readFileSync(join(ROOT_DIR, 'action.yml'), 'utf8');
-    assert.equal(PINNED_ACTION_PACKAGE, 'repo-archaeology@0.3.0');
+    const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8')) as { version: string };
+    assert.equal(PINNED_ACTION_PACKAGE, `repo-archaeology@${pkg.version}`);
     assert.match(actionYml, /using:\s*'composite'/);
     assert.match(actionYml, /suggestion-count:/);
     assert.match(actionYml, /json-path:/);
@@ -219,8 +221,9 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
     }
   });
 
-  it('covers Scenario 5: detects shallow clones and exits 0 with analysis-status=insufficient-history', () => {
+  it('covers Scenario 5: detects shallow clones and <2-commit repositories and exits 0 with analysis-status=insufficient-history', () => {
     const originRepo = new FixtureRepo();
+    const singleCommitRepo = new FixtureRepo();
     const shallowRoot = mkdtempSync(join(tmpdir(), 'repo-arch-shallow-'));
     const shallowCloneDir = join(shallowRoot, 'clone');
     try {
@@ -246,8 +249,28 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       } finally {
         harness.cleanup();
       }
+
+      // Non-shallow repository with only 1 commit -> also insufficient-history (exit 0)
+      singleCommitRepo.touch(['src/only.ts'], 'initial single commit');
+      const oneSha = singleCommitRepo.git('rev-parse', 'HEAD').trim();
+      const singleHarness = createActionHarness(singleCommitRepo.dir);
+      try {
+        const oneRes = singleHarness.run({
+          INPUT_BASE: oneSha,
+          INPUT_HEAD: oneSha,
+          INPUT_FAIL_ON_SUGGESTIONS: 'true',
+        });
+        assert.equal(oneRes.res.exitCode, 0);
+        assert.equal(oneRes.outputs['analysis-status'], 'insufficient-history');
+        assert.equal(oneRes.outputs['suggestion-count'], '0');
+        assert.equal(oneRes.outputs['json-path'], '');
+        assert.match(oneRes.summary, /Skipped \(insufficient commit history\)/);
+      } finally {
+        singleHarness.cleanup();
+      }
     } finally {
       rmSync(shallowRoot, { recursive: true, force: true });
+      singleCommitRepo.cleanup();
       originRepo.cleanup();
     }
   });
@@ -275,7 +298,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       const syntheticMergeSha = repo.git('rev-parse', 'HEAD').trim();
       assert.notEqual(syntheticMergeSha, prHeadSha);
 
-      // Scenario 7: HEAD is synthetic merge commit while INPUT_HEAD is prHeadSha -> must fail with actionable guidance
+      // Scenario 7: HEAD is synthetic merge commit while INPUT_HEAD is prHeadSha -> must fail with actionable guidance and summary
       const mismatch = harness.run({
         INPUT_BASE: forkSha,
         INPUT_HEAD: prHeadSha,
@@ -285,6 +308,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       assert.match(mismatch.res.stderr, /Checked-out HEAD .* does not match expected head/);
       assert.match(mismatch.res.stderr, /synthetic pull_request merge commit/);
       assert.match(mismatch.res.stderr, /github\.event\.pull_request\.head\.sha/);
+      assert.match(mismatch.summary, /Checked-out HEAD .* does not match expected head/);
 
       // Scenario 6: Missing base input or non-existent base SHA
       repo.git('checkout', '-q', prHeadSha);
@@ -307,7 +331,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
     }
   });
 
-  it('covers Scenarios 9, 11 & 12: supports monorepo working-directory, rejects path/symlink escapes and hostile inputs, and runs via action.yml shell step', () => {
+  it('covers Scenarios 9, 11 & 12: supports monorepo working-directory, rejects path/symlink escapes and hostile inputs, isolates external package resolution, and runs via action.yml shell step', () => {
     const repo = new FixtureRepo();
     const harness = createActionHarness(repo.dir);
     const outsideDir = mkdtempSync(join(tmpdir(), 'repo-arch-outside-'));
@@ -376,16 +400,90 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         2,
       );
 
+      // External-consumer fallback & workspace-binary isolation test (Windows, macOS, Linux):
+      // 1. Verify resolveNpxCliJs locates a real JS entrypoint on this OS.
+      const detectedNpxCli = resolveNpxCliJs();
+      assert.ok(detectedNpxCli && existsSync(detectedNpxCli), `expected resolveNpxCliJs() to find npx-cli.js, got: ${detectedNpxCli}`);
+
+      // 2. Plant a malicious workspace binary & package.json inside GITHUB_WORKSPACE (repo.dir)
+      const poisonMarker = join(outsideDir, 'workspace-binary-executed.txt');
+      const fakeBinDir = join(repo.dir, 'node_modules', '.bin');
+      mkdirSync(fakeBinDir, { recursive: true });
+      writeFileSync(
+        join(repo.dir, 'package.json'),
+        JSON.stringify({ name: 'repo-archaeology', version: '0.3.0', bin: './evil.js' }),
+        'utf8',
+      );
+      writeFileSync(
+        join(fakeBinDir, 'repo-archaeology'),
+        `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(poisonMarker)}, 'pwned');\nprocess.exit(0);\n`,
+        { encoding: 'utf8', mode: 0o755 },
+      );
+
+      // 3. Point GITHUB_ACTION_PATH to an empty external action directory (no dist/, no node_modules/)
+      const externalActionDir = join(outsideDir, 'external-action-checkout');
+      mkdirSync(externalActionDir, { recursive: true });
+      const launcherMetaFile = join(outsideDir, 'npx-launcher-meta.json');
+      const mockNpxCliJs = join(outsideDir, 'mock-npx-cli.mjs');
+      const tsxLoaderUrl = pathToFileURL(join(ROOT_DIR, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href;
+      const realSrcCli = join(ROOT_DIR, 'src', 'cli.ts');
+
+      writeFileSync(
+        mockNpxCliJs,
+        [
+          "import { spawnSync } from 'node:child_process';",
+          "import { writeFileSync } from 'node:fs';",
+          `writeFileSync(${JSON.stringify(launcherMetaFile)}, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2), userconfig: process.env.NPM_CONFIG_USERCONFIG }));`,
+          'const pkgIdx = process.argv.findIndex((a) => a.startsWith("repo-archaeology@"));',
+          'const cliArgs = pkgIdx !== -1 ? process.argv.slice(pkgIdx + 1) : [];',
+          `const r = spawnSync(process.execPath, ['--import', ${JSON.stringify(tsxLoaderUrl)}, ${JSON.stringify(realSrcCli)}, ...cliArgs], { encoding: 'utf8', env: process.env });`,
+          'if (r.stdout) process.stdout.write(r.stdout);',
+          'if (r.stderr) process.stderr.write(r.stderr);',
+          'process.exit(r.status ?? 1);',
+        ].join('\n'),
+        'utf8',
+      );
+
+      const externalRun = harness.run({
+        GITHUB_ACTION_PATH: externalActionDir,
+        REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
+        NODE_OPTIONS: '--require ./nonexistent-workspace-hook.js',
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+        INPUT_FAIL_ON_SUGGESTIONS: 'true',
+      });
+      assert.equal(externalRun.res.exitCode, 1, externalRun.res.stderr);
+      assert.equal(externalRun.outputs['suggestion-count'], '1');
+      assert.equal(externalRun.outputs['analysis-status'], 'analyzed');
+      assert.equal(existsSync(poisonMarker), false, 'workspace binary must never be executed');
+
+      const launcherMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
+        cwd: string;
+        argv: string[];
+        userconfig: string;
+      };
+      const relToWorkspace = relative(repo.dir, launcherMeta.cwd);
+      assert.ok(
+        relToWorkspace.startsWith('..') || dirname(relToWorkspace) !== '.',
+        `external npx launcher must execute outside GITHUB_WORKSPACE, got cwd=${launcherMeta.cwd}`,
+      );
+      assert.ok(launcherMeta.argv.includes(PINNED_ACTION_PACKAGE));
+
+      // Clean up untracked files planted in repo.dir before Scenario 12
+      rmSync(join(repo.dir, 'node_modules'), { recursive: true, force: true });
+      rmSync(join(repo.dir, 'package.json'), { force: true });
+
       // Scenario 12: Execute the actual bash snippet from action.yml end-to-end
       writeFileSync(harness.summaryFile, '', 'utf8');
       writeFileSync(harness.outputFile, '', 'utf8');
       const bashScript = [
         'if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then',
         '  node "$GITHUB_ACTION_PATH/dist/action/runner.js"',
-        'elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then',
-        '  node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'elif node --experimental-strip-types -e "" >/dev/null 2>&1; then',
         '  node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"',
+        'elif [ -f "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" ]; then',
+        '  node "$GITHUB_ACTION_PATH/node_modules/tsx/dist/cli.mjs" "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'else',
         '  npx --yes tsx@4.19.0 "$GITHUB_ACTION_PATH/src/action/runner.ts"',
         'fi',

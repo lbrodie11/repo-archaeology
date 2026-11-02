@@ -64,12 +64,18 @@ function isInsideDir(childPath: string, parentDir: string): boolean {
 
 function assertNotProtectedGitPath(targetPath: string): void {
   const parts = targetPath.split(/[\\/]+/);
-  const gitIdx = parts.lastIndexOf('.git');
+  let gitIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i]?.toLowerCase() === '.git') {
+      gitIdx = i;
+      break;
+    }
+  }
   if (gitIdx === -1) return;
   const afterGit = parts.slice(gitIdx + 1);
   // Allow writing inside .git/repo-archaeology/... (e.g. local scratch artifacts),
   // but never allow overwriting .git/config, .git/HEAD, .git/hooks/*, etc.
-  if (afterGit.length < 2 || afterGit[0] !== 'repo-archaeology') {
+  if (afterGit.length < 2 || afterGit[0]?.toLowerCase() !== 'repo-archaeology') {
     throw new UsageError('--json-out cannot write directly into .git internal directories.');
   }
 }

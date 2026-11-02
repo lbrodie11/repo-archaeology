@@ -217,6 +217,7 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
       assert.ok(md.includes(escapeMarkdownInline(`Detail for ${reason}`)));
       assert.match(md, /not that this change is guaranteed free of omissions/);
       assert.doesNotMatch(md, /\bsafe to merge\b|\bno bugs\b/i);
+      assert.ok(!md.includes(FEEDBACK_ISSUE_URL), 'feedback footer should be omitted when there are 0 suggestions');
     }
   });
 
@@ -237,19 +238,67 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.match(escaped, /\\\\n\\\\r\\\\u202e/);
 
     const codeSpan = formatMarkdownCode('src/weird`file|name<test>\n.ts');
-    assert.equal(codeSpan, "`src/weird'file∣name＜test＞\\n.ts`");
+    assert.equal(codeSpan, '``src/weird`file|name<test>\\n.ts``');
+    assert.equal(formatMarkdownCode('`leading-and-trailing`'), '`` `leading-and-trailing` ``');
   });
 
-  it('enforces UTF-8 maxBytes ceiling and emits an explicit omission notice when truncated', () => {
+  it('preserves exact shell quoting in Verify commands without executing filename-controlled syntax or truncating long paths', () => {
+    const probePath = 'src/a`$(printf INJECTED)`b|c<d>/one.ts';
+    const longPartner = `packages/${'deeply-nested-monorepo-module/'.repeat(12)}partner.ts`;
+    const base = createBaseDiffResult();
+    base.meta.settings.halfLifeDays = 90;
+    base.meta.settings.since = '2025-01-01';
+    base.meta.settings.maxCommits = 250;
+    base.suggestions[0]!.from = probePath;
+    base.suggestions[0]!.to = longPartner;
+
+    const md = renderDiffMarkdown(base, {
+      repoUrl: 'https://github.com/lbrodie11/repo-archaeology',
+    });
+
+    // Path characters (` | < >) must be preserved literally inside multi-backtick code span
+    assert.ok(md.includes('``src/a`$(printf INJECTED)`b|c<d>/one.ts``'));
+
+    // Extract the Verify command from its multi-backtick code span
+    const verifyMatch = /Verify: (`+)\s*(npx repo-archaeology explain [^\n]+?)\s*\1/.exec(md);
+    assert.ok(verifyMatch, `expected Verify code span in:\n${md}`);
+    const verifyCmd = verifyMatch[2]!;
+
+    // Must preserve the single-quoted literal backtick and never replace it with an apostrophe
+    assert.ok(
+      verifyCmd.includes(`'${probePath}'`),
+      `Verify command must preserve literal single-quoted path, got: ${verifyCmd}`,
+    );
+    assert.ok(verifyCmd.includes(longPartner), 'Verify command must not truncate paths > 300 characters');
+
+    // Must preserve effective analysis settings (--since, --max-commits, --half-life)
+    assert.match(verifyCmd, /--since 2025-01-01/);
+    assert.match(verifyCmd, /--max-commits 250/);
+    assert.match(verifyCmd, /--half-life 90/);
+
+    // Commit SHAs must link when repoUrl is provided
+    assert.match(
+      md,
+      /\[`26f8c33`\]\(https:\/\/github\.com\/lbrodie11\/repo-archaeology\/commit\/26f8c33000000000000000000000000000000000\)/,
+    );
+  });
+
+  it('enforces UTF-8 maxBytes ceiling in sub-linear time and shows totalSuggestions when capped by --limit', () => {
     const manySuggestions = Array.from({ length: 12 }, (_, idx) => ({
       ...createBaseDiffResult().suggestions[0]!,
       to: `src/adapter/platform-${idx}/serve-static.ts`,
       alsoLinkedFrom: [],
     }));
-    const result = createBaseDiffResult({ suggestions: manySuggestions });
+    const result = createBaseDiffResult({
+      base: '00112233445566778899aabbccddeeff00112233',
+      totalSuggestions: 25,
+      suggestions: manySuggestions,
+    });
     const fullMd = renderDiffMarkdown(result);
-    const fullBytes = Buffer.byteLength(fullMd, 'utf8');
+    assert.match(fullMd, /against base `0011223`/);
+    assert.match(fullMd, /### Possibly missed \(showing 12 of 25\)/);
 
+    const fullBytes = Buffer.byteLength(fullMd, 'utf8');
     const tightBudget = Math.floor(fullBytes * 0.45);
     const truncatedMd = renderDiffMarkdown(result, { maxBytes: tightBudget });
     const truncatedBytes = Buffer.byteLength(truncatedMd, 'utf8');
@@ -258,7 +307,22 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
       truncatedBytes <= tightBudget,
       `expected truncated markdown (${truncatedBytes} B) <= maxBytes (${tightBudget} B)`,
     );
-    assert.match(truncatedMd, /### Possibly missed \(showing \d+ of 12\)/);
+    assert.match(truncatedMd, /### Possibly missed \(showing \d+ of 25\)/);
     assert.match(truncatedMd, /Output truncated to stay within the summary size limit \(omitted \d+ suggestions?\)/);
+
+    // Performance regression check: 2,000 suggestions truncated to 16 KiB must finish quickly (< 500ms)
+    const hugeSuggestions = Array.from({ length: 2000 }, (_, idx) => ({
+      ...createBaseDiffResult().suggestions[0]!,
+      to: `src/adapter/platform-${idx}/serve-static.ts`,
+      alsoLinkedFrom: [],
+    }));
+    const startMs = performance.now();
+    const hugeTruncated = renderDiffMarkdown(
+      createBaseDiffResult({ totalSuggestions: 2000, suggestions: hugeSuggestions }),
+      { maxBytes: 16 * 1024 },
+    );
+    const elapsedMs = performance.now() - startMs;
+    assert.ok(Buffer.byteLength(hugeTruncated, 'utf8') <= 16 * 1024);
+    assert.ok(elapsedMs < 500, `expected 2,000-suggestion truncation in < 500ms, took ${elapsedMs.toFixed(1)}ms`);
   });
 });

@@ -22,7 +22,7 @@ Every JSON payload emitted by Repo Archaeology includes a top-level contract env
 
 ### Core Guarantees
 - **Clean `stdout`:** When `--json` is passed, `stdout` contains strictly a single UTF-8 JSON document terminated by `\n`. Progress indicators and error messages are written exclusively to `stderr`.
-- **Single-Pass Dual Output on `diff`:** `repo-archaeology diff --format markdown --json-out <file>` runs Git history analysis once, writes the rendered Markdown summary to `stdout`, and atomically writes the full `schemaVersion: 1` JSON payload to `<file>`.
+- **Single-Pass Dual Output on `diff`:** `repo-archaeology diff --format markdown --json-out <file>` runs Git history analysis once, writes the rendered Markdown summary to `stdout`, and atomically writes the full `schemaVersion: 1` JSON payload to `<file>` (`<file>` resolves relative to the invoking shell's working directory).
 - **Backward Compatibility with `v0.2.x`:** All existing fields (including `meta.tool`) are preserved unchanged. `schemaVersion` and top-level `tool` are strictly additive.
 
 ---
@@ -33,7 +33,7 @@ Repo Archaeology follows a strict schema versioning policy for `--json` and `--j
 
 1. **Additive Changes Keep `schemaVersion: 1`:**
    - Adding new optional properties, adding new top-level summary fields, or adding new diagnostic metadata does **not** increment `schemaVersion`.
-   - Consumers should ignore unrecognized object properties when parsing in code.
+   - Consumers should ignore unrecognized object properties when parsing in code. All published `v1` JSON Schemas in `schema/` permit additional properties so additive `0.3.x` fields remain valid against the `v1` schemas.
 2. **Breaking Changes Increment `schemaVersion`:**
    - Removing a documented property, renaming a property, changing a property's data type, or altering the meaning of an existing discriminator requires incrementing `schemaVersion` (e.g. to `2`).
 
@@ -102,7 +102,8 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `base` | `string` | Optional | Present when `--base <ref>` was passed. |
 | `evaluation` | `DiffEvaluation` | Yes | Reproducibility metadata: `commitsAnalyzed`, `effectiveOptions`, and optional `targetBranchRef`, `headSha`, `mergeBaseSha`, `baselineSha`. |
 | `changed` | `ChangedFileView[]` | Yes | Evaluated changed files (`path`, `deleted`, `sources`, `hasHistory`, and optional `oldPath`, `added`, `historyPath`). |
-| `suggestions` | `DiffSuggestion[]` | Yes | Ranked untouched companion files (`RelationshipView` plus `alsoLinkedFrom: string[]`). |
+| `totalSuggestions` | `integer` | Yes | Total number of qualifying companion suggestions before `--limit` truncation. |
+| `suggestions` | `DiffSuggestion[]` | Yes | Ranked untouched companion files (`RelationshipView` plus `alsoLinkedFrom: string[]`), capped at `--limit`. |
 | `families` | `DiffFamilyView[]` | Yes | Parallel-implementation finding families touched by the change (`FindingFamilyView` plus `changedMembers` and `suggestedMembers`). |
 | `silence` | `SilenceDiagnostics` | Optional | Present when `suggestions.length === 0`. Explains why no recommendations were emitted (`primaryReason`, `reasons`, `details`, and filter counts). |
 
@@ -160,6 +161,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
       "hasHistory": true
     }
   ],
+  "totalSuggestions": 1,
   "suggestions": [
     {
       "from": "src/adapter/bun/serve-static.ts",

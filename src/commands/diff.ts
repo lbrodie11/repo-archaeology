@@ -104,6 +104,8 @@ export interface DiffResult {
   base?: string;
   evaluation?: DiffEvaluation;
   changed: ChangedFileView[];
+  /** Total number of qualifying suggestions before `--limit` truncation. */
+  totalSuggestions?: number;
   suggestions: Suggestion[];
   /** Parallel-implementation finding families formed by the current changeset and qualifying suggestions. */
   families?: DiffFamilyView[];
@@ -446,7 +448,13 @@ export function suggestMissing(
   ctx: Context,
   changes: ChangedFile[],
   options: Pick<DiffOptions, 'base' | 'limit' | 'kinds'>,
-): { changed: ChangedFileView[]; suggestions: Suggestion[]; families: DiffFamilyView[]; silence?: SilenceDiagnostics } {
+): {
+  changed: ChangedFileView[];
+  totalSuggestions: number;
+  suggestions: Suggestion[];
+  families: DiffFamilyView[];
+  silence?: SilenceDiagnostics;
+} {
   const { model } = ctx;
   const touched = new Set<string>();
   for (const f of changes) {
@@ -501,6 +509,7 @@ export function suggestMissing(
   }
 
   const allEntries = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
+  const totalSuggestions = allEntries.length;
   const topEntries = allEntries.slice(0, options.limit);
   const suggestions: Suggestion[] = topEntries.map((entry) => ({
     ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
@@ -509,7 +518,7 @@ export function suggestMissing(
   const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
   const families = buildDiffFamilies(ctx, changed, allSuggestedPaths, options.kinds);
   const silence = suggestions.length === 0 ? explainSilence(ctx, changed, touched, options) : undefined;
-  return { changed, suggestions, families, ...(silence ? { silence } : {}) };
+  return { changed, totalSuggestions, suggestions, families, ...(silence ? { silence } : {}) };
 }
 
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
@@ -517,7 +526,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
   const localWarnings = [...isolatedCtx.warnings];
   const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
   changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
-  const { changed, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
+  const { changed, totalSuggestions, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
   const meta = buildMeta(effectiveCtx);
   const baselineSha = effectiveCtx.mergeBaseSha ?? effectiveCtx.headSha;
   const evaluation: DiffEvaluation = {
@@ -541,6 +550,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
     base: options.base,
     evaluation,
     changed,
+    totalSuggestions,
     suggestions,
     families,
     ...(silence ? { silence } : {}),
