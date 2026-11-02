@@ -129,7 +129,7 @@ const LABELS: Record<Relationship, (s: string) => string> = {
   test: (s) => c.green(s),
 };
 
-const NAMES: Record<Relationship, string> = {
+export const NAMES: Record<Relationship, string> = {
   ghost: 'ghost wire',
   unknown: 'unchecked',
   indirect: 'indirect import',

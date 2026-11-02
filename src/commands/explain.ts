@@ -2,6 +2,7 @@ import { posix } from 'node:path';
 import { DEFAULT_SETTINGS, type Settings } from '../config.js';
 import type { Context } from '../context.js';
 import { toRepoPath, UsageError } from '../context.js';
+import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
 import {
   DEFAULT_CONTEXT_LINES,
   DEFAULT_MAX_HUNKS_PER_FILE,
@@ -138,14 +139,22 @@ function shellQuoteArg(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
+export interface FormatExplainCommandOptions {
+  base?: string;
+}
+
 /** Formats a safe, copyable CLI command for inspecting two repository-relative paths. */
 export function formatExplainCommand(
   fileA: string,
   fileB: string,
   settings?: Partial<Settings>,
   flagSettings?: Partial<Settings>,
+  options?: FormatExplainCommandOptions,
 ): string {
   const flagParts: string[] = [];
+  if (options?.base !== undefined && options.base.trim() !== '') {
+    flagParts.push(`--base ${shellQuoteArg(options.base.trim())}`);
+  }
   if (settings) {
     if (settings.since !== undefined) {
       flagParts.push(`--since ${shellQuoteArg(settings.since)}`);
@@ -242,13 +251,50 @@ function sortCommitsNewestFirst(commits: readonly HistoryCommit[], indices: numb
   });
 }
 
-function ensureFileInHistory(ctx: Context, path: string): number {
-  const id = ctx.model.id(path);
+interface ResolvedExplainFile {
+  /** Current working-tree/branch path used for import classification, cross-directory check, and output display. */
+  currentPath: string;
+  /** Pre-change baseline path in `ctx.model` (`undefined` if newly added on the branch without rename). */
+  historyPath?: string;
+}
+
+function resolveExplainIdentity(
+  repoPath: string,
+  changes?: readonly ChangedFile[],
+): ResolvedExplainFile {
+  if (!changes) {
+    return { currentPath: repoPath, historyPath: repoPath };
+  }
+  const byCurrentPath = changes.find((c) => c.path === repoPath);
+  if (byCurrentPath) {
+    if (byCurrentPath.added && !byCurrentPath.oldPath) {
+      return { currentPath: repoPath, historyPath: undefined };
+    }
+    if (byCurrentPath.oldPath) {
+      return { currentPath: repoPath, historyPath: byCurrentPath.oldPath };
+    }
+    return { currentPath: repoPath, historyPath: repoPath };
+  }
+  const byOldPath = changes.find((c) => c.oldPath === repoPath && !c.deleted);
+  if (byOldPath) {
+    return { currentPath: byOldPath.path, historyPath: repoPath };
+  }
+  return { currentPath: repoPath, historyPath: repoPath };
+}
+
+function ensureFileInHistory(ctx: Context, historyPath: string | undefined, displayPath: string): number {
+  if (historyPath === undefined) {
+    throw new UsageError(
+      `Nothing to show for ${displayPath}: it has no usable history yet (new, ignored, or only changed in sweeping commits).`,
+    );
+  }
+  const id = ctx.model.id(historyPath);
   if (id === undefined) {
-    const reason = ctx.currentFiles.has(path)
+    const existsNow = ctx.currentFiles.has(displayPath) || ctx.currentFiles.has(historyPath);
+    const reason = existsNow
       ? 'it has no usable history yet (new, ignored, or only changed in sweeping commits)'
       : 'no such file in the history or the working tree';
-    throw new UsageError(`Nothing to show for ${path}: ${reason}.`);
+    throw new UsageError(`Nothing to show for ${displayPath}: ${reason}.`);
   }
   return id;
 }
@@ -259,14 +305,27 @@ export async function explain(
   inputB: string,
   options: ExplainOptions = {},
 ): Promise<ExplainResult> {
-  const from = toRepoPath(ctx, inputA);
-  const to = toRepoPath(ctx, inputB);
-  if (from === to) {
+  const rawFrom = toRepoPath(ctx, inputA);
+  const rawTo = toRepoPath(ctx, inputB);
+  const wtChanges = await workingTreeChanges(ctx.root);
+  const changes = ctx.mergeBaseSha
+    ? mergeChanges(await branchChanges(ctx.root, ctx.mergeBaseSha), wtChanges)
+    : wtChanges;
+  const resolvedA = resolveExplainIdentity(rawFrom, changes);
+  const resolvedB = resolveExplainIdentity(rawTo, changes);
+  const currentFrom = resolvedA.currentPath;
+  const currentTo = resolvedB.currentPath;
+  if (
+    currentFrom === currentTo ||
+    (resolvedA.historyPath !== undefined && resolvedA.historyPath === resolvedB.historyPath)
+  ) {
     throw new UsageError('Please provide two different files to explain.');
   }
 
-  const idA = ensureFileInHistory(ctx, from);
-  const idB = ensureFileInHistory(ctx, to);
+  const idA = ensureFileInHistory(ctx, resolvedA.historyPath, currentFrom);
+  const idB = ensureFileInHistory(ctx, resolvedB.historyPath, currentTo);
+  const historyFrom = resolvedA.historyPath!;
+  const historyTo = resolvedB.historyPath!;
 
   const requestedCommits = options.commits ?? options.limit ?? DEFAULT_EXPLAIN_COMMITS;
   const maxCommits = Math.min(MAX_EXPLAIN_COMMITS, Math.max(1, Math.floor(requestedCommits)));
@@ -292,17 +351,17 @@ export async function explain(
     shared >= ctx.thresholds.minShared &&
     (confidence >= ctx.thresholds.minConfidence || reverseConfidence >= ctx.thresholds.minConfidence);
 
-  const relationship = ctx.classifier.classify(from, to);
-  const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(from, to) : undefined;
-  const why = ctx.classifier.explain(from, to, relationship, hiddenBridge);
+  const relationship = ctx.classifier.classify(currentFrom, currentTo);
+  const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(currentFrom, currentTo) : undefined;
+  const why = ctx.classifier.explain(currentFrom, currentTo, relationship, hiddenBridge);
 
   const sharedIndices: number[] = [];
   const aOnlyIndices: number[] = [];
   const bOnlyIndices: number[] = [];
 
   model.commits.forEach((commit, idx) => {
-    const hasA = commit.files.includes(from);
-    const hasB = commit.files.includes(to);
+    const hasA = commit.files.includes(historyFrom);
+    const hasB = commit.files.includes(historyTo);
     if (hasA && hasB) sharedIndices.push(idx);
     else if (hasA) aOnlyIndices.push(idx);
     else if (hasB) bOnlyIndices.push(idx);
@@ -334,8 +393,8 @@ export async function explain(
   const sharedCommits: SharedCommitEvidence[] = [];
   for (const idx of selectedShared) {
     const commit = model.commits[idx]!;
-    const changeA = resolveCommitFileChange(commit, from);
-    const changeB = resolveCommitFileChange(commit, to);
+    const changeA = resolveCommitFileChange(commit, historyFrom);
+    const changeB = resolveCommitFileChange(commit, historyTo);
     const remainingMs = deadlineMs - Date.now();
     if (remainingMs <= 0) {
       timedOut = true;
@@ -345,9 +404,9 @@ export async function explain(
     const { patchA: rawA, patchB: rawB, timedOut: pairTimedOut } = await fetchPairCommitPatches(
       ctx.root,
       commit.hash,
-      from,
+      currentFrom,
       changeA,
-      to,
+      currentTo,
       changeB,
       { ...patchBounds, timeoutMs: budgetMs, deadlineMs },
     );
@@ -377,12 +436,13 @@ export async function explain(
 
   const buildCounterexamples = async (
     indices: number[],
+    historyPath: string,
     canonicalPath: string,
   ): Promise<CounterexampleCommitEvidence[]> => {
     const result: CounterexampleCommitEvidence[] = [];
     for (const idx of indices.slice(0, MAX_COUNTEREXAMPLES_PER_SIDE)) {
       const commit = model.commits[idx]!;
-      const change = resolveCommitFileChange(commit, canonicalPath);
+      const change = resolveCommitFileChange(commit, historyPath);
       const entry: CounterexampleCommitEvidence = {
         hash: commit.hash,
         date: isoDate(commit.time),
@@ -415,13 +475,13 @@ export async function explain(
     return result;
   };
 
-  const fromWithoutTo = await buildCounterexamples(sortedAOnly, from);
-  const toWithoutFrom = await buildCounterexamples(sortedBOnly, to);
+  const fromWithoutTo = await buildCounterexamples(sortedAOnly, historyFrom, currentFrom);
+  const toWithoutFrom = await buildCounterexamples(sortedBOnly, historyTo, currentTo);
 
   return {
     meta: buildMeta(ctx),
-    from,
-    to,
+    from: currentFrom,
+    to: currentTo,
     relationship,
     why,
     ...(hiddenBridge ? { hiddenBridge } : {}),
@@ -434,7 +494,7 @@ export async function explain(
     score: round(score),
     weighted: model.weighted,
     ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
-    crossesDirectories: posix.dirname(from) !== posix.dirname(to),
+    crossesDirectories: posix.dirname(currentFrom) !== posix.dirname(currentTo),
     sharedCommits,
     counterexamples: {
       fromWithoutToTotal: sortedAOnly.length,
@@ -455,7 +515,13 @@ export async function explain(
       outputTruncated,
       timedOut,
     },
-    cliCommand: formatExplainCommand(from, to, ctx.settings, ctx.flagSettings),
+    cliCommand: formatExplainCommand(
+      currentFrom,
+      currentTo,
+      ctx.settings,
+      ctx.flagSettings,
+      ctx.base ? { base: ctx.mergeBaseSha ?? ctx.base } : undefined,
+    ),
     disclaimer: EXPLAIN_DISCLAIMER,
   };
 }

@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/explain.schema.json",
+  "title": "Repo Archaeology Explain Result (v1)",
+  "description": "JSON output contract for `repo-archaeology explain <from> <to> --json`.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "tool",
+    "meta",
+    "from",
+    "to",
+    "relationship",
+    "why",
+    "meetsThresholds",
+    "shared",
+    "fromChanges",
+    "toChanges",
+    "confidence",
+    "reverseConfidence",
+    "score",
+    "weighted",
+    "crossesDirectories",
+    "sharedCommits",
+    "counterexamples",
+    "bounds",
+    "cliCommand",
+    "disclaimer"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "common.schema.json#/$defs/SchemaVersion"
+    },
+    "tool": {
+      "$ref": "common.schema.json#/$defs/ToolInfo"
+    },
+    "meta": {
+      "$ref": "common.schema.json#/$defs/Meta"
+    },
+    "from": {
+      "type": "string",
+      "minLength": 1
+    },
+    "to": {
+      "type": "string",
+      "minLength": 1
+    },
+    "relationship": {
+      "$ref": "common.schema.json#/$defs/Relationship"
+    },
+    "why": {
+      "type": "string"
+    },
+    "hiddenBridge": {
+      "$ref": "common.schema.json#/$defs/HiddenBridge"
+    },
+    "meetsThresholds": {
+      "type": "boolean"
+    },
+    "shared": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "fromChanges": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "toChanges": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reverseConfidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "weighted": {
+      "type": "boolean"
+    },
+    "lastTogether": {
+      "type": "string"
+    },
+    "crossesDirectories": {
+      "type": "boolean"
+    },
+    "sharedCommits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SharedCommitEvidence"
+      }
+    },
+    "counterexamples": {
+      "type": "object",
+      "required": [
+        "fromWithoutToTotal",
+        "toWithoutFromTotal",
+        "fromWithoutTo",
+        "toWithoutFrom"
+      ],
+      "properties": {
+        "fromWithoutToTotal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toWithoutFromTotal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromWithoutTo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CounterexampleCommitEvidence"
+          }
+        },
+        "toWithoutFrom": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CounterexampleCommitEvidence"
+          }
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "required": [
+        "maxCommits",
+        "contextLines",
+        "maxPatchBytes",
+        "maxHunksPerFile",
+        "maxLinesPerHunk",
+        "maxTotalPatchLines",
+        "timeoutMs",
+        "commitsTruncated",
+        "outputTruncated",
+        "timedOut"
+      ],
+      "properties": {
+        "maxCommits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "contextLines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contextClamped": {
+          "type": "boolean"
+        },
+        "maxPatchBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxHunksPerFile": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxLinesPerHunk": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTotalPatchLines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "commitsTruncated": {
+          "type": "boolean"
+        },
+        "outputTruncated": {
+          "type": "boolean"
+        },
+        "timedOut": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cliCommand": {
+      "type": "string",
+      "minLength": 1
+    },
+    "disclaimer": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "PatchHunk": {
+      "type": "object",
+      "required": [
+        "header",
+        "lines",
+        "truncated",
+        "omittedLines"
+      ],
+      "properties": {
+        "header": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "omittedLines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lineClipped": {
+          "type": "boolean"
+        }
+      }
+    },
+    "FilePatchEvidence": {
+      "type": "object",
+      "required": [
+        "canonicalPath",
+        "path",
+        "status",
+        "binary",
+        "emptyDiff",
+        "unsupportedPath",
+        "truncated",
+        "timedOut",
+        "omittedHunks",
+        "omittedLines",
+        "hunks"
+      ],
+      "properties": {
+        "canonicalPath": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "oldPath": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "binary": {
+          "type": "boolean"
+        },
+        "emptyDiff": {
+          "type": "boolean"
+        },
+        "unsupportedPath": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "rawTruncated": {
+          "type": "boolean"
+        },
+        "timedOut": {
+          "type": "boolean"
+        },
+        "omittedHunks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omittedLines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "statusNote": {
+          "type": "string"
+        },
+        "hunks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHunk"
+          }
+        }
+      }
+    },
+    "SharedCommitEvidence": {
+      "type": "object",
+      "required": [
+        "hash",
+        "date",
+        "author",
+        "subject",
+        "fileA",
+        "fileB"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "author": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "fileA": {
+          "$ref": "#/$defs/FilePatchEvidence"
+        },
+        "fileB": {
+          "$ref": "#/$defs/FilePatchEvidence"
+        }
+      }
+    },
+    "CounterexampleCommitEvidence": {
+      "type": "object",
+      "required": [
+        "hash",
+        "date",
+        "author",
+        "subject",
+        "historicalPath",
+        "status"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "author": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "historicalPath": {
+          "type": "string"
+        },
+        "oldPath": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "patch": {
+          "$ref": "#/$defs/FilePatchEvidence"
+        }
+      }
+    }
+  }
+}

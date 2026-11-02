@@ -1,0 +1,80 @@
+name: 'Repo Archaeology'
+description: 'Find historically coupled companion files a pull request may have overlooked, backed by Git commit evidence.'
+author: 'Laqwan Brodie'
+
+branding:
+  icon: 'git-commit'
+  color: 'purple'
+
+inputs:
+  base:
+    description: 'Base commit SHA or branch ref to compare against (defaults to the pull request base SHA).'
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  head:
+    description: 'Expected head commit SHA to verify against checked-out HEAD (defaults to the pull request head SHA).'
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
+  limit:
+    description: 'Maximum companion file suggestions to include in the summary (default: 5).'
+    required: false
+    default: '5'
+  min-shared:
+    description: 'Minimum shared commits required for a relationship (defaults to repo config or 3).'
+    required: false
+    default: ''
+  min-confidence:
+    description: 'Minimum directional confidence required, 0-1 or percentage (defaults to repo config or 0.4).'
+    required: false
+    default: ''
+  kinds:
+    description: 'Comma-separated relationship kinds to include: ghost,unknown,indirect,direct,test, or all.'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Working directory inside GITHUB_WORKSPACE to analyze (default: ".").'
+    required: false
+    default: '.'
+  fail-on-suggestions:
+    description: 'Exit with status 1 when one or more companion suggestions are found (default: "false").'
+    required: false
+    default: 'false'
+
+outputs:
+  suggestion-count:
+    description: 'Number of companion file suggestions surfaced.'
+    value: ${{ steps.analyze.outputs.suggestion-count }}
+  json-path:
+    description: 'Path to the versioned JSON diff report written on the runner (empty when skipped).'
+    value: ${{ steps.analyze.outputs.json-path }}
+  analysis-status:
+    description: 'Outcome of the action run: analyzed, insufficient-history, or skipped.'
+    value: ${{ steps.analyze.outputs.analysis-status }}
+  uncommitted-files-count:
+    description: 'Number of uncommitted working-tree files included in the analysis (0 when clean or skipped).'
+    value: ${{ steps.analyze.outputs.uncommitted-files-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: analyze
+      name: Run Repo Archaeology PR diff analysis
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_HEAD: ${{ inputs.head }}
+        INPUT_LIMIT: ${{ inputs.limit }}
+        INPUT_MIN_SHARED: ${{ inputs.min-shared }}
+        INPUT_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
+        INPUT_KINDS: ${{ inputs.kinds }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_FAIL_ON_SUGGESTIONS: ${{ inputs.fail-on-suggestions }}
+      run: |
+        if [ -f "$GITHUB_ACTION_PATH/dist/action/runner.js" ]; then
+          NODE_OPTIONS="" node "$GITHUB_ACTION_PATH/dist/action/runner.js"
+        elif NODE_OPTIONS="" node --experimental-strip-types -e "" >/dev/null 2>&1; then
+          NODE_OPTIONS="" node --experimental-strip-types "$GITHUB_ACTION_PATH/src/action/runner.ts"
+        else
+          echo "error: Repo Archaeology GitHub Action requires Node.js >= 22.6 on PATH (found $(node -v 2>/dev/null || echo 'none'))." >&2
+          exit 2
+        fi

@@ -1,0 +1,215 @@
+name: Action Consumer Smoke Test
+
+on:
+  workflow_run:
+    workflows: ['Publish to npm']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to smoke-test (e.g. v0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-consumer:
+    name: Consumer Path (${{ matrix.os }} / Node ${{ matrix.node }})
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_branch, '-')) }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - name: Resolve release tag and version
+        id: meta
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+          WORKFLOW_RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          RAW_TAG="${DISPATCH_TAG:-$WORKFLOW_RUN_TAG}"
+          if [[ ! "$RAW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "error: Expected release tag like v0.3.0, got '$RAW_TAG'" >&2
+            exit 1
+          fi
+          VERSION="${RAW_TAG#v}"
+          echo "tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check out unbuilt Action at release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          path: .action-under-test
+          persist-credentials: false
+
+      - name: Set up Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+
+      - name: Wait for repo-archaeology@${{ steps.meta.outputs.version }} on npm
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          for attempt in $(seq 1 40); do
+            PUBLISHED=$(npm view "repo-archaeology@${TARGET_VERSION}" version 2>/dev/null || true)
+            if [ "$PUBLISHED" = "$TARGET_VERSION" ]; then
+              echo "Confirmed repo-archaeology@${TARGET_VERSION} on npm registry."
+              exit 0
+            fi
+            echo "Waiting for repo-archaeology@${TARGET_VERSION} on npm (attempt ${attempt}/40)..."
+            sleep 15
+          done
+          echo "error: Timed out waiting for repo-archaeology@${TARGET_VERSION} on npm." >&2
+          exit 1
+
+      - name: Create synthetic consumer fixture repository
+        id: fixture
+        shell: bash
+        run: |
+          FIXTURE_DIR="$GITHUB_WORKSPACE/fixture"
+          mkdir -p "$FIXTURE_DIR/src"
+          cd "$FIXTURE_DIR"
+          git init -b main
+          git config user.name "Smoke Tester"
+          git config user.email "smoke@example.com"
+          for i in 1 2 3 4 5 6; do
+            printf 'export const a = %d;\n' "$i" > src/a.ts
+            printf 'export const b = %d;\n' "$i" > src/b.ts
+            git add src/a.ts src/b.ts
+            GIT_AUTHOR_DATE="2026-01-0${i}T12:00:00Z" GIT_COMMITTER_DATE="2026-01-0${i}T12:00:00Z" \
+              git commit -q -m "feat: sync a and b ($i)"
+          done
+          BASE_SHA=$(git rev-parse HEAD)
+          git checkout -q -b pr
+          printf 'export const a = 99;\n' > src/a.ts
+          git add src/a.ts
+          GIT_AUTHOR_DATE="2026-01-07T12:00:00Z" GIT_COMMITTER_DATE="2026-01-07T12:00:00Z" \
+            git commit -q -m "feat: update a without b"
+          HEAD_SHA=$(git rev-parse HEAD)
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Run unbuilt Action against consumer fixture
+        id: analyze
+        uses: ./.action-under-test
+        env:
+          REPO_ARCHAEOLOGY_SUMMARY_OUT: ${{ runner.temp }}/smoke-summary.md
+        with:
+          working-directory: fixture
+          base: ${{ steps.fixture.outputs.base_sha }}
+          head: ${{ steps.fixture.outputs.head_sha }}
+          limit: '5'
+
+      - name: Verify Action outputs, v1 JSON report, and preserved step summary
+        shell: bash
+        env:
+          STATUS: ${{ steps.analyze.outputs.analysis-status }}
+          COUNT: ${{ steps.analyze.outputs.suggestion-count }}
+          UNCOMMITTED: ${{ steps.analyze.outputs.uncommitted-files-count }}
+          JSON_PATH: ${{ steps.analyze.outputs.json-path }}
+          EXPECTED_VERSION: ${{ steps.meta.outputs.version }}
+          SUMMARY_MIRROR: ${{ runner.temp }}/smoke-summary.md
+        run: |
+          node -e '
+            const assert = require("node:assert/strict");
+            const fs = require("node:fs");
+            assert.equal(process.env.STATUS, "analyzed");
+            assert.ok(Number(process.env.COUNT) >= 1, `expected suggestion-count >= 1, got ${process.env.COUNT}`);
+            assert.equal(process.env.UNCOMMITTED, "0");
+            assert.ok(process.env.JSON_PATH && fs.existsSync(process.env.JSON_PATH), "expected json-path file to exist");
+            const report = JSON.parse(fs.readFileSync(process.env.JSON_PATH, "utf8"));
+            assert.equal(report.schemaVersion, 1);
+            assert.equal(report.tool.name, "repo-archaeology");
+            assert.equal(report.tool.version, process.env.EXPECTED_VERSION);
+            assert.ok(fs.existsSync(process.env.SUMMARY_MIRROR), "expected preserved step summary to exist");
+            const summary = fs.readFileSync(process.env.SUMMARY_MIRROR, "utf8");
+            assert.match(summary, /Possibly missed/);
+            assert.match(summary, /src\/b\.ts/);
+          '
+
+  smoke-shallow:
+    name: Shallow Clone Graceful Skip
+    needs: smoke-consumer
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_branch, '-')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+          WORKFLOW_RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          RAW_TAG="${DISPATCH_TAG:-$WORKFLOW_RUN_TAG}"
+          echo "tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check out unbuilt Action at release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          path: .action-under-test
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Create shallow consumer clone
+        id: shallow
+        shell: bash
+        run: |
+          ORIGIN_DIR="$RUNNER_TEMP/origin-repo"
+          SHALLOW_DIR="$GITHUB_WORKSPACE/shallow-fixture"
+          mkdir -p "$ORIGIN_DIR/src"
+          cd "$ORIGIN_DIR"
+          git init -b main
+          git config user.name "Smoke Tester"
+          git config user.email "smoke@example.com"
+          for i in 1 2 3; do
+            printf 'export const a = %d;\n' "$i" > src/a.ts
+            git add src/a.ts
+            git commit -q -m "commit $i"
+          done
+          HEAD_SHA=$(git rev-parse HEAD)
+          git clone -q --depth 1 "file://$ORIGIN_DIR" "$SHALLOW_DIR"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Run Action on shallow clone
+        id: analyze_shallow
+        uses: ./.action-under-test
+        env:
+          REPO_ARCHAEOLOGY_SUMMARY_OUT: ${{ runner.temp }}/shallow-summary.md
+        with:
+          working-directory: shallow-fixture
+          base: ${{ steps.shallow.outputs.head_sha }}
+          head: ${{ steps.shallow.outputs.head_sha }}
+          fail-on-suggestions: 'true'
+
+      - name: Verify insufficient-history status and summary
+        shell: bash
+        env:
+          STATUS: ${{ steps.analyze_shallow.outputs.analysis-status }}
+          COUNT: ${{ steps.analyze_shallow.outputs.suggestion-count }}
+          UNCOMMITTED: ${{ steps.analyze_shallow.outputs.uncommitted-files-count }}
+          SUMMARY_MIRROR: ${{ runner.temp }}/shallow-summary.md
+        run: |
+          node -e '
+            const assert = require("node:assert/strict");
+            const fs = require("node:fs");
+            assert.equal(process.env.STATUS, "insufficient-history");
+            assert.equal(process.env.COUNT, "0");
+            assert.equal(process.env.UNCOMMITTED, "0");
+            const summary = fs.readFileSync(process.env.SUMMARY_MIRROR, "utf8");
+            assert.match(summary, /Skipped \(shallow Git clone detected\)/);
+          '

@@ -185,7 +185,7 @@ When three or more sibling parallel implementations form a connected co-change g
 | `map` | Show me the whole picture as an interactive map in the browser. |
 | `backtest` | How often would these suggestions have been right on recent history? |
 
-Every command accepts `--json`. Run `repo-archaeology --help` for all options.
+Every command accepts `--json` (`schemaVersion: 1`; see [docs/json.md](docs/json.md) and [`schema/`](schema) for the formal JSON Schema contract). Run `repo-archaeology --help` for all options.
 
 ### `diff`
 
@@ -193,10 +193,61 @@ Looks at staged, unstaged and untracked changes (renames included). With `--base
 
 When three or more sibling parallel implementations form a connected co-change group and your change touches part of the family, `diff` surfaces a **Finding families** summary (`changed …; check …`) above the individual pairwise suggestions. If `diff` finds changed files in history but zero suggestions pass thresholds, it prints a `"No suggestions after evaluating …"` breakdown showing why (for example, files are new or only appeared in skipped sweep commits, all historical companions are already in your change, or the closest companions fell below `--min-shared` or `--min-confidence`).
 
+Use `--format markdown` to render a GitHub-Flavored Markdown pull request summary to `stdout`, and `--json-out <file>` to simultaneously write the versioned `schemaVersion: 1` JSON report to a file in the same single history pass:
+
 ```bash
 repo-archaeology diff --base main
+repo-archaeology diff --base main --format markdown --json-out diff.json
 repo-archaeology diff --exit-code   # exit 1 when something looks missed (for hooks/CI)
 ```
+
+### GitHub Action (Pull Request Summaries)
+
+Repo Archaeology ships an official composite GitHub Action (`action.yml`) that writes a quiet, non-blocking Markdown summary to `$GITHUB_STEP_SUMMARY` on pull requests—requiring only `contents: read` permissions and zero PR comment spam:
+
+```yaml
+name: Repo Archaeology
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  archaeology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Check out the exact PR head commit with full history for merge-base training
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Check for overlooked companion files
+        id: archaeology
+        uses: lbrodie11/repo-archaeology@v0.3.0
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          limit: '5'
+          fail-on-suggestions: 'false'
+```
+
+**Action inputs & outputs:**
+- **Inputs:** `base` (default `${{ github.event.pull_request.base.sha }}`), `head` (default `${{ github.event.pull_request.head.sha }}`), `limit` (default `'5'`), `min-shared`, `min-confidence`, `kinds`, `working-directory` (default `'.'`), and `fail-on-suggestions` (default `'false'`).
+- **Outputs:** `suggestion-count` (total qualifying suggestions before `--limit`), `uncommitted-files-count` (number of dirty working-tree files included in the analysis; `0` when clean), `json-path` (path to the `schemaVersion: 1` JSON artifact on the runner), and `analysis-status` (`analyzed`, `insufficient-history`, or `skipped`).
+- **Checkout & environment notes:**
+  - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
+  - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
+  - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
+  - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is resolved to its canonical absolute path and honoured, while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated into separate empty config files. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.3.0`) or automatically after `Publish to npm` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
 
 ### `explain`
 
@@ -317,7 +368,7 @@ Known limits:
 
 ## Project status
 
-The v0.2 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), and finding families across `scan`, `diff`, and `map`. See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.3 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 
