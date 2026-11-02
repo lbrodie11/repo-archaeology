@@ -132,7 +132,7 @@ function escapeActionMarkdownInline(value: string, maxChars = 360): string {
 
 function isInsideDir(childPath: string, parentDir: string): boolean {
   const rel = relative(parentDir, childPath);
-  return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 function nearestExistingAncestor(targetPath: string): string {
@@ -186,11 +186,12 @@ function sanitizeNpmConfigVar(
   if (rawVal === undefined) {
     return;
   }
+  const resolvedTarget = resolve(workspaceReal, rawVal);
   const canonicalTarget = resolveCanonicalPath(rawVal, workspaceReal);
   if (isInsideWorkspacePath(canonicalTarget, workspaceReal)) {
     envObj[canonicalName] = emptyNpmrc;
   } else {
-    envObj[canonicalName] = rawVal;
+    envObj[canonicalName] = resolvedTarget;
   }
 }
 
@@ -372,6 +373,8 @@ export function resolveNpxCliJs(env: NodeJS.ProcessEnv = process.env): string | 
 
 export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRunResult {
   const summaryFile = env.GITHUB_STEP_SUMMARY;
+  // Optional smoke-test hook: mirrors the rendered step summary to a caller-specified file
+  // because GitHub Actions clears/isolates $GITHUB_STEP_SUMMARY between composite action steps.
   const summaryMirrorFile = env.REPO_ARCHAEOLOGY_SUMMARY_OUT;
   const outputFile = env.GITHUB_OUTPUT;
 
@@ -707,15 +710,19 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
         `repo-arch-exec-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`,
       );
       mkdirSync(isolatedExecDir, { recursive: true });
-      const emptyNpmrc = join(isolatedExecDir, '.npmrc');
+      const emptyProjectNpmrc = join(isolatedExecDir, '.npmrc');
+      const emptyUserNpmrc = join(isolatedExecDir, 'user.npmrc');
+      const emptyGlobalNpmrc = join(isolatedExecDir, 'global.npmrc');
       writeFileSync(join(isolatedExecDir, 'package.json'), '{"private":true}\n', 'utf8');
-      writeFileSync(emptyNpmrc, '', 'utf8');
+      writeFileSync(emptyProjectNpmrc, '', 'utf8');
+      writeFileSync(emptyUserNpmrc, '', 'utf8');
+      writeFileSync(emptyGlobalNpmrc, '', 'utf8');
 
       const isolatedEnv: NodeJS.ProcessEnv = {
         ...childEnv,
       };
-      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_USERCONFIG', workspaceReal, emptyNpmrc);
-      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_GLOBALCONFIG', workspaceReal, emptyNpmrc);
+      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_USERCONFIG', workspaceReal, emptyUserNpmrc);
+      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_GLOBALCONFIG', workspaceReal, emptyGlobalNpmrc);
       delete isolatedEnv.NODE_OPTIONS;
 
       const npxCliJs = resolveNpxCliJs(env);
@@ -800,15 +807,18 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
         shownMd.push(`+${extraCount} more`);
       }
       const warningMd =
-        `> **Warning:** ${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownMd.join(', ')}). An earlier workflow step may have modified tracked files.`;
-      finalSummaryMarkdown = `${warningMd}\n\n${cliStdout}`;
+        `> **Warning:** ${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownMd.join(', ')}). An earlier workflow step may have modified or created files.`;
+      const headingPrefix = '## Repo Archaeology\n\n';
+      finalSummaryMarkdown = cliStdout.startsWith(headingPrefix)
+        ? `${headingPrefix}${warningMd}\n\n${cliStdout.slice(headingPrefix.length)}`
+        : `${warningMd}\n\n${cliStdout}`;
 
       const shownPlain = uncommittedFiles.slice(0, 2);
       if (extraCount > 0) {
         shownPlain.push(`+${extraCount} more`);
       }
       const annotationMsg =
-        `${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownPlain.join(', ')}). An earlier workflow step may have modified tracked files.`;
+        `${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownPlain.join(', ')}). An earlier workflow step may have modified or created files.`;
       actionStdout = `::warning::${escapeWorkflowCommand(annotationMsg)}\n`;
     }
 

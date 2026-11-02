@@ -307,12 +307,10 @@ export async function explain(
 ): Promise<ExplainResult> {
   const rawFrom = toRepoPath(ctx, inputA);
   const rawTo = toRepoPath(ctx, inputB);
+  const wtChanges = await workingTreeChanges(ctx.root);
   const changes = ctx.mergeBaseSha
-    ? mergeChanges(
-        await branchChanges(ctx.root, ctx.mergeBaseSha),
-        await workingTreeChanges(ctx.root),
-      )
-    : undefined;
+    ? mergeChanges(await branchChanges(ctx.root, ctx.mergeBaseSha), wtChanges)
+    : wtChanges;
   const resolvedA = resolveExplainIdentity(rawFrom, changes);
   const resolvedB = resolveExplainIdentity(rawTo, changes);
   const currentFrom = resolvedA.currentPath;

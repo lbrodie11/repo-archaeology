@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { describe, it } from 'node:test';
@@ -432,13 +432,25 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       const mockNpxCliJs = join(outsideDir, 'mock-npx-cli.mjs');
       const tsxLoaderUrl = pathToFileURL(join(ROOT_DIR, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href;
       const realSrcCli = join(ROOT_DIR, 'src', 'cli.ts');
+      const realNpxCliJs = resolveNpxCliJs({});
+      const realNpmCliJs = realNpxCliJs ? join(dirname(realNpxCliJs), 'npm-cli.js') : '';
 
       writeFileSync(
         mockNpxCliJs,
         [
           "import { spawnSync } from 'node:child_process';",
-          "import { writeFileSync } from 'node:fs';",
-          `writeFileSync(${JSON.stringify(launcherMetaFile)}, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2), userconfig: process.env.NPM_CONFIG_USERCONFIG ?? null, globalconfig: process.env.NPM_CONFIG_GLOBALCONFIG ?? null }));`,
+          "import { existsSync, writeFileSync } from 'node:fs';",
+          `const npmCliJs = ${JSON.stringify(realNpmCliJs)};`,
+          'let npmConfigStatus = 0;',
+          'let npmConfigStdout = "";',
+          'let npmConfigStderr = "";',
+          'if (npmCliJs && existsSync(npmCliJs)) {',
+          "  const cfg = spawnSync(process.execPath, [npmCliJs, 'config', 'get', 'registry'], { cwd: process.cwd(), env: process.env, encoding: 'utf8' });",
+          '  npmConfigStatus = cfg.status ?? 1;',
+          '  npmConfigStdout = (cfg.stdout ?? "").trim();',
+          '  npmConfigStderr = (cfg.stderr ?? "").trim();',
+          '}',
+          `writeFileSync(${JSON.stringify(launcherMetaFile)}, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2), userconfig: process.env.NPM_CONFIG_USERCONFIG ?? null, globalconfig: process.env.NPM_CONFIG_GLOBALCONFIG ?? null, npmConfigStatus, npmConfigStdout, npmConfigStderr }));`,
           'const pkgIdx = process.argv.findIndex((a) => a.startsWith("repo-archaeology@"));',
           'const cliArgs = pkgIdx !== -1 ? process.argv.slice(pkgIdx + 1) : [];',
           `const r = spawnSync(process.execPath, ['--import', ${JSON.stringify(tsxLoaderUrl)}, ${JSON.stringify(realSrcCli)}, ...cliArgs], { encoding: 'utf8', env: process.env });`,
@@ -449,13 +461,14 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         'utf8',
       );
 
-      // (a) User config under RUNNER_TEMP (outside workspace) is preserved
-      const externalNpmrc = join(harness.runnerTemp, 'setup-node.npmrc');
-      writeFileSync(externalNpmrc, 'registry=https://registry.npmjs.org/\n', 'utf8');
+      // (a) External relative NPM_CONFIG_USERCONFIG under RUNNER_TEMP (outside workspace) is resolved to its absolute path and preserved
+      const externalNpmrc = join(realpathSync(harness.runnerTemp), 'setup-node.npmrc');
+      writeFileSync(externalNpmrc, 'registry=https://mirror.example.test/\n', 'utf8');
+      const relativeExternalNpmrc = relative(realpathSync(repo.dir), externalNpmrc);
       const externalRun = harness.run({
         GITHUB_ACTION_PATH: externalActionDir,
         REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
-        NPM_CONFIG_USERCONFIG: externalNpmrc,
+        NPM_CONFIG_USERCONFIG: relativeExternalNpmrc,
         NODE_OPTIONS: '--require ./nonexistent-workspace-hook.js',
         INPUT_BASE: baseSha,
         INPUT_HEAD: headSha,
@@ -473,6 +486,9 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         argv: string[];
         userconfig: string | null;
         globalconfig: string | null;
+        npmConfigStatus: number;
+        npmConfigStdout: string;
+        npmConfigStderr: string;
       };
       const relToWorkspace = relative(repo.dir, launcherMeta.cwd);
       assert.ok(
@@ -480,11 +496,27 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         `external npx launcher must execute outside GITHUB_WORKSPACE, got cwd=${launcherMeta.cwd}`,
       );
       assert.ok(launcherMeta.argv.includes(PINNED_ACTION_PACKAGE));
-      assert.equal(launcherMeta.userconfig, externalNpmrc, 'NPM_CONFIG_USERCONFIG under RUNNER_TEMP must be preserved');
+      assert.equal(
+        launcherMeta.userconfig,
+        externalNpmrc,
+        'relative external NPM_CONFIG_USERCONFIG must be forwarded as a resolved absolute path',
+      );
+      if (realNpmCliJs && existsSync(realNpmCliJs)) {
+        assert.equal(launcherMeta.npmConfigStatus, 0, launcherMeta.npmConfigStderr);
+        assert.equal(
+          launcherMeta.npmConfigStdout,
+          'https://mirror.example.test/',
+          'real npm config loader must read external mirror setting after changing cwd to isolatedExecDir',
+        );
+      }
 
-      // (b) User config inside GITHUB_WORKSPACE is replaced with the isolated empty .npmrc
+      // (b) Workspace .npmrc symlink targeting '..npmrc' inside GITHUB_WORKSPACE + workspace globalconfig:
+      //     - '..npmrc' inside workspace must be recognized as inside GITHUB_WORKSPACE and replaced
+      //     - userconfig and globalconfig must use distinct empty files so real npm never fails with 'double-loading config'
+      const workspaceDoubleDotNpmrc = join(repo.dir, '..npmrc');
       const workspaceNpmrc = join(repo.dir, '.npmrc');
-      writeFileSync(workspaceNpmrc, 'registry=https://evil.example/\n', 'utf8');
+      writeFileSync(workspaceDoubleDotNpmrc, 'registry=https://evil.example/\n', 'utf8');
+      symlinkSync('..npmrc', workspaceNpmrc);
       harness.run({
         GITHUB_ACTION_PATH: externalActionDir,
         REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
@@ -497,8 +529,11 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       const wsMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
         userconfig: string | null;
         globalconfig: string | null;
+        npmConfigStatus: number;
+        npmConfigStdout: string;
+        npmConfigStderr: string;
       };
-      assert.ok(wsMeta.userconfig && wsMeta.userconfig !== workspaceNpmrc, 'workspace userconfig must be replaced');
+      assert.ok(wsMeta.userconfig && wsMeta.userconfig !== workspaceNpmrc, 'workspace userconfig symlink to ..npmrc must be replaced');
       assert.ok(
         relative(repo.dir, wsMeta.userconfig!).startsWith('..'),
         `replaced userconfig must be outside workspace, got ${wsMeta.userconfig}`,
@@ -507,7 +542,42 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         wsMeta.globalconfig && relative(repo.dir, wsMeta.globalconfig).startsWith('..'),
         'workspace globalconfig must also be replaced',
       );
+      assert.notEqual(
+        wsMeta.userconfig,
+        wsMeta.globalconfig,
+        'replaced userconfig and globalconfig must use distinct files',
+      );
+      if (realNpmCliJs && existsSync(realNpmCliJs)) {
+        assert.equal(wsMeta.npmConfigStatus, 0, `real npm config failed: ${wsMeta.npmConfigStderr}`);
+        assert.doesNotMatch(wsMeta.npmConfigStderr, /double-loading config/i);
+        assert.notEqual(wsMeta.npmConfigStdout, 'https://evil.example/');
+      }
       rmSync(workspaceNpmrc, { force: true });
+      rmSync(workspaceDoubleDotNpmrc, { force: true });
+
+      // (b2) Only NPM_CONFIG_GLOBALCONFIG inside workspace (with NPM_CONFIG_USERCONFIG unset) must not collide with project .npmrc
+      harness.run({
+        GITHUB_ACTION_PATH: externalActionDir,
+        REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
+        NPM_CONFIG_USERCONFIG: undefined,
+        npm_config_userconfig: undefined,
+        NPM_CONFIG_GLOBALCONFIG: join(repo.dir, 'global.npmrc'),
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      const globalOnlyMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
+        userconfig: string | null;
+        globalconfig: string | null;
+        npmConfigStatus: number;
+        npmConfigStderr: string;
+      };
+      assert.equal(globalOnlyMeta.userconfig, null);
+      assert.ok(globalOnlyMeta.globalconfig && relative(repo.dir, globalOnlyMeta.globalconfig).startsWith('..'));
+      if (realNpmCliJs && existsSync(realNpmCliJs)) {
+        assert.equal(globalOnlyMeta.npmConfigStatus, 0, `real npm config failed: ${globalOnlyMeta.npmConfigStderr}`);
+        assert.doesNotMatch(globalOnlyMeta.npmConfigStderr, /double-loading config/i);
+      }
 
       // (c) Unset NPM_CONFIG_USERCONFIG remains unset (null)
       harness.run({
@@ -570,7 +640,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       assert.equal(dirtyTreeRun.outputs['uncommitted-files-count'], '3');
       assert.match(
         dirtyTreeRun.summary,
-        /^> \*\*Warning:\*\* 3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*, \+1 more\)\. An earlier workflow step may have modified tracked files\./,
+        /^## Repo Archaeology\n\n> \*\*Warning:\*\* 3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*, \+1 more\)\. An earlier workflow step may have modified or created files\./,
       );
       assert.ok(
         dirtyTreeRun.summary.includes('``packages/web/src/hostile`100%`.ts``'),
@@ -578,7 +648,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       );
       assert.match(
         dirtyTreeRun.res.stdout,
-        /^::warning::3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*hostile`100%25`\.ts, \+1 more\)\. An earlier workflow step may have modified tracked files\.\n$/,
+        /^::warning::3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*hostile`100%25`\.ts, \+1 more\)\. An earlier workflow step may have modified or created files\.\n$/,
       );
       repo.git('checkout', '-q', '--', 'packages/web/src/a.ts');
       rmSync(join(repo.dir, 'packages', 'web', 'src', 'hostile`100%`.ts'), { force: true });

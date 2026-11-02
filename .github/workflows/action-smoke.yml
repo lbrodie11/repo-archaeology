@@ -17,7 +17,7 @@ permissions:
 jobs:
   smoke-consumer:
     name: Consumer Path (${{ matrix.os }} / Node ${{ matrix.node }})
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_branch, '-')) }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -139,7 +139,7 @@ jobs:
   smoke-shallow:
     name: Shallow Clone Graceful Skip
     needs: smoke-consumer
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.head_branch, '-')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release tag

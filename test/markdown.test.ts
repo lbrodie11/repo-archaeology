@@ -404,6 +404,30 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
         () => explain(ctx, 'src/fresh-reused.ts', 'src/partner.ts'),
         /Nothing to show for src\/fresh-reused\.ts: it has no usable history yet/,
       );
+
+      // Uncommitted working-tree rename WITHOUT --base (`git mv src/reused.ts src/wt-renamed.ts`):
+      // diff (without --base) produces a suggestion with Verify command omitting --base,
+      // and running explain without --base resolves the working-tree rename and classifies current imports.
+      repo.git('mv', 'src/reused.ts', 'src/wt-renamed.ts');
+      const ctxNoBase = await loadContext(repo.dir, {});
+      const diffNoBase = await diff(ctxNoBase, {
+        limit: 10,
+        kinds: ['ghost', 'unknown', 'indirect', 'direct', 'test'],
+      });
+      assert.equal(diffNoBase.suggestions.length, 1);
+      assert.equal(diffNoBase.suggestions[0]!.from, 'src/wt-renamed.ts');
+      assert.equal(diffNoBase.suggestions[0]!.to, 'src/partner.ts');
+      const mdNoBase = renderDiffMarkdown(diffNoBase);
+      assert.match(
+        mdNoBase,
+        /Verify: `npx repo-archaeology explain src\/wt-renamed\.ts src\/partner\.ts`/,
+      );
+      const explainWtRename = await explain(ctxNoBase, 'src/wt-renamed.ts', 'src/partner.ts');
+      assert.equal(explainWtRename.from, 'src/wt-renamed.ts');
+      assert.equal(explainWtRename.to, 'src/partner.ts');
+      assert.equal(explainWtRename.shared, 4);
+      assert.equal(explainWtRename.fromChanges, 5);
+      assert.equal(explainWtRename.relationship, 'direct');
     } finally {
       repo.cleanup();
     }
