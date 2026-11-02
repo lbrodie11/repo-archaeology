@@ -462,9 +462,9 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       );
 
       // (a) External relative NPM_CONFIG_USERCONFIG under RUNNER_TEMP (outside workspace) is resolved to its absolute path and preserved
-      const externalNpmrc = join(realpathSync(harness.runnerTemp), 'setup-node.npmrc');
+      const externalNpmrc = join(realpathSync.native(harness.runnerTemp), 'setup-node.npmrc');
       writeFileSync(externalNpmrc, 'registry=https://mirror.example.test/\n', 'utf8');
-      const relativeExternalNpmrc = relative(realpathSync(repo.dir), externalNpmrc);
+      const relativeExternalNpmrc = relative(realpathSync.native(repo.dir), externalNpmrc);
       const externalRun = harness.run({
         GITHUB_ACTION_PATH: externalActionDir,
         REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
