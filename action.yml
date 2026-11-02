@@ -50,6 +50,9 @@ outputs:
   analysis-status:
     description: 'Outcome of the action run: analyzed, insufficient-history, or skipped.'
     value: ${{ steps.analyze.outputs.analysis-status }}
+  uncommitted-files-count:
+    description: 'Number of uncommitted working-tree files included in the analysis (0 when clean or skipped).'
+    value: ${{ steps.analyze.outputs.uncommitted-files-count }}
 
 runs:
   using: 'composite'

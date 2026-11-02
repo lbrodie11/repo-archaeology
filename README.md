@@ -241,10 +241,13 @@ jobs:
 
 **Action inputs & outputs:**
 - **Inputs:** `base` (default `${{ github.event.pull_request.base.sha }}`), `head` (default `${{ github.event.pull_request.head.sha }}`), `limit` (default `'5'`), `min-shared`, `min-confidence`, `kinds`, `working-directory` (default `'.'`), and `fail-on-suggestions` (default `'false'`).
-- **Outputs:** `suggestion-count`, `json-path` (path to the `schemaVersion: 1` JSON artifact on the runner), and `analysis-status` (`analyzed`, `insufficient-history`, or `skipped`).
-- **Checkout notes:**
-  - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`), the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
+- **Outputs:** `suggestion-count` (total qualifying suggestions before `--limit`), `uncommitted-files-count` (number of dirty working-tree files included in the analysis; `0` when clean), `json-path` (path to the `schemaVersion: 1` JSON artifact on the runner), and `analysis-status` (`analyzed`, `insufficient-history`, or `skipped`).
+- **Checkout & environment notes:**
+  - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
   - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
+  - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
+  - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is honoured while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.3.0`) or automatically after `Publish to npm` completes to verify the unbuilt external consumer path across Linux and Windows.
 
 ### `explain`
 

@@ -67,18 +67,20 @@ export function escapeMarkdownInline(value: string, maxChars = 200): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/@([a-zA-Z0-9_-]+)/g, '@\u200B$1')
+    .replace(/#(\d+)/g, '#\u200B$1')
+    .replace(/\b(GH)-(\d+)\b/gi, '$1-\u200B$2')
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
     .replace(/\*/g, '\\*')
     .replace(/_/g, '\\_')
     .replace(/~/g, '\\~')
+    .replace(/!/g, '\\!')
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
     .replace(/\|/g, '\\|')
-    .replace(/[@#]/g, (ch) => (ch === '@' ? '&#64;' : '&#35;'))
-    .replace(/\b(GH)-(\d+)\b/gi, '$1&#45;$2')
     .replace(/\b(https?):\/\//gi, '$1&#58;//');
 }
 
@@ -144,7 +146,6 @@ function renderSuggestionBlock(
   flagSettings?: Partial<Settings>,
   repoUrl?: string,
   baselineRef?: string,
-  fromHistoryPath?: string,
 ): string {
   const lines: string[] = [];
   const kindLabel = NAMES[s.relationship];
@@ -162,9 +163,8 @@ function renderSuggestionBlock(
     lines.push(` ${formatCommitEvidenceLine(ev, repoUrl)}`);
   }
 
-  const explainFrom = fromHistoryPath ?? s.from;
   const explainCmd = formatExplainCommand(
-    explainFrom,
+    s.from,
     s.to,
     settings,
     flagSettings,
@@ -332,20 +332,8 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
   const families = result.families ?? [];
   const baselineRef =
     result.base !== undefined
-      ? evaluation?.baselineSha
-        ? shortHash(evaluation.baselineSha)
-        : evaluation?.mergeBaseSha
-          ? shortHash(evaluation.mergeBaseSha)
-          : FULL_HEX_SHA_RE.test(result.base)
-            ? shortHash(result.base)
-            : result.base
+      ? (evaluation?.baselineSha ?? evaluation?.mergeBaseSha ?? result.base)
       : undefined;
-  const historyPathByCurrentPath = new Map<string, string>();
-  for (const ch of result.changed) {
-    if (ch.historyPath && ch.historyPath.trim() !== '') {
-      historyPathByCurrentPath.set(ch.path, ch.historyPath);
-    }
-  }
   const suggestionBlocks = result.suggestions.map((s, idx) =>
     renderSuggestionBlock(
       s,
@@ -354,7 +342,6 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
       options.flagSettings,
       repoUrl,
       baselineRef,
-      historyPathByCurrentPath.get(s.from),
     ),
   );
   const totalSuggestions = Math.max(result.totalSuggestions ?? suggestionBlocks.length, suggestionBlocks.length);

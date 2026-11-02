@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { DiffResult } from '../src/commands/diff.js';
+import { diff, type DiffResult } from '../src/commands/diff.js';
+import { explain } from '../src/commands/explain.js';
+import { loadContext } from '../src/context.js';
 import {
   escapeMarkdownInline,
   FEEDBACK_ISSUE_URL,
   formatMarkdownCode,
   renderDiffMarkdown,
 } from '../src/report/markdown.js';
+import { FixtureRepo } from './helpers.js';
 
 function createBaseDiffResult(overrides: Partial<DiffResult> = {}): DiffResult {
   return {
@@ -158,11 +161,11 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.doesNotMatch(md, /9999999/, 'must cap supporting commit evidence at 3 commits per suggestion');
     assert.match(
       md,
-      /Verify: `npx repo-archaeology explain --base 0011223 src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
+      /Verify: `npx repo-archaeology explain --base 00112233445566778899aabbccddeeff00112233 src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
     );
     assert.ok(md.includes(FEEDBACK_ISSUE_URL));
 
-    // When a changed file was renamed on the branch, Verify uses its baseline historyPath
+    // When a changed file was renamed on the branch, Verify uses the current filename and full baseline SHA
     const renamedMd = renderDiffMarkdown(
       createBaseDiffResult({
         changed: [
@@ -186,7 +189,7 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     );
     assert.match(
       renamedMd,
-      /Verify: `npx repo-archaeology explain --base 0011223 src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts`/,
+      /Verify: `npx repo-archaeology explain --base 00112233445566778899aabbccddeeff00112233 src\/adapter\/bun\/static-handler\.ts src\/adapter\/deno\/serve-static\.ts`/,
     );
   });
 
@@ -255,11 +258,13 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
 
     assert.doesNotMatch(escaped, /<script>|<!--/);
     assert.match(escaped, /&lt;script&gt;alert\\\(1\\\)&lt;\/script&gt;/);
-    assert.doesNotMatch(escaped, /(?<!&#64;)@octocat|(?<!&#64;)@org\/team/);
-    assert.match(escaped, /&#64;octocat/);
-    assert.doesNotMatch(escaped, /(?<!&#35;)#123/);
-    assert.match(escaped, /&#35;123/);
-    assert.match(escaped, /GH&#45;456/);
+    assert.doesNotMatch(escaped, /@octocat|@org\/team/);
+    assert.ok(escaped.includes('@\u200Boctocat'));
+    assert.ok(escaped.includes('@\u200Borg/team'));
+    assert.doesNotMatch(escaped, /#123/);
+    assert.ok(escaped.includes('#\u200B123'));
+    assert.doesNotMatch(escaped, /GH-456/);
+    assert.ok(escaped.includes('GH-\u200B456'));
     assert.match(escaped, /https&#58;\/\/evil\.example/);
     assert.doesNotMatch(escaped, /[\n\r\u202e]/);
     assert.match(escaped, /\\\\n\\\\r\\\\u202e/);
@@ -267,6 +272,7 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     const codeSpan = formatMarkdownCode('src/weird`file|name<test>\n.ts');
     assert.equal(codeSpan, '``src/weird`file|name<test>\\n.ts``');
     assert.equal(formatMarkdownCode('`leading-and-trailing`'), '`` `leading-and-trailing` ``');
+    assert.ok(!codeSpan.includes('\u200B'), 'code spans must never contain zero-width spaces');
   });
 
   it('preserves exact shell quoting in Verify commands without executing filename-controlled syntax or truncating long paths', () => {
@@ -298,16 +304,109 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     );
     assert.ok(verifyCmd.includes(longPartner), 'Verify command must not truncate paths > 300 characters');
 
-    // Must preserve effective analysis settings (--since, --max-commits, --half-life)
+    // Must preserve effective analysis settings (--since, --max-commits, --half-life) and contain zero U+200B
+    assert.match(verifyCmd, /--base 00112233445566778899aabbccddeeff00112233/);
     assert.match(verifyCmd, /--since 2025-01-01/);
     assert.match(verifyCmd, /--max-commits 250/);
     assert.match(verifyCmd, /--half-life 90/);
+    assert.ok(!verifyCmd.includes('\u200B'), 'Verify command must never contain U+200B zero-width spaces');
 
     // Commit SHAs must link when repoUrl is provided
     assert.match(
       md,
       /\[`26f8c33`\]\(https:\/\/github\.com\/lbrodie11\/repo-archaeology\/commit\/26f8c33000000000000000000000000000000000\)/,
     );
+  });
+
+  it('reproduces diff --base statistics via Verify command, resolves reused renamed paths, and preserves import classification', async () => {
+    const repo = new FixtureRepo();
+    try {
+      // 1. Create and delete `src/reused.ts` and `src/fresh-reused.ts` in early history (unrelated to `src/partner.ts`)
+      repo.write('src/reused.ts', 'export const oldReused = 1;\n');
+      repo.write('src/fresh-reused.ts', 'export const oldFresh = 1;\n');
+      repo.write('src/other.ts', 'export const other = 1;\n');
+      repo.git('add', '.');
+      repo.commit({ message: 'early unrelated files' });
+      repo.commit({
+        message: 'remove old reused files',
+        write: {
+          'src/reused.ts': null,
+          'src/fresh-reused.ts': null,
+          'src/other.ts': 'export const other = 2;\n',
+        },
+      });
+
+      // 2. Co-change `src/original.ts` (which directly imports `src/partner.ts`) and `src/partner.ts` 4 times on main
+      for (let i = 1; i <= 4; i++) {
+        repo.commit({
+          message: `sync original and partner (${i})`,
+          write: {
+            'src/original.ts': `import { partner } from './partner';\nexport const orig = partner + ${i};\n`,
+            'src/partner.ts': `export const partner = ${i};\n`,
+          },
+        });
+      }
+      const baseSha = repo.git('rev-parse', 'HEAD').trim();
+
+      // 3. On a feature branch, rename `src/original.ts` -> `src/reused.ts` (touching only `reused.ts`, so HEAD has 4/5 while baseline has 4/4)
+      //    and add a brand-new `src/fresh-reused.ts`
+      repo.git('checkout', '-q', '-b', 'feature-reused-rename');
+      repo.commit({
+        message: 'refactor: rename original.ts to reused.ts and add fresh-reused.ts',
+        move: [['src/original.ts', 'src/reused.ts']],
+        write: {
+          'src/reused.ts': "import { partner } from './partner';\nexport const orig = partner + 99;\n",
+          'src/fresh-reused.ts': 'export const brandNew = true;\n',
+        },
+      });
+
+      const ctx = await loadContext(repo.dir, {}, { base: 'main' });
+      const diffRes = await diff(ctx, {
+        base: 'main',
+        limit: 10,
+        kinds: ['ghost', 'unknown', 'indirect', 'direct', 'test'],
+      });
+
+      assert.equal(diffRes.suggestions.length, 1);
+      const sug = diffRes.suggestions[0]!;
+      assert.equal(sug.from, 'src/reused.ts');
+      assert.equal(sug.to, 'src/partner.ts');
+      assert.equal(sug.shared, 4);
+      assert.equal(sug.fromChanges, 4);
+      assert.equal(sug.relationship, 'direct');
+
+      // Render Markdown and verify the generated Verify command uses full 40-char SHA and current filename
+      const md = renderDiffMarkdown(diffRes);
+      assert.match(
+        md,
+        new RegExp(`Verify: \`npx repo-archaeology explain --base ${baseSha} src/reused\\.ts src/partner\\.ts\``),
+      );
+
+      // Run explain --base <baseSha> with the current path `src/reused.ts` (as in the Verify command):
+      // Must resolve rename lineage BEFORE matching the deleted `src/reused.ts` in the baseline model,
+      // and must classify imports using the current working-tree path (`direct`, not `unknown`)!
+      const explainCurrent = await explain(ctx, 'src/reused.ts', 'src/partner.ts');
+      assert.equal(explainCurrent.from, 'src/reused.ts');
+      assert.equal(explainCurrent.to, 'src/partner.ts');
+      assert.equal(explainCurrent.shared, 4);
+      assert.equal(explainCurrent.fromChanges, 4);
+      assert.equal(explainCurrent.confidence, 1);
+      assert.equal(explainCurrent.relationship, 'direct');
+
+      // Running explain --base with the old baseline path `src/original.ts` also maps to current `src/reused.ts` for classification
+      const explainOldName = await explain(ctx, 'src/original.ts', 'src/partner.ts');
+      assert.equal(explainOldName.shared, 4);
+      assert.equal(explainOldName.fromChanges, 4);
+      assert.equal(explainOldName.relationship, 'direct');
+
+      // Brand-new file added over a previously deleted path (`src/fresh-reused.ts`) must NOT inherit deleted history
+      await assert.rejects(
+        () => explain(ctx, 'src/fresh-reused.ts', 'src/partner.ts'),
+        /Nothing to show for src\/fresh-reused\.ts: it has no usable history yet/,
+      );
+    } finally {
+      repo.cleanup();
+    }
   });
 
   it('enforces UTF-8 maxBytes ceiling in sub-linear time and shows totalSuggestions when capped by --limit', () => {

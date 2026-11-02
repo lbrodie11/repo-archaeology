@@ -438,7 +438,7 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         [
           "import { spawnSync } from 'node:child_process';",
           "import { writeFileSync } from 'node:fs';",
-          `writeFileSync(${JSON.stringify(launcherMetaFile)}, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2), userconfig: process.env.NPM_CONFIG_USERCONFIG }));`,
+          `writeFileSync(${JSON.stringify(launcherMetaFile)}, JSON.stringify({ cwd: process.cwd(), argv: process.argv.slice(2), userconfig: process.env.NPM_CONFIG_USERCONFIG ?? null, globalconfig: process.env.NPM_CONFIG_GLOBALCONFIG ?? null }));`,
           'const pkgIdx = process.argv.findIndex((a) => a.startsWith("repo-archaeology@"));',
           'const cliArgs = pkgIdx !== -1 ? process.argv.slice(pkgIdx + 1) : [];',
           `const r = spawnSync(process.execPath, ['--import', ${JSON.stringify(tsxLoaderUrl)}, ${JSON.stringify(realSrcCli)}, ...cliArgs], { encoding: 'utf8', env: process.env });`,
@@ -449,9 +449,13 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         'utf8',
       );
 
+      // (a) User config under RUNNER_TEMP (outside workspace) is preserved
+      const externalNpmrc = join(harness.runnerTemp, 'setup-node.npmrc');
+      writeFileSync(externalNpmrc, 'registry=https://registry.npmjs.org/\n', 'utf8');
       const externalRun = harness.run({
         GITHUB_ACTION_PATH: externalActionDir,
         REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
+        NPM_CONFIG_USERCONFIG: externalNpmrc,
         NODE_OPTIONS: '--require ./nonexistent-workspace-hook.js',
         INPUT_BASE: baseSha,
         INPUT_HEAD: headSha,
@@ -460,13 +464,15 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       });
       assert.equal(externalRun.res.exitCode, 1, externalRun.res.stderr);
       assert.equal(externalRun.outputs['suggestion-count'], '1');
+      assert.equal(externalRun.outputs['uncommitted-files-count'], '3');
       assert.equal(externalRun.outputs['analysis-status'], 'analyzed');
       assert.equal(existsSync(poisonMarker), false, 'workspace binary must never be executed');
 
       const launcherMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
         cwd: string;
         argv: string[];
-        userconfig: string;
+        userconfig: string | null;
+        globalconfig: string | null;
       };
       const relToWorkspace = relative(repo.dir, launcherMeta.cwd);
       assert.ok(
@@ -474,16 +480,116 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
         `external npx launcher must execute outside GITHUB_WORKSPACE, got cwd=${launcherMeta.cwd}`,
       );
       assert.ok(launcherMeta.argv.includes(PINNED_ACTION_PACKAGE));
+      assert.equal(launcherMeta.userconfig, externalNpmrc, 'NPM_CONFIG_USERCONFIG under RUNNER_TEMP must be preserved');
 
-      // Clean up untracked files planted in repo.dir before Scenario 12
+      // (b) User config inside GITHUB_WORKSPACE is replaced with the isolated empty .npmrc
+      const workspaceNpmrc = join(repo.dir, '.npmrc');
+      writeFileSync(workspaceNpmrc, 'registry=https://evil.example/\n', 'utf8');
+      harness.run({
+        GITHUB_ACTION_PATH: externalActionDir,
+        REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
+        NPM_CONFIG_USERCONFIG: workspaceNpmrc,
+        NPM_CONFIG_GLOBALCONFIG: join(repo.dir, 'global.npmrc'),
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      const wsMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
+        userconfig: string | null;
+        globalconfig: string | null;
+      };
+      assert.ok(wsMeta.userconfig && wsMeta.userconfig !== workspaceNpmrc, 'workspace userconfig must be replaced');
+      assert.ok(
+        relative(repo.dir, wsMeta.userconfig!).startsWith('..'),
+        `replaced userconfig must be outside workspace, got ${wsMeta.userconfig}`,
+      );
+      assert.ok(
+        wsMeta.globalconfig && relative(repo.dir, wsMeta.globalconfig).startsWith('..'),
+        'workspace globalconfig must also be replaced',
+      );
+      rmSync(workspaceNpmrc, { force: true });
+
+      // (c) Unset NPM_CONFIG_USERCONFIG remains unset (null)
+      harness.run({
+        GITHUB_ACTION_PATH: externalActionDir,
+        REPO_ARCHAEOLOGY_NPX_CLI_JS: mockNpxCliJs,
+        NPM_CONFIG_USERCONFIG: undefined,
+        npm_config_userconfig: undefined,
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      const unsetMeta = JSON.parse(readFileSync(launcherMetaFile, 'utf8')) as {
+        userconfig: string | null;
+      };
+      assert.equal(unsetMeta.userconfig, null, 'unset NPM_CONFIG_USERCONFIG must remain unset');
+
+      // Clean up untracked files planted in repo.dir before uncommitted-files & invalid-config tests
+      rmSync(symlinkPath, { force: true });
       rmSync(join(repo.dir, 'node_modules'), { recursive: true, force: true });
       rmSync(join(repo.dir, 'package.json'), { force: true });
 
+      // Uncommitted working-tree changes warning & annotation test:
+      // 1. Clean tree -> uncommitted-files-count == '0', no warning
+      const cleanTreeRun = harness.run({
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      assert.equal(cleanTreeRun.outputs['uncommitted-files-count'], '0');
+      assert.equal(cleanTreeRun.res.stdout, '');
+      assert.doesNotMatch(cleanTreeRun.summary, /uncommitted file\(s\) in the runner's working tree/);
+
+      // 2. Gitignored build output (dist/, node_modules/) -> must NOT trigger uncommitted warning
+      repo.write('.gitignore', 'dist/\nnode_modules/\n');
+      repo.git('add', '.gitignore');
+      repo.commit({ message: 'chore: add gitignore' });
+      const headWithIgnoreSha = repo.git('rev-parse', 'HEAD').trim();
+      repo.write('packages/web/dist/bundle.js', 'console.log("ignored");\n');
+      repo.write('packages/web/node_modules/pkg/index.js', 'console.log("ignored");\n');
+      const ignoredOnlyRun = harness.run({
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headWithIgnoreSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      assert.equal(ignoredOnlyRun.outputs['uncommitted-files-count'], '0');
+      assert.equal(ignoredOnlyRun.res.stdout, '');
+      assert.doesNotMatch(ignoredOnlyRun.summary, /uncommitted file\(s\) in the runner's working tree/);
+      rmSync(join(repo.dir, 'packages', 'web', 'dist'), { recursive: true, force: true });
+      rmSync(join(repo.dir, 'packages', 'web', 'node_modules'), { recursive: true, force: true });
+
+      // 3. Modified tracked file + hostile untracked filenames -> summary warning, ::warning:: annotation, and count
+      repo.write('packages/web/src/a.ts', '// modified by build step\n');
+      repo.write('packages/web/src/hostile`100%`.ts', 'export const x = 1;\n');
+      repo.write('packages/web/src/third-dirty.ts', 'export const y = 2;\n');
+      const dirtyTreeRun = harness.run({
+        INPUT_BASE: baseSha,
+        INPUT_HEAD: headWithIgnoreSha,
+        INPUT_WORKING_DIRECTORY: 'packages/web',
+      });
+      assert.equal(dirtyTreeRun.outputs['uncommitted-files-count'], '3');
+      assert.match(
+        dirtyTreeRun.summary,
+        /^> \*\*Warning:\*\* 3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*, \+1 more\)\. An earlier workflow step may have modified tracked files\./,
+      );
+      assert.ok(
+        dirtyTreeRun.summary.includes('``packages/web/src/hostile`100%`.ts``'),
+        'hostile path with backticks must be wrapped in multi-backtick fence in summary',
+      );
+      assert.match(
+        dirtyTreeRun.res.stdout,
+        /^::warning::3 uncommitted file\(s\) in the runner's working tree were included in this analysis \(.*hostile`100%25`\.ts, \+1 more\)\. An earlier workflow step may have modified tracked files\.\n$/,
+      );
+      repo.git('checkout', '-q', '--', 'packages/web/src/a.ts');
+      rmSync(join(repo.dir, 'packages', 'web', 'src', 'hostile`100%`.ts'), { force: true });
+      rmSync(join(repo.dir, 'packages', 'web', 'src', 'third-dirty.ts'), { force: true });
+      repo.git('checkout', '-q', headSha);
+
       // Invalid .repo-archaeology.json regression test:
-      // 1. Escapes Markdown links, images, and @mentions in the error summary
+      // 1. Escapes Markdown links, images, and @mentions (using U+200B zero-width spaces) in the error summary
       // 2. Renders '> **Error:**' (not 'Skipped:')
       // 3. Does not double-prefix 'error: error:' on stderr
-      const hostileConfigKey = '![tracker](https://evil.example/p.png) [click](https://evil.example) @octocat #123';
+      const hostileConfigKey = '![tracker](https://evil.example/p.png) [click](https://evil.example) @octocat #123 GH-7';
       writeFileSync(
         join(repo.dir, '.repo-archaeology.json'),
         JSON.stringify({ [hostileConfigKey]: true }),
@@ -499,9 +605,11 @@ describe('Composite GitHub Action (action.yml & src/action/runner.ts)', () => {
       assert.match(invalidConfigRun.res.stderr, /^error: \.repo-archaeology\.json:/);
       assert.doesNotMatch(invalidConfigRun.res.stderr, /^error:\s*error:/i);
       assert.match(invalidConfigRun.summary, /> \*\*Error:\*\*/);
-      assert.doesNotMatch(invalidConfigRun.summary, /!\[tracker\]\(|\[click\]\(https:\/\/|(?<!&#64;)@octocat/);
+      assert.doesNotMatch(invalidConfigRun.summary, /!\[tracker\]\(|\[click\]\(https:\/\/|@octocat|#123|GH-7/);
       assert.match(invalidConfigRun.summary, /\\!\\\[tracker\\\]\\\(https&#58;\/\/evil\.example\/p\.png\\\)/);
-      assert.match(invalidConfigRun.summary, /&#64;octocat/);
+      assert.ok(invalidConfigRun.summary.includes('@\u200Boctocat'));
+      assert.ok(invalidConfigRun.summary.includes('#\u200B123'));
+      assert.ok(invalidConfigRun.summary.includes('GH-\u200B7'));
 
       // Scenario 12: Execute the actual bash snippet from action.yml end-to-end
       // even when a malicious node_modules/tsx is planted in GITHUB_WORKSPACE

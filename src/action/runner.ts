@@ -34,9 +34,11 @@ export type AnalysisStatus = 'analyzed' | 'insufficient-history' | 'skipped';
 export interface ActionRunResult {
   exitCode: number;
   suggestionCount: number;
+  uncommittedFilesCount: number;
   jsonPath: string;
   analysisStatus: AnalysisStatus;
   summaryMarkdown: string;
+  stdout: string;
   stderr: string;
 }
 
@@ -60,12 +62,60 @@ function sanitizeActionControlChars(value: string, maxChars = 360): string {
   return `${cleaned.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
+function sanitizeActionCodeChars(value: string, maxChars = 240): string {
+  const cleaned = value.replace(ACTION_CONTROL_AND_BIDI_RE, (ch) => {
+    if (ch === '\n') return '\\n';
+    if (ch === '\r') return '\\r';
+    if (ch === '\t') return '\\t';
+    const code = ch.codePointAt(0)!;
+    return code <= 0xff
+      ? `\\x${code.toString(16).padStart(2, '0')}`
+      : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function formatActionCodeSpan(value: string, maxChars = 240): string {
+  const sanitized = sanitizeActionCodeChars(value, maxChars);
+  if (sanitized.length === 0) {
+    return '` `';
+  }
+  let fence = '`';
+  while (sanitized.includes(fence)) {
+    fence += '`';
+  }
+  const needsSpacePadding =
+    sanitized.startsWith('`') ||
+    sanitized.endsWith('`') ||
+    sanitized.startsWith(' ') ||
+    sanitized.endsWith(' ');
+  const pad = needsSpacePadding ? ' ' : '';
+  return `${fence}${pad}${sanitized}${pad}${fence}`;
+}
+
+export function escapeWorkflowCommand(value: string): string {
+  return value
+    .replace(/%/g, '%25')
+    .replace(/\r/g, '%0D')
+    .replace(/\n/g, '%0A')
+    .replace(ACTION_CONTROL_AND_BIDI_RE, (ch) => {
+      const code = ch.codePointAt(0)!;
+      return code <= 0xff
+        ? `\\x${code.toString(16).padStart(2, '0')}`
+        : `\\u${code.toString(16).padStart(4, '0')}`;
+    });
+}
+
 function escapeActionMarkdownInline(value: string, maxChars = 360): string {
   const sanitized = sanitizeActionControlChars(value, maxChars);
   return sanitized
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/@([a-zA-Z0-9_-]+)/g, '@\u200B$1')
+    .replace(/#(\d+)/g, '#\u200B$1')
+    .replace(/\b(GH)-(\d+)\b/gi, '$1-\u200B$2')
     .replace(/\\/g, '\\\\')
     .replace(/`/g, '\\`')
     .replace(/\*/g, '\\*')
@@ -77,14 +127,71 @@ function escapeActionMarkdownInline(value: string, maxChars = 360): string {
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
     .replace(/\|/g, '\\|')
-    .replace(/[@#]/g, (ch) => (ch === '@' ? '&#64;' : '&#35;'))
-    .replace(/\b(GH)-(\d+)\b/gi, '$1&#45;$2')
     .replace(/\b(https?):\/\//gi, '$1&#58;//');
 }
 
 function isInsideDir(childPath: string, parentDir: string): boolean {
   const rel = relative(parentDir, childPath);
   return rel === '' || (!rel.startsWith('..') && !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+function nearestExistingAncestor(targetPath: string): string {
+  let current = targetPath;
+  while (true) {
+    const st = lstatSync(current, { throwIfNoEntry: false });
+    if (st) return current;
+    const parent = dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+}
+
+function resolveCanonicalPath(rawPath: string, baseDir: string): string {
+  const resolved = resolve(baseDir, rawPath);
+  const ancestor = nearestExistingAncestor(resolved);
+  try {
+    const ancestorReal = realpathSync.native(ancestor);
+    const rel = relative(ancestor, resolved);
+    return rel ? resolve(ancestorReal, rel) : ancestorReal;
+  } catch {
+    return resolved;
+  }
+}
+
+function isInsideWorkspacePath(candidatePath: string, workspaceReal: string): boolean {
+  if (isInsideDir(candidatePath, workspaceReal)) return true;
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    return isInsideDir(candidatePath.toLowerCase(), workspaceReal.toLowerCase());
+  }
+  return false;
+}
+
+function sanitizeNpmConfigVar(
+  envObj: NodeJS.ProcessEnv,
+  canonicalName: 'NPM_CONFIG_USERCONFIG' | 'NPM_CONFIG_GLOBALCONFIG',
+  workspaceReal: string,
+  emptyNpmrc: string,
+): void {
+  const matchingKeys = Object.keys(envObj).filter(
+    (k) => k.toLowerCase() === canonicalName.toLowerCase(),
+  );
+  let rawVal: string | undefined;
+  for (const k of matchingKeys) {
+    const v = envObj[k];
+    if (typeof v === 'string' && v.trim() !== '') {
+      rawVal = v.trim();
+    }
+    delete envObj[k];
+  }
+  if (rawVal === undefined) {
+    return;
+  }
+  const canonicalTarget = resolveCanonicalPath(rawVal, workspaceReal);
+  if (isInsideWorkspacePath(canonicalTarget, workspaceReal)) {
+    envObj[canonicalName] = emptyNpmrc;
+  } else {
+    envObj[canonicalName] = rawVal;
+  }
 }
 
 function writeGitHubOutputs(outputFile: string | undefined, entries: Record<string, string>): void {
@@ -100,10 +207,16 @@ function writeGitHubOutputs(outputFile: string | undefined, entries: Record<stri
   appendFileSync(outputFile, `${lines.join('\n')}\n`, 'utf8');
 }
 
-function writeStepSummary(summaryFile: string | undefined, markdown: string): void {
-  if (!summaryFile || summaryFile.trim() === '') return;
-  mkdirSync(dirname(resolve(summaryFile)), { recursive: true });
-  appendFileSync(summaryFile, markdown.endsWith('\n') ? markdown : `${markdown}\n`, 'utf8');
+function writeStepSummary(summaryFile: string | undefined, markdown: string, mirrorFile?: string): void {
+  const normalized = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
+  if (summaryFile && summaryFile.trim() !== '') {
+    mkdirSync(dirname(resolve(summaryFile)), { recursive: true });
+    appendFileSync(summaryFile, normalized, 'utf8');
+  }
+  if (mirrorFile && mirrorFile.trim() !== '') {
+    mkdirSync(dirname(resolve(mirrorFile)), { recursive: true });
+    writeFileSync(resolve(mirrorFile), normalized, 'utf8');
+  }
 }
 
 function runGitSync(cwd: string, args: string[]): { status: number; stdout: string; stderr: string } {
@@ -259,24 +372,28 @@ export function resolveNpxCliJs(env: NodeJS.ProcessEnv = process.env): string | 
 
 export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRunResult {
   const summaryFile = env.GITHUB_STEP_SUMMARY;
+  const summaryMirrorFile = env.REPO_ARCHAEOLOGY_SUMMARY_OUT;
   const outputFile = env.GITHUB_OUTPUT;
 
   const failWith = (message: string, exitCode = 2): ActionRunResult => {
     const normalized = stripLeadingErrorPrefix(message);
     const cleanMsg = `error: ${normalized}`;
     const errMd = buildErrorMarkdown(normalized);
-    writeStepSummary(summaryFile, errMd);
+    writeStepSummary(summaryFile, errMd, summaryMirrorFile);
     writeGitHubOutputs(outputFile, {
       'suggestion-count': '0',
+      'uncommitted-files-count': '0',
       'json-path': '',
       'analysis-status': 'skipped',
     });
     return {
       exitCode,
       suggestionCount: 0,
+      uncommittedFilesCount: 0,
       jsonPath: '',
       analysisStatus: 'skipped',
       summaryMarkdown: errMd,
+      stdout: '',
       stderr: cleanMsg,
     };
   };
@@ -353,18 +470,21 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     const shallowCheck = runGitSync(workingDirReal, ['rev-parse', '--is-shallow-repository']);
     if (shallowCheck.status === 0 && shallowCheck.stdout === 'true') {
       const md = buildShallowCloneMarkdown();
-      writeStepSummary(summaryFile, md);
+      writeStepSummary(summaryFile, md, summaryMirrorFile);
       writeGitHubOutputs(outputFile, {
         'suggestion-count': '0',
+        'uncommitted-files-count': '0',
         'json-path': '',
         'analysis-status': 'insufficient-history',
       });
       return {
         exitCode: 0,
         suggestionCount: 0,
+        uncommittedFilesCount: 0,
         jsonPath: '',
         analysisStatus: 'insufficient-history',
         summaryMarkdown: md,
+        stdout: '',
         stderr: '',
       };
     }
@@ -374,18 +494,21 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     const commitCount = commitCountCheck.status === 0 ? Number.parseInt(commitCountCheck.stdout, 10) : 0;
     if (!Number.isFinite(commitCount) || commitCount < 2) {
       const md = buildInsufficientCommitsMarkdown(Number.isFinite(commitCount) ? commitCount : 0);
-      writeStepSummary(summaryFile, md);
+      writeStepSummary(summaryFile, md, summaryMirrorFile);
       writeGitHubOutputs(outputFile, {
         'suggestion-count': '0',
+        'uncommitted-files-count': '0',
         'json-path': '',
         'analysis-status': 'insufficient-history',
       });
       return {
         exitCode: 0,
         suggestionCount: 0,
+        uncommittedFilesCount: 0,
         jsonPath: '',
         analysisStatus: 'insufficient-history',
         summaryMarkdown: md,
+        stdout: '',
         stderr: '',
       };
     }
@@ -590,9 +713,9 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
 
       const isolatedEnv: NodeJS.ProcessEnv = {
         ...childEnv,
-        NPM_CONFIG_USERCONFIG: emptyNpmrc,
-        npm_config_userconfig: emptyNpmrc,
       };
+      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_USERCONFIG', workspaceReal, emptyNpmrc);
+      sanitizeNpmConfigVar(isolatedEnv, 'NPM_CONFIG_GLOBALCONFIG', workspaceReal, emptyNpmrc);
       delete isolatedEnv.NODE_OPTIONS;
 
       const npxCliJs = resolveNpxCliJs(env);
@@ -643,6 +766,7 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
 
     const parsedJson = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
       schemaVersion?: unknown;
+      changed?: unknown[];
       totalSuggestions?: unknown;
       suggestions?: unknown[];
     };
@@ -650,13 +774,52 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       return failWith('Generated JSON output did not match schemaVersion 1.');
     }
 
+    const uncommittedFiles: string[] = [];
+    if (Array.isArray(parsedJson.changed)) {
+      for (const entry of parsedJson.changed) {
+        if (entry && typeof entry === 'object') {
+          const rec = entry as { path?: unknown; sources?: unknown };
+          if (
+            typeof rec.path === 'string' &&
+            Array.isArray(rec.sources) &&
+            rec.sources.some((s) => typeof s === 'string' && s !== 'branch')
+          ) {
+            uncommittedFiles.push(rec.path);
+          }
+        }
+      }
+    }
+
+    const uncommittedFilesCount = uncommittedFiles.length;
+    let finalSummaryMarkdown = cliStdout;
+    let actionStdout = '';
+    if (uncommittedFilesCount > 0) {
+      const shownMd = uncommittedFiles.slice(0, 2).map((p) => formatActionCodeSpan(p));
+      const extraCount = uncommittedFilesCount - shownMd.length;
+      if (extraCount > 0) {
+        shownMd.push(`+${extraCount} more`);
+      }
+      const warningMd =
+        `> **Warning:** ${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownMd.join(', ')}). An earlier workflow step may have modified tracked files.`;
+      finalSummaryMarkdown = `${warningMd}\n\n${cliStdout}`;
+
+      const shownPlain = uncommittedFiles.slice(0, 2);
+      if (extraCount > 0) {
+        shownPlain.push(`+${extraCount} more`);
+      }
+      const annotationMsg =
+        `${uncommittedFilesCount} uncommitted file(s) in the runner's working tree were included in this analysis (${shownPlain.join(', ')}). An earlier workflow step may have modified tracked files.`;
+      actionStdout = `::warning::${escapeWorkflowCommand(annotationMsg)}\n`;
+    }
+
     const suggestionCount =
       typeof parsedJson.totalSuggestions === 'number' && Number.isFinite(parsedJson.totalSuggestions)
         ? Math.max(parsedJson.totalSuggestions, parsedJson.suggestions.length)
         : parsedJson.suggestions.length;
-    writeStepSummary(summaryFile, cliStdout);
+    writeStepSummary(summaryFile, finalSummaryMarkdown, summaryMirrorFile);
     writeGitHubOutputs(outputFile, {
       'suggestion-count': String(suggestionCount),
+      'uncommitted-files-count': String(uncommittedFilesCount),
       'json-path': jsonPath,
       'analysis-status': 'analyzed',
     });
@@ -665,9 +828,11 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
       return {
         exitCode: 1,
         suggestionCount,
+        uncommittedFilesCount,
         jsonPath,
         analysisStatus: 'analyzed',
-        summaryMarkdown: cliStdout,
+        summaryMarkdown: finalSummaryMarkdown,
+        stdout: actionStdout,
         stderr: `Repo Archaeology found ${suggestionCount} companion suggestion${suggestionCount === 1 ? '' : 's'} (fail-on-suggestions is enabled).`,
       };
     }
@@ -675,9 +840,11 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     return {
       exitCode: 0,
       suggestionCount,
+      uncommittedFilesCount,
       jsonPath,
       analysisStatus: 'analyzed',
-      summaryMarkdown: cliStdout,
+      summaryMarkdown: finalSummaryMarkdown,
+      stdout: actionStdout,
       stderr: cliStderr,
     };
   } catch (err) {
@@ -698,6 +865,9 @@ const isMain =
 
 if (isMain) {
   const result = runGitHubAction(process.env);
+  if (result.stdout) {
+    process.stdout.write(result.stdout.endsWith('\n') ? result.stdout : `${result.stdout}\n`);
+  }
   if (result.stderr) {
     process.stderr.write(`${result.stderr}\n`);
   }
