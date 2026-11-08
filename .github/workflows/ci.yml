@@ -41,3 +41,16 @@ jobs:
           install_dir=$(mktemp -d)
           npm install --prefix "$install_dir" "./$package" --no-audit --no-fund
           npm exec --prefix "$install_dir" -- repo-archaeology --version
+
+  smoke-pack:
+    name: Smoke test tarball & schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node scripts/smoke-pack.mjs
