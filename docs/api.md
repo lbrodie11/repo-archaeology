@@ -21,6 +21,7 @@ Library API calls:
 - **Never open a browser.**
 - **Route progress exclusively through `onProgress`** when provided.
 - **Throw typed errors** (`UsageError`, `GitError`, `ConfigError`, or `AbortError` when `signal` is aborted).
+- **Local history cache under `.git`:** By default, `openRepository()` reads and updates the incremental commit history cache under `<git-common-dir>/repo-archaeology/cache/` (never touching the working tree or git refs). Pass `settings: { cache: { enabled: false } }` for strictly read-only filesystem execution.
 
 ### Supported Node.js Versions & Package Exports
 - **Node.js `>= 22`** (matches `"engines": { "node": ">=22" }` in [`package.json`](../package.json)).
@@ -63,7 +64,7 @@ export interface OpenOptions {
   cwd: string;                  // any path inside the repo
   head?: string;                // RA-02 semantics; default: checked-out HEAD + working tree
   base?: string;                // merge-base isolation, same as --base
-  settings?: Partial<Settings>; // same keys as .repo-archaeology.json / CLI flags (maxCommits, maxFiles, minShared, minConfidence, halfLife, skipCommits, ignore, defaultIgnores)
+  settings?: Partial<Settings>; // same keys as .repo-archaeology.json / CLI flags (maxCommits, maxFiles, minShared, minConfidence, halfLife, skipCommits, ignore, defaultIgnores, cache: { dir?, enabled? })
   useConfigFile?: boolean;      // default true: merge .repo-archaeology.json under explicit settings
   onProgress?: (e: { phase: string; done?: number; total?: number }) => void;
   signal?: AbortSignal;         // cancel long history loads (rejects with AbortError)

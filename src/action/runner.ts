@@ -635,6 +635,9 @@ export function runGitHubAction(env: NodeJS.ProcessEnv = process.env): ActionRun
     if (kinds !== undefined) {
       cliArgs.push('--kinds', kinds);
     }
+    if (!env.REPO_ARCHAEOLOGY_CACHE_DIR?.trim()) {
+      cliArgs.push('--no-cache');
+    }
 
     // Determine CLI entrypoint:
     // - When running from src/action/runner.ts (e.g. during `npm test`), prefer src/cli.ts via tsx so a stale dist/ build is never used.

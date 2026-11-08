@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 export class GitError extends Error {
   constructor(
@@ -16,6 +16,8 @@ export type GitSpawnObserver = (args: readonly string[], cwd: string) => void;
 export interface GitRunOptions {
   signal?: AbortSignal;
   onSpawn?: GitSpawnObserver;
+  /** Text written to git's stdin (for `--stdin` commands); stdin is closed when omitted. */
+  input?: string;
 }
 
 /** Creates a standard `AbortError` (`err.name === 'AbortError'`) when an `AbortSignal` fires. */
@@ -80,6 +82,7 @@ function spawnGit(
   options?.onSpawn?.(args, cwd);
   return new Promise((resolve, reject) => {
     const isPosix = process.platform !== 'win32';
+    // stdin is only piped when `input` is given (otherwise it is 'ignore' and `child.stdin` is null).
     const child = spawn('git', [...CONFIG_OVERRIDES, ...args], {
       cwd,
       env: {
@@ -90,10 +93,15 @@ function spawnGit(
         GIT_PAGER: 'cat',
         GIT_NO_REPLACE_OBJECTS: '1',
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options?.input !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       detached: isPosix && signal !== undefined,
       windowsHide: true,
-    });
+    }) as ChildProcessWithoutNullStreams;
+    if (options?.input !== undefined && child.stdin) {
+      // git may exit before reading all input (e.g. on a bad revision); its exit code reports that.
+      child.stdin.on('error', () => {});
+      child.stdin.end(options.input);
+    }
     let stderr = '';
     let settled = false;
     let aborted = false;
