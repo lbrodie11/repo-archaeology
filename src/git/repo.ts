@@ -27,6 +27,15 @@ export async function isShallow(root: string): Promise<boolean> {
   }
 }
 
+export async function remoteOriginUrl(root: string): Promise<string | undefined> {
+  try {
+    const out = (await runGit(root, ['config', '--get', 'remote.origin.url'])).trim();
+    return out !== '' ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function refExists(root: string, ref: string): Promise<boolean> {
   if (ref.startsWith('-')) return false;
   return gitSucceeds(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]);

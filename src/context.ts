@@ -22,6 +22,7 @@ import {
   mergeBases,
   parseLsTree,
   refExists,
+  remoteOriginUrl,
   resolveCommit,
   type TreeFileSet,
 } from './git/repo.js';
@@ -96,6 +97,8 @@ export interface Context {
   mergeBaseSha?: string;
   /** Commit SHA of `HEAD` (or resolved `<head>` when `--head` is used). */
   headSha?: string;
+  /** Raw `remote.origin.url` from git config, if configured. */
+  remoteUrl?: string;
   /** Head ref and resolved commit SHA when `--head <ref>` was explicitly provided. */
   head?: { ref: string; sha: string };
   /** Loaded and compiled relationship verdicts from `.repo-archaeology.verdicts.json`. */
@@ -285,11 +288,12 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       resolveCommit(root, 'HEAD'),
     ]);
     if (signal?.aborted) throw createAbortError(signal);
-    const [shallow, mergeBaseSha, currentFiles, wtChanges] = await Promise.all([
+    const [shallow, mergeBaseSha, currentFiles, wtChanges, remoteUrl] = await Promise.all([
       isShallow(root),
       options?.base !== undefined ? resolveBaseline(root, options.base, headSha) : Promise.resolve(undefined),
       listTreeFiles(root, headSha),
       headSha === checkedOutHeadSha ? workingTreeChanges(root) : Promise.resolve([]),
+      remoteOriginUrl(root),
     ]);
     if (signal?.aborted) throw createAbortError(signal);
     let fileConfig: Partial<Settings> = {};
@@ -345,6 +349,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       base: options?.base,
       mergeBaseSha,
       headSha,
+      remoteUrl,
       head: { ref: headRef, sha: headSha },
       verdicts: new VerdictMatcher(activeVerdicts, trained.history),
       headVerdicts: headVerdictsRes.loaded,
@@ -361,9 +366,10 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
 
   const headSha = await resolveCommit(root, 'HEAD');
   if (signal?.aborted) throw createAbortError(signal);
-  const [shallow, mergeBaseSha] = await Promise.all([
+  const [shallow, mergeBaseSha, remoteUrl] = await Promise.all([
     isShallow(root),
     options?.base !== undefined ? resolveBaseline(root, options.base, 'HEAD') : Promise.resolve(undefined),
+    remoteOriginUrl(root),
   ]);
   if (signal?.aborted) throw createAbortError(signal);
 
@@ -406,6 +412,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     base: options?.base,
     mergeBaseSha,
     headSha,
+    remoteUrl,
     verdicts: new VerdictMatcher(activeVerdicts, trained.history),
     headVerdicts,
   };

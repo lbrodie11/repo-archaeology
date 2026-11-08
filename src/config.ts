@@ -1,8 +1,9 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
+import { isStyleMode, STYLE_MODES, type StyleMode } from './style/frame12.js';
 
-export { riskySkipPattern };
+export { riskySkipPattern, type StyleMode };
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -29,6 +30,8 @@ export interface Settings {
   useDefaultIgnores: boolean;
   /** Optional commit origin classification overrides and per-origin weights. */
   origin?: OriginConfig;
+  /** Optional visual style mode ("classic" or "rich"). */
+  style?: StyleMode;
 }
 
 export const DEFAULT_SETTINGS: Settings = Object.freeze({
@@ -102,7 +105,7 @@ export function loadConfigFile(root: string): Partial<Settings> {
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
   const out: Partial<Settings> = {};
-  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin']));
+  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin', 'style']));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new ConfigError(`${source}: unknown setting "${key}".`);
   }
@@ -154,6 +157,12 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
   }
   if (raw.origin !== undefined) {
     out.origin = validateOriginConfig(raw.origin, source);
+  }
+  if (raw.style !== undefined) {
+    if (!isStyleMode(raw.style)) {
+      throw new ConfigError(`${source}: "style" must be one of: ${STYLE_MODES.join(', ')}.`);
+    }
+    out.style = raw.style;
   }
   return out;
 }

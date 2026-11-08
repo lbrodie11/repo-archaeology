@@ -24,6 +24,15 @@ import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
 import { parseOriginWeightsSpec, type OriginWeights } from './model/origin.js';
 import { formatJsonContract, getToolVersion, validateJsonOutPath, writeJsonContractFile } from './report/contract.js';
 import { renderDiffMarkdown } from './report/markdown.js';
+import {
+  printRichDiff,
+  printRichExplain,
+  printRichFile,
+  printRichScan,
+  startRichProgressSpinner,
+  type RichRenderOptions,
+} from './report/terminal-rich.js';
+import { resolveStyleMode, STYLE_MODES, type StyleMode } from './style/frame12.js';
 import { c, terminalText } from './util/term.js';
 
 const version = getToolVersion();
@@ -108,10 +117,20 @@ interface GlobalOptions {
   originWeights?: OriginWeights;
   ignore?: string[];
   defaultIgnores: boolean;
+  style?: StyleMode;
+  ascii?: boolean;
+  links?: boolean;
+  color?: boolean;
+  fullEvidence?: boolean;
   json?: boolean;
 }
 
 function settingsFrom(opts: GlobalOptions): Partial<Settings> {
+  const envStyle = process.env.REPO_ARCHAEOLOGY_STYLE;
+  const hasFlagOrEnvStyle = opts.style !== undefined || (envStyle !== undefined && envStyle !== '');
+  const styleOverride = hasFlagOrEnvStyle
+    ? resolveStyleMode({ flag: opts.style, env: envStyle })
+    : undefined;
   return {
     maxCommits: opts.maxCommits,
     since: opts.since,
@@ -123,6 +142,17 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
     origin: opts.originWeights !== undefined ? { weights: opts.originWeights } : undefined,
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
+    style: styleOverride,
+  };
+}
+
+function richRenderOptionsFrom(global: GlobalOptions, remoteUrl?: string): RichRenderOptions {
+  return {
+    remoteUrl,
+    ascii: global.ascii === true,
+    noColor: global.color === false,
+    noLinks: global.links === false,
+    fullEvidence: global.fullEvidence === true,
   };
 }
 
@@ -151,6 +181,10 @@ program
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
+  .addOption(new Option('--style <mode>', 'visual style mode: classic or rich').choices([...STYLE_MODES]))
+  .option('--ascii', 'use ASCII-only characters in rich terminal output')
+  .addOption(new Option('--no-links', 'disable OSC 8 hyperlinks in rich terminal output'))
+  .option('--full-evidence', 'show all supporting commit receipts inline in rich terminal output')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
   .allowExcessArguments(true)
@@ -164,14 +198,34 @@ program
   .option('--show-silenced', 'also show relationships silenced by expected verdicts')
   .action(async (opts: { limit: number; kinds: Relationship[]; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
-    const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
-    if (global.json) {
-      printVersionedJson(await createRepository(ctx).scan(options));
-    } else {
-      const result = scan(ctx, options);
-      printScan(result, options);
+    const settingsFlags = settingsFrom(global);
+    const spinner =
+      !global.json && settingsFlags.style === 'rich'
+        ? startRichProgressSpinner(richRenderOptionsFrom(global))
+        : undefined;
+    try {
+      const ctx = await loadContext(global.cwd, settingsFlags, { head: global.head });
+      // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
+      const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(await createRepository(ctx).scan(options));
+      } else {
+        const result = scan(ctx, options);
+        spinner?.stop();
+        const style = resolveStyleMode({
+          flag: global.style,
+          env: process.env.REPO_ARCHAEOLOGY_STYLE,
+          config: ctx.settings.style,
+        });
+        if (style === 'rich') {
+          printRichScan(result, options, richRenderOptionsFrom(global, ctx.remoteUrl));
+        } else {
+          printScan(result, options);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -207,26 +261,47 @@ program
       if (opts.jsonOut !== undefined) {
         validateJsonOutPath(opts.jsonOut);
       }
-      const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-      const result = await createRepository(ctx).diff(opts);
-      if (opts.jsonOut !== undefined) {
-        writeJsonContractFile(opts.jsonOut, result);
+      const settingsFlags = settingsFrom(global);
+      const spinner =
+        !global.json && opts.format !== 'markdown' && settingsFlags.style === 'rich'
+          ? startRichProgressSpinner(richRenderOptionsFrom(global))
+          : undefined;
+      try {
+        const ctx = await loadContext(global.cwd, settingsFlags, { base: opts.base, head: global.head });
+        const result = await createRepository(ctx).diff(opts);
+        spinner?.stop();
+        if (opts.jsonOut !== undefined) {
+          writeJsonContractFile(opts.jsonOut, result);
+        }
+        if (global.json) printVersionedJson(result);
+        else if (opts.format === 'markdown') {
+          const repoUrl =
+            process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+              ? `${process.env.GITHUB_SERVER_URL.replace(/\/+$/, '')}/${process.env.GITHUB_REPOSITORY}`
+              : undefined;
+          process.stdout.write(
+            renderDiffMarkdown(result, {
+              settings: ctx.settings,
+              flagSettings: ctx.flagSettings,
+              repoUrl,
+            }),
+          );
+        } else {
+          const style = resolveStyleMode({
+            flag: global.style,
+            env: process.env.REPO_ARCHAEOLOGY_STYLE,
+            config: ctx.settings.style,
+          });
+          if (style === 'rich') {
+            printRichDiff(result, richRenderOptionsFrom(global, ctx.remoteUrl));
+          } else {
+            printDiff(result);
+          }
+        }
+        if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
+      } finally {
+        spinner?.stop();
       }
-      if (global.json) printVersionedJson(result);
-      else if (opts.format === 'markdown') {
-        const repoUrl =
-          process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
-            ? `${process.env.GITHUB_SERVER_URL.replace(/\/+$/, '')}/${process.env.GITHUB_REPOSITORY}`
-            : undefined;
-        process.stdout.write(
-          renderDiffMarkdown(result, {
-            settings: ctx.settings,
-            flagSettings: ctx.flagSettings,
-            repoUrl,
-          }),
-        );
-      } else printDiff(result);
-      if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
     },
   );
 
@@ -238,12 +313,32 @@ program
   .option('--show-silenced', 'also show companions silenced by expected verdicts')
   .action(async (path: string, opts: { limit: number; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    if (global.json) {
-      printVersionedJson(await createRepository(ctx).file(path, opts));
-    } else {
-      const result = fileReport(ctx, path, opts);
-      printFile(result);
+    const settingsFlags = settingsFrom(global);
+    const spinner =
+      !global.json && settingsFlags.style === 'rich'
+        ? startRichProgressSpinner(richRenderOptionsFrom(global))
+        : undefined;
+    try {
+      const ctx = await loadContext(global.cwd, settingsFlags, { head: global.head });
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(await createRepository(ctx).file(path, opts));
+      } else {
+        const result = fileReport(ctx, path, opts);
+        spinner?.stop();
+        const style = resolveStyleMode({
+          flag: global.style,
+          env: process.env.REPO_ARCHAEOLOGY_STYLE,
+          config: ctx.settings.style,
+        });
+        if (style === 'rich') {
+          printRichFile(result, richRenderOptionsFrom(global, ctx.remoteUrl));
+        } else {
+          printFile(result);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -258,22 +353,42 @@ program
   .option('-U, --context <lines>', 'lines of unified diff context around each hunk (default 2, max 10)', nonNegativeInt, 2)
   .action(async (fileA: string, fileB: string, opts: { base?: string; commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-    if (global.json) {
-      printVersionedJson(
-        await createRepository(ctx).explain(fileA, fileB, {
+    const settingsFlags = settingsFrom(global);
+    const spinner =
+      !global.json && settingsFlags.style === 'rich'
+        ? startRichProgressSpinner(richRenderOptionsFrom(global))
+        : undefined;
+    try {
+      const ctx = await loadContext(global.cwd, settingsFlags, { base: opts.base, head: global.head });
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(
+          await createRepository(ctx).explain(fileA, fileB, {
+            commits: opts.commits,
+            counterexamples: opts.counterexamples,
+            context: opts.context,
+          }),
+        );
+      } else {
+        const result = await explain(ctx, fileA, fileB, {
           commits: opts.commits,
           counterexamples: opts.counterexamples,
-          context: opts.context,
-        }),
-      );
-    } else {
-      const result = await explain(ctx, fileA, fileB, {
-        commits: opts.commits,
-        counterexamples: opts.counterexamples,
-        contextLines: opts.context,
-      });
-      printExplain(result);
+          contextLines: opts.context,
+        });
+        spinner?.stop();
+        const style = resolveStyleMode({
+          flag: global.style,
+          env: process.env.REPO_ARCHAEOLOGY_STYLE,
+          config: ctx.settings.style,
+        });
+        if (style === 'rich') {
+          printRichExplain(result, richRenderOptionsFrom(global, ctx.remoteUrl));
+        } else {
+          printExplain(result);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -429,29 +544,50 @@ program.action(async () => {
     program.error(`error: unknown command '${terminalText(unexpected)}'${suggestion ? `\n(Did you mean ${suggestion}?)` : ''}`, { exitCode: 2, code: 'commander.unknownCommand' });
   }
   const global = program.opts<GlobalOptions>();
-  const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-  let changedWithoutHistory = 0;
-  if (!ctx.head) {
-    const changes = await workingTreeChanges(ctx.root);
-    if (changes.length > 0) {
-      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
-      if (result.changed.some((file) => file.hasHistory)) {
-        if (global.json) printJson({ mode: 'diff', ...result });
-        else printDiff(result);
-        return;
+  const settingsFlags = settingsFrom(global);
+  const spinner =
+    !global.json && settingsFlags.style === 'rich'
+      ? startRichProgressSpinner(richRenderOptionsFrom(global))
+      : undefined;
+  try {
+    const ctx = await loadContext(global.cwd, settingsFlags, { head: global.head });
+    const style = resolveStyleMode({
+      flag: global.style,
+      env: process.env.REPO_ARCHAEOLOGY_STYLE,
+      config: ctx.settings.style,
+    });
+    let changedWithoutHistory = 0;
+    if (!ctx.head) {
+      const changes = await workingTreeChanges(ctx.root);
+      if (changes.length > 0) {
+        const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
+        if (result.changed.some((file) => file.hasHistory)) {
+          spinner?.stop();
+          if (global.json) printJson({ mode: 'diff', ...result });
+          else if (style === 'rich') printRichDiff(result, richRenderOptionsFrom(global, ctx.remoteUrl));
+          else printDiff(result);
+          return;
+        }
+        changedWithoutHistory = result.changed.length;
       }
-      changedWithoutHistory = result.changed.length;
     }
-  }
 
-  const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };
-  const result = scan(ctx, options);
-  if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
-  else {
-    if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
-    printScan(result, options);
-    console.log();
-    console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
+    const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };
+    const result = scan(ctx, options);
+    spinner?.stop();
+    if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
+    else {
+      if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
+      if (style === 'rich') {
+        printRichScan(result, options, richRenderOptionsFrom(global, ctx.remoteUrl));
+      } else {
+        printScan(result, options);
+      }
+      console.log();
+      console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
+    }
+  } finally {
+    spinner?.stop();
   }
 });
 
@@ -483,7 +619,12 @@ async function main(): Promise<void> {
   try {
     await program.parseAsync(process.argv);
   } catch (err) {
-    if (err instanceof GitError || err instanceof UsageError || err instanceof ConfigError) {
+    if (
+      err instanceof GitError ||
+      err instanceof UsageError ||
+      err instanceof ConfigError ||
+      (err instanceof Error && err.name === 'ConfigError')
+    ) {
       console.error(c.red(`error: ${terminalText(err.message)}`));
       process.exitCode = 2;
       return;
