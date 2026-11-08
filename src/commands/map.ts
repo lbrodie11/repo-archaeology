@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, posix, resolve } from 'node:path';
+import { getInvalidConfigStyle } from '../config.js';
 import type { Context } from '../context.js';
 import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js';
 import { runGit } from '../git/run.js';
@@ -12,6 +13,7 @@ import { buildFindingFamilies, type FindingFamilyView } from '../model/families.
 import { resolveCommitFileChange } from '../model/history.js';
 import type { CommitOrigin, OriginShare } from '../model/origin.js';
 import { buildMeta, toView, type Meta, type RelationshipVerdictView, type RelationshipView } from '../report/views.js';
+import { resolveStyleMode, type StyleMode } from '../style/frame12.js';
 import type { WilsonInterval } from '../util/stats.js';
 import { c, isoDate, plural, terminalText } from '../util/term.js';
 import { formatExplainCommand, MAX_COUNTEREXAMPLES_PER_SIDE } from './explain.js';
@@ -31,6 +33,10 @@ export interface MapOptions {
   includePatches?: boolean;
   /** Include relationships silenced by `"expected"` verdicts. */
   showSilenced?: boolean;
+  /** Visual style mode ("classic" or "rich"). */
+  style?: StyleMode;
+  /** Optional callback for non-fatal style resolution warnings. */
+  onWarning?: (message: string) => void;
   out?: string;
   open: boolean;
 }
@@ -439,17 +445,23 @@ export async function defaultMapPath(root: string): Promise<string> {
   return join(gitDir, 'repo-archaeology', 'map.html');
 }
 
-export async function writeMap(ctx: Context, options: MapOptions): Promise<{ file: string; data: MapData }> {
+export async function writeMap(ctx: Context, options: MapOptions): Promise<{ file: string; data: MapData; style: StyleMode }> {
+  const style = resolveStyleMode({
+    flag: options.style ?? ctx.flagSettings?.style,
+    env: process.env.REPO_ARCHAEOLOGY_STYLE,
+    config: ctx.settings.style ?? getInvalidConfigStyle(ctx.settings),
+    onWarning: options.onWarning,
+  });
   const data = buildMapData(ctx, options);
   if (options.includePatches) {
     await attachMapPatches(ctx, data);
   }
-  const layout = computeLayout(data);
+  const layout = computeLayout(data, { style });
   // --out is relative to where the command was run, even with --cwd.
   const file = options.out ? resolve(process.cwd(), options.out) : await defaultMapPath(ctx.root);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, renderMapHtml(data, layout), 'utf8');
-  return { file, data };
+  writeFileSync(file, renderMapHtml(data, layout, { style }), 'utf8');
+  return { file, data, style };
 }
 
 /**

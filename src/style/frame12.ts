@@ -280,3 +280,26 @@ export function wcagContrastRatio(fg: string, bg: string): number {
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);
 }
+
+/**
+ * Normalizes untrusted repository text (file paths, commit subjects, author names)
+ * for HTML and Canvas display by neutralizing C0/C1 control characters, Unicode
+ * bidirectional overrides (`\p{Bidi_Control}`), and zero-width characters into
+ * visible escape sequences (`\x..` / `\u....`).
+ * Kept separate from `src/util/term.ts` (`sanitizeDisplayText`) so browser display
+ * normalization and terminal ANSI/OSC escaping remain independent.
+ */
+export function sanitizeHtmlDisplayText(value: string): string {
+  return value.replace(
+    /[\u0000-\u001f\u007f-\u009f\u200b-\u200d\u2028\u2029\u2060\ufeff]|\p{Bidi_Control}/gu,
+    (character) => {
+      if (character === '\n') return '\\n';
+      if (character === '\r') return '\\r';
+      if (character === '\t') return '\\t';
+      const code = character.codePointAt(0)!;
+      return code <= 0xff
+        ? `\\x${code.toString(16).padStart(2, '0')}`
+        : `\\u${code.toString(16).padStart(4, '0')}`;
+    },
+  );
+}

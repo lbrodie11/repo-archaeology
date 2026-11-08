@@ -16,6 +16,7 @@ import { chromium } from 'playwright';
 import { buildMapData } from '../src/commands/map.js';
 import { loadContext } from '../src/context.js';
 import { RELATIONSHIPS } from '../src/imports/classify.js';
+import { computeLayout, computeRichLayoutWithTiming } from '../src/map/layout.js';
 import { renderMapHtml } from '../src/map/template.js';
 import { generateSyntheticMapData, SYNTHETIC_EDGE_COUNTS } from '../test/fixtures/map-synthetic.js';
 
@@ -244,6 +245,99 @@ async function benchmarkFixture(browser, label, htmlPath, fileBytes) {
   };
 }
 
+function countFrameOverlaps(frames = []) {
+  let overlaps = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const a = frames[i];
+    for (let j = i + 1; j < frames.length; j++) {
+      const b = frames[j];
+      if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
+        overlaps++;
+      }
+    }
+  }
+  return overlaps;
+}
+
+function buildTopologyVariant(edgeCount, topology) {
+  const base = generateSyntheticMapData(edgeCount, { repoName: `synthetic-${topology}-${edgeCount}` });
+  if (topology === 'many-pairs') {
+    const nodes = Array.from({ length: edgeCount * 2 }, (_, i) => ({
+      path: `src/pair-${Math.floor(i / 2)}/file-${i}.ts`,
+      dir: `src/pair-${Math.floor(i / 2)}`,
+      changes: 12,
+      topAuthor: 'Alice',
+      topAuthorShare: 0.75,
+    }));
+    const edges = base.edges.map((e, idx) => ({
+      ...e,
+      source: idx * 2,
+      target: idx * 2 + 1,
+    }));
+    return { ...base, nodes, edges, families: [] };
+  }
+  if (topology === 'giant-component') {
+    const nodeCount = Math.max(45, Math.min(edgeCount + 1, 220));
+    const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+      path: `src/giant/file-${i}.ts`,
+      dir: `src/giant-${i % 6}`,
+      changes: 15,
+      topAuthor: 'Alice',
+      topAuthorShare: 0.75,
+    }));
+    const edges = base.edges.map((e, idx) => {
+      const s = idx % (nodeCount - 1);
+      const step = 1 + Math.floor(idx / (nodeCount - 1));
+      const t = (s + step) % nodeCount;
+      return {
+        ...e,
+        source: Math.min(s, t),
+        target: Math.max(s, t === s ? (s + 1) % nodeCount : t),
+      };
+    });
+    return { ...base, nodes, edges, families: [] };
+  }
+  return base;
+}
+
+function prepareFixture(tmp, id, label, data, style) {
+  const t0 = performance.now();
+  let layout;
+  let componentDiscoveryMs = 0;
+  let packingMs = 0;
+  let simulationMs = 0;
+  if (style === 'rich') {
+    const res = computeRichLayoutWithTiming(data, { style: 'rich' });
+    layout = res.layout;
+    componentDiscoveryMs = Math.round(res.timing.componentDiscoveryMs * 10) / 10;
+    packingMs = Math.round(res.timing.packingMs * 10) / 10;
+    simulationMs = Math.round(res.timing.simulationMs * 10) / 10;
+  } else {
+    const s0 = performance.now();
+    layout = computeLayout(data, { style: 'classic' });
+    simulationMs = Math.round((performance.now() - s0) * 10) / 10;
+  }
+  const r0 = performance.now();
+  const html = renderMapHtml(data, layout, { style });
+  const htmlRenderMs = Math.round((performance.now() - r0) * 10) / 10;
+  const totalNodeGenMs = Math.round((performance.now() - t0) * 10) / 10;
+  const htmlPath = join(tmp, `${id}-${style}.html`);
+  writeFileSync(htmlPath, html, 'utf8');
+  return {
+    label: `${label} [${style}]`,
+    style,
+    htmlPath,
+    fileBytes: statSync(htmlPath).size,
+    componentDiscoveryMs,
+    packingMs,
+    simulationMs,
+    htmlRenderMs,
+    totalNodeGenMs,
+    frameCount: layout.frames ? layout.frames.length : 0,
+    frameOverlapCount: countFrameOverlaps(layout.frames ?? []),
+  };
+}
+
 async function main() {
   const tmp = mkdtempSync(join(tmpdir(), 'ra-bench-map-'));
   const browser = await chromium.launch({
@@ -261,48 +355,82 @@ async function main() {
     await warmPage.waitForTimeout(100);
     await warmCtx.close();
 
+    const styles = process.env.RA_BENCH_STYLE ? [process.env.RA_BENCH_STYLE] : ['classic', 'rich'];
     const fixtures = [];
     for (const edgeCount of SYNTHETIC_EDGE_COUNTS) {
       const data = generateSyntheticMapData(edgeCount);
-      const html = renderMapHtml(data);
-      const htmlPath = join(tmp, `synthetic-${edgeCount}.html`);
-      writeFileSync(htmlPath, html, 'utf8');
-      fixtures.push({
-        label: `${edgeCount} edges (${data.nodes.length} nodes)`,
-        htmlPath,
-        fileBytes: statSync(htmlPath).size,
-      });
+      for (const style of styles) {
+        fixtures.push(
+          prepareFixture(
+            tmp,
+            `synthetic-${edgeCount}`,
+            `${edgeCount} edges (${data.nodes.length} nodes)`,
+            data,
+            style,
+          ),
+        );
+      }
+    }
+
+    if (styles.includes('rich')) {
+      for (const topo of ['many-pairs', 'giant-component']) {
+        const topoData = buildTopologyVariant(500, topo);
+        fixtures.push(
+          prepareFixture(
+            tmp,
+            `topo-${topo}-500`,
+            `500 edges (${topo}, ${topoData.nodes.length} nodes)`,
+            topoData,
+            'rich',
+          ),
+        );
+      }
     }
 
     if (process.env.RA_BENCH_REPO) {
       const repoPath = resolve(process.env.RA_BENCH_REPO);
       const ctx = await loadContext(repoPath, {});
       const data = buildMapData(ctx, { edges: 150, kinds: [...RELATIONSHIPS], uncheckedCap: 10 });
-      const html = renderMapHtml(data);
-      const htmlPath = join(tmp, 'real-repo.html');
-      writeFileSync(htmlPath, html, 'utf8');
-      fixtures.push({
-        label: `repo:${data.repoName} (${data.edges.length} edges, ${data.nodes.length} nodes)`,
-        htmlPath,
-        fileBytes: statSync(htmlPath).size,
-      });
+      for (const style of styles) {
+        fixtures.push(
+          prepareFixture(
+            tmp,
+            'real-repo',
+            `repo:${data.repoName} (${data.edges.length} edges, ${data.nodes.length} nodes)`,
+            data,
+            style,
+          ),
+        );
+      }
     }
 
     const results = [];
     for (const f of fixtures) {
       const res = await benchmarkFixture(browser, f.label, f.htmlPath, f.fileBytes);
-      results.push(res);
+      results.push({
+        ...res,
+        style: f.style,
+        componentDiscoveryMs: f.componentDiscoveryMs,
+        packingMs: f.packingMs,
+        simulationMs: f.simulationMs,
+        htmlRenderMs: f.htmlRenderMs,
+        totalNodeGenMs: f.totalNodeGenMs,
+        frameCount: f.frameCount,
+        frameOverlapCount: f.frameOverlapCount,
+      });
     }
 
-    console.log('\n| Fixture | HTML Size | First Draw | Settle | Load Long Tasks (>50ms) | Toggle Long Tasks (10x / reduced-motion) | Idle rAF (5s) | JS Heap |');
-    console.log('| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+    console.log('\n| Fixture | Style | Node Gen (disc / pack / sim / html = total) | Frames (Overlaps) | HTML Size | First Draw | Settle | Load Long Tasks (>50ms) | Toggle Long Tasks (10x / reduced-motion) | Idle rAF (5s) | JS Heap |');
+    console.log('| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
     for (const r of results) {
       const loadLT = r.longTasksLoadCount > 0 ? `${r.longTasksLoadCount} (max ${r.maxLoadLongTaskMs} ms)` : '0';
       const toggleLT = r.longTasksTogglesCount > 0 ? `${r.longTasksTogglesCount} (max ${r.maxToggleLongTaskMs} ms)` : '0';
       const rmToggleLT = r.longTasksRmTogglesCount > 0 ? `${r.longTasksRmTogglesCount} (max ${r.maxRmToggleLongTaskMs} ms)` : '0';
       const heap = r.heapMiB !== null ? `${r.heapMiB} MiB` : 'n/a';
+      const genBreakdown = `${r.componentDiscoveryMs}/${r.packingMs}/${r.simulationMs}/${r.htmlRenderMs} = ${r.totalNodeGenMs} ms`;
+      const framesCol = r.style === 'rich' ? `${r.frameCount} (${r.frameOverlapCount})` : '—';
       console.log(
-        `| ${r.label} | ${r.fileKiB} KiB | ${r.firstDrawMs} ms | ${r.settleMs} ms | ${loadLT} | ${toggleLT} / ${rmToggleLT} | ${r.idleRaf5s} | ${heap} |`,
+        `| ${r.label} | ${r.style} | ${genBreakdown} | ${framesCol} | ${r.fileKiB} KiB | ${r.firstDrawMs} ms | ${r.settleMs} ms | ${loadLT} | ${toggleLT} / ${rmToggleLT} | ${r.idleRaf5s} | ${heap} |`,
       );
     }
     console.log('');
