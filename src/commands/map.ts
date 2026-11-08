@@ -5,6 +5,7 @@ import type { Context } from '../context.js';
 import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js';
 import { runGit } from '../git/run.js';
 import { parallelImplementation, type HiddenBridge, type Relationship } from '../imports/classify.js';
+import { computeLayout } from '../map/layout.js';
 import { renderMapHtml } from '../map/template.js';
 import type { WeightingMode } from '../model/cochange.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
@@ -421,10 +422,11 @@ export async function writeMap(ctx: Context, options: MapOptions): Promise<{ fil
   if (options.includePatches) {
     await attachMapPatches(ctx, data);
   }
+  const layout = computeLayout(data);
   // --out is relative to where the command was run, even with --cwd.
   const file = options.out ? resolve(process.cwd(), options.out) : await defaultMapPath(ctx.root);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, renderMapHtml(data), 'utf8');
+  writeFileSync(file, renderMapHtml(data, layout), 'utf8');
   return { file, data };
 }
 

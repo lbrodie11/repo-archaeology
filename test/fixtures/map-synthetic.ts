@@ -296,7 +296,7 @@ export function generateSyntheticMapData(
     }
   }
 
-  const families: MapFamily[] =
+  const families = (
     famEdges.length >= 2
       ? [
           {
@@ -335,7 +335,8 @@ export function generateSyntheticMapData(
             overviewPriority: 1,
           },
         ]
-      : [];
+      : []
+  ) as unknown as MapFamily[];
 
   return {
     meta: {
@@ -350,14 +351,14 @@ export function generateSyntheticMapData(
         minShared: 3,
         minConfidence: 0.4,
         maxFilesPerCommit: 25,
-      },
+      } as unknown as MapData['meta']['settings'],
       warnings: [],
       origins: {
         human: edgeCount * 4,
         agent: 0,
         bot: 0,
       },
-    },
+    } as unknown as MapData['meta'],
     repoName,
     generatedAt: '2026-10-15T00:00:00.000Z',
     counts,

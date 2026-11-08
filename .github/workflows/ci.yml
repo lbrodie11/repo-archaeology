@@ -27,6 +27,9 @@ jobs:
           git config --global user.email "ci@example.com"
           git config --global init.defaultBranch main
       - run: npm ci
+      - name: Install Playwright Chromium for map engine browser tests
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
