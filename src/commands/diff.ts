@@ -4,7 +4,19 @@ import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
 import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } from '../model/families.js';
 import type { OriginWeights } from '../model/origin.js';
-import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
+import { isSameVerdictEntry, VerdictMatcher } from '../model/verdicts.js';
+import {
+  buildMeta,
+  describeStrength,
+  DISCLAIMER,
+  formatVerdictAnnotation,
+  printEvidence,
+  printHeader,
+  relationshipLabel,
+  toView,
+  type Meta,
+  type RelationshipView,
+} from '../report/views.js';
 import { c, pct, plural, terminalText } from '../util/term.js';
 
 export interface DiffOptions {
@@ -12,6 +24,8 @@ export interface DiffOptions {
   base?: string;
   limit: number;
   kinds: Relationship[];
+  /** When true, apply verdicts added or modified on the branch during `diff --base` before merging. */
+  applyBranchVerdicts?: boolean;
 }
 
 export interface ChangedFileView extends ChangedFile {
@@ -41,6 +55,7 @@ export type SilenceReason =
   | 'no_history_for_changed_files'
   | 'no_cochange_partners'
   | 'all_companions_touched'
+  | 'silenced_by_verdicts'
   | 'filtered_by_kinds'
   | 'filtered_by_thresholds'
   | 'limited_repo_history';
@@ -74,6 +89,11 @@ export interface SilenceDiagnostics {
   limitedHistory: boolean;
   /** Usable baseline commits available to the model. */
   commitsAnalyzed: number;
+  /** Count of qualifying companion suggestions silenced by `"expected"` verdicts. */
+  verdicts?: {
+    silenced: number;
+    addedInBranch?: number;
+  };
   /** Human-readable explanations supported by the actual analysis. */
   details: string[];
 }
@@ -111,6 +131,11 @@ export interface DiffResult {
   suggestions: Suggestion[];
   /** Parallel-implementation finding families formed by the current changeset and qualifying suggestions. */
   families?: DiffFamilyView[];
+  /** Count of qualifying companion suggestions silenced by `"expected"` verdicts during this diff run. */
+  verdicts?: {
+    silenced: number;
+    addedInBranch?: number;
+  };
   /** Present when `suggestions.length === 0`, explaining why no recommendations were emitted. */
   silence?: SilenceDiagnostics;
 }
@@ -218,6 +243,7 @@ function explainSilence(
       shallowHistory,
       limitedHistory,
       commitsAnalyzed,
+      verdicts: { silenced: 0 },
       details,
     };
   }
@@ -250,6 +276,7 @@ function explainSilence(
       shallowHistory,
       limitedHistory,
       commitsAnalyzed,
+      verdicts: { silenced: 0 },
       details,
     };
   }
@@ -259,6 +286,7 @@ function explainSilence(
   const qualifyingCompanionSet = new Set<string>();
   const touchedQualifyingSet = new Set<string>();
   const touchedRawSet = new Set<string>();
+  const silencedByVerdictSet = new Set<string>();
   const filteredByKindSet = new Set<string>();
   const filteredByThresholdSet = new Set<string>();
   const deletedSet = new Set<string>();
@@ -294,6 +322,8 @@ function explainSilence(
           if (!options.kinds.includes(rel)) {
             filteredByKindSet.add(target);
             excludedKinds.add(rel);
+          } else if (ctx.verdicts?.match(file.path, target)?.kind === 'expected') {
+            silencedByVerdictSet.add(target);
           }
         }
       } else if (isTouched) {
@@ -311,6 +341,11 @@ function explainSilence(
   for (const target of touchedRawSet) {
     filteredByThresholdSet.delete(target);
     filteredByKindSet.delete(target);
+    silencedByVerdictSet.delete(target);
+  }
+  for (const target of silencedByVerdictSet) {
+    filteredByKindSet.delete(target);
+    filteredByThresholdSet.delete(target);
   }
   for (const target of filteredByKindSet) {
     filteredByThresholdSet.delete(target);
@@ -332,6 +367,13 @@ function explainSilence(
     }
   }
 
+  if (silencedByVerdictSet.size > 0) {
+    reasons.push('silenced_by_verdicts');
+    details.push(
+      `${plural(silencedByVerdictSet.size, 'expected relationship')} (${formatPathSample(silencedByVerdictSet)}) met co-change thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence) and ${silencedByVerdictSet.size === 1 ? 'was' : 'were'} silenced by .repo-archaeology.verdicts.json.`,
+    );
+  }
+
   if (filteredByKindSet.size > 0) {
     reasons.push('filtered_by_kinds');
     details.push(
@@ -351,7 +393,8 @@ function explainSilence(
     }
   }
 
-  const nothingFiltered = filteredByKindSet.size === 0 && filteredByThresholdSet.size === 0;
+  const nothingFiltered =
+    silencedByVerdictSet.size === 0 && filteredByKindSet.size === 0 && filteredByThresholdSet.size === 0;
   if (touchedQualifyingSet.size > 0) {
     reasons.push('all_companions_touched');
     const prefix = nothingFiltered ? 'All ' : '';
@@ -368,7 +411,7 @@ function explainSilence(
   if (limitedHistory) {
     const noSpecificFilterOrTouched =
       nothingFiltered && touchedRawSet.size === 0;
-    if ((shallowHistory && !reasons.includes('all_companions_touched')) || (insufficientRepoHistory && noSpecificFilterOrTouched)) {
+    if ((shallowHistory && !reasons.includes('all_companions_touched') && !reasons.includes('silenced_by_verdicts')) || (insufficientRepoHistory && noSpecificFilterOrTouched)) {
       reasons.unshift('limited_repo_history');
     } else {
       reasons.push('limited_repo_history');
@@ -392,6 +435,7 @@ function explainSilence(
     shallowHistory,
     limitedHistory,
     commitsAnalyzed,
+    verdicts: { silenced: silencedByVerdictSet.size },
     details,
   };
 }
@@ -428,13 +472,17 @@ function buildDiffFamilies(
     for (let j = i + 1; j < candidateMembers.length; j++) {
       const pathA = candidateMembers[i]!;
       const pathB = candidateMembers[j]!;
-      const view = evaluateParallelPair(ctx, pathA, pathB, kinds, historyPathByMember);
+      const view = evaluateParallelPair(ctx, pathA, pathB, kinds, historyPathByMember, true);
       if (view) candidateViews.push(view);
     }
   }
   if (candidateViews.length < 2) return [];
 
-  const rawFamilies = buildFindingFamilies(ctx, candidateViews, { historyPathByMember, allowedKinds: kinds });
+  const rawFamilies = buildFindingFamilies(ctx, candidateViews, {
+    historyPathByMember,
+    allowedKinds: kinds,
+    showSilenced: false,
+  });
   const diffFamilies: DiffFamilyView[] = [];
   for (const fam of rawFamilies) {
     const changedMembers = fam.members.map((m) => m.path).filter((p) => changedSet.has(p));
@@ -459,9 +507,13 @@ export function suggestMissing(
   totalSuggestions: number;
   suggestions: Suggestion[];
   families: DiffFamilyView[];
+  verdicts?: { silenced: number };
   silence?: SilenceDiagnostics;
 } {
   const { model } = ctx;
+  const verdictMatcher = ctx.verdicts?.withChanges(changes);
+  const verdictCtx: Context =
+    verdictMatcher && verdictMatcher !== ctx.verdicts ? { ...ctx, verdicts: verdictMatcher } : ctx;
   const touched = new Set<string>();
   for (const f of changes) {
     touched.add(f.path);
@@ -469,6 +521,7 @@ export function suggestMissing(
   }
 
   const changed: ChangedFileView[] = [];
+  const silencedTargets = new Set<string>();
   // Classify and filter every (changed file, partner) link *before* picking the strongest
   // per partner: otherwise a strong import link could hide a weaker but qualifying ghost wire.
   const best = new Map<
@@ -490,11 +543,15 @@ export function suggestMissing(
     if (historyPath) touched.add(historyPath);
     changed.push({ ...file, historyPath, hasHistory: historyPath !== undefined });
     if (historyPath === undefined) continue;
-    for (const companion of model.companions(model.id(historyPath)!, ctx.thresholds)) {
+    for (const companion of model.companions(model.id(historyPath)!, verdictCtx.thresholds)) {
       const target = model.path(companion.to);
-      if (touched.has(target) || !ctx.currentFiles.has(target)) continue;
-      const relationship = ctx.classifier.classify(file.path, target);
+      if (touched.has(target) || !verdictCtx.currentFiles.has(target)) continue;
+      const relationship = verdictCtx.classifier.classify(file.path, target);
       if (!options.kinds.includes(relationship)) continue;
+      if (verdictCtx.verdicts?.match(file.path, target)?.kind === 'expected') {
+        silencedTargets.add(target);
+        continue;
+      }
       const existing = best.get(companion.to);
       if (!existing) {
         best.set(companion.to, {
@@ -514,17 +571,29 @@ export function suggestMissing(
     }
   }
 
+  for (const entry of best.values()) {
+    silencedTargets.delete(model.path(entry.companion.to));
+  }
+  const silencedCount = silencedTargets.size;
+
   const allEntries = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
   const totalSuggestions = allEntries.length;
   const topEntries = allEntries.slice(0, options.limit);
   const suggestions: Suggestion[] = topEntries.map((entry) => ({
-    ...toView(ctx, entry.companion, entry.relationship, entry.fromPath),
+    ...toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath),
     alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
   }));
   const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
-  const families = buildDiffFamilies(ctx, changed, allSuggestedPaths, options.kinds);
-  const silence = suggestions.length === 0 ? explainSilence(ctx, changed, touched, options) : undefined;
-  return { changed, totalSuggestions, suggestions, families, ...(silence ? { silence } : {}) };
+  const families = buildDiffFamilies(verdictCtx, changed, allSuggestedPaths, options.kinds);
+  const silence = suggestions.length === 0 ? explainSilence(verdictCtx, changed, touched, options) : undefined;
+  return {
+    changed,
+    totalSuggestions,
+    suggestions,
+    families,
+    ...(silencedCount > 0 ? { verdicts: { silenced: silencedCount } } : {}),
+    ...(silence ? { silence } : {}),
+  };
 }
 
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
@@ -536,8 +605,40 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
     const isolatedCtx = await isolateBaselineContext(ctx, options.base);
     const localWarnings = [...isolatedCtx.warnings];
     const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
+    let addedInBranch = 0;
+    if (options.base !== undefined && isolatedCtx.headVerdicts !== undefined) {
+      const baseEntries = isolatedCtx.verdicts?.loaded.activeEntries ?? [];
+      const headEntries = isolatedCtx.headVerdicts.activeEntries;
+      const branchAddedEntries = headEntries.filter(
+        (entry) => !baseEntries.some((baseEntry) => isSameVerdictEntry(entry, baseEntry)),
+      );
+      addedInBranch = branchAddedEntries.length;
+      if (options.applyBranchVerdicts) {
+        effectiveCtx.verdicts = new VerdictMatcher(isolatedCtx.headVerdicts, isolatedCtx.history);
+        for (const w of isolatedCtx.headVerdicts.warnings) {
+          if (!localWarnings.includes(w)) localWarnings.push(w);
+        }
+      }
+    }
     changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
-    const { changed, totalSuggestions, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
+    const { changed, totalSuggestions, suggestions, families, verdicts, silence } = suggestMissing(effectiveCtx, changes, options);
+    const silencedCount = verdicts?.silenced ?? 0;
+    const mergedVerdicts =
+      silencedCount > 0 || addedInBranch > 0
+        ? {
+            silenced: silencedCount,
+            ...(addedInBranch > 0 ? { addedInBranch } : {}),
+          }
+        : undefined;
+    const mergedSilence: SilenceDiagnostics | undefined = silence
+      ? {
+          ...silence,
+          verdicts: {
+            silenced: silence.verdicts?.silenced ?? 0,
+            ...(addedInBranch > 0 ? { addedInBranch } : {}),
+          },
+        }
+      : undefined;
     const meta = buildMeta(effectiveCtx);
     const baselineSha = effectiveCtx.mergeBaseSha ?? effectiveCtx.headSha;
     const evaluation: DiffEvaluation = {
@@ -565,7 +666,8 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
       totalSuggestions,
       suggestions,
       families,
-      ...(silence ? { silence } : {}),
+      ...(mergedVerdicts ? { verdicts: mergedVerdicts } : {}),
+      ...(mergedSilence ? { silence: mergedSilence } : {}),
     };
   } finally {
     ctx.close?.();
@@ -581,7 +683,13 @@ export function printDiff(result: DiffResult): void {
   const withoutHistory = result.changed.filter((f) => !f.hasHistory).length;
   const withHistory = result.changed.length - withoutHistory;
   const note = withoutHistory > 0 ? c.dim(` (${withoutHistory} new or without usable history)`) : '';
-  console.log(`You changed ${plural(result.changed.length, 'file')}${note}.`);
+  const silencedCount = result.verdicts?.silenced ?? result.silence?.verdicts?.silenced ?? 0;
+  const silencedNote = silencedCount > 0 ? c.dim(` (${plural(silencedCount, 'expected relationship')} silenced by verdicts)`) : '';
+  console.log(`You changed ${plural(result.changed.length, 'file')}${note}${silencedNote}.`);
+  const addedInBranch = result.verdicts?.addedInBranch ?? result.silence?.verdicts?.addedInBranch ?? 0;
+  if (addedInBranch > 0) {
+    console.log(c.dim(`This PR adds ${plural(addedInBranch, 'expected verdict')} (not applied until merged).`));
+  }
   console.log();
   if (result.suggestions.length === 0) {
     if (withHistory === 0) {
@@ -625,6 +733,7 @@ export function printDiff(result: DiffResult): void {
     console.log(`    changed with ${terminalText(s.from)} in ${describeStrength(s)}`);
     if (s.alsoLinkedFrom.length > 0) console.log(c.dim(`    also linked to: ${s.alsoLinkedFrom.map(terminalText).join(', ')}`));
     console.log(c.dim(`    ${terminalText(s.why)}`));
+    if (s.verdict) console.log(`    ${formatVerdictAnnotation(s.verdict)}`);
     printEvidence(s);
     console.log();
   }

@@ -1169,6 +1169,10 @@ const CLIENT = String.raw`
       '- ' + sanitizeMarkdown(capitalize(e.d.why)) + '.' + scope,
       (e.d.relationship === 'ghost' ? '- No direct or supported indirect import relationship found in current code.' : '')
     ];
+    if (e.d.verdict) {
+      var vHead = e.d.verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship';
+      lines.push('- **' + vHead + ':** ' + sanitizeMarkdown(e.d.verdict.reason));
+    }
     if (e.d.evidence && e.d.evidence.length > 0) {
       lines.push('', '**Supporting Commits:**');
       e.d.evidence.slice(0, 5).forEach(function (ev) {
@@ -1791,6 +1795,14 @@ const CLIENT = String.raw`
       var p3 = el('p');
       p3.textContent = 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + ').';
       callout.appendChild(p3);
+    }
+    if (e.d.verdict) {
+      var pv = el('p');
+      var vLabel = e.d.verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship (silenced)';
+      if (e.d.verdict.by) vLabel += ' by ' + e.d.verdict.by;
+      if (e.d.verdict.until) vLabel += ' (until ' + e.d.verdict.until + ')';
+      pv.textContent = vLabel + ': ' + e.d.verdict.reason;
+      callout.appendChild(pv);
     }
     panel.appendChild(callout);
 

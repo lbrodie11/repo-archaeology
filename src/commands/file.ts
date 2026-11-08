@@ -1,11 +1,23 @@
 import type { Context } from '../context.js';
 import { toRepoPath, UsageError } from '../context.js';
-import { buildMeta, describeStrength, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
+import {
+  buildMeta,
+  describeStrength,
+  formatVerdictAnnotation,
+  printEvidence,
+  printHeader,
+  relationshipLabel,
+  toView,
+  type Meta,
+  type RelationshipView,
+} from '../report/views.js';
 import { median } from '../util/stats.js';
 import { c, isoDate, pct, plural, terminalText, timeAgo } from '../util/term.js';
 
 export interface FileOptions {
   limit: number;
+  /** Include relationships silenced by `"expected"` verdicts. */
+  showSilenced?: boolean;
 }
 
 export interface FileCompanionView extends RelationshipView {
@@ -23,6 +35,10 @@ export interface FileResult {
   lastChanged: string;
   authors: { author: string; commits: number; share: number }[];
   companions: FileCompanionView[];
+  /** Count of qualifying companions silenced by `"expected"` verdicts. */
+  verdicts?: {
+    silenced: number;
+  };
 }
 
 export function fileReport(ctx: Context, input: string, options: FileOptions): FileResult {
@@ -40,14 +56,28 @@ export function fileReport(ctx: Context, input: string, options: FileOptions): F
     const counts = model.changeCount;
     const mine = counts[id] ?? 0;
     const below = counts.filter((n) => n < mine).length;
+    let silenced = 0;
     // Show weaker links too (min confidence 0), flagging the ones `diff` would raise.
     const companions = model
       .companions(id, { minShared: ctx.thresholds.minShared, minConfidence: 0 })
-      .filter((comp) => ctx.currentFiles.has(model.path(comp.to)))
+      .filter((comp) => {
+        const target = model.path(comp.to);
+        if (!ctx.currentFiles.has(target)) return false;
+        if (!options.showSilenced && ctx.verdicts?.match(path, target)?.kind === 'expected') {
+          silenced++;
+          return false;
+        }
+        return true;
+      })
       .slice(0, options.limit)
       .map((comp) => {
-        const relationship = ctx.classifier.classify(path, model.path(comp.to));
-        return { ...toView(ctx, comp, relationship), wouldAlert: comp.confidence >= ctx.thresholds.minConfidence };
+        const target = model.path(comp.to);
+        const relationship = ctx.classifier.classify(path, target);
+        const view = toView(ctx, comp, relationship);
+        return {
+          ...view,
+          wouldAlert: comp.confidence >= ctx.thresholds.minConfidence && view.verdict?.kind !== 'expected',
+        };
       });
     return {
       meta: buildMeta(ctx),
@@ -58,6 +88,7 @@ export function fileReport(ctx: Context, input: string, options: FileOptions): F
       lastChanged: isoDate(model.lastTime[id] ?? 0),
       authors: model.topAuthors(id, 3),
       companions,
+      ...(silenced > 0 ? { verdicts: { silenced } } : {}),
     };
   } finally {
     ctx.close?.();
@@ -75,16 +106,23 @@ export function printFile(result: FileResult): void {
   console.log();
   if (result.companions.length === 0) {
     console.log(`No file changed with it at least ${result.meta.settings.minShared} times.`);
+    if (result.verdicts?.silenced) {
+      console.log(c.dim(`(${result.verdicts.silenced} silenced by verdicts; use --show-silenced)`));
+    }
     return;
   }
   console.log(c.bold('Files that move with it'));
   console.log(c.dim(`● = strong enough for \`diff\` to flag it (≥ ${pct(result.meta.settings.minConfidence)} confidence)`));
+  if (result.verdicts?.silenced) {
+    console.log(c.dim(`(${result.verdicts.silenced} silenced by verdicts; use --show-silenced)`));
+  }
   console.log();
   for (const comp of result.companions) {
     const dot = comp.wouldAlert ? c.magenta('●') : c.dim('○');
     console.log(`  ${dot} ${c.bold(terminalText(comp.to))}  ${relationshipLabel(comp.relationship)}`);
     console.log(`    ${describeStrength(comp)} · reverse ${pct(comp.reverseConfidence)}`);
     console.log(c.dim(`    ${terminalText(comp.why)}`));
+    if (comp.verdict) console.log(`    ${formatVerdictAnnotation(comp.verdict)}`);
     printEvidence(comp);
     console.log();
   }

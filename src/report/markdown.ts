@@ -166,6 +166,14 @@ function renderSuggestionBlock(
   lines.push(`${index + 1}. **${formatMarkdownCode(s.to)}** — \`${kindLabel}\``);
   lines.push(`   - ${formatDirectionalEvidence(s, settings)}${alsoNote}`);
   lines.push(`   - ${escapeMarkdownInline(s.why, 240)}`);
+  if (s.verdict) {
+    const label = s.verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship';
+    const metaParts: string[] = [];
+    if (s.verdict.by) metaParts.push(`by ${escapeMarkdownInline(s.verdict.by, 80)}`);
+    if (s.verdict.until) metaParts.push(`until ${escapeMarkdownInline(s.verdict.until, 20)}`);
+    const attr = metaParts.length > 0 ? ` (${metaParts.join(', ')})` : '';
+    lines.push(`   - **${label}**${attr}: ${escapeMarkdownInline(s.verdict.reason, 300)}`);
+  }
 
   const topCommits = s.evidence.slice(0, 3);
   for (const ev of topCommits) {
@@ -220,6 +228,7 @@ function renderSilenceSection(result: DiffResult, silence: SilenceDiagnostics): 
       lines.push('No suggestions: none of the changed files appear in the pre-change baseline history.');
       break;
     case 'all_companions_touched':
+    case 'silenced_by_verdicts':
     case 'no_cochange_partners':
     case 'filtered_by_thresholds':
     case 'filtered_by_kinds':
@@ -292,6 +301,9 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
     skippedParts.push(`${plural(meta.subjectSkipped, 'filtered commit')} skipped`);
   }
   const skippedNote = skippedParts.length > 0 ? ` · ${skippedParts.join(', ')}` : '';
+  const silencedCount = result.verdicts?.silenced ?? result.silence?.verdicts?.silenced ?? 0;
+  const silencedNote =
+    silencedCount > 0 ? ` · ${plural(silencedCount, 'expected relationship')} silenced by verdicts` : '';
   const halfLifeNote =
     meta.settings.halfLifeDays !== undefined
       ? ` · recency half-life ${meta.settings.halfLifeDays}d`
@@ -302,8 +314,16 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
   const weightNote = `${halfLifeNote}${originWeightsNote}`;
   headerLines.push(
     `${scopeParts.join(' ')} · **${plural(meta.commitsAnalyzed, 'commit')} analyzed**${range}` +
-      ` (thresholds: ≥${meta.settings.minShared} shared, ≥${pct(meta.settings.minConfidence)} confidence${weightNote})${skippedNote}.`,
+      ` (thresholds: ≥${meta.settings.minShared} shared, ≥${pct(meta.settings.minConfidence)} confidence${weightNote})${skippedNote}${silencedNote}.`,
   );
+
+  const addedInBranch = result.verdicts?.addedInBranch ?? result.silence?.verdicts?.addedInBranch ?? 0;
+  if (addedInBranch > 0) {
+    headerLines.push('');
+    headerLines.push(
+      `> **Note:** This PR adds ${plural(addedInBranch, 'expected verdict')} (not applied until merged).`,
+    );
+  }
 
   if (meta.warnings.length > 0) {
     headerLines.push('');

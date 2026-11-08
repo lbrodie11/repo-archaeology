@@ -8,6 +8,14 @@ import { fileReport, printFile } from './commands/file.js';
 import { importGraph, printImports } from './commands/imports.js';
 import { openInBrowser, printMap, writeMap } from './commands/map.js';
 import { printScan, scan } from './commands/scan.js';
+import {
+  printVerdictAdd,
+  printVerdictList,
+  printVerdictPrune,
+  verdictAdd,
+  verdictList,
+  verdictPrune,
+} from './commands/verdict.js';
 import { ConfigError, type Settings } from './config.js';
 import { loadContext, UsageError } from './context.js';
 import { workingTreeChanges } from './git/changes.js';
@@ -153,7 +161,8 @@ program
   .description('list the strongest ghost wires across the repository')
   .option('-n, --limit <n>', 'how many to show', positiveInt, 15)
   .addOption(kindsOption('relationship kinds to show', ['ghost', 'unknown']))
-  .action(async (opts: { limit: number; kinds: Relationship[] }, cmd: Command) => {
+  .option('--show-silenced', 'also show relationships silenced by expected verdicts')
+  .action(async (opts: { limit: number; kinds: Relationship[]; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
@@ -174,6 +183,7 @@ program
   .addOption(kindsOption('relationship kinds to report', [...RELATIONSHIPS]))
   .addOption(new Option('--format <format>', 'output format for stdout').choices(['text', 'markdown']).default('text'))
   .option('--json-out <file>', 'also write the versioned JSON result to <file> in the same run')
+  .option('--apply-branch-verdicts', 'apply verdicts added or changed on this branch before merging (when using --base)')
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
   .action(
     async (
@@ -183,6 +193,7 @@ program
         kinds: Relationship[];
         format: 'text' | 'markdown';
         jsonOut?: string;
+        applyBranchVerdicts?: boolean;
         exitCode?: boolean;
       },
       cmd: Command,
@@ -224,7 +235,8 @@ program
   .description('everything history knows about one file: churn, owners and the files that move with it')
   .argument('<path>', 'file to inspect')
   .option('-n, --limit <n>', 'how many related files to show', positiveInt, 10)
-  .action(async (path: string, opts: { limit: number }, cmd: Command) => {
+  .option('--show-silenced', 'also show companions silenced by expected verdicts')
+  .action(async (path: string, opts: { limit: number; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     if (global.json) {
@@ -321,8 +333,9 @@ program
   .option('--edges <n>', 'maximum relationships to draw', positiveInt, 150)
   .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'indirect', 'direct']))
   .option('--include-patches', 'embed bounded git diff hunks for top relationships (opt-in; review before sharing externally)')
+  .option('--show-silenced', 'also include relationships silenced by expected verdicts')
   .option('--no-open', 'write the file without opening a browser')
-  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; open: boolean }, cmd: Command) => {
+  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; showSilenced?: boolean; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     const options = {
@@ -340,12 +353,72 @@ program
         edges: data.edges.length,
         counts: data.counts,
         patchesIncluded: Boolean(data.patchesIncluded),
+        ...(data.verdicts ? { verdicts: data.verdicts } : {}),
       });
     } else printMap(file, data, shouldOpen);
   });
 
+const verdictCmd = program
+  .command('verdict')
+  .description('manage repo-committed relationship verdicts (.repo-archaeology.verdicts.json)');
+
+verdictCmd
+  .command('add')
+  .description('record an expected (silenced) or confirmed relationship verdict')
+  .argument('<a>', 'first file path or glob')
+  .argument('<b>', 'second file path or glob')
+  .option('--expected', 'mark the relationship as expected mechanical coupling (silenced in diff/scan/file/map)')
+  .option('--confirmed', 'mark the relationship as a confirmed hidden dependency')
+  .option('--reason <text>', 'explanation for this verdict (1–300 characters)')
+  .option('--until <date>', 'optional expiration date in YYYY-MM-DD format')
+  .option('--by <name>', 'optional author or team handle')
+  .option('--directed', 'apply only in direction <a> → <b> (default is undirected)')
+  .action(
+    async (
+      a: string,
+      b: string,
+      opts: {
+        expected?: boolean;
+        confirmed?: boolean;
+        reason?: string;
+        until?: string;
+        by?: string;
+        directed?: boolean;
+      },
+      cmd: Command,
+    ) => {
+      const global = cmd.optsWithGlobals<GlobalOptions>();
+      const result = await verdictAdd(a, b, { ...opts, cwd: global.cwd });
+      if (global.json) printJson(result);
+      else printVerdictAdd(result);
+    },
+  );
+
+verdictCmd
+  .command('list')
+  .description('list configured relationship verdicts in .repo-archaeology.verdicts.json')
+  .action(async (_opts: unknown, cmd: Command) => {
+    const global = cmd.optsWithGlobals<GlobalOptions>();
+    const result = await verdictList({ cwd: global.cwd });
+    if (global.json) printJson(result);
+    else printVerdictList(result);
+  });
+
+verdictCmd
+  .command('prune')
+  .description('remove expired verdicts from .repo-archaeology.verdicts.json')
+  .action(async (_opts: unknown, cmd: Command) => {
+    const global = cmd.optsWithGlobals<GlobalOptions>();
+    const result = await verdictPrune({ cwd: global.cwd });
+    if (global.json) printJson(result);
+    else printVerdictPrune(result);
+  });
+
 for (const cmd of program.commands) {
   cmd.allowExcessArguments(false);
+  for (const sub of cmd.commands) {
+    sub.allowExcessArguments(false);
+  }
 }
 
 program.action(async () => {

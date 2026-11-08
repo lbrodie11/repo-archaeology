@@ -9,6 +9,8 @@ export interface ChangedFile {
   path: string;
   /** Previous path when the file was renamed (history may still know it by this name). */
   oldPath?: string;
+  /** Intermediate paths between `oldPath` and `path` across branch commits or working-tree renames (non-enumerable). */
+  priorPaths?: string[];
   deleted: boolean;
   /** The path was created by this change (added, untracked, or the target of a rename or copy). */
   added?: boolean;
@@ -16,9 +18,22 @@ export interface ChangedFile {
 }
 
 type BranchOrigin =
-  | { kind: 'baseline'; basePath: string }
-  | { kind: 'born_on_branch' }
+  | { kind: 'baseline'; basePath: string; priorPaths: string[] }
+  | { kind: 'born_on_branch'; priorPaths: string[] }
   | { kind: 'deleted' };
+
+function attachPriorPaths(file: ChangedFile, paths: readonly string[]): ChangedFile {
+  const filtered = [...new Set(paths)].filter((p) => p !== file.path && p !== file.oldPath);
+  if (filtered.length > 0) {
+    Object.defineProperty(file, 'priorPaths', {
+      value: filtered,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return file;
+}
 
 /**
  * Parses `git status --porcelain=v1 -z` output.
@@ -84,7 +99,8 @@ export function reconcileBranchLineage(
   headFiles?: ReadonlySet<string>,
 ): ChangedFile[] {
   const state = new Map<string, BranchOrigin>();
-  const originBefore = (path: string): BranchOrigin => state.get(path) ?? { kind: 'baseline', basePath: path };
+  const originBefore = (path: string): BranchOrigin =>
+    state.get(path) ?? { kind: 'baseline', basePath: path, priorPaths: [path] };
 
   for (const commit of branchCommits) {
     const renameOrigins = commit.changes.map((ch) =>
@@ -101,10 +117,17 @@ export function reconcileBranchLineage(
     commit.changes.forEach((ch, i) => {
       if (ch.status === 'D') return;
       if (ch.status === 'A' || ch.status === 'C') {
-        state.set(ch.path, { kind: 'born_on_branch' });
+        state.set(ch.path, { kind: 'born_on_branch', priorPaths: [ch.path] });
       } else if (ch.status === 'R') {
         const origin = renameOrigins[i]!;
-        state.set(ch.path, origin.kind === 'deleted' ? { kind: 'born_on_branch' } : origin);
+        if (origin.kind === 'deleted') {
+          state.set(ch.path, { kind: 'born_on_branch', priorPaths: [ch.path] });
+        } else {
+          const priorPaths = origin.priorPaths.includes(ch.path)
+            ? [...origin.priorPaths]
+            : [...origin.priorPaths, ch.path];
+          state.set(ch.path, { ...origin, priorPaths });
+        }
       } else {
         const current = originBefore(ch.path);
         if (current.kind !== 'deleted') state.set(ch.path, current);
@@ -136,13 +159,26 @@ export function reconcileBranchLineage(
     seenPaths.add(file.path);
     const origin = state.get(file.path);
     if (origin?.kind === 'born_on_branch') {
-      const entry: ChangedFile = { path: file.path, deleted: false, added: true, sources: [...file.sources] };
+      const entry: ChangedFile = attachPriorPaths(
+        { path: file.path, deleted: false, added: true, sources: [...file.sources] },
+        origin.priorPaths,
+      );
       result.push(entry);
     } else if (origin?.kind === 'baseline') {
       if (origin.basePath !== file.path) {
-        result.push({ path: file.path, oldPath: origin.basePath, deleted: false, added: true, sources: [...file.sources] });
+        result.push(
+          attachPriorPaths(
+            { path: file.path, oldPath: origin.basePath, deleted: false, added: true, sources: [...file.sources] },
+            origin.priorPaths,
+          ),
+        );
       } else {
-        result.push({ path: file.path, deleted: false, added: false, sources: [...file.sources] });
+        result.push(
+          attachPriorPaths(
+            { path: file.path, deleted: false, added: false, sources: [...file.sources] },
+            origin.priorPaths,
+          ),
+        );
       }
     } else {
       result.push({ ...file, sources: [...file.sources] });
@@ -155,9 +191,19 @@ export function reconcileBranchLineage(
     for (const [currentPath, origin] of state) {
       if (seenPaths.has(currentPath) || !headFiles.has(currentPath)) continue;
       if (origin.kind === 'born_on_branch') {
-        result.push({ path: currentPath, deleted: false, added: true, sources: ['branch'] });
+        result.push(
+          attachPriorPaths(
+            { path: currentPath, deleted: false, added: true, sources: ['branch'] },
+            origin.priorPaths,
+          ),
+        );
       } else if (origin.kind === 'baseline' && origin.basePath !== currentPath) {
-        result.push({ path: currentPath, oldPath: origin.basePath, deleted: false, added: true, sources: ['branch'] });
+        result.push(
+          attachPriorPaths(
+            { path: currentPath, oldPath: origin.basePath, deleted: false, added: true, sources: ['branch'] },
+            origin.priorPaths,
+          ),
+        );
       }
     }
   }
@@ -203,15 +249,24 @@ export function mergeChanges(...lists: ChangedFile[][]): ChangedFile[] {
   const byPath = new Map<string, ChangedFile>();
   for (const list of lists) {
     const priorByPath = new Map<string, ChangedFile>();
-    for (const [k, v] of byPath) priorByPath.set(k, { ...v, sources: [...v.sources] });
+    for (const [k, v] of byPath) {
+      priorByPath.set(
+        k,
+        attachPriorPaths({ ...v, sources: [...v.sources] }, v.priorPaths ?? []),
+      );
+    }
     const writtenInList = new Set(list.filter((f) => !f.deleted).map((f) => f.path));
     for (const file of list) {
       const movedFrom = file.oldPath !== undefined && file.oldPath !== file.path ? priorByPath.get(file.oldPath) : undefined;
       let effectiveOldPath = file.oldPath;
       let effectiveAdded = file.added;
       const mergedSources = [...file.sources];
+      const mergedPriors: string[] = [...(file.priorPaths ?? [])];
 
       if (movedFrom && !movedFrom.deleted) {
+        for (const p of movedFrom.priorPaths ?? []) mergedPriors.push(p);
+        if (movedFrom.oldPath) mergedPriors.push(movedFrom.oldPath);
+        mergedPriors.push(movedFrom.path);
         if (movedFrom.added && movedFrom.oldPath === undefined) {
           effectiveOldPath = undefined;
           effectiveAdded = true;
@@ -237,6 +292,7 @@ export function mergeChanges(...lists: ChangedFile[][]): ChangedFile[] {
         };
         if (effectiveOldPath !== undefined) entry.oldPath = effectiveOldPath;
         else delete entry.oldPath;
+        attachPriorPaths(entry, mergedPriors);
         byPath.set(file.path, entry);
         continue;
       }
@@ -251,6 +307,7 @@ export function mergeChanges(...lists: ChangedFile[][]): ChangedFile[] {
       existing.deleted = file.deleted;
       if (effectiveAdded) existing.added = true;
       for (const s of mergedSources) if (!existing.sources.includes(s)) existing.sources.push(s);
+      attachPriorPaths(existing, [...(existing.priorPaths ?? []), ...mergedPriors]);
     }
   }
   return [...byPath.values()];

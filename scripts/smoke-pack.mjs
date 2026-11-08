@@ -329,9 +329,11 @@ export function runSmokePack(options = {}) {
       "import { openRepository } from 'repo-archaeology';",
       "import diffSchema from 'repo-archaeology/schema/diff.schema.json' with { type: 'json' };",
       "import importGraphSchema from 'repo-archaeology/schema/import-graph.schema.json' with { type: 'json' };",
+      "import verdictsSchema from 'repo-archaeology/schema/verdicts.schema.json' with { type: 'json' };",
       `const require = createRequire(pathToFileURL(${JSON.stringify(join(installDir, 'package.json'))}).href);`,
       "assert.equal(diffSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
       "assert.equal(importGraphSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
+      "assert.equal(verdictsSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
       "assert.ok(require.resolve('repo-archaeology/schema/diff.schema.json').endsWith('diff.schema.json'));",
       "assert.ok(require.resolve('repo-archaeology').endsWith('index.js'));",
       "const [nodeMaj, nodeMin] = process.versions.node.split('.').map(Number);",
@@ -347,7 +349,7 @@ export function runSmokePack(options = {}) {
       '  await repo.close();',
       '}',
     ].join('\n');
-    const apiRes = spawnSync(process.execPath, ['--input-type=module', '-e', apiScript], {
+    const apiRes = spawnSync(process.execPath, ['--no-warnings=ExperimentalWarning', '--input-type=module', '-e', apiScript], {
       cwd: installDir,
       encoding: 'utf8',
       env: sanitizeGitEnv(process.env, { NO_COLOR: '1' }),

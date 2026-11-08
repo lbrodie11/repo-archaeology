@@ -184,6 +184,7 @@ When three or more sibling parallel implementations form a connected co-change g
 | `file <path>` | What does history know about this file: churn, owners, companions? |
 | `map` | Show me the whole picture as an interactive map in the browser. |
 | `backtest` | How often would these suggestions have been right on recent history? |
+| `verdict add\|list\|prune` | Silence expected mechanical relationships or annotate confirmed hidden dependencies in `.repo-archaeology.verdicts.json`. |
 
 Every command accepts `--json` (`schemaVersion: 1`; see [docs/json.md](docs/json.md) and [`schema/`](schema) for the formal JSON Schema contract). Run `repo-archaeology --help` for all options.
 
@@ -385,6 +386,55 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 ```
 
 The config file is part of the repository, so it is treated as untrusted input: it must be a small regular file, `maxFilesPerCommit` is capped at 1000, and `skipCommits` patterns that can backtrack catastrophically (quantifiers vulnerable to polynomial/exponential ReDoS, repeated groups with alternation, or backreferences) are refused. For safe prefix-based skipping without regexes, use `skipCommitPrefixes`. Command-line flags are not restricted.
+
+## Relationship verdicts (`.repo-archaeology.verdicts.json`)
+
+Teams can commit `<repoRoot>/.repo-archaeology.verdicts.json` (validated against [`schema/verdicts.schema.json`](schema/verdicts.schema.json)) to silence known mechanical relationships (`"verdict": "expected"`) or annotate real hidden dependencies (`"verdict": "confirmed"`) **without altering underlying historical scores, counts, confidence, Wilson intervals, or `backtest` accuracy**:
+
+```json
+{
+  "version": 1,
+  "verdicts": [
+    {
+      "pair": ["package.json", "package-lock.json"],
+      "verdict": "expected",
+      "reason": "Lockfile always moves with package.json",
+      "until": "2027-01-01",
+      "by": "lbrodie11",
+      "directed": false
+    },
+    {
+      "pair": ["src/billing/charge.ts", "db/schema.sql"],
+      "verdict": "confirmed",
+      "reason": "Charge writes the orders table directly; keep in sync",
+      "by": "lbrodie11"
+    }
+  ]
+}
+```
+
+```bash
+# Silence a known mechanical pair (with optional expiration and author)
+npx repo-archaeology verdict add package.json package-lock.json --expected --reason "Lockfile always moves with package.json" --until 2027-01-01 --by lbrodie11
+
+# Annotate a confirmed hidden dependency
+npx repo-archaeology verdict add src/billing/charge.ts db/schema.sql --confirmed --reason "Charge writes the orders table directly; keep in sync" --by lbrodie11
+
+# List active and expired verdicts, or remove expired entries
+npx repo-archaeology verdict list
+npx repo-archaeology verdict prune
+
+# Include silenced (expected) relationships in scan, file, or map
+npx repo-archaeology scan --show-silenced
+```
+
+- **How verdicts behave:**
+  - **`diff` & GitHub Action:** `expected` pairs are filtered out of `suggestions` and `families` (including family completion) and counted in `verdicts: { silenced: N }` (and in `silence.verdicts: { silenced: N }` with `silence.primaryReason: "silenced_by_verdicts"` when all qualifying candidates were silenced). `confirmed` pairs stay in `suggestions` with their `verdict` annotation rendered in terminal and Markdown output.
+  - **`diff --base` self-silencing protection:** When `diff` runs with `--base <ref>`, active verdicts are loaded from the `<merge-base>` commit tree by default so a pull request cannot silence warnings about itself before merging. Verdict entries added or modified on the branch are reported in `verdicts.addedInBranch` and in Markdown/terminal output (`"This PR adds N expected verdict(s) (not applied until merged)"`). Pass `--apply-branch-verdicts` for local preview before merging.
+  - **`scan`, `file`, and `map`:** `expected` pairs are hidden by default (and counted in `verdicts: { silenced: N }` in JSON plus a dim `(N silenced by verdicts; use --show-silenced)` line in terminal output) unless `--show-silenced` is passed; `confirmed` pairs (and `expected` pairs with `--show-silenced`) include their `verdict` annotation.
+  - **`explain`:** Always explains the requested pair and displays its `verdict` annotation when one matches.
+  - **Specificity, precedence & expiration:** Catch-all globs where both endpoints match every file (such as `["**", "**"]` or `["*", "**"]`) are rejected; at least one endpoint must be an exact path or a glob with a fixed directory prefix or file extension. When multiple active verdicts match a pair, more specific endpoints win over broader globs, `directed: true` wins over undirected at equal path specificity, and `"confirmed"` wins over `"expected"` at equal specificity, independent of file order. `until` (`YYYY-MM-DD`) is an inclusive UTC date (`until >= today` in UTC is active; `until < today` is expired and emits a warning in `meta.warnings`).
+  - **Renames vs. globs:** Exact (non-glob) verdict paths are resolved through `RenameTracker` / `History` identities and active branch/working-tree renames (including multi-hop intermediate branch renames and preserving separate file identities when a rename reuses a vacated path), so a verdict on `a.ts` continues to apply after `git mv a.ts b.ts`. Glob verdicts (using `*`, `**`, `?`, `{a,b}`, or trailing `/`; literal `[id]` or `{id}` path segments are treated as exact paths) match current paths only.
 
 ## Bots and agents
 

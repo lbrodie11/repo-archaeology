@@ -41,6 +41,16 @@
     },
     "patchesIncluded": {
       "type": "boolean"
+    },
+    "verdicts": {
+      "type": "object",
+      "required": ["silenced"],
+      "properties": {
+        "silenced": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

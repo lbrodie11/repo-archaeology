@@ -22,6 +22,15 @@ import { GitError } from '../git/run.js';
 import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { parseOriginWeightsSpec, type CommitOrigin, type OriginConfig, type OriginWeights } from '../model/origin.js';
 import {
+  VERDICTS_FILE,
+  VERDICTS_SCHEMA_URL,
+  type RelationshipVerdictView,
+  type VerdictEntry,
+  type VerdictKind,
+  type VerdictsFile,
+  type VerdictsMeta,
+} from '../model/verdicts.js';
+import {
   JSON_SCHEMA_VERSION,
   withJsonContract,
   type ToolInfo,
@@ -37,6 +46,8 @@ export {
   JSON_SCHEMA_VERSION,
   RELATIONSHIPS,
   UsageError,
+  VERDICTS_FILE,
+  VERDICTS_SCHEMA_URL,
   type CommitOrigin,
   type ImportEdgeKind,
   type ImportGraphEdge,
@@ -45,8 +56,13 @@ export {
   type OriginWeights,
   type ProgressEvent,
   type Relationship,
+  type RelationshipVerdictView,
   type Settings,
   type ToolInfo,
+  type VerdictEntry,
+  type VerdictKind,
+  type VerdictsFile,
+  type VerdictsMeta,
   type VersionedJson,
 };
 
@@ -64,6 +80,9 @@ export interface MapSummaryResult {
   edges: number;
   counts: Record<Relationship, number>;
   patchesIncluded: boolean;
+  verdicts?: {
+    silenced: number;
+  };
 }
 
 export type MapJson = VersionedJson<MapSummaryResult>;
@@ -108,9 +127,19 @@ export interface Repository {
   readonly root: string;
   readonly headSha: string;
   readonly mergeBaseSha?: string;
-  diff(opts?: { limit?: number; kinds?: Relationship[]; base?: string }): Promise<DiffJson>;
-  scan(opts?: { limit?: number; kinds?: Relationship[]; uncheckedCap?: number }): Promise<ScanJson>;
-  file(path: string, opts?: { limit?: number }): Promise<FileJson>;
+  diff(opts?: {
+    limit?: number;
+    kinds?: Relationship[];
+    base?: string;
+    applyBranchVerdicts?: boolean;
+  }): Promise<DiffJson>;
+  scan(opts?: {
+    limit?: number;
+    kinds?: Relationship[];
+    uncheckedCap?: number;
+    showSilenced?: boolean;
+  }): Promise<ScanJson>;
+  file(path: string, opts?: { limit?: number; showSilenced?: boolean }): Promise<FileJson>;
   explain(a: string, b: string, opts?: { commits?: number; counterexamples?: boolean; context?: number }): Promise<ExplainJson>;
   backtest(opts?: {
     testFraction?: number;
@@ -205,6 +234,7 @@ export function createRepository(ctx: Context): Repository {
         base: opts?.base ?? ctx.base,
         limit: opts?.limit ?? 10,
         kinds: opts?.kinds ?? [...RELATIONSHIPS],
+        applyBranchVerdicts: opts?.applyBranchVerdicts,
       });
       return withJsonContract(result);
     },
@@ -215,7 +245,12 @@ export function createRepository(ctx: Context): Repository {
       const kinds = opts?.kinds ?? ['ghost', 'unknown'];
       const uncheckedCap =
         opts?.uncheckedCap !== undefined ? opts.uncheckedCap : opts?.kinds === undefined ? 5 : undefined;
-      const result = scan(ctx, { limit, kinds, uncheckedCap });
+      const result = scan(ctx, {
+        limit,
+        kinds,
+        uncheckedCap,
+        showSilenced: opts?.showSilenced,
+      });
       return withJsonContract(result);
     },
 
@@ -223,6 +258,7 @@ export function createRepository(ctx: Context): Repository {
       assertOpen();
       const result = fileReport(ctx, path, {
         limit: opts?.limit ?? 10,
+        showSilenced: opts?.showSilenced,
       });
       return withJsonContract(result);
     },

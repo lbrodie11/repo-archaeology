@@ -65,6 +65,8 @@ export interface History {
    */
   excluded: HistoryCommit[];
   stats: HistoryStats;
+  /** Historical rename paths mapped to their latest live canonical path. */
+  renames?: Record<string, string>;
 }
 
 export interface HistoryOptions extends LogOptions {
@@ -115,6 +117,8 @@ export class RenameTracker {
   private readonly usedPlain = new Set<string>();
   /** Identities to rewrite once the whole log has been read (see `apply`). */
   private readonly redirects = new Map<string, string>();
+  /** Historical old paths mapped to their newest observed target identity. */
+  private readonly renameTargets = new Map<string, string>();
   private lifetimes = 0;
   renames = 0;
 
@@ -144,6 +148,9 @@ export class RenameTracker {
         if (!this.alias.has(change.oldPath) && this.usedPlain.has(change.oldPath) && !this.redirects.has(change.oldPath)) {
           this.redirects.set(change.oldPath, names[i]!);
         }
+        if (!this.renameTargets.has(change.oldPath) && !this.usedPlain.has(change.oldPath)) {
+          this.renameTargets.set(change.oldPath, names[i]!);
+        }
         this.alias.set(change.oldPath, names[i]!);
         this.renames++;
       }
@@ -160,6 +167,18 @@ export class RenameTracker {
       current = next;
     }
     return current;
+  }
+
+  /** Returns a map of historical pre-rename paths to their latest live canonical path. */
+  latestRenames(): Record<string, string> {
+    const out: Record<string, string> = Object.create(null);
+    for (const [oldPath, target] of this.renameTargets.entries()) {
+      const resolved = this.resolve(target);
+      if (!resolved.includes(LIFETIME_SEPARATOR) && resolved !== oldPath) {
+        out[oldPath] = resolved;
+      }
+    }
+    return out;
   }
 
   get hasRedirects(): boolean {
@@ -260,7 +279,12 @@ export class HistoryBuilder {
         }
       }
     }
-    return { commits: this.commits, excluded: this.excluded, stats: this.stats };
+    return {
+      commits: this.commits,
+      excluded: this.excluded,
+      stats: this.stats,
+      renames: this.renames.latestRenames(),
+    };
   }
 }
 

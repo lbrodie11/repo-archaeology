@@ -9,8 +9,15 @@ import {
   type OriginCounts,
   type OriginShare,
 } from '../model/origin.js';
+import {
+  VERDICTS_FILE,
+  type RelationshipVerdictView,
+  type VerdictsMeta,
+} from '../model/verdicts.js';
 import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
+
+export type { RelationshipVerdictView, VerdictsMeta } from '../model/verdicts.js';
 
 export function weightingLabel(item: { weighted?: boolean; weighting?: WeightingMode }): string | undefined {
   if (!item.weighted && (!item.weighting || item.weighting === 'none')) return undefined;
@@ -57,6 +64,8 @@ export interface RelationshipView {
   crossesDirectories: boolean;
   /** Share of all shared commits by commit origin (human, agent, bot), summing to 1. */
   originShare?: OriginShare;
+  /** Repo-committed relationship verdict annotation, when matched by `.repo-archaeology.verdicts.json`. */
+  verdict?: RelationshipVerdictView;
   evidence: EvidenceView[];
 }
 
@@ -79,6 +88,8 @@ export interface Meta {
   newestCommit?: string;
   /** Counts of analyzed commits by origin. */
   origins?: OriginCounts;
+  /** Summary of `.repo-archaeology.verdicts.json` entries. */
+  verdicts?: VerdictsMeta;
   settings: {
     maxCommits: number;
     since?: string;
@@ -115,6 +126,12 @@ export function buildMeta(ctx: Context): Meta {
     oldestCommit: stats.oldestTime ? isoDate(stats.oldestTime) : undefined,
     newestCommit: stats.newestTime ? isoDate(stats.newestTime) : undefined,
     origins,
+    verdicts: ctx.verdicts?.meta ?? {
+      loaded: 0,
+      active: 0,
+      expired: 0,
+      file: VERDICTS_FILE,
+    },
     settings: {
       maxCommits: s.maxCommits,
       since: s.since,
@@ -136,6 +153,7 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
   const from = fromPath ?? model.path(companion.from);
   const to = toPath ?? model.path(companion.to);
   const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(from, to) : undefined;
+  const verdict = ctx.verdicts?.match(from, to);
   const shared = companion.stat.count;
   const fromChanges = model.changeCount[companion.from] ?? 0;
   const toChanges = model.changeCount[companion.to] ?? 0;
@@ -158,6 +176,7 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
     lastTogether: isoDate(companion.stat.lastTime),
     crossesDirectories: posix.dirname(from) !== posix.dirname(to),
     originShare: computeOriginShare(companion.stat.originCounts),
+    ...(verdict !== undefined ? { verdict } : {}),
     evidence: companion.stat.evidence.map((i) => {
       const commit = model.commits[i]!;
       return {
@@ -169,6 +188,15 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
       };
     }),
   };
+}
+
+export function formatVerdictAnnotation(verdict: RelationshipVerdictView): string {
+  const badge = verdict.kind === 'confirmed' ? c.green('confirmed') : c.yellow('expected (silenced)');
+  const metaParts: string[] = [];
+  if (verdict.by) metaParts.push(`by ${terminalText(verdict.by)}`);
+  if (verdict.until) metaParts.push(`until ${terminalText(verdict.until)}`);
+  const metaStr = metaParts.length > 0 ? c.dim(` (${metaParts.join(', ')})`) : '';
+  return `${badge}${metaStr}: ${terminalText(verdict.reason)}`;
 }
 
 function round(x: number): number {

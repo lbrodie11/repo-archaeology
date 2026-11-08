@@ -88,6 +88,10 @@ export interface BuildFindingFamiliesOptions {
    * Optional map populated with the sorted member index arrays for every qualifying commit per family ID.
    */
   commitMemberIndicesByFamily?: Map<string, number[][]>;
+  /**
+   * When true, include relationships silenced by `"expected"` verdicts when forming and completing families.
+   */
+  showSilenced?: boolean;
 }
 
 const EXTENDED_FAMILY_CONFIG = /^[\w.-]+\.config-[\w.-]+\.[cm]?[jt]s$/i;
@@ -106,6 +110,7 @@ export function evaluateParallelPair(
   pathB: string,
   allowedKinds?: readonly Relationship[],
   historyPathByMember?: ReadonlyMap<string, string>,
+  excludeSilenced = false,
 ): RelationshipView | undefined {
   if (isFamilyConfig(pathA) || isFamilyConfig(pathB)) return undefined;
   if (!parallelImplementation(pathA, pathB)) return undefined;
@@ -121,13 +126,15 @@ export function evaluateParallelPair(
   const confBA = model.confidence(stat, idB);
   const passAB = confAB >= thresholds.minConfidence;
   const passBA = confBA >= thresholds.minConfidence;
-  if (!passAB && !passBA) return undefined;
+  const allowAB = passAB && !(excludeSilenced && ctx.verdicts?.match(pathA, pathB)?.kind === 'expected');
+  const allowBA = passBA && !(excludeSilenced && ctx.verdicts?.match(pathB, pathA)?.kind === 'expected');
+  if (!allowAB && !allowBA) return undefined;
   const rel = ctx.classifier.classify(pathA, pathB);
   if (allowedKinds && !allowedKinds.includes(rel)) return undefined;
 
   const scoreAB = wilsonLowerBound(confAB, model.effectiveChanges(idA));
   const scoreBA = wilsonLowerBound(confBA, model.effectiveChanges(idB));
-  const forward = passAB && (!passBA || scoreAB > scoreBA || (scoreAB === scoreBA && confAB >= confBA));
+  const forward = allowAB && (!allowBA || scoreAB > scoreBA || (scoreAB === scoreBA && confAB >= confBA));
   const companion: Companion = forward
     ? { from: idA, to: idB, stat, confidence: confAB, reverseConfidence: confBA, score: scoreAB }
     : { from: idB, to: idA, stat, confidence: confBA, reverseConfidence: confAB, score: scoreBA };
@@ -197,12 +204,13 @@ interface RankedCommitEvidence {
  *   in a single pass over `ctx.model.commits` rather than summing pairwise counts.
  */
 export function buildFindingFamilies(
-  ctx: Pick<Context, 'model'> & Partial<Pick<Context, 'thresholds' | 'classifier' | 'settings'>>,
+  ctx: Pick<Context, 'model'> & Partial<Pick<Context, 'thresholds' | 'classifier' | 'settings' | 'verdicts'>>,
   relationships: readonly RelationshipView[],
   options: BuildFindingFamiliesOptions = {},
 ): FindingFamilyView[] {
   const { model } = ctx;
-  const { historyPathByMember, allowedKinds, commitMemberIndicesByFamily } = options;
+  const { historyPathByMember, allowedKinds, commitMemberIndicesByFamily, showSilenced } = options;
+  const excludeSilenced = !showSilenced;
   const canEvaluateModelPairs =
     allowedKinds !== undefined
     && ctx.thresholds !== undefined
@@ -215,6 +223,12 @@ export function buildFindingFamilies(
     if (isFamilyConfig(rel.from) || isFamilyConfig(rel.to)) continue;
     if (!parallelImplementation(rel.from, rel.to)) continue;
     if (allowedKinds && !allowedKinds.includes(rel.relationship)) continue;
+    if (
+      excludeSilenced
+      && (rel.verdict?.kind === 'expected' || ctx.verdicts?.match(rel.from, rel.to)?.kind === 'expected')
+    ) {
+      continue;
+    }
     const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
     const key = `${u}\u0000${v}`;
     const existing = bestPairByKey.get(key);
@@ -295,7 +309,14 @@ export function buildFindingFamilies(
             const pathB = compNodes[j]!;
             const key = `${pathA}\u0000${pathB}`;
             if (existingPairKeys.has(key)) continue;
-            const extraView = evaluateParallelPair(ctx as Context, pathA, pathB, allowedKinds, historyPathByMember);
+            const extraView = evaluateParallelPair(
+              ctx as Context,
+              pathA,
+              pathB,
+              allowedKinds,
+              historyPathByMember,
+              excludeSilenced,
+            );
             if (extraView) {
               compPairs.push(extraView);
               existingPairKeys.add(key);
