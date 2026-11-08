@@ -287,6 +287,20 @@ Use it to choose thresholds for your repo. To avoid fooling yourself, tune with 
 
 `repo-archaeology backtest --follow-ups [--follow-up-window <hours>]` evaluates multi-commit omissions by checking whether files suggested for a commit were untouched in that commit, then subsequently modified by the same author within the time window (`48` hours by default) in a commit that either shares a modified file with the original commit or is immediately consecutive. Subject cues (`fix`/`fixed`/`fixup`, `forgot`, `missed`/`missing`, `follow-up`, `oops`, `amend`, `repair`, `patch`, `sync`, `companion`) are reported as an optional signal label (`subject-cue`), not a requirement. Follow-up matches are heuristic proxies for multi-commit follow-ups, not proof of prevented bugs.
 
+### Analyze a past commit (`--head <ref>`)
+
+Pass `--head <ref>` to run any command (`scan`, `diff`, `file`, `explain`, `backtest`, or `map`) as if `<ref>` were checked out, without touching `HEAD`, `.git/index`, or your working tree. History is restricted to ancestors of `<ref>`, `.repo-archaeology.json` is loaded from `<ref>`'s tree (with CLI flags retaining precedence), current files come from `git ls-tree <ref>`, and import classification reads regular-file blobs from `<ref>` via a single `git cat-file --batch` session:
+
+```bash
+# Replay a historical pull request at its exact head and base commits
+repo-archaeology diff --head <sha> --base <sha>
+
+# Run a chronological holdout backtest as of a past release tag
+repo-archaeology backtest --head v1.2.0
+```
+
+`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). If `<ref>` contains a `.repo-archaeology.json` that the current version rejects, Repo Archaeology falls back to the working-tree configuration and records a warning in `meta.warnings`. JSON outputs include `meta.head: { ref, sha }`.
+
 ## How to read the results
 
 Every relationship has a kind:
@@ -332,6 +346,7 @@ Global options work with every command:
 | `--no-default-ignores` | | Keep lockfiles, build output, snapshots and changelogs |
 | `--skip-commits <regex>` | | Skip commits whose subject matches, e.g. `"^(chore\|style)\b"` |
 | `--half-life <days>` | | Weight recent commits more |
+| `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 
 Settings can also live in `.repo-archaeology.json` at the repository root (flags win):

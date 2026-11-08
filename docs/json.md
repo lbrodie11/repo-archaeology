@@ -82,6 +82,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | --- | --- | --- | --- |
 | `tool` | `"repo-archaeology"` | Yes | Legacy tool identifier retained for compatibility. |
 | `root` | `string` | Yes | Absolute path to the Git repository root. |
+| `head` | `{ ref: string, sha: string }` | Optional | Present when `--head <ref>` was passed; records the raw ref string and resolved 40–64 hex commit SHA. |
 | `commitsRead` | `integer` | Yes | Total non-merge commits read from `git log`. |
 | `commitsAnalyzed` | `integer` | Yes | Usable commits retained after sweep and subject filters. |
 | `sweepsSkipped` | `integer` | Yes | Commits skipped because they touched more than `maxFilesPerCommit` files. |
@@ -287,6 +288,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | --- | --- | --- | --- |
 | `schemaVersion` | `1` | Yes | JSON contract major version. |
 | `tool` | `{ name, version }` | Yes | Tool name and semver version. |
+| `meta` | `Meta` | Yes | Repository metadata (`root` is sanitized to the repository folder name; includes `meta.head` when `--head <ref>` is passed). |
 | `file` | `string` | Yes | Absolute path to the written HTML file. |
 | `nodes` | `integer` | Yes | Number of file nodes drawn in the map. |
 | `edges` | `integer` | Yes | Number of relationship edges drawn in the map. |

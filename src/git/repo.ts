@@ -67,11 +67,42 @@ export async function listCurrentFiles(root: string): Promise<Set<string>> {
   return files;
 }
 
-/** Files present in a commit tree (`git ls-tree -r --name-only -z`). */
-export async function listTreeFiles(root: string, rev = 'HEAD'): Promise<Set<string>> {
+export interface TreeFileSet extends Set<string> {
+  /** Git tree entry mode (`100644`, `100755`, `120000`, etc.) for each path. */
+  readonly modes: ReadonlyMap<string, string>;
+}
+
+export function isRegularTreeMode(mode: string | undefined): boolean {
+  return mode === '100644' || mode === '100755';
+}
+
+export function parseLsTree(out: string): TreeFileSet {
+  const modes = new Map<string, string>();
+  const files = new Set<string>();
+  for (const entry of splitNul(out)) {
+    const tab = entry.indexOf('\t');
+    if (tab === -1) continue;
+    const meta = entry.slice(0, tab);
+    const path = entry.slice(tab + 1);
+    const mode = meta.split(' ', 1)[0] ?? '';
+    // Skip submodule gitlinks (160000); keep regular files (100644/100755) and symlinks (120000)
+    // in the path set to match `git ls-files`, while recording modes so non-regular entries are not read as source.
+    if (mode === '160000' || path === '') continue;
+    files.add(path);
+    modes.set(path, mode);
+  }
+  return Object.defineProperty(files, 'modes', {
+    value: modes,
+    enumerable: false,
+    writable: false,
+  }) as TreeFileSet;
+}
+
+/** Files present in a commit tree (`git ls-tree -r -z`), with entry modes attached. */
+export async function listTreeFiles(root: string, rev = 'HEAD'): Promise<TreeFileSet> {
   if (rev.startsWith('-')) throw new GitError(`Invalid revision: ${rev}`);
-  const out = await runGit(root, ['ls-tree', '-r', '--name-only', '-z', rev]);
-  return new Set(splitNul(out));
+  const out = await runGit(root, ['ls-tree', '-r', '-z', '--end-of-options', rev]);
+  return parseLsTree(out);
 }
 
 /** True when `base..head` contains at least one merge commit. */

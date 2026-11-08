@@ -116,6 +116,23 @@
         }
       }
     },
+    "HeadInfo": {
+      "type": "object",
+      "required": [
+        "ref",
+        "sha"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        }
+      }
+    },
     "Meta": {
       "type": "object",
       "required": [
@@ -138,6 +155,9 @@
         "root": {
           "type": "string",
           "minLength": 1
+        },
+        "head": {
+          "$ref": "#/$defs/HeadInfo"
         },
         "commitsRead": {
           "type": "integer",

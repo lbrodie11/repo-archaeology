@@ -92,10 +92,15 @@ export const EVALUATION_MAX_FILES = 25;
  * among the files that really changed with it, using a frozen training model.
  */
 export function backtest(ctx: Context, options: BacktestOptions): BacktestResult {
-  const isGhost = options.ghosts ? (from: string, to: string) => ctx.currentFiles.has(from)
-    && ctx.currentFiles.has(to) && ctx.classifier.classify(from, to) === 'ghost' : undefined;
-  const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded, isGhost);
-  return { ...result, meta: buildMeta(ctx) };
+  if (options.ghosts) ctx.open?.();
+  try {
+    const isGhost = options.ghosts ? (from: string, to: string) => ctx.currentFiles.has(from)
+      && ctx.currentFiles.has(to) && ctx.classifier.classify(from, to) === 'ghost' : undefined;
+    const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded, isGhost);
+    return { ...result, meta: buildMeta(ctx) };
+  } finally {
+    ctx.close?.();
+  }
 }
 
 /**

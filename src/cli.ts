@@ -69,6 +69,7 @@ function collect(value: string, previous: string[] = []): string[] {
 
 interface GlobalOptions {
   cwd?: string;
+  head?: string;
   maxCommits?: number;
   since?: string;
   maxFiles?: number;
@@ -105,6 +106,7 @@ program
   .description('Dig through git history to find files that change together, especially ghost wires: files that keep changing together without importing each other.')
   .version(version)
   .option('-C, --cwd <path>', 'run as if started in <path>')
+  .option('--head <ref>', 'analyze repository at <ref> without checking it out')
   .option('--max-commits <n>', 'analyze at most this many recent commits (default 5000)', positiveInt)
   .option('--since <date>', 'only use commits after this date, e.g. "2 years ago" or 2024-01-01')
   .option('--max-files <n>', 'skip commits that touch more files than this, like formatting sweeps (default 25)', positiveInt)
@@ -126,7 +128,7 @@ program
   .addOption(kindsOption('relationship kinds to show', ['ghost', 'unknown']))
   .action(async (opts: { limit: number; kinds: Relationship[] }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
     const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
     const result = scan(ctx, options);
@@ -164,7 +166,7 @@ program
       if (opts.jsonOut !== undefined) {
         validateJsonOutPath(opts.jsonOut);
       }
-      const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
+      const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
       const result = await diff(ctx, opts);
       if (opts.jsonOut !== undefined) {
         writeJsonContractFile(opts.jsonOut, result);
@@ -194,7 +196,7 @@ program
   .option('-n, --limit <n>', 'how many related files to show', positiveInt, 10)
   .action(async (path: string, opts: { limit: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     const result = fileReport(ctx, path, opts);
     if (global.json) printJson(result);
     else printFile(result);
@@ -211,7 +213,7 @@ program
   .option('-U, --context <lines>', 'lines of unified diff context around each hunk (default 2, max 10)', nonNegativeInt, 2)
   .action(async (fileA: string, fileB: string, opts: { base?: string; commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base });
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
     const result = await explain(ctx, fileA, fileB, {
       commits: opts.commits,
       counterexamples: opts.counterexamples,
@@ -235,7 +237,7 @@ program
       throw new UsageError('--follow-up-window requires --follow-ups.');
     }
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow });
     if (global.json) printJson(result);
     else printBacktest(result);
@@ -251,7 +253,7 @@ program
   .option('--no-open', 'write the file without opening a browser')
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global));
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     const options = {
       ...opts,
       uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? Math.max(1, Math.floor(opts.edges * 0.1)) : undefined,
@@ -259,8 +261,16 @@ program
     const { file, data } = await writeMap(ctx, options);
     const shouldOpen = opts.open && !global.json && process.stdout.isTTY === true;
     if (shouldOpen) openInBrowser(file);
-    if (global.json) printJson({ file, nodes: data.nodes.length, edges: data.edges.length, counts: data.counts, patchesIncluded: Boolean(data.patchesIncluded) });
-    else printMap(file, data, shouldOpen);
+    if (global.json) {
+      printJson({
+        meta: data.meta,
+        file,
+        nodes: data.nodes.length,
+        edges: data.edges.length,
+        counts: data.counts,
+        patchesIncluded: Boolean(data.patchesIncluded),
+      });
+    } else printMap(file, data, shouldOpen);
   });
 
 for (const cmd of program.commands) {
@@ -275,17 +285,19 @@ program.action(async () => {
     program.error(`error: unknown command '${terminalText(unexpected)}'${suggestion ? `\n(Did you mean ${suggestion}?)` : ''}`, { exitCode: 2, code: 'commander.unknownCommand' });
   }
   const global = program.opts<GlobalOptions>();
-  const ctx = await loadContext(global.cwd, settingsFrom(global));
-  const changes = await workingTreeChanges(ctx.root);
+  const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
   let changedWithoutHistory = 0;
-  if (changes.length > 0) {
-    const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
-    if (result.changed.some((file) => file.hasHistory)) {
-      if (global.json) printJson({ mode: 'diff', ...result });
-      else printDiff(result);
-      return;
+  if (!ctx.head) {
+    const changes = await workingTreeChanges(ctx.root);
+    if (changes.length > 0) {
+      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
+      if (result.changed.some((file) => file.hasHistory)) {
+        if (global.json) printJson({ mode: 'diff', ...result });
+        else printDiff(result);
+        return;
+      }
+      changedWithoutHistory = result.changed.length;
     }
-    changedWithoutHistory = result.changed.length;
   }
 
   const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };

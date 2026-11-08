@@ -1,4 +1,4 @@
-import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, type Context } from '../context.js';
+import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, UsageError, type Context } from '../context.js';
 import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
 import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
@@ -118,12 +118,14 @@ const MERGE_FALLBACK_WARNING =
 
 export async function collectChanges(ctx: Context, base?: string, warnings?: string[]): Promise<ChangedFile[]> {
   const lists: ChangedFile[][] = [];
+  const headSha = ctx.head?.sha;
   if (base) {
     const mergeBaseSha = ctx.base === base && ctx.mergeBaseSha !== undefined
       ? ctx.mergeBaseSha
-      : await resolveBaseline(ctx.root, base);
+      : await resolveBaseline(ctx.root, base, headSha ?? 'HEAD');
     lists.push(
       await branchChanges(ctx.root, mergeBaseSha, {
+        head: headSha,
         onMergeFallback: () => {
           if (warnings && !warnings.includes(MERGE_FALLBACK_WARNING)) {
             warnings.push(MERGE_FALLBACK_WARNING);
@@ -132,7 +134,9 @@ export async function collectChanges(ctx: Context, base?: string, warnings?: str
       }),
     );
   }
-  lists.push(await workingTreeChanges(ctx.root));
+  if (!headSha) {
+    lists.push(await workingTreeChanges(ctx.root));
+  }
   return mergeChanges(...lists);
 }
 
@@ -522,39 +526,47 @@ export function suggestMissing(
 }
 
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
-  const isolatedCtx = await isolateBaselineContext(ctx, options.base);
-  const localWarnings = [...isolatedCtx.warnings];
-  const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
-  changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
-  const { changed, totalSuggestions, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
-  const meta = buildMeta(effectiveCtx);
-  const baselineSha = effectiveCtx.mergeBaseSha ?? effectiveCtx.headSha;
-  const evaluation: DiffEvaluation = {
-    ...(options.base !== undefined ? { targetBranchRef: options.base } : {}),
-    ...(effectiveCtx.headSha !== undefined ? { headSha: effectiveCtx.headSha } : {}),
-    ...(options.base !== undefined && effectiveCtx.mergeBaseSha !== undefined ? { mergeBaseSha: effectiveCtx.mergeBaseSha } : {}),
-    ...(baselineSha !== undefined ? { baselineSha } : {}),
-    commitsAnalyzed: meta.commitsAnalyzed,
-    effectiveOptions: {
-      minShared: meta.settings.minShared,
-      minConfidence: meta.settings.minConfidence,
-      maxCommits: meta.settings.maxCommits,
-      maxFilesPerCommit: meta.settings.maxFilesPerCommit,
-      ...(meta.settings.halfLifeDays !== undefined ? { halfLifeDays: meta.settings.halfLifeDays } : {}),
-      ...(meta.settings.since !== undefined ? { since: meta.settings.since } : {}),
-      ...(meta.settings.skipCommits !== undefined ? { skipCommits: meta.settings.skipCommits } : {}),
-    },
-  };
-  return {
-    meta,
-    base: options.base,
-    evaluation,
-    changed,
-    totalSuggestions,
-    suggestions,
-    families,
-    ...(silence ? { silence } : {}),
-  };
+  if (ctx.head && !options.base && changes === undefined) {
+    throw new UsageError('diff --head requires --base <ref>.');
+  }
+  ctx.open?.();
+  try {
+    const isolatedCtx = await isolateBaselineContext(ctx, options.base);
+    const localWarnings = [...isolatedCtx.warnings];
+    const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
+    changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
+    const { changed, totalSuggestions, suggestions, families, silence } = suggestMissing(effectiveCtx, changes, options);
+    const meta = buildMeta(effectiveCtx);
+    const baselineSha = effectiveCtx.mergeBaseSha ?? effectiveCtx.headSha;
+    const evaluation: DiffEvaluation = {
+      ...(options.base !== undefined ? { targetBranchRef: options.base } : {}),
+      ...(effectiveCtx.headSha !== undefined ? { headSha: effectiveCtx.headSha } : {}),
+      ...(options.base !== undefined && effectiveCtx.mergeBaseSha !== undefined ? { mergeBaseSha: effectiveCtx.mergeBaseSha } : {}),
+      ...(baselineSha !== undefined ? { baselineSha } : {}),
+      commitsAnalyzed: meta.commitsAnalyzed,
+      effectiveOptions: {
+        minShared: meta.settings.minShared,
+        minConfidence: meta.settings.minConfidence,
+        maxCommits: meta.settings.maxCommits,
+        maxFilesPerCommit: meta.settings.maxFilesPerCommit,
+        ...(meta.settings.halfLifeDays !== undefined ? { halfLifeDays: meta.settings.halfLifeDays } : {}),
+        ...(meta.settings.since !== undefined ? { since: meta.settings.since } : {}),
+        ...(meta.settings.skipCommits !== undefined ? { skipCommits: meta.settings.skipCommits } : {}),
+      },
+    };
+    return {
+      meta,
+      base: options.base,
+      evaluation,
+      changed,
+      totalSuggestions,
+      suggestions,
+      families,
+      ...(silence ? { silence } : {}),
+    };
+  } finally {
+    ctx.close?.();
+  }
 }
 
 export function printDiff(result: DiffResult): void {
