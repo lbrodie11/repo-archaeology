@@ -20,6 +20,7 @@ export type ImportEdgeKind = 'static' | 'dynamic' | 'reexport' | 'require';
 export interface ExtractedImport {
   specifier: string;
   kind: ImportEdgeKind;
+  typeOnly?: boolean;
 }
 
 /**
@@ -64,15 +65,42 @@ export function extractDetailedDependencies(
 
   const visit = (node: TS.Node): void => {
     if (ts.isImportDeclaration(node) && isLiteral(node.moduleSpecifier)) {
-      imports.push({ specifier: node.moduleSpecifier.text, kind: 'static' });
+      const clause = node.importClause;
+      const allNamedTypeOnly =
+        clause !== undefined &&
+        clause.name === undefined &&
+        clause.namedBindings !== undefined &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.length > 0 &&
+        clause.namedBindings.elements.every((el) => el.isTypeOnly);
+      const typeOnly = Boolean(clause?.isTypeOnly || allNamedTypeOnly);
+      imports.push({
+        specifier: node.moduleSpecifier.text,
+        kind: 'static',
+        ...(typeOnly ? { typeOnly: true } : {}),
+      });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && isLiteral(node.moduleSpecifier)) {
-      imports.push({ specifier: node.moduleSpecifier.text, kind: 'reexport' });
+      const allNamedTypeOnly =
+        node.exportClause !== undefined &&
+        ts.isNamedExports(node.exportClause) &&
+        node.exportClause.elements.length > 0 &&
+        node.exportClause.elements.every((el) => el.isTypeOnly);
+      const typeOnly = Boolean(node.isTypeOnly || allNamedTypeOnly);
+      imports.push({
+        specifier: node.moduleSpecifier.text,
+        kind: 'reexport',
+        ...(typeOnly ? { typeOnly: true } : {}),
+      });
     } else if (
       ts.isImportEqualsDeclaration(node) &&
       ts.isExternalModuleReference(node.moduleReference) &&
       isLiteral(node.moduleReference.expression)
     ) {
-      imports.push({ specifier: node.moduleReference.expression.text, kind: 'require' });
+      imports.push({
+        specifier: node.moduleReference.expression.text,
+        kind: 'require',
+        ...(node.isTypeOnly ? { typeOnly: true } : {}),
+      });
     } else if (ts.isCallExpression(node)) {
       const callee = node.expression;
       const arg = node.arguments[0];
@@ -88,7 +116,7 @@ export function extractDetailedDependencies(
       ts.isLiteralTypeNode(node.argument) &&
       isLiteral(node.argument.literal)
     ) {
-      imports.push({ specifier: node.argument.literal.text, kind: 'static' });
+      imports.push({ specifier: node.argument.literal.text, kind: 'static', typeOnly: true });
     }
     ts.forEachChild(node, visit);
   };

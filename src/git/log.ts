@@ -1,4 +1,4 @@
-import { streamGitNulTokens, type GitSpawnObserver } from './run.js';
+import { runGit, streamGitNulTokens, type GitSpawnObserver } from './run.js';
 
 export interface RawChange {
   /** First letter of git's name-status code: A, M, D, R, C, T, U, X, B. */
@@ -45,21 +45,55 @@ export const MAX_TRAILERS_PER_COMMIT = 20;
 /**
  * `%(trailers:only,unfold,separator=%x1d)` requires Git >= 2.22.0 (released June 2019).
  * Trailers are placed before `%s` so commit subjects containing control separators remain intact.
+ *
+ * CACHE INVARIANT: parsed `RawCommit` records are persisted by the history cache
+ * (`src/git/cache.ts`). `CACHE_FORMAT_SIGNATURE` hashes `CACHE_VERSION`, `FORMAT`,
+ * `DIFF_ARGS`, `MAX_TRAILERS_PER_COMMIT`, and `CONFIG_OVERRIDES` so flag/format edits
+ * invalidate automatically, and any change to `LogParser` or the shape of `RawCommit` /
+ * `RawChange` / `RawTrailer` MUST also bump `CACHE_VERSION` in `src/git/cache.ts`.
+ * Note for RA-12 (mailmap): `FORMAT` uses raw `%an` / `%ae`; prefer post-cache mailmap
+ * canonicalization in `HistoryBuilder`, or bump `CACHE_VERSION` if `FORMAT` changes.
  */
 export const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
+
+/** Diff flags shared by every history read, so cached and freshly parsed records match. */
+export const DIFF_ARGS: readonly string[] = Object.freeze(['-z', '-M', '--name-status', '--no-ext-diff', FORMAT]);
 
 /**
  * Builds the `git log` arguments. Merge commits are skipped (their diffs repeat
  * work already counted on the branch), and `-M` turns delete+add pairs into renames.
  */
 export function logArgs(options: LogOptions): string[] {
-  const args = ['log', '--no-merges', '-z', '-M', '--name-status', '--no-ext-diff', FORMAT];
+  const args = ['log', '--no-merges', ...DIFF_ARGS];
   if (options.topoOrder) args.push('--topo-order');
   if (options.reverse) args.push('--reverse');
   if (options.maxCommits && options.maxCommits > 0) args.push(`--max-count=${Math.floor(options.maxCommits)}`);
   if (options.since) args.push(`--since=${options.since}`);
   args.push('--end-of-options', options.rev ?? 'HEAD', '--');
   return args;
+}
+
+/**
+ * Builds `git rev-list` arguments that walk exactly the commits (and order) `logArgs`
+ * would print for the same options, without computing any diffs.
+ */
+export function revListArgs(options: LogOptions): string[] {
+  const args = ['rev-list', '--no-merges'];
+  if (options.topoOrder) args.push('--topo-order');
+  if (options.reverse) args.push('--reverse');
+  if (options.maxCommits && options.maxCommits > 0) args.push(`--max-count=${Math.floor(options.maxCommits)}`);
+  if (options.since) args.push(`--since=${options.since}`);
+  args.push('--end-of-options', options.rev ?? 'HEAD', '--');
+  return args;
+}
+
+/**
+ * `git log` arguments that print the listed commits (one hash per stdin line) with the same
+ * format and diff options as `logArgs`, without walking their history. `--no-walk` shows each
+ * commit against its first parent, exactly as it appears inside a normal walk.
+ */
+export function logByHashArgs(): string[] {
+  return ['log', '--no-walk=unsorted', ...DIFF_ARGS, '--stdin'];
 }
 
 /**
@@ -154,6 +188,29 @@ export async function readLog(root: string, options: LogOptions, onCommit: (comm
   await streamGitNulTokens(root, logArgs(options), (token) => parser.push(token), {
     signal: options.signal,
     onSpawn: options.onSpawn,
+  });
+  parser.end();
+}
+
+/** Lists the hashes `readLog` would visit for `options`, in the same order. */
+export async function listLogHashes(root: string, options: LogOptions): Promise<string[]> {
+  const out = await runGit(root, revListArgs(options), { signal: options.signal, onSpawn: options.onSpawn });
+  return out.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+}
+
+/** Parses specific commits by hash with one `git log --no-walk --stdin` call (order not guaranteed). */
+export async function readCommitsByHash(
+  root: string,
+  hashes: readonly string[],
+  onCommit: (commit: RawCommit) => void,
+  options?: Pick<LogOptions, 'signal' | 'onSpawn'>,
+): Promise<void> {
+  if (hashes.length === 0) return;
+  const parser = new LogParser(onCommit);
+  await streamGitNulTokens(root, logByHashArgs(), (token) => parser.push(token), {
+    signal: options?.signal,
+    onSpawn: options?.onSpawn,
+    input: `${hashes.join('\n')}\n`,
   });
   parser.end();
 }

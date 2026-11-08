@@ -126,6 +126,7 @@ interface GlobalOptions {
   links?: boolean;
   color?: boolean;
   fullEvidence?: boolean;
+  cache: boolean;
   json?: boolean;
 }
 
@@ -142,6 +143,7 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
     style: opts.style,
+    cache: opts.cache === false ? { enabled: false } : undefined,
   };
 }
 
@@ -237,6 +239,7 @@ program
   .option('--ascii', 'use ASCII-only characters in rich terminal output')
   .addOption(new Option('--no-links', 'disable OSC 8 hyperlinks in rich terminal output'))
   .option('--full-evidence', 'show all supporting commit receipts inline in rich terminal output')
+  .option('--no-cache', 'do not read or write the persistent history cache (.git/repo-archaeology/cache/)')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
   .allowExcessArguments(true)

@@ -297,6 +297,117 @@
         }
       }
     },
+    "ImportResolutionVia": {
+      "type": "string",
+      "enum": [
+        "relative",
+        "paths",
+        "workspace",
+        "exports",
+        "imports"
+      ]
+    },
+    "ImportUnresolvedReasonCode": {
+      "type": "string",
+      "enum": [
+        "alias-unmatched",
+        "unknown-package",
+        "target-missing",
+        "not-exported",
+        "invalid-target",
+        "unsupported-config",
+        "ambiguous-package"
+      ]
+    },
+    "ImportsCoverageMeta": {
+      "type": "object",
+      "required": [
+        "scope",
+        "filesScanned",
+        "internalEdges",
+        "external",
+        "unresolved",
+        "dynamicLoads",
+        "unsupportedFiles",
+        "sourceUnavailable",
+        "heuristicEdges",
+        "unresolvedByReason"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "repository",
+            "analyzed-files"
+          ]
+        },
+        "filesScanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internalEdges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "external": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolved": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dynamicLoads": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupportedFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceUnavailable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "heuristicEdges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolvedByReason": {
+          "type": "object",
+          "properties": {
+            "alias-unmatched": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown-package": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "target-missing": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not-exported": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "invalid-target": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unsupported-config": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ambiguous-package": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
     "Meta": {
       "type": "object",
       "required": [
@@ -361,6 +472,9 @@
         "verdicts": {
           "$ref": "#/$defs/VerdictsMeta"
         },
+        "imports": {
+          "$ref": "#/$defs/ImportsCoverageMeta"
+        },
         "settings": {
           "$ref": "#/$defs/Settings"
         },
@@ -369,6 +483,40 @@
           "items": {
             "type": "string"
           }
+        },
+        "cache": {
+          "$ref": "#/$defs/CacheMeta",
+          "description": "History cache usage for this run (RA-04). Optional; omitted by producers that predate RA-04."
+        }
+      }
+    },
+    "CacheMeta": {
+      "type": "object",
+      "description": "Persistent history cache usage. Excluded from equivalence comparisons: cached and --no-cache runs differ only here.",
+      "required": [
+        "enabled",
+        "hits",
+        "misses"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "False when --no-cache or cache.enabled=false disabled the cache."
+        },
+        "hits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Needed commits served from the cache."
+        },
+        "misses": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Needed commits parsed from git log in this run."
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cache directory relative to the repository root (POSIX separators), or the literal \"$REPO_ARCHAEOLOGY_CACHE_DIR\" when set by that environment variable. Never an absolute path."
         }
       }
     },

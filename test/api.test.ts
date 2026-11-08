@@ -50,6 +50,17 @@ function assertMatchesSchema(value: unknown, schemaFile: string): void {
   assert.deepEqual(errors, [], `Schema validation failed for ${schemaFile}:\n${errors.join('\n')}`);
 }
 
+/**
+ * `meta.cache` (RA-04) reports per-run cache hits/misses, so it legitimately differs between
+ * an API session and a later CLI run on the same cache; everything else must stay identical.
+ */
+function withoutCacheMeta<T>(payload: T): T {
+  if (typeof payload !== 'object' || payload === null) return payload;
+  const clone = structuredClone(payload) as T & { meta?: { cache?: unknown } };
+  if (clone.meta && typeof clone.meta === 'object') delete clone.meta.cache;
+  return clone;
+}
+
 function canonicalPosixPath(p: string): string {
   return realpathSync.native(p).replace(/\\/g, '/');
 }
@@ -189,7 +200,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliScan = JSON.parse(
         runCli(['scan', '--limit', '5', '--kinds', 'ghost,direct', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiScan, cliScan);
+      assert.deepEqual(withoutCacheMeta(apiScan), withoutCacheMeta(cliScan));
       assertMatchesSchema(apiScan, 'scan.schema.json');
 
       // diff (working-tree clean -> silence)
@@ -197,7 +208,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliCleanDiff = JSON.parse(
         runCli(['diff', '--limit', '5', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiCleanDiff, cliCleanDiff);
+      assert.deepEqual(withoutCacheMeta(apiCleanDiff), withoutCacheMeta(cliCleanDiff));
       assertMatchesSchema(apiCleanDiff, 'diff.schema.json');
 
       // file (session opened in join(repo.dir, 'src') resolves paths relative to cwd or repo root)
@@ -205,7 +216,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliFile = JSON.parse(
         runCli(['file', 'src/adapter/bun/serve-static.ts', '--limit', '5', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiFile, cliFile);
+      assert.deepEqual(withoutCacheMeta(apiFile), withoutCacheMeta(cliFile));
       assertMatchesSchema(apiFile, 'file.schema.json');
 
       // explain
@@ -230,7 +241,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           repo.dir,
         ).stdout,
       );
-      assert.deepEqual(apiExplain, cliExplain);
+      assert.deepEqual(withoutCacheMeta(apiExplain), withoutCacheMeta(cliExplain));
       assertMatchesSchema(apiExplain, 'explain.schema.json');
 
       // backtest
@@ -261,20 +272,20 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           repo.dir,
         ).stdout,
       );
-      assert.deepEqual(apiBacktest, cliBacktest);
+      assert.deepEqual(withoutCacheMeta(apiBacktest), withoutCacheMeta(cliBacktest));
       assertMatchesSchema(apiBacktest, 'backtest.schema.json');
 
       // importGraph
       const apiImports: ImportGraphJson = await defaultSession.importGraph();
       const cliImports = JSON.parse(runCli(['imports', '--json'], repo.dir).stdout);
-      assert.deepEqual(apiImports, cliImports);
+      assert.deepEqual(withoutCacheMeta(apiImports), withoutCacheMeta(cliImports));
       assertMatchesSchema(apiImports, 'import-graph.schema.json');
 
       const apiFilteredImports: ImportGraphJson = await defaultSession.importGraph({ files: ['db.ts'] });
       const cliFilteredImports = JSON.parse(
         runCli(['imports', '--files', 'src/db.ts', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiFilteredImports, cliFilteredImports);
+      assert.deepEqual(withoutCacheMeta(apiFilteredImports), withoutCacheMeta(cliFilteredImports));
       assertMatchesSchema(apiFilteredImports, 'import-graph.schema.json');
     } finally {
       await defaultSession.close();
@@ -294,7 +305,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliDiff = JSON.parse(
         runCli(['diff', '--base', baseRefSha, '--limit', '5', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiDiff, cliDiff);
+      assert.deepEqual(withoutCacheMeta(apiDiff), withoutCacheMeta(cliDiff));
       assert.ok(apiDiff.suggestions.length >= 1, 'expected suggestions for bun serve-static change');
       assertMatchesSchema(apiDiff, 'diff.schema.json');
 
@@ -321,7 +332,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           repo.dir,
         ).stdout,
       );
-      assert.deepEqual(apiBaseExplain, cliBaseExplain);
+      assert.deepEqual(withoutCacheMeta(apiBaseExplain), withoutCacheMeta(cliBaseExplain));
       assertMatchesSchema(apiBaseExplain, 'explain.schema.json');
     } finally {
       await baseSession.close();
@@ -338,7 +349,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliHeadDiff = JSON.parse(
         runCli(['--head', 'HEAD~1', 'diff', '--base', 'HEAD~3', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiHeadDiff, cliHeadDiff);
+      assert.deepEqual(withoutCacheMeta(apiHeadDiff), withoutCacheMeta(cliHeadDiff));
     } finally {
       await headBaseSession.close();
     }
@@ -352,7 +363,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       const cliHeadImports = JSON.parse(
         runCli(['--head', 'HEAD~1', 'imports', '--json'], repo.dir).stdout,
       );
-      assert.deepEqual(apiHeadImports, cliHeadImports);
+      assert.deepEqual(withoutCacheMeta(apiHeadImports), withoutCacheMeta(cliHeadImports));
     } finally {
       await headOnlySession.close();
     }
@@ -377,12 +388,13 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       await session.close();
     }
 
+    // With the RA-04 history cache, one history load is one `git rev-list --no-merges` walk plus at
+    // most one `git log --no-walk --stdin` for uncached commits (none when the cache is warm).
+    const historyWalks = spawnedGitArgs.filter((args) => args[0] === 'rev-list' && args.includes('--no-merges'));
     const gitLogCalls = spawnedGitArgs.filter((args) => args[0] === 'log');
-    assert.equal(
-      gitLogCalls.length,
-      1,
-      `Expected git log to be called exactly once per session, got ${gitLogCalls.length}:\n${spawnedGitArgs.map((a) => a.join(' ')).join('\n')}`,
-    );
+    const spawnLog = spawnedGitArgs.map((a) => a.join(' ')).join('\n');
+    assert.equal(historyWalks.length, 1, `Expected history to be walked exactly once per session, got ${historyWalks.length}:\n${spawnLog}`);
+    assert.ok(gitLogCalls.length <= 1, `Expected git log to be called at most once per session, got ${gitLogCalls.length}:\n${spawnLog}`);
   });
 
   it('never writes to stdout or stderr in library mode and reports progress via onProgress', () => {
@@ -447,36 +459,42 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'src/adapter/bun/serve-static.ts',
             specifier: './adapter/bun/serve-static.js',
             kind: 'dynamic',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/db.ts',
             specifier: './db.js',
             kind: 'reexport',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/db.ts',
             specifier: './db.js',
             kind: 'static',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/types.d.ts',
             specifier: './types.d.ts',
             kind: 'static',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/util.ts',
             specifier: './util',
             kind: 'require',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/util.ts',
             specifier: '@/util',
             kind: 'static',
+            via: 'paths',
           },
         ],
       );
@@ -487,6 +505,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           from: 'src/api.ts',
           specifier: './does-not-exist.js',
           reason: 'unmatched',
+          reasonCode: 'target-missing',
         },
       ]);
 
@@ -500,6 +519,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           from: 'src/api.ts',
           specifier: './does-not-exist.js',
           reason: 'unmatched',
+          reasonCode: 'target-missing',
         },
       ]);
 
@@ -526,6 +546,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
     // while require() selects the "require" condition in package.json exports.
     const cjsEsmRepo = new FixtureRepo();
     try {
+      cjsEsmRepo.write('package.json', JSON.stringify({ name: 'root', private: true, workspaces: ['packages/*'] }, null, 2));
       cjsEsmRepo.write(
         'packages/dual/package.json',
         JSON.stringify(
@@ -585,12 +606,14 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'packages/dual/cjs.cjs',
             specifier: 'dual-pkg',
             kind: 'require',
+            via: 'exports',
           },
           {
             from: 'src/entry.cjs',
             to: 'packages/dual/esm.mjs',
             specifier: 'dual-pkg',
             kind: 'dynamic',
+            via: 'exports',
           },
         ]);
         assert.deepEqual(ctsEdges, [
@@ -599,12 +622,14 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'packages/dual/cjs.cjs',
             specifier: 'dual-pkg',
             kind: 'require',
+            via: 'exports',
           },
           {
             from: 'src/entry.cts',
             to: 'packages/dual/esm.mjs',
             specifier: 'dual-pkg',
             kind: 'dynamic',
+            via: 'exports',
           },
         ]);
 
