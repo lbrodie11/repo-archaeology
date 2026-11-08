@@ -370,6 +370,7 @@ Global options work with every command:
 | `--half-life <days>` | | Weight recent commits more |
 | `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
 | `--origin-weights <spec>` | `human=1,agent=1,bot=1` | Weight commits by origin, e.g. `bot=0,agent=0.5` (values in `[0, 1]`) |
+| `--no-cache` | | Neither read nor write the [history cache](#history-cache) |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 
 Settings can also live in `.repo-archaeology.json` at the repository root (flags win):
@@ -386,6 +387,45 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 ```
 
 The config file is part of the repository, so it is treated as untrusted input: it must be a small regular file, `maxFilesPerCommit` is capped at 1000, and `skipCommits` patterns that can backtrack catastrophically (quantifiers vulnerable to polynomial/exponential ReDoS, repeated groups with alternation, or backreferences) are refused. For safe prefix-based skipping without regexes, use `skipCommitPrefixes`. Command-line flags are not restricted.
+
+## History cache
+
+Reading history (`git log --name-status` over up to `--max-commits` commits) is the slowest part of every run. Repo Archaeology therefore keeps the **raw, settings-independent** parsed commit records on disk, keyed by commit hash, and on each run parses only the commits the cache does not have yet. Filtering (`--max-files`, ignores, `--skip-commits`, `--since`) still happens after the cache, so one cache serves every setting, every `--head`, and every branch. Cached and `--no-cache` runs produce identical results; only the optional `meta.cache` field differs.
+
+- **Location:** `<git-common-dir>/repo-archaeology/cache/` (normally `.git/repo-archaeology/cache/`, shared by all worktrees). It is never committed.
+- **Override:** set `REPO_ARCHAEOLOGY_CACHE_DIR` (any path; relative paths resolve against the current directory), or `"cache": { "dir": "…" }` in `.repo-archaeology.json` (must be a relative path inside the repository without `..` or symlink traversal, because the config file is untrusted). The environment variable wins over the config file.
+- **Disable:** pass `--no-cache`, or set `"cache": { "enabled": false }`. In the library API, pass `settings: { cache: { enabled: false } }`.
+- **Safety & invalidation:** the cache only writes into an empty directory or one it has tagged with `CACHEDIR.TAG` (using `0700` directory and `0600` file permissions where supported), so a mistyped directory can never clobber other files. Each segment is written to a temp file and atomically renamed; `index.json` records a SHA-256 per segment plus `cacheVersion`, `gitVersion`, and a `formatSignature` covering `FORMAT`, diff flags, trailer limits, and Git config overrides (`raVersion` patch bumps do not discard cached records). A corrupt segment, a checksum mismatch, a changed git version, or a format-signature change discards and rebuilds the cache with a warning in `meta.warnings`. Concurrent runs are safe: writers take an exclusive token-verified lock file (abandoned after 60 s), and a run that cannot take the lock simply skips saving.
+- **Shallow clones:** the cache is read but never written (the history is incomplete), commits at the shallow boundary are always re-parsed, and a warning is added.
+- **Size:** more than 20 segments or 200 MB triggers compaction into one segment, which also drops commits no longer reachable from any ref.
+- **Observability:** JSON output includes `meta.cache: { enabled, hits, misses, dir? }`, where `dir` is relative to the repository root (or `"$REPO_ARCHAEOLOGY_CACHE_DIR"` when set by the environment variable) and never absolute.
+
+### Reusing the cache in GitHub Actions (`actions/cache`)
+
+CI checkouts start empty, so you can optionally point the cache at a directory that `actions/cache` restores. Use `fetch-depth: 0`: in shallow clones the cache is read-only.
+
+> **Privacy & CI security note:** Cache segments store commit metadata from your repository (`hash`, `authorName`, `authorEmail`, timestamps, subjects, trailers, and changed file paths). Keep `actions/cache` explicit in your workflow, scope keys by branch (`github.ref_name`) with `restore-keys` fallback, and do not grant cache write access to untrusted fork pull requests (`pull_request_target`).
+
+```yaml
+jobs:
+  ghost-wires:
+    runs-on: ubuntu-latest
+    env:
+      REPO_ARCHAEOLOGY_CACHE_DIR: ${{ runner.temp }}/repo-archaeology-cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/repo-archaeology-cache
+          # Immutable per-SHA key with branch-scoped restore fallback.
+          key: repo-archaeology-v1-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            repo-archaeology-v1-${{ runner.os }}-${{ github.ref_name }}-
+            repo-archaeology-v1-${{ runner.os }}-
+      - run: npx repo-archaeology diff --base origin/${{ github.base_ref }} --json > ghost-wires.json
+```
 
 ## Relationship verdicts (`.repo-archaeology.verdicts.json`)
 
@@ -529,6 +569,7 @@ npm test
 npm run typecheck
 npm run build
 npm run bench:map
+npm run bench:history
 node scripts/smoke-pack.mjs
 npm run dev -- scan -C ../some-repo
 ```

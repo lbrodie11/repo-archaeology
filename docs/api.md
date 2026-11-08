@@ -63,7 +63,7 @@ export interface OpenOptions {
   cwd: string;                  // any path inside the repo
   head?: string;                // RA-02 semantics; default: checked-out HEAD + working tree
   base?: string;                // merge-base isolation, same as --base
-  settings?: Partial<Settings>; // same keys as .repo-archaeology.json / CLI flags (maxCommits, maxFiles, minShared, minConfidence, halfLife, skipCommits, ignore, defaultIgnores)
+  settings?: Partial<Settings>; // same keys as .repo-archaeology.json / CLI flags (maxCommits, maxFiles, minShared, minConfidence, halfLife, skipCommits, ignore, defaultIgnores, cache: { dir?, enabled? })
   useConfigFile?: boolean;      // default true: merge .repo-archaeology.json under explicit settings
   onProgress?: (e: { phase: string; done?: number; total?: number }) => void;
   signal?: AbortSignal;         // cancel long history loads (rejects with AbortError)
