@@ -10,11 +10,11 @@ import type { WeightingMode } from '../model/cochange.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
 import type { CommitOrigin, OriginShare } from '../model/origin.js';
-import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
+import { buildMeta, toView, type Meta, type RelationshipVerdictView, type RelationshipView } from '../report/views.js';
 import type { WilsonInterval } from '../util/stats.js';
 import { c, isoDate, plural, terminalText } from '../util/term.js';
 import { formatExplainCommand, MAX_COUNTEREXAMPLES_PER_SIDE } from './explain.js';
-import { classifiedPairs } from './scan.js';
+import { classifiedPairs, MAX_CLASSIFIED } from './scan.js';
 
 export const MAX_MAP_PATCH_EDGES = 20;
 export const MAX_MAP_COMMITS_PER_EDGE = 2;
@@ -28,6 +28,8 @@ export interface MapOptions {
   uncheckedCap?: number;
   /** Opt-in: embed bounded git diff hunks for top relationships into the HTML file. */
   includePatches?: boolean;
+  /** Include relationships silenced by `"expected"` verdicts. */
+  showSilenced?: boolean;
   out?: string;
   open: boolean;
 }
@@ -83,6 +85,7 @@ export interface MapEdge {
   lastTogether: string;
   crossesDirectories: boolean;
   originShare?: OriginShare;
+  verdict?: RelationshipVerdictView;
   evidence: MapEdgeEvidence[];
   counterexamples?: {
     fromOnlyTotal?: number;
@@ -110,6 +113,7 @@ export interface MapUndrawnPair {
   weighting?: WeightingMode;
   lastTogether: string;
   originShare?: OriginShare;
+  verdict?: RelationshipVerdictView;
   evidence: { hash: string; date: string; subject: string; origin?: CommitOrigin }[];
   explainCommand: string;
 }
@@ -137,9 +141,13 @@ export interface MapData {
   nodes: MapNode[];
   edges: MapEdge[];
   families?: MapFamily[];
+  /** Count of qualifying relationships silenced by `"expected"` verdicts. */
+  verdicts?: {
+    silenced: number;
+  };
 }
 
-export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
+export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap' | 'showSilenced'>): MapData {
   ctx.open?.();
   try {
     const generatedAt = new Date().toISOString();
@@ -210,7 +218,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     const familyCandidates: RelationshipView[] = [];
     const edgeIndexByPairKey = new Map<string, number>();
     let unchecked = 0;
-    const classified = classifiedPairs(ctx);
+    const classified = classifiedPairs(ctx, MAX_CLASSIFIED, { showSilenced: options.showSilenced });
     const hasPrimary = classified.entries.some(({ relationship }) => relationship !== 'unknown' && options.kinds.includes(relationship));
     const uncheckedCap = hasPrimary ? options.uncheckedCap : undefined;
     for (const { companion, relationship } of classified.entries) {
@@ -271,6 +279,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         lastTogether: view.lastTogether,
         crossesDirectories: view.crossesDirectories,
         originShare: view.originShare,
+        ...(view.verdict ? { verdict: view.verdict } : {}),
         evidence,
         counterexamples: {
           fromOnlyTotal: cxFrom.total,
@@ -286,6 +295,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     const rawFamilies = buildFindingFamilies(ctx, familyCandidates, {
       allowedKinds: options.kinds,
       commitMemberIndicesByFamily,
+      showSilenced: options.showSilenced,
     });
     const families: MapFamily[] = rawFamilies.map((fam) => {
       const nodeIndices = fam.members.map((m) => nodeIndex.get(m.path) ?? -1);
@@ -314,6 +324,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
             ...(rel.weighting ? { weighting: rel.weighting } : {}),
             lastTogether: rel.lastTogether,
             originShare: rel.originShare,
+            ...(rel.verdict ? { verdict: rel.verdict } : {}),
             evidence: rel.evidence.slice(0, 3).map((ev) => ({
               hash: ev.hash,
               date: ev.date,
@@ -340,7 +351,18 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     const repoName = basename(ctx.root);
     // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
     const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
-    return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges, families };
+    return {
+      meta,
+      repoName,
+      generatedAt,
+      counts,
+      classificationTruncated: classified.truncated,
+      patchesIncluded: false,
+      nodes,
+      edges,
+      families,
+      ...(classified.silenced > 0 ? { verdicts: { silenced: classified.silenced } } : {}),
+    };
   } finally {
     ctx.close?.();
   }
@@ -453,6 +475,9 @@ export function printMap(file: string, data: MapData, opened: boolean): void {
     console.log('No relationships passed the thresholds, so the map is empty. Try --min-shared 2 or --min-confidence 0.3.');
   } else {
     console.log(`Drew ${data.edges.length} relationships between ${data.nodes.length} files (${ghosts} ghost wires${familyNote}).`);
+  }
+  if (data.verdicts?.silenced) {
+    console.log(c.dim(`(${data.verdicts.silenced} silenced by verdicts; use --show-silenced)`));
   }
   if (data.classificationTruncated) console.log(c.yellow('Only the strongest relationships were classified; additional relationship kinds may exist.'));
   console.log(`${opened ? 'Opened' : 'Wrote'} ${c.bold(terminalText(file))}`);

@@ -105,6 +105,9 @@
     "originShare": {
       "$ref": "common.schema.json#/$defs/OriginShare"
     },
+    "verdict": {
+      "$ref": "common.schema.json#/$defs/RelationshipVerdictView"
+    },
     "sharedCommits": {
       "type": "array",
       "items": {

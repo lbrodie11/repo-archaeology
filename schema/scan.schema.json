@@ -50,6 +50,16 @@
       "items": {
         "$ref": "common.schema.json#/$defs/FindingFamilyView"
       }
+    },
+    "verdicts": {
+      "type": "object",
+      "required": ["silenced"],
+      "properties": {
+        "silenced": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

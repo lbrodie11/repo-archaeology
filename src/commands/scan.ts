@@ -2,7 +2,18 @@ import type { Context } from '../context.js';
 import { parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
-import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
+import {
+  buildMeta,
+  describeStrength,
+  DISCLAIMER,
+  formatVerdictAnnotation,
+  printEvidence,
+  printHeader,
+  relationshipLabel,
+  toView,
+  type Meta,
+  type RelationshipView,
+} from '../report/views.js';
 import { c, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 /** Upper bound on relationships classified (each needs the files' imports parsed). */
@@ -17,6 +28,8 @@ export interface ScanOptions {
    * in around the ghost wires instead of crowding them out.
    */
   uncheckedCap?: number;
+  /** Include relationships silenced by `"expected"` verdicts. */
+  showSilenced?: boolean;
 }
 
 export interface ScanResult {
@@ -29,6 +42,10 @@ export interface ScanResult {
   relationships: RelationshipView[];
   /** Parallel-implementation finding families (3+ related files) among the reported relationships. */
   families: FindingFamilyView[];
+  /** Count of qualifying relationships silenced by `"expected"` verdicts. */
+  verdicts?: {
+    silenced: number;
+  };
 }
 
 export interface ClassifiedCompanion {
@@ -40,21 +57,30 @@ export interface ClassifiedPairs {
   entries: ClassifiedCompanion[];
   qualifying: number;
   truncated: boolean;
+  silenced: number;
 }
 
 /** Relationships above the thresholds between files that still exist, best first, classified. */
-export function classifiedPairs(ctx: Context, max = MAX_CLASSIFIED): ClassifiedPairs {
+export function classifiedPairs(ctx: Context, max = MAX_CLASSIFIED, options?: { showSilenced?: boolean }): ClassifiedPairs {
   const { model, currentFiles } = ctx;
   const candidates: Companion[] = [];
+  let silenced = 0;
   for (const pair of model.strongestPairs(ctx.thresholds)) {
-    if (currentFiles.has(model.path(pair.from)) && currentFiles.has(model.path(pair.to))) candidates.push(pair);
+    const fromPath = model.path(pair.from);
+    const toPath = model.path(pair.to);
+    if (!currentFiles.has(fromPath) || !currentFiles.has(toPath)) continue;
+    if (!options?.showSilenced && ctx.verdicts?.match(fromPath, toPath)?.kind === 'expected') {
+      silenced++;
+      continue;
+    }
+    candidates.push(pair);
   }
   candidates.sort(compareCompanions);
   const entries = candidates.slice(0, max).map((companion) => ({
     companion,
     relationship: ctx.classifier.classify(model.path(companion.from), model.path(companion.to)),
   }));
-  return { entries, qualifying: candidates.length, truncated: candidates.length > entries.length };
+  return { entries, qualifying: candidates.length, truncated: candidates.length > entries.length, silenced };
 }
 
 export function scan(ctx: Context, options: ScanOptions): ScanResult {
@@ -63,7 +89,7 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
     const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
     const selected: RelationshipView[] = [];
     const pending: ClassifiedCompanion[] = [];
-    const classified = classifiedPairs(ctx);
+    const classified = classifiedPairs(ctx, MAX_CLASSIFIED, { showSilenced: options.showSilenced });
     for (const entry of classified.entries) {
       counts[entry.relationship]++;
       if (options.kinds.includes(entry.relationship)) pending.push(entry);
@@ -85,7 +111,10 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
         familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
       }
     }
-    const families = buildFindingFamilies(ctx, familyCandidates, { allowedKinds: options.kinds }).slice(0, options.limit);
+    const families = buildFindingFamilies(ctx, familyCandidates, {
+      allowedKinds: options.kinds,
+      showSilenced: options.showSilenced,
+    }).slice(0, options.limit);
     return {
       meta: buildMeta(ctx),
       counts,
@@ -94,6 +123,7 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
       truncated: classified.truncated,
       relationships: selected,
       families,
+      ...(classified.silenced > 0 ? { verdicts: { silenced: classified.silenced } } : {}),
     };
   } finally {
     ctx.close?.();
@@ -106,7 +136,11 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
   const total = RELATIONSHIPS.reduce((sum, r) => sum + counts[r], 0);
   if (total === 0) {
     console.log('No files changed together often enough to report.');
-    console.log(c.dim(`Try lowering --min-shared (now ${result.meta.settings.minShared}) or --min-confidence (now ${pct(result.meta.settings.minConfidence)}).`));
+    if (result.verdicts?.silenced) {
+      console.log(c.dim(`(${result.verdicts.silenced} silenced by verdicts; use --show-silenced)`));
+    } else {
+      console.log(c.dim(`Try lowering --min-shared (now ${result.meta.settings.minShared}) or --min-confidence (now ${pct(result.meta.settings.minConfidence)}).`));
+    }
     return;
   }
   const counted = RELATIONSHIPS.map((r) => `${counts[r]} ${relationshipLabel(r)}`).join(c.dim(' · '));
@@ -114,6 +148,9 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
     ? `${result.qualifying} relationships above the thresholds; strongest ${result.classified} classified: ${counted}`
     : `${total} relationships above the thresholds: ${counted}`);
   console.log(c.dim(`Showing ${options.kinds.map((k) => relationshipLabel(k)).join(', ')}. Change with --kinds ghost,unknown,indirect,direct,test.`));
+  if (result.verdicts?.silenced) {
+    console.log(c.dim(`(${result.verdicts.silenced} silenced by verdicts; use --show-silenced)`));
+  }
   console.log();
   if (result.relationships.length === 0) {
     console.log(result.truncated
@@ -154,6 +191,7 @@ export function printScan(result: ScanResult, options: ScanOptions): void {
     console.log(`${n} ${c.bold(from)} ${c.dim('→')} ${c.bold(to)}  ${relationshipLabel(view.relationship)}`);
     console.log(`    when ${from} changed, ${to} changed too in ${describeStrength(view)}`);
     console.log(c.dim(`    reverse: ${pct(view.reverseConfidence)} · ${terminalText(view.why)}`));
+    if (view.verdict) console.log(`    ${formatVerdictAnnotation(view.verdict)}`);
     printEvidence(view);
     console.log();
   });

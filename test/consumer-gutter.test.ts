@@ -38,6 +38,7 @@ const GUTTER_SILENCE_REASONS = [
   'no_history_for_changed_files',
   'no_cochange_partners',
   'all_companions_touched',
+  'silenced_by_verdicts',
   'filtered_by_thresholds',
   'filtered_by_kinds',
 ] as const;

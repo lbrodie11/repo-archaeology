@@ -26,7 +26,17 @@ import {
   type CommitOrigin,
   type OriginShare,
 } from '../model/origin.js';
-import { buildMeta, formatIntervalCi, printHeader, relationshipLabel, roundInterval, weightingLabel, type Meta } from '../report/views.js';
+import {
+  buildMeta,
+  formatIntervalCi,
+  formatVerdictAnnotation,
+  printHeader,
+  relationshipLabel,
+  roundInterval,
+  weightingLabel,
+  type Meta,
+  type RelationshipVerdictView,
+} from '../report/views.js';
 import { wilsonInterval, wilsonLowerBound, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
@@ -109,6 +119,7 @@ export interface ExplainResult {
   lastTogether?: string;
   crossesDirectories: boolean;
   originShare: OriginShare;
+  verdict?: RelationshipVerdictView;
   sharedCommits: SharedCommitEvidence[];
   counterexamples: {
     fromWithoutToTotal: number;
@@ -498,6 +509,7 @@ export async function explain(
 
     const fromWithoutTo = await buildCounterexamples(sortedAOnly, historyFrom, currentFrom);
     const toWithoutFrom = await buildCounterexamples(sortedBOnly, historyTo, currentTo);
+    const verdict = ctx.verdicts?.withChanges(changes).match(currentFrom, currentTo);
 
     return {
       meta: buildMeta(ctx),
@@ -520,6 +532,7 @@ export async function explain(
       ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
       crossesDirectories: posix.dirname(currentFrom) !== posix.dirname(currentTo),
       originShare: computeOriginShare(stat?.originCounts ?? { human: 0, agent: 0, bot: 0 }),
+      ...(verdict !== undefined ? { verdict } : {}),
       sharedCommits,
       counterexamples: {
         fromWithoutToTotal: sortedAOnly.length,
@@ -627,6 +640,9 @@ export function printExplain(result: ExplainResult): void {
 
   console.log(`${c.bold('Relationship')}  ${relationshipLabel(result.relationship)}${lastStr}`);
   console.log(`${c.bold('Why')}           ${terminalText(result.why)}`);
+  if (result.verdict) {
+    console.log(`${c.bold('Verdict')}       ${formatVerdictAnnotation(result.verdict)}`);
+  }
   console.log(`${c.bold('Direction')}     ${terminalText(result.from)} → ${terminalText(result.to)}: ${dirA}`);
   console.log(`              ${terminalText(result.to)} → ${terminalText(result.from)}: ${dirB}`);
   if (!result.meetsThresholds) {

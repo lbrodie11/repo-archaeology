@@ -42,7 +42,7 @@ Last updated: November 2026
 
 ### Milestone 3: PR-Time Coupling Signals, Relationship Verdicts & Architecture Evolution
 - **"✓ Already Updated" Companions & New Coupling Signals in `diff`:** Positive confirmation when a PR already updates expected historical companions, plus early surfacing when a branch introduces or strengthens hidden coupling.
-- **Relationship Verdicts (`.repo-archaeology.verdicts.json`):** Repo-committed configuration for silencing expected mechanical relationships (with optional reasons and expiration dates) and annotating confirmed hidden dependencies for teammates and coding agents without altering underlying historical scores.
+- **Relationship Verdicts (`.repo-archaeology.verdicts.json`) *(Shipped)*:** Repo-committed configuration for silencing expected mechanical relationships (with optional reasons and expiration dates) and annotating confirmed hidden dependencies for teammates and coding agents without altering underlying historical scores (`repo-archaeology verdict add|list|prune`, `--show-silenced`, `schema/verdicts.schema.json`).
 - **Stateless Architecture Evolution (`evolution --from <ref> --to <ref>`):** Compare co-change models across Git tags or releases (keyed by cross-revision rename lineage over a fixed commit range) to spot newly emerged or strengthening ghost wires.
 - **Formatting-Only Commit Filter:** Optional whitespace-aware filtering (`git diff -w`) so small formatting-only commits do not inflate co-change counts.
 

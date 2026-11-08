@@ -20,6 +20,7 @@ import {
   listCurrentFiles,
   listTreeFiles,
   mergeBases,
+  parseLsTree,
   refExists,
   resolveCommit,
   type TreeFileSet,
@@ -29,6 +30,15 @@ import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFil
 import type { RepoFiles } from './imports/resolve.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
 import { loadHistory, type History } from './model/history.js';
+import {
+  emptyLoadedVerdicts,
+  loadVerdictsFile,
+  MAX_VERDICTS_BYTES,
+  parseVerdictsText,
+  VERDICTS_FILE,
+  VerdictMatcher,
+  type LoadedVerdicts,
+} from './model/verdicts.js';
 import { PathMatcher } from './util/glob.js';
 import { progress } from './util/term.js';
 
@@ -88,6 +98,10 @@ export interface Context {
   headSha?: string;
   /** Head ref and resolved commit SHA when `--head <ref>` was explicitly provided. */
   head?: { ref: string; sha: string };
+  /** Loaded and compiled relationship verdicts from `.repo-archaeology.verdicts.json`. */
+  verdicts?: VerdictMatcher;
+  /** Working-tree or `--head` verdicts prior to `--base` merge-base isolation. */
+  headVerdicts?: LoadedVerdicts;
   /** Starts any long-lived background process (e.g. `git cat-file --batch`) associated with this context. */
   open?: () => void;
   /** Closes any long-lived background process (e.g. `git cat-file --batch`) associated with this context. */
@@ -212,6 +226,46 @@ async function loadConfigFromHeadTree(
   return parseConfigText(content, CONFIG_FILE);
 }
 
+async function loadVerdictsFromCommitTree(
+  root: string,
+  commitSha: string,
+  treeFiles?: TreeFileSet,
+): Promise<LoadedVerdicts> {
+  const files =
+    treeFiles ??
+    parseLsTree(await runGit(root, ['ls-tree', '-z', '--end-of-options', commitSha, '--', VERDICTS_FILE]));
+  const mode = files.modes.get(VERDICTS_FILE);
+  if (mode === undefined) return emptyLoadedVerdicts();
+  if (!isRegularTreeMode(mode)) {
+    throw new ConfigError(`Refusing to read ${VERDICTS_FILE}: not a regular file.`);
+  }
+  const spec = `${commitSha}:${VERDICTS_FILE}`;
+  const sizeOut = (await runGit(root, ['cat-file', '-s', '--end-of-options', spec])).trim();
+  if (Number(sizeOut) > MAX_VERDICTS_BYTES) {
+    throw new ConfigError(`${VERDICTS_FILE} exceeds the 256 KB size limit.`);
+  }
+  const content = await runGit(root, ['cat-file', 'blob', '--end-of-options', spec]);
+  return parseVerdictsText(content, VERDICTS_FILE);
+}
+
+async function loadVerdictsFromCommitTreeSafe(
+  root: string,
+  commitSha: string,
+  refLabel: string,
+  treeFiles?: TreeFileSet,
+): Promise<{ loaded: LoadedVerdicts; warning?: string }> {
+  try {
+    const loaded = await loadVerdictsFromCommitTree(root, commitSha, treeFiles);
+    return { loaded };
+  } catch (err) {
+    if (!(err instanceof ConfigError)) throw err;
+    return {
+      loaded: emptyLoadedVerdicts(),
+      warning: `Ignoring invalid ${VERDICTS_FILE} at ${refLabel} (${err.message}); proceeding with no verdicts.`,
+    };
+  }
+}
+
 export async function loadContext(cwdOption: string | undefined, flags: Partial<Settings>, options?: ContextOptions): Promise<Context> {
   const signal = options?.signal;
   if (signal?.aborted) throw createAbortError(signal);
@@ -249,13 +303,24 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
         configWarning = `Ignoring invalid ${CONFIG_FILE} at ${headRef} (${err.message}); using working-tree configuration instead.`;
       }
     }
+    const headVerdictsRes = await loadVerdictsFromCommitTreeSafe(root, headSha, headRef, currentFiles);
+    const baseVerdictsRes =
+      mergeBaseSha !== undefined && mergeBaseSha !== headSha
+        ? await loadVerdictsFromCommitTreeSafe(root, mergeBaseSha, options!.base!)
+        : headVerdictsRes;
+    const activeVerdicts = mergeBaseSha !== undefined ? baseVerdictsRes.loaded : headVerdictsRes.loaded;
     const settings = resolveSettings(fileConfig, flags);
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
 
     if (emitStderrProgress) progress('Reading git history…');
     const extraWarnings: string[] = [];
     if (configWarning !== undefined) extraWarnings.push(configWarning);
+    if (headVerdictsRes.warning !== undefined) extraWarnings.push(headVerdictsRes.warning);
+    if (baseVerdictsRes.warning !== undefined && baseVerdictsRes.warning !== headVerdictsRes.warning) {
+      extraWarnings.push(baseVerdictsRes.warning);
+    }
     if (wtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
+    for (const w of activeVerdicts.warnings) extraWarnings.push(w);
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings, {
       onProgress: options?.onProgress,
       signal,
@@ -281,6 +346,8 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       mergeBaseSha,
       headSha,
       head: { ref: headRef, sha: headSha },
+      verdicts: new VerdictMatcher(activeVerdicts, trained.history),
+      headVerdicts: headVerdictsRes.loaded,
       open: () => treeFiles.open(),
       close: options?.keepOpen ? () => {} : () => treeFiles.close(),
       closeSession: () => treeFiles.close(),
@@ -290,6 +357,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   const fileConfig = useConfigFile ? loadConfigFile(root) : {};
   const settings = resolveSettings(fileConfig, flags);
   compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
+  const headVerdicts = loadVerdictsFile(root);
 
   const headSha = await resolveCommit(root, 'HEAD');
   if (signal?.aborted) throw createAbortError(signal);
@@ -299,9 +367,18 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   ]);
   if (signal?.aborted) throw createAbortError(signal);
 
+  const baseVerdictsRes =
+    mergeBaseSha !== undefined
+      ? await loadVerdictsFromCommitTreeSafe(root, mergeBaseSha, options!.base!)
+      : undefined;
+  const activeVerdicts = baseVerdictsRes ? baseVerdictsRes.loaded : headVerdicts;
+  const verdictWarnings: string[] = [];
+  if (baseVerdictsRes?.warning) verdictWarnings.push(baseVerdictsRes.warning);
+  for (const w of activeVerdicts.warnings) verdictWarnings.push(w);
+
   if (emitStderrProgress) progress('Reading git history…');
   const [trained, currentFiles] = await Promise.all([
-    trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow, [], {
+    trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow, verdictWarnings, {
       onProgress: options?.onProgress,
       signal,
       onSpawn: options?.onSpawn,
@@ -329,12 +406,14 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     base: options?.base,
     mergeBaseSha,
     headSha,
+    verdicts: new VerdictMatcher(activeVerdicts, trained.history),
+    headVerdicts,
   };
 }
 
 /**
  * Ensures `ctx` is trained on the appropriate pre-change baseline:
- * - When `base` is provided: isolates history to the unique `merge-base` of `base` and `HEAD` (or `<head>`).
+ * - When `base` is provided: isolates history and active verdicts to the unique `merge-base` of `base` and `HEAD` (or `<head>`).
  * - When `base` is omitted: ensures `ctx` is trained at `HEAD` (or `<head>`).
  */
 export async function isolateBaselineContext(ctx: Context, base?: string): Promise<Context> {
@@ -342,10 +421,19 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
   const targetHead = ctx.head?.sha ?? 'HEAD';
   const isCommitCountWarning = (w: string): boolean =>
     w.startsWith('No usable commits were found') || w.startsWith('Only ');
-  const extraWarnings = ctx.warnings.filter((w) => w !== SHALLOW_WARNING && !isCommitCountWarning(w));
+  const isVerdictWarning = (w: string): boolean =>
+    (w.startsWith('Verdict verdicts[') && w.endsWith('and was ignored.')) ||
+    (w.startsWith('Unknown key ') && w.includes(VERDICTS_FILE)) ||
+    w.startsWith(`Ignoring invalid ${VERDICTS_FILE} at `);
+  const baseExtraWarnings = ctx.warnings.filter(
+    (w) => w !== SHALLOW_WARNING && !isCommitCountWarning(w) && !isVerdictWarning(w),
+  );
+  const headVerdicts = ctx.headVerdicts ?? ctx.verdicts?.loaded ?? emptyLoadedVerdicts();
+
   if (base === undefined) {
     if (ctx.base === undefined) return ctx;
     const headSha = ctx.headSha ?? (await resolveCommit(ctx.root, targetHead));
+    const extraWarnings = [...baseExtraWarnings, ...headVerdicts.warnings];
     const trained = await trainBaseline(ctx.root, ctx.settings, targetHead, shallow, extraWarnings);
     return {
       ...ctx,
@@ -356,15 +444,38 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
       base: undefined,
       mergeBaseSha: undefined,
       headSha,
+      verdicts: new VerdictMatcher(headVerdicts, trained.history),
+      headVerdicts,
     };
   }
   if (ctx.base === base && ctx.mergeBaseSha !== undefined) return ctx;
-  const [mergeBaseSha, headSha] = await Promise.all([
+  const [mergeBaseSha, headSha, baseVerdictsRes] = await Promise.all([
     resolveBaseline(ctx.root, base, targetHead),
     ctx.headSha !== undefined ? Promise.resolve(ctx.headSha) : resolveCommit(ctx.root, targetHead),
+    resolveBaseline(ctx.root, base, targetHead).then((mbSha) =>
+      loadVerdictsFromCommitTreeSafe(ctx.root, mbSha, base),
+    ),
   ]);
+  const extraWarnings = [
+    ...baseExtraWarnings,
+    ...(baseVerdictsRes.warning ? [baseVerdictsRes.warning] : []),
+    ...baseVerdictsRes.loaded.warnings,
+  ];
   if (ctx.base === undefined && mergeBaseSha === headSha) {
-    return { ...ctx, shallow, base, mergeBaseSha, headSha };
+    const warnings: string[] = [];
+    if (shallow) warnings.push(SHALLOW_WARNING);
+    for (const w of extraWarnings) if (!warnings.includes(w)) warnings.push(w);
+    for (const w of ctx.warnings.filter(isCommitCountWarning)) if (!warnings.includes(w)) warnings.push(w);
+    return {
+      ...ctx,
+      warnings,
+      shallow,
+      base,
+      mergeBaseSha,
+      headSha,
+      verdicts: new VerdictMatcher(baseVerdictsRes.loaded, ctx.history),
+      headVerdicts,
+    };
   }
   const trained = await trainBaseline(ctx.root, ctx.settings, mergeBaseSha, shallow, extraWarnings);
   return {
@@ -376,6 +487,8 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
     base,
     mergeBaseSha,
     headSha,
+    verdicts: new VerdictMatcher(baseVerdictsRes.loaded, trained.history),
+    headVerdicts,
   };
 }
 

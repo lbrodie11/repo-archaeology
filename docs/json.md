@@ -38,7 +38,7 @@ Repo Archaeology follows a strict schema versioning policy for `--json` and `--j
    - Removing a documented property, renaming a property, changing a property's data type, or altering the meaning of an existing discriminator requires incrementing `schemaVersion` (e.g. to `2`).
 3. **Downstream Consumer Guards & Enum Stability:**
    - [`test/json-contract.test.ts`](../test/json-contract.test.ts) and [`scripts/smoke-pack.mjs`](../scripts/smoke-pack.mjs) validate CLI and packed tarball outputs against the Draft 2020-12 schemas in [`schema/`](../schema) via the shared validator in [`scripts/schema-validator.mjs`](../scripts/schema-validator.mjs).
-   - [`test/consumer-gutter.test.ts`](../test/consumer-gutter.test.ts) freezes the exact `diff --json` and `backtest --json` field paths, types, relationship kinds (`ghost`, `unknown`, `indirect`, `direct`, `test`), `silence.primaryReason` codes (`no_changed_files`, `limited_repo_history`, `no_history_for_changed_files`, `no_cochange_partners`, `all_companions_touched`, `filtered_by_thresholds`, `filtered_by_kinds`), and strategy names (`co-change`, `popularity, same changes`) consumed by Gutter (`lbrodie11/gutter`). Removing, renaming, or retyping any of these frozen values requires a coordinated Gutter release.
+   - [`test/consumer-gutter.test.ts`](../test/consumer-gutter.test.ts) freezes the exact `diff --json` and `backtest --json` field paths, types, relationship kinds (`ghost`, `unknown`, `indirect`, `direct`, `test`), `silence.primaryReason` codes (`no_changed_files`, `limited_repo_history`, `no_history_for_changed_files`, `no_cochange_partners`, `all_companions_touched`, `silenced_by_verdicts`, `filtered_by_thresholds`, `filtered_by_kinds`), and strategy names (`co-change`, `popularity, same changes`) consumed by Gutter (`lbrodie11/gutter`). Removing, renaming, or retyping any of these frozen values requires a coordinated Gutter release.
 
 ---
 
@@ -57,6 +57,7 @@ Machine-readable JSON Schema definitions (Draft 2020-12, `https://json-schema.or
 | `backtest` | `repo-archaeology backtest --json` | [`schema/backtest.schema.json`](../schema/backtest.schema.json) | Chronological holdout replay scores, optional `ghostDiagnostics` (`--ghosts`), and optional `followUpBenchmark` (`--follow-ups`). |
 | `imports` / `importGraph` | `repo-archaeology imports --json`<br>`repo.importGraph()` | [`schema/import-graph.schema.json`](../schema/import-graph.schema.json) | Internal import graph (`files`, `edges`, `unresolved`, `languages`) and reverse-importer lookups. |
 | Default (bare) | `repo-archaeology --json` | [`schema/default.schema.json`](../schema/default.schema.json) | Discriminated union (`oneOf`) keyed by `mode`: `"diff"` when working tree has changes with history, otherwise `"scan"` (with `changedWithoutHistory`). |
+| Relationship verdicts file | `<repoRoot>/.repo-archaeology.verdicts.json` | [`schema/verdicts.schema.json`](../schema/verdicts.schema.json) | Repo-committed file (`version: 1`, `verdicts: VerdictEntry[]`) for silencing `expected` pairs or annotating `confirmed` hidden dependencies. |
 
 ---
 
@@ -93,6 +94,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
+| `verdicts` | `{ loaded, active, expired, file }` | Optional (always emitted since RA-11) | Summary of `.repo-archaeology.verdicts.json`: total `loaded` entries, `active` entries, `expired` (`until < today`) entries, and `file: ".repo-archaeology.verdicts.json"`. |
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
@@ -107,6 +109,28 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
   - Raw directional rate: $\hat{p} = 14 / 19 \approx 0.7368$ (`confidence: 0.737`).
   - Two-sided 95% Wilson score interval (`wilsonInterval(14, 19)` $\approx \{ \text{low}: 0.51208, \text{high}: 0.88194 \}$): outward-rounded to `interval: { "low": 0.512, "high": 0.882 }`, rendered in Markdown and terminal output as `(95% CI 51–89%)`.
   - Ranking score: `score: 0.512` (the Wilson lower bound rounded to 3 decimal places).
+
+#### 5.1.2 Relationship Verdicts (`.repo-archaeology.verdicts.json`, `common.schema.json#/$defs/RelationshipVerdict`)
+
+Teams can commit `<repoRoot>/.repo-archaeology.verdicts.json` (validated against [`schema/verdicts.schema.json`](../schema/verdicts.schema.json)) to silence known mechanical relationships (`"verdict": "expected"`) or annotate real hidden dependencies (`"verdict": "confirmed"`):
+
+- **Scores never change:** Verdicts never alter `shared`, `fromChanges`, `toChanges`, `confidence`, `reverseConfidence`, `interval`, `reverseInterval`, `score`, or `backtest` replay results.
+- **Annotation shape (`verdict`):** When a relationship matches an active verdict, `RelationshipView` (and `explain --json`) includes `verdict: { kind: "expected" | "confirmed", reason: string, by?: string, until?: string }`.
+- **`diff` filtering, `--base` merge-base isolation & silence diagnostics:**
+  - `expected` pairs are excluded from `suggestions[]` and `families[]` (including triangle/family completion).
+  - When `diff` runs with `--base <ref>`, active verdicts are loaded from the `<merge-base>` commit tree by default so a pull request cannot silence warnings about itself before merging. Verdict entries added or modified on the branch are counted in `verdicts.addedInBranch` (and `silence.verdicts.addedInBranch`) and noted in terminal/Markdown output (`"This PR adds N expected verdict(s) (not applied until merged)"`). Pass `--apply-branch-verdicts` to preview branch-added verdicts locally before merging.
+  - When at least one qualifying candidate is silenced by an `expected` verdict (or `addedInBranch > 0`), `diff` emits top-level `verdicts: { silenced: number, addedInBranch?: number }` (and `silence.verdicts: { silenced: number, addedInBranch?: number }` when `suggestions.length === 0`).
+  - When every qualifying candidate was silenced by `expected` verdicts, `silence.primaryReason` is `"silenced_by_verdicts"` (and `"silenced_by_verdicts"` is included in `silence.reasons`).
+  - `confirmed` pairs remain in `suggestions[]` with their `verdict` object attached.
+- **`scan`, `file`, `map`, and `explain`:**
+  - `scan`, `file`, and `map` hide `expected` pairs by default (including during Finding Family completion) unless `--show-silenced` is passed, emit `verdicts: { silenced: number }` in JSON when `silenced > 0` (plus a dim `(N silenced by verdicts; use --show-silenced)` line in terminal output), and attach `verdict` to `confirmed` pairs (and `expected` pairs when `--show-silenced` is set).
+  - `explain <a> <b>` always explains the requested pair and includes `verdict` when one matches.
+- **Specificity guard, precedence & expiration:**
+  - At least one endpoint of `pair` must be an exact path or an anchored glob with a fixed directory prefix or file extension; catch-all pairs where both endpoints match every file (such as `["**", "**"]` or `["*", "**"]`) are rejected.
+  - When multiple active verdicts match a pair, precedence is deterministic and independent of file order: more exact endpoints win over globs, narrower globs (more literal segments, then more literal characters) win over broader globs, `directed: true` wins over undirected at equal path specificity, and `"confirmed"` wins over `"expected"` at equal specificity.
+  - `until` (`YYYY-MM-DD`) is an inclusive UTC date (`until >= today` in UTC is active; `until < today` is expired and emits a warning in `meta.warnings`).
+  - In `--head` or `--base` mode, if `.repo-archaeology.verdicts.json` in a historical commit tree is invalid, analysis falls back to no verdicts and records a warning in `meta.warnings`.
+- **Renames vs. globs:** Exact (non-glob) verdict paths are resolved through `RenameTracker` / `History` identities and active branch/working-tree renames (including multi-hop intermediate branch renames and preserving separate file identities when a rename reuses a vacated path), so a verdict on `a.ts` continues to match after `git mv a.ts b.ts`. Glob syntax is recognized when an endpoint contains `*`, `?`, trailing `/`, or comma-separated brace alternation `{a,b}` (literal `[id]` or `{id}` path segments are treated as exact paths), and glob verdicts match current paths only.
 
 ---
 
@@ -123,7 +147,8 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `totalSuggestions` | `integer` | Yes | Total number of qualifying companion suggestions before `--limit` truncation. |
 | `suggestions` | `DiffSuggestion[]` | Yes | Ranked untouched companion files (`RelationshipView` plus `alsoLinkedFrom: string[]`), capped at `--limit`. |
 | `families` | `DiffFamilyView[]` | Yes | Parallel-implementation finding families touched by the change (`FindingFamilyView` plus `changedMembers` and `suggestedMembers`). |
-| `silence` | `SilenceDiagnostics` | Optional | Present when `suggestions.length === 0`. Explains why no recommendations were emitted (`primaryReason`, `reasons`, `details`, and filter counts). |
+| `verdicts` | `{ silenced: integer, addedInBranch?: integer }` | Optional | Present when at least one qualifying suggestion was silenced by an `expected` verdict (`silenced > 0`) or when `diff --base` detected verdict entries added/changed on the branch (`addedInBranch > 0`). |
+| `silence` | `SilenceDiagnostics` | Optional | Present when `suggestions.length === 0`. Explains why no recommendations were emitted (`primaryReason`, `reasons`, `details`, filter counts, and optional `verdicts: { silenced, addedInBranch? }`). |
 
 #### Example `diff --base main --json` Payload
 
@@ -249,6 +274,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `truncated` | `boolean` | Yes | `true` when `qualifying > classified`. |
 | `relationships` | `RelationshipView[]` | Yes | Top relationships matching `--kinds` and `--limit`. |
 | `families` | `FindingFamilyView[]` | Yes | Parallel-implementation finding families (3+ sibling files). |
+| `verdicts` | `{ silenced: integer }` | Optional | Present when at least one qualifying relationship was silenced by an `expected` verdict (`silenced > 0`). |
 
 ---
 
@@ -266,6 +292,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `lastChanged` | `string` (`YYYY-MM-DD`) | Yes | ISO date of the most recent analyzed commit touching this file. |
 | `authors` | `{ author, commits, share }[]` | Yes | Top 3 authors by commit count on this file. |
 | `companions` | `FileCompanionView[]` | Yes | Co-changing files meeting `--min-shared` (`RelationshipView` plus `wouldAlert: boolean`). |
+| `verdicts` | `{ silenced: integer }` | Optional | Present when at least one companion was silenced by an `expected` verdict (`silenced > 0`). |
 
 ---
 
@@ -280,6 +307,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `relationship` | `Relationship` | Yes | Dependency classification in current code. |
 | `why` | `string` | Yes | Human-readable classification explanation. |
 | `hiddenBridge` | `HiddenBridge` | Optional | Shared AST signal when `relationship === "ghost"`. |
+| `verdict` | `RelationshipVerdict` | Optional | Active verdict annotation (`{ kind: "expected" \| "confirmed", reason, by?, until? }`) when `.repo-archaeology.verdicts.json` matches this pair. |
 | `meetsThresholds` | `boolean` | Yes | Whether the pair meets active `--min-shared` and `--min-confidence` in at least one direction. |
 | `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts (stay raw even when `--half-life` or `--origin-weights` is set, while `minShared` uses the origin-weighted shared count when origin weights are active; `interval` from RA-05 stays raw as well). |
 | `confidence`, `reverseConfidence`, `score` | `number` | Yes | Directional confidences and Wilson score. |
@@ -309,6 +337,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `edges` | `integer` | Yes | Number of relationship edges drawn in the map. |
 | `counts` | `Record<Relationship, integer>` | Yes | Classified relationship counts by kind across the repository. |
 | `patchesIncluded` | `boolean` | Yes | `true` when `--include-patches` was enabled. |
+| `verdicts` | `{ silenced: integer }` | Optional | Present when at least one qualifying relationship was silenced by an `expected` verdict (`silenced > 0`). |
 
 ---
 

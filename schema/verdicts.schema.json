@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/verdicts.schema.json",
+  "title": "Repo Archaeology Relationship Verdicts (.repo-archaeology.verdicts.json, v1)",
+  "description": "Repo-committed relationship verdicts file for silencing expected mechanical couplings or annotating confirmed hidden dependencies without altering underlying historical scores.",
+  "type": "object",
+  "required": ["version", "verdicts"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema URI."
+    },
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Format version for `.repo-archaeology.verdicts.json`."
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/VerdictEntry"
+      },
+      "description": "List of expected (silenced) or confirmed relationship verdicts."
+    }
+  },
+  "$defs": {
+    "VerdictEntry": {
+      "type": "object",
+      "required": ["pair", "verdict", "reason"],
+      "properties": {
+        "pair": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Two repository-relative POSIX file paths or glob patterns."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["expected", "confirmed"],
+          "description": "\"expected\" silences known mechanical couplings; \"confirmed\" annotates real hidden dependencies."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Human-readable explanation (1–300 characters)."
+        },
+        "until": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Optional expiration date (YYYY-MM-DD). Expired entries are ignored and emit a warning."
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional author or team handle."
+        },
+        "directed": {
+          "type": "boolean",
+          "description": "When true, the verdict applies only in direction pair[0] -> pair[1] (default: false, undirected)."
+        }
+      }
+    }
+  }
+}

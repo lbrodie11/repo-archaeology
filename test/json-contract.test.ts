@@ -98,6 +98,7 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       'backtest.schema.json',
       'default.schema.json',
       'import-graph.schema.json',
+      'verdicts.schema.json',
     ];
     for (const file of schemaFiles) {
       const schema = loadSchema(file);

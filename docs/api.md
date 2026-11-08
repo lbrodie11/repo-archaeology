@@ -77,9 +77,9 @@ export interface Repository {
   readonly root: string;
   readonly headSha: string;
   readonly mergeBaseSha?: string;
-  diff(opts?: { limit?: number; kinds?: Relationship[] }): Promise<DiffJson>;
-  scan(opts?: { limit?: number; kinds?: Relationship[] }): Promise<ScanJson>;
-  file(path: string, opts?: { limit?: number }): Promise<FileJson>;
+  diff(opts?: { limit?: number; kinds?: Relationship[]; base?: string; applyBranchVerdicts?: boolean }): Promise<DiffJson>;
+  scan(opts?: { limit?: number; kinds?: Relationship[]; uncheckedCap?: number; showSilenced?: boolean }): Promise<ScanJson>;
+  file(path: string, opts?: { limit?: number; showSilenced?: boolean }): Promise<FileJson>;
   explain(a: string, b: string, opts?: { commits?: number; counterexamples?: boolean; context?: number }): Promise<ExplainJson>;
   backtest(opts?: { testFraction?: number; k?: number; before?: string | number; ghosts?: boolean; followUps?: boolean; followUpWindowHours?: number; compareOriginWeights?: string | readonly string[] }): Promise<BacktestJson>;
   importGraph(opts?: { files?: string[] }): Promise<ImportGraphJson>;

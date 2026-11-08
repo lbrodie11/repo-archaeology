@@ -77,6 +77,16 @@
       "items": {
         "$ref": "#/$defs/FileCompanionView"
       }
+    },
+    "verdicts": {
+      "type": "object",
+      "required": ["silenced"],
+      "properties": {
+        "silenced": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   },
   "$defs": {
@@ -162,6 +172,9 @@
         },
         "originShare": {
           "$ref": "common.schema.json#/$defs/OriginShare"
+        },
+        "verdict": {
+          "$ref": "common.schema.json#/$defs/RelationshipVerdictView"
         },
         "evidence": {
           "type": "array",
