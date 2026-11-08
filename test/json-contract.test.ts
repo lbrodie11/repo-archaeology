@@ -197,6 +197,20 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     assert.ok(backtestJson.ghostDiagnostics);
     assert.ok(backtestJson.followUpBenchmark);
     assertMatchesSchema(backtestJson, 'backtest.schema.json');
+
+    // 6. --head <ref> includes meta.head: { ref, sha } and validates against all schemas
+    const headSha = repo.git('rev-parse', 'HEAD~1').trim();
+    const headScanRes = runCli(['--head', 'HEAD~1', 'scan', '--json'], repo.dir);
+    assert.equal(headScanRes.code, 0, headScanRes.stderr);
+    const headScanJson = JSON.parse(headScanRes.stdout);
+    assert.deepEqual(headScanJson.meta.head, { ref: 'HEAD~1', sha: headSha });
+    assertMatchesSchema(headScanJson, 'scan.schema.json');
+
+    const headDiffRes = runCli(['--head', 'HEAD~1', 'diff', '--base', 'HEAD~2', '--json'], repo.dir);
+    assert.equal(headDiffRes.code, 0, headDiffRes.stderr);
+    const headDiffJson = JSON.parse(headDiffRes.stdout);
+    assert.deepEqual(headDiffJson.meta.head, { ref: 'HEAD~1', sha: headSha });
+    assertMatchesSchema(headDiffJson, 'diff.schema.json');
   });
 
   it('validates diff --json (suggestions and silence) and bare default command in both scan and diff modes', () => {
