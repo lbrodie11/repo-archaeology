@@ -453,12 +453,14 @@ const CLIENT = String.raw`
     Array.isArray(precomputed.x) &&
     Array.isArray(precomputed.y) &&
     precomputed.x.length === nodes.length &&
-    precomputed.y.length === nodes.length
+    precomputed.y.length === nodes.length &&
+    precomputed.x.every(function (v) { return typeof v === 'number' && Number.isFinite(v); }) &&
+    precomputed.y.every(function (v) { return typeof v === 'number' && Number.isFinite(v); })
   );
   if (hasPrecomputed) {
     for (var li = 0; li < nodes.length; li++) {
-      nodes[li].x = Number(precomputed.x[li]) || 0;
-      nodes[li].y = Number(precomputed.y[li]) || 0;
+      nodes[li].x = precomputed.x[li];
+      nodes[li].y = precomputed.y[li];
     }
   }
 
@@ -479,12 +481,21 @@ const CLIENT = String.raw`
   var fitPendingAfterSettle = !hasPrecomputed;
   var deferSimOneFrame = false;
   var activeNodesList = [];
+  var visibleEdgesList = [];
   var edgesByKind = { test: [], direct: [], indirect: [], unknown: [], ghost: [] };
   edges.forEach(function (e) {
     if (edgesByKind[e.d.relationship]) edgesByKind[e.d.relationship].push(e);
   });
-  var gridHeads = new Int32Array(65536);
-  var gridNext = new Int32Array(nodes.length);
+  var xOrder = new Int32Array(nodes.length);
+  var cellX = new Int32Array(nodes.length);
+  var cellY = new Int32Array(nodes.length);
+  var nodeCell = new Int32Array(nodes.length);
+  var sortedNode = new Int32Array(nodes.length);
+  var gridCounts = new Int32Array(1024);
+  var gridStarts = new Int32Array(1024);
+  var gridWrite = new Int32Array(1024);
+  var nonEmptyCells = new Int32Array(1024);
+  var xOrderNeedsInit = true;
   function syncActiveNodes() {
     activeNodesList = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -497,6 +508,11 @@ const CLIENT = String.raw`
       if (act) activeNodesList.push(n);
       else { n.vx = 0; n.vy = 0; }
     }
+    visibleEdgesList = [];
+    for (var ei = 0; ei < edges.length; ei++) {
+      if (visible[edges[ei].d.relationship]) visibleEdgesList.push(edges[ei]);
+    }
+    xOrderNeedsInit = true;
   }
   syncActiveNodes();
 
@@ -539,12 +555,30 @@ const CLIENT = String.raw`
     var activeNodes = activeNodesList;
     var mLen = activeNodes.length;
     if (mLen > 1) {
+      if (xOrderNeedsInit) {
+        for (i = 0; i < mLen; i++) xOrder[i] = i;
+        xOrder.subarray(0, mLen).sort(function (ia, ib) { return activeNodes[ia].x - activeNodes[ib].x; });
+        xOrderNeedsInit = false;
+      } else {
+        for (i = 1; i < mLen; i++) {
+          var idx = xOrder[i];
+          var xVal = activeNodes[idx].x;
+          j = i - 1;
+          while (j >= 0 && activeNodes[xOrder[j]].x > xVal) {
+            xOrder[j + 1] = xOrder[j];
+            j--;
+          }
+          xOrder[j + 1] = idx;
+        }
+      }
       var minCellX = 2147483647, maxCellX = -2147483648;
       var minCellY = 2147483647, maxCellY = -2147483648;
       for (i = 0; i < mLen; i++) {
         a = activeNodes[i];
-        var cx0 = Math.floor(a.x / 300);
-        var cy0 = Math.floor(a.y / 300);
+        var cx0 = Math.floor(a.x / 300) | 0;
+        var cy0 = Math.floor(a.y / 300) | 0;
+        cellX[i] = cx0;
+        cellY[i] = cy0;
         if (cx0 < minCellX) minCellX = cx0;
         if (cx0 > maxCellX) maxCellX = cx0;
         if (cy0 < minCellY) minCellY = cy0;
@@ -553,75 +587,94 @@ const CLIENT = String.raw`
       var cols = maxCellX - minCellX + 3;
       var rows = maxCellY - minCellY + 3;
       var totalCells = cols * rows;
+      var repAlpha = 1400 * alpha;
       if (totalCells <= 65536) {
-        gridHeads.fill(-1, 0, totalCells);
-        for (i = mLen - 1; i >= 0; i--) {
-          a = activeNodes[i];
-          var cxi = Math.floor(a.x / 300) - minCellX + 1;
-          var cyi = Math.floor(a.y / 300) - minCellY + 1;
-          var cIdx = cyi * cols + cxi;
-          gridNext[i] = gridHeads[cIdx];
-          gridHeads[cIdx] = i;
+        if (gridCounts.length < totalCells + 1) {
+          gridCounts = new Int32Array(totalCells + 1);
+          gridStarts = new Int32Array(totalCells + 1);
+          gridWrite = new Int32Array(totalCells + 1);
+          nonEmptyCells = new Int32Array(totalCells + 1);
+        } else {
+          gridCounts.fill(0, 0, totalCells + 1);
         }
-        var nOffsets = [1, cols - 1, cols, cols + 1];
-        for (var r = 1; r < rows - 1; r++) {
-          var rowOff = r * cols;
-          for (var c = 1; c < cols - 1; c++) {
-            var cell = rowOff + c;
-            var ai = gridHeads[cell];
-            if (ai === -1) continue;
-            while (ai !== -1) {
-              a = activeNodes[ai];
-              var bi = gridNext[ai];
-              while (bi !== -1) {
-                b = activeNodes[bi];
+        for (i = 0; i < mLen; i++) {
+          var cIdx = (cellY[i] - minCellY + 1) * cols + (cellX[i] - minCellX + 1);
+          nodeCell[i] = cIdx;
+          gridCounts[cIdx]++;
+        }
+        var sum = 0, nonEmptyCount = 0;
+        for (var c = 0; c < totalCells; c++) {
+          gridStarts[c] = sum;
+          gridWrite[c] = sum;
+          var cnt = gridCounts[c];
+          if (cnt > 0) nonEmptyCells[nonEmptyCount++] = c;
+          sum += cnt;
+        }
+        gridStarts[totalCells] = sum;
+        for (var k = 0; k < mLen; k++) {
+          var nIdx = xOrder[k];
+          var cell = nodeCell[nIdx];
+          sortedNode[gridWrite[cell]++] = nIdx;
+        }
+        for (var nc = 0; nc < nonEmptyCount; nc++) {
+          var cCell = nonEmptyCells[nc];
+          var startA = gridStarts[cCell];
+          var endA = gridStarts[cCell + 1];
+          var endARight = gridStarts[cCell + 2];
+          var startBottom = gridStarts[cCell + cols - 1];
+          var endBottom = gridStarts[cCell + cols + 2];
+          var jStartBottom = startBottom;
+          for (i = startA; i < endA; i++) {
+            a = activeNodes[sortedNode[i]];
+            var maxX = a.x + 300;
+            for (j = i + 1; j < endARight; j++) {
+              b = activeNodes[sortedNode[j]];
+              if (b.x > maxX) break;
+              dx = b.x - a.x; dy = b.y - a.y;
+              d2 = dx * dx + dy * dy;
+              if (d2 > 90000) continue;
+              if (d2 < 1) { var jit = pairJitter(a.i, b.i); dx = jit.dx; dy = jit.dy; d2 = 1; }
+              f = repAlpha / d2;
+              a.vx -= dx * f; a.vy -= dy * f;
+              b.vx += dx * f; b.vy += dy * f;
+            }
+            if (jStartBottom < endBottom) {
+              var minX = a.x - 300;
+              while (jStartBottom < endBottom && activeNodes[sortedNode[jStartBottom]].x < minX) jStartBottom++;
+              for (j = jStartBottom; j < endBottom; j++) {
+                b = activeNodes[sortedNode[j]];
+                if (b.x > maxX) break;
                 dx = b.x - a.x; dy = b.y - a.y;
                 d2 = dx * dx + dy * dy;
-                if (d2 <= 90000) {
-                  if (d2 < 1) { var jit = pairJitter(a.i, b.i); dx = jit.dx; dy = jit.dy; d2 = 1; }
-                  f = (1400 * alpha) / d2;
-                  a.vx -= dx * f; a.vy -= dy * f;
-                  b.vx += dx * f; b.vy += dy * f;
-                }
-                bi = gridNext[bi];
+                if (d2 > 90000) continue;
+                if (d2 < 1) { var jit2 = pairJitter(a.i, b.i); dx = jit2.dx; dy = jit2.dy; d2 = 1; }
+                f = repAlpha / d2;
+                a.vx -= dx * f; a.vy -= dy * f;
+                b.vx += dx * f; b.vy += dy * f;
               }
-              for (var dOff = 0; dOff < 4; dOff++) {
-                var nbi = gridHeads[cell + nOffsets[dOff]];
-                while (nbi !== -1) {
-                  b = activeNodes[nbi];
-                  dx = b.x - a.x; dy = b.y - a.y;
-                  d2 = dx * dx + dy * dy;
-                  if (d2 <= 90000) {
-                    if (d2 < 1) { var jit2 = pairJitter(a.i, b.i); dx = jit2.dx; dy = jit2.dy; d2 = 1; }
-                    f = (1400 * alpha) / d2;
-                    a.vx -= dx * f; a.vy -= dy * f;
-                    b.vx += dx * f; b.vy += dy * f;
-                  }
-                  nbi = gridNext[nbi];
-                }
-              }
-              ai = gridNext[ai];
             }
           }
         }
       } else {
         for (i = 0; i < mLen; i++) {
-          a = activeNodes[i];
+          a = activeNodes[xOrder[i]];
+          var maxSweepX = a.x + 300;
           for (j = i + 1; j < mLen; j++) {
-            b = activeNodes[j];
+            b = activeNodes[xOrder[j]];
+            if (b.x > maxSweepX) break;
             dx = b.x - a.x; dy = b.y - a.y;
             d2 = dx * dx + dy * dy;
             if (d2 > 90000) continue;
             if (d2 < 1) { var jit3 = pairJitter(a.i, b.i); dx = jit3.dx; dy = jit3.dy; d2 = 1; }
-            f = (1400 * alpha) / d2;
+            f = repAlpha / d2;
             a.vx -= dx * f; a.vy -= dy * f;
             b.vx += dx * f; b.vy += dy * f;
           }
         }
       }
     }
-    edges.forEach(function (e) {
-      if (!isVisible(e)) return;
+    for (i = 0; i < visibleEdgesList.length; i++) {
+      var e = visibleEdgesList[i];
       dx = e.t.x - e.s.x; dy = e.t.y - e.s.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       var strength = Math.max(e.d.confidence, e.d.reverseConfidence);
@@ -629,7 +682,7 @@ const CLIENT = String.raw`
       f = ((d - rest) / d) * 0.05 * alpha * (0.4 + strength);
       e.s.vx += dx * f; e.s.vy += dy * f;
       e.t.vx -= dx * f; e.t.vy -= dy * f;
-    });
+    }
     dirList.forEach(function (d) { d.cx = 0; d.cy = 0; d.count = 0; });
     activeNodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
     activeNodes.forEach(function (n) {
@@ -650,12 +703,14 @@ const CLIENT = String.raw`
   var size = { w: 0, h: 0, dpr: 1 };
   function resizeNow() {
     var rect = canvas.getBoundingClientRect();
-    var maxScale = Math.sqrt(16000000 / Math.max(1, rect.width * rect.height));
+    var rw = rect.width > 0 ? rect.width : (canvas.clientWidth || 800);
+    var rh = rect.height > 0 ? rect.height : (canvas.clientHeight || 600);
+    var maxScale = Math.sqrt(16000000 / Math.max(1, rw * rh));
     var dpr = Math.min(window.devicePixelRatio || 1, 2, maxScale);
     size.dpr = dpr;
-    size.w = rect.width; size.h = rect.height;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    size.w = rw; size.h = rh;
+    canvas.width = Math.round(rw * dpr);
+    canvas.height = Math.round(rh * dpr);
     requestDraw();
   }
   function bounds(list) {
@@ -664,7 +719,9 @@ const CLIENT = String.raw`
       minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
       minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
     });
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(size.w / (maxX - minX + 160), size.h / (maxY - minY + 160)))) };
+    var w = Math.max(1, size.w);
+    var h = Math.max(1, size.h);
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(w / Math.max(1, maxX - minX + 160), h / Math.max(1, maxY - minY + 160)))) };
   }
   function fit() {
     var list = activeNodesList;
@@ -1011,7 +1068,7 @@ const CLIENT = String.raw`
           fitPendingAfterSettle = false;
           if (!userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
         }
-        if (reduceMotion && (alpha > 0.02 || steps > 2)) {
+        if (reduceMotion && didSimStep) {
           requestDraw();
           return;
         }
@@ -1200,6 +1257,9 @@ const CLIENT = String.raw`
         drag = null;
         pinchMoved = true;
         canvas.classList.remove('dragging');
+        activeTouches.forEach(function (_, pid) {
+          try { canvas.setPointerCapture(pid); } catch (_) {}
+        });
         var pts = Array.from(activeTouches.values());
         pinchState = {
           midX: (pts[0].x + pts[1].x) / 2,
@@ -1249,7 +1309,7 @@ const CLIENT = String.raw`
       if (drag && drag.stackedSingleTouch) {
         if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 6) {
           drag.moved = true;
-          if (window.scrollY === prevTouch.lastScrollY && dyClient !== 0) {
+          if (!ev.isTrusted && window.scrollY === prevTouch.lastScrollY && dyClient !== 0) {
             window.scrollBy(0, dyClient);
           }
           prevTouch.lastScrollY = window.scrollY;
@@ -1334,6 +1394,13 @@ const CLIENT = String.raw`
     canvas.classList.remove('dragging');
   });
   canvas.addEventListener('pointerleave', function () { if (!drag) { tooltip.hidden = true; if (hoverNode) { hoverNode = null; requestDraw(); } } });
+  window.addEventListener('blur', function () {
+    activeTouches.clear();
+    pinchState = null;
+    pinchMoved = false;
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
   canvas.addEventListener('wheel', function (ev) {
     ev.preventDefault();
     userMoved = true; flight = null;

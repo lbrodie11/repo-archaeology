@@ -149,8 +149,10 @@ describe('RA-15 map engine: contract, layout determinism, and spatial grid equiv
 
   it('computes the 1,000-edge layout in under 200 ms in Node (median of 10 runs)', () => {
     const data1000 = generateSyntheticMapData(1000);
-    // Warmup
-    computeLayout(data1000);
+    // Warm up V8 JIT across 3 runs before timing
+    for (let w = 0; w < 3; w++) {
+      computeLayout(data1000);
+    }
     const durations: number[] = [];
     for (let i = 0; i < 10; i++) {
       const t0 = performance.now();
@@ -213,6 +215,38 @@ describe('RA-15 map engine: browser runtime behavior (Playwright)', () => {
             () => (window as unknown as { __testDraws: number }).__testDraws,
           );
           assert.equal(drawsAfterIdle, drawsBeforeIdle, 'Expected fallback simulation to stop drawing once settled');
+
+          // Also verify corrupted #ra-layout with non-finite coordinates falls back cleanly without NaN arcs
+          const pathCorruptLayout = join(tmpDir, 'map-50-corrupt.html');
+          const corruptHtml = htmlWithLayout.replace(
+            /<script type="application\/json" id="ra-layout">[\s\S]*?<\/script>/,
+            `<script type="application/json" id="ra-layout">{"x":[${new Array(data50.nodes.length).fill('null').join(',')}],"y":[${new Array(data50.nodes.length).fill('0').join(',')}]}</script>`,
+          );
+          writeFileSync(pathCorruptLayout, corruptHtml, 'utf8');
+          const pageCorrupt = await context.newPage();
+          await pageCorrupt.addInitScript(() => {
+            const win = window as unknown as { __testDraws: number; __nanArc: boolean };
+            win.__testDraws = 0;
+            win.__nanArc = false;
+            const origFillRect = CanvasRenderingContext2D.prototype.fillRect;
+            CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+              if (x === 0 && y === 0 && w > 0 && h > 0) win.__testDraws++;
+              return origFillRect.call(this, x, y, w, h);
+            };
+            const origArc = CanvasRenderingContext2D.prototype.arc;
+            CanvasRenderingContext2D.prototype.arc = function (x, y, r, sa, ea, ccw) {
+              if (!Number.isFinite(x) || !Number.isFinite(y)) win.__nanArc = true;
+              return origArc.call(this, x, y, r, sa, ea, ccw);
+            };
+          });
+          await pageCorrupt.goto(pathToFileURL(pathCorruptLayout).href, { waitUntil: 'load' });
+          await pageCorrupt.waitForTimeout(400);
+          const corruptState = await pageCorrupt.evaluate(() => {
+            const win = window as unknown as { __testDraws: number; __nanArc: boolean };
+            return { draws: win.__testDraws, nanArc: win.__nanArc };
+          });
+          assert.ok(corruptState.draws > 2, 'Expected corrupted #ra-layout to fall back to simulation');
+          assert.equal(corruptState.nanArc, false, 'Expected no NaN canvas arc coordinates when #ra-layout is corrupted');
           await context.close();
         }
 
