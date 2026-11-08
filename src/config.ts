@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { ConfigError } from './errors.js';
 import { hasSymlinkInRepoPath, type CacheSettings } from './git/cache.js';
 import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
 import {
@@ -8,8 +9,16 @@ import {
   MAX_OWNERS_PER_SUGGESTION,
   type OwnersConfig,
 } from './model/owners.js';
+import { isStyleMode, type StyleMode } from './style/frame12.js';
 
-export { riskySkipPattern, type OwnersConfig };
+export { ConfigError, riskySkipPattern, type OwnersConfig, type StyleMode };
+
+const INVALID_STYLE_SYMBOL = Symbol.for('repo-archaeology.invalidStyle');
+
+export function getInvalidConfigStyle(settings: Partial<Settings> | undefined): string | undefined {
+  if (!settings) return undefined;
+  return (settings as Record<symbol, string | undefined>)[INVALID_STYLE_SYMBOL];
+}
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -36,6 +45,8 @@ export interface Settings {
   useDefaultIgnores: boolean;
   /** Optional commit origin classification overrides and per-origin weights. */
   origin?: OriginConfig;
+  /** Optional visual style mode ("classic" or "rich"). */
+  style?: StyleMode;
   /** Persistent history cache (`dir` relative to the repository root; `enabled: false` turns it off). */
   cache?: CacheSettings;
   /** Optional contributor context and CODEOWNERS enrichment settings for `diff`. */
@@ -62,10 +73,6 @@ export const DEFAULT_IGNORES: readonly string[] = Object.freeze([
   // snapshots and release bookkeeping
   '__snapshots__/', '*.snap', 'CHANGELOG*', 'HISTORY.md',
 ]);
-
-export class ConfigError extends Error {
-  override name = 'ConfigError';
-}
 
 /**
  * The config file comes from the repository, which may not be yours (the README demo
@@ -130,6 +137,7 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
       'skipCommits',
       'skipCommitPrefixes',
       'origin',
+      'style',
       'cache',
       'owners',
     ]),
@@ -185,6 +193,17 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
   }
   if (raw.origin !== undefined) {
     out.origin = validateOriginConfig(raw.origin, source);
+  }
+  if (raw.style !== undefined) {
+    if (isStyleMode(raw.style)) {
+      out.style = raw.style;
+    } else {
+      Object.defineProperty(out, INVALID_STYLE_SYMBOL, {
+        value: typeof raw.style === 'string' ? raw.style : JSON.stringify(raw.style),
+        enumerable: false,
+        configurable: true,
+      });
+    }
   }
   if (raw.cache !== undefined) {
     out.cache = validateCacheSettings(raw.cache, source);
@@ -326,6 +345,14 @@ function validateOriginConfig(raw: unknown, source: string): OriginConfig {
 /** Defaults, then the config file, then command-line flags. Ignore lists are concatenated. */
 export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<Settings>): Settings {
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stripUndefined(fromFile), ...stripUndefined(fromFlags) };
+  const invalidFileStyle = getInvalidConfigStyle(fromFile);
+  if (invalidFileStyle !== undefined && merged.style === undefined) {
+    Object.defineProperty(merged, INVALID_STYLE_SYMBOL, {
+      value: invalidFileStyle,
+      enumerable: false,
+      configurable: true,
+    });
+  }
   merged.ignore = [...(fromFile.ignore ?? []), ...(fromFlags.ignore ?? [])];
   if (fromFile.cache !== undefined || fromFlags.cache !== undefined) {
     merged.cache = { ...stripUndefined(fromFile.cache ?? {}), ...stripUndefined(fromFlags.cache ?? {}) };

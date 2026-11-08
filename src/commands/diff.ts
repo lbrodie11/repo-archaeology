@@ -16,6 +16,7 @@ import {
 } from '../model/owners.js';
 import { isSameVerdictEntry, VerdictMatcher } from '../model/verdicts.js';
 import {
+  attachAllEvidence,
   buildMeta,
   describeStrength,
   DISCLAIMER,
@@ -617,10 +618,13 @@ export function suggestMissing(
     const baseView = toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath);
     const alsoLinkedFrom = [...entry.linkedFrom].filter((p) => p !== entry.fromPath);
     if (!ownersConfig.enabled) {
-      return {
-        ...baseView,
-        alsoLinkedFrom,
-      };
+      return attachAllEvidence(
+        {
+          ...baseView,
+          alsoLinkedFrom,
+        },
+        baseView.allEvidence,
+      );
     }
     const ownership = computeFileOwnership(baseView.to, {
       history: verdictCtx.history,
@@ -629,13 +633,16 @@ export function suggestMissing(
       shallow: verdictCtx.shallow,
       codeowners: options.codeowners,
     });
-    return {
-      ...baseView,
-      alsoLinkedFrom,
-      owners: ownership.owners,
-      ownersSample: ownership.ownersSample,
-      ...(ownership.codeowners !== undefined ? { codeowners: ownership.codeowners } : {}),
-    };
+    return attachAllEvidence(
+      {
+        ...baseView,
+        alsoLinkedFrom,
+        owners: ownership.owners,
+        ownersSample: ownership.ownersSample,
+        ...(ownership.codeowners !== undefined ? { codeowners: ownership.codeowners } : {}),
+      },
+      baseView.allEvidence,
+    );
   });
   const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
   const families = buildDiffFamilies(verdictCtx, changed, allSuggestedPaths, options.kinds);

@@ -26,6 +26,7 @@ import {
   resolveCommit,
   type TreeFileSet,
 } from './git/repo.js';
+import { UsageError } from './errors.js';
 import { createAbortError, GitError, runGit, type GitSpawnObserver } from './git/run.js';
 import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
 import type { RepoFiles } from './imports/resolve.js';
@@ -45,9 +46,7 @@ import { PathMatcher } from './util/glob.js';
 import { getToolVersion } from './report/contract.js';
 import { progress } from './util/term.js';
 
-export class UsageError extends Error {
-  override name = 'UsageError';
-}
+export { UsageError };
 
 export interface ProgressEvent {
   phase: string;
@@ -74,6 +73,8 @@ export interface ContextOptions {
   treeFilesOptions?: GitTreeFilesOptions;
   /** Optional observer invoked when `git log` is spawned during history loading (for testing). */
   onSpawn?: GitSpawnObserver;
+  /** Optional callback invoked as soon as effective `Settings` are resolved, before history loading starts. */
+  onSettingsResolved?: (settings: Settings) => void;
 }
 
 export interface Context {
@@ -99,6 +100,8 @@ export interface Context {
   mergeBaseSha?: string;
   /** Commit SHA of `HEAD` (or resolved `<head>` when `--head` is used). */
   headSha?: string;
+  /** Raw `remote.origin.url` from git config, if configured. */
+  remoteUrl?: string;
   /** Head ref and resolved commit SHA when `--head <ref>` was explicitly provided. */
   head?: { ref: string; sha: string };
   /** Loaded and compiled relationship verdicts from `.repo-archaeology.verdicts.json`. */
@@ -366,6 +369,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     const activeVerdicts = mergeBaseSha !== undefined ? baseVerdictsRes.loaded : headVerdictsRes.loaded;
     const settings = resolveSettings(fileConfig, flags);
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
+    options?.onSettingsResolved?.(settings);
 
     if (emitStderrProgress) progress('Reading git history…');
     const historyCache = await resolveHistoryCache(root, fileConfig.cache, flags.cache, shallow, signal, currentFiles);
@@ -424,6 +428,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   const fileConfig = useConfigFile ? loadConfigFile(root) : {};
   const settings = resolveSettings(fileConfig, flags);
   compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
+  options?.onSettingsResolved?.(settings);
   const headVerdicts = loadVerdictsFile(root);
 
   const headSha = await resolveCommit(root, 'HEAD');

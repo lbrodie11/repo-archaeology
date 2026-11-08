@@ -16,14 +16,27 @@ import {
   verdictList,
   verdictPrune,
 } from './commands/verdict.js';
-import { ConfigError, type Settings } from './config.js';
-import { loadContext, UsageError } from './context.js';
+import { ConfigError, getInvalidConfigStyle, type Settings } from './config.js';
+import { loadContext, UsageError, type Context } from './context.js';
 import { workingTreeChanges } from './git/changes.js';
+import { remoteOriginUrl } from './git/repo.js';
 import { GitError } from './git/run.js';
 import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
 import { parseOriginWeightsSpec, type OriginWeights } from './model/origin.js';
 import { formatJsonContract, getToolVersion, validateJsonOutPath, writeJsonContractFile } from './report/contract.js';
 import { renderDiffMarkdown } from './report/markdown.js';
+import {
+  detectTerminalCapabilities,
+  printRichDiff,
+  printRichDimLine,
+  printRichExplain,
+  printRichFile,
+  printRichScan,
+  startRichProgressSpinner,
+  type RichRenderOptions,
+  type RichSpinnerController,
+} from './report/terminal-rich.js';
+import { resolveStyleMode, type StyleMode } from './style/frame12.js';
 import { c, terminalText } from './util/term.js';
 
 const version = getToolVersion();
@@ -109,6 +122,11 @@ interface GlobalOptions {
   owners?: boolean;
   ignore?: string[];
   defaultIgnores: boolean;
+  style?: StyleMode;
+  ascii?: boolean;
+  links?: boolean;
+  color?: boolean;
+  fullEvidence?: boolean;
   cache: boolean;
   json?: boolean;
 }
@@ -137,8 +155,72 @@ function settingsFrom(opts: GlobalOptions, cmd?: Command): Partial<Settings> {
     owners: ownersFlag !== undefined ? { enabled: ownersFlag } : undefined,
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
+    style: opts.style,
     cache: opts.cache === false ? { enabled: false } : undefined,
   };
+}
+
+function richRenderOptionsFrom(
+  global: GlobalOptions,
+  remoteUrl?: string,
+  flagSettings?: Partial<Settings>,
+): RichRenderOptions {
+  return {
+    remoteUrl,
+    ascii: global.ascii === true,
+    noColor: global.color === false,
+    noLinks: global.links === false,
+    fullEvidence: global.fullEvidence === true,
+    flagSettings,
+  };
+}
+
+async function resolveRichRenderOptions(global: GlobalOptions, ctx: Context): Promise<RichRenderOptions> {
+  const baseOpts = richRenderOptionsFrom(global, undefined, ctx.flagSettings);
+  const caps = detectTerminalCapabilities(baseOpts);
+  const remoteUrl = caps.links ? await remoteOriginUrl(ctx.root) : undefined;
+  return { ...baseOpts, remoteUrl };
+}
+
+async function loadTerminalContext(
+  global: GlobalOptions,
+  options: { base?: string; isMachineOutput?: boolean; cmd?: Command } = {},
+): Promise<{ ctx: Context; style: StyleMode; spinner?: RichSpinnerController }> {
+  if (global.style !== undefined) {
+    resolveStyleMode({ flag: global.style });
+  }
+  const settingsFlags = settingsFrom(global, options.cmd);
+  if (options.isMachineOutput) {
+    const ctx = await loadContext(global.cwd, settingsFlags, {
+      base: options.base,
+      head: global.head,
+    });
+    return { ctx, style: 'classic' };
+  }
+
+  let resolvedStyle: StyleMode = 'classic';
+  let spinner: RichSpinnerController | undefined;
+  try {
+    const ctx = await loadContext(global.cwd, settingsFlags, {
+      base: options.base,
+      head: global.head,
+      onSettingsResolved: (settings) => {
+        resolvedStyle = resolveStyleMode({
+          flag: global.style,
+          env: process.env.REPO_ARCHAEOLOGY_STYLE,
+          config: settings.style ?? getInvalidConfigStyle(settings),
+          onWarning: (msg) => console.error(c.yellow(`! ${terminalText(msg)}`)),
+        });
+        if (resolvedStyle === 'rich') {
+          spinner = startRichProgressSpinner(richRenderOptionsFrom(global));
+        }
+      },
+    });
+    return { ctx, style: resolvedStyle, spinner };
+  } catch (err) {
+    spinner?.stop();
+    throw err;
+  }
 }
 
 function printJson(value: object): void {
@@ -168,6 +250,10 @@ program
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
+  .option('--style <mode>', 'visual style mode: classic or rich', (value) => resolveStyleMode({ flag: value }))
+  .option('--ascii', 'use ASCII-only characters in rich terminal output')
+  .addOption(new Option('--no-links', 'disable OSC 8 hyperlinks in rich terminal output'))
+  .option('--full-evidence', 'show all supporting commit receipts inline in rich terminal output')
   .option('--no-cache', 'do not read or write the persistent history cache (.git/repo-archaeology/cache/)')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
@@ -182,14 +268,26 @@ program
   .option('--show-silenced', 'also show relationships silenced by expected verdicts')
   .action(async (opts: { limit: number; kinds: Relationship[]; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
-    const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
-    if (global.json) {
-      printVersionedJson(await createRepository(ctx).scan(options));
-    } else {
-      const result = scan(ctx, options);
-      printScan(result, options);
+    const { ctx, style, spinner } = await loadTerminalContext(global, {
+      isMachineOutput: Boolean(global.json),
+    });
+    try {
+      // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
+      const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(await createRepository(ctx).scan(options));
+      } else {
+        const result = scan(ctx, options);
+        spinner?.stop();
+        if (style === 'rich') {
+          printRichScan(result, options, await resolveRichRenderOptions(global, ctx));
+        } else {
+          printScan(result, options);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -229,26 +327,49 @@ program
         validateJsonOutPath(opts.jsonOut);
       }
       const ownersFlag = resolveOwnersFlag(cmd);
-      const ctx = await loadContext(global.cwd, settingsFrom(global, cmd), { base: opts.base, head: global.head });
-      const result = await createRepository(ctx).diff({ ...opts, owners: ownersFlag });
-      if (opts.jsonOut !== undefined) {
-        writeJsonContractFile(opts.jsonOut, result);
+      const { ctx, style, spinner } = await loadTerminalContext(global, {
+        base: opts.base,
+        isMachineOutput: Boolean(global.json || opts.format === 'markdown'),
+        cmd,
+      });
+      try {
+        if (global.json || opts.format === 'markdown') {
+          const result = await createRepository(ctx).diff({ ...opts, owners: ownersFlag });
+          spinner?.stop();
+          if (opts.jsonOut !== undefined) {
+            writeJsonContractFile(opts.jsonOut, result);
+          }
+          if (global.json) printVersionedJson(result);
+          else {
+            const repoUrl =
+              process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+                ? `${process.env.GITHUB_SERVER_URL.replace(/\/+$/, '')}/${process.env.GITHUB_REPOSITORY}`
+                : undefined;
+            process.stdout.write(
+              renderDiffMarkdown(result, {
+                settings: ctx.settings,
+                flagSettings: ctx.flagSettings,
+                repoUrl,
+              }),
+            );
+          }
+          if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
+        } else {
+          const result = await diff(ctx, { ...opts, owners: ownersFlag });
+          spinner?.stop();
+          if (opts.jsonOut !== undefined) {
+            writeJsonContractFile(opts.jsonOut, result);
+          }
+          if (style === 'rich') {
+            printRichDiff(result, await resolveRichRenderOptions(global, ctx));
+          } else {
+            printDiff(result);
+          }
+          if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
+        }
+      } finally {
+        spinner?.stop();
       }
-      if (global.json) printVersionedJson(result);
-      else if (opts.format === 'markdown') {
-        const repoUrl =
-          process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
-            ? `${process.env.GITHUB_SERVER_URL.replace(/\/+$/, '')}/${process.env.GITHUB_REPOSITORY}`
-            : undefined;
-        process.stdout.write(
-          renderDiffMarkdown(result, {
-            settings: ctx.settings,
-            flagSettings: ctx.flagSettings,
-            repoUrl,
-          }),
-        );
-      } else printDiff(result);
-      if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
     },
   );
 
@@ -260,12 +381,24 @@ program
   .option('--show-silenced', 'also show companions silenced by expected verdicts')
   .action(async (path: string, opts: { limit: number; showSilenced?: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    if (global.json) {
-      printVersionedJson(await createRepository(ctx).file(path, opts));
-    } else {
-      const result = fileReport(ctx, path, opts);
-      printFile(result);
+    const { ctx, style, spinner } = await loadTerminalContext(global, {
+      isMachineOutput: Boolean(global.json),
+    });
+    try {
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(await createRepository(ctx).file(path, opts));
+      } else {
+        const result = fileReport(ctx, path, opts);
+        spinner?.stop();
+        if (style === 'rich') {
+          printRichFile(result, await resolveRichRenderOptions(global, ctx));
+        } else {
+          printFile(result);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -280,22 +413,35 @@ program
   .option('-U, --context <lines>', 'lines of unified diff context around each hunk (default 2, max 10)', nonNegativeInt, 2)
   .action(async (fileA: string, fileB: string, opts: { base?: string; commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-    if (global.json) {
-      printVersionedJson(
-        await createRepository(ctx).explain(fileA, fileB, {
+    const { ctx, style, spinner } = await loadTerminalContext(global, {
+      base: opts.base,
+      isMachineOutput: Boolean(global.json),
+    });
+    try {
+      if (global.json) {
+        spinner?.stop();
+        printVersionedJson(
+          await createRepository(ctx).explain(fileA, fileB, {
+            commits: opts.commits,
+            counterexamples: opts.counterexamples,
+            context: opts.context,
+          }),
+        );
+      } else {
+        const result = await explain(ctx, fileA, fileB, {
           commits: opts.commits,
           counterexamples: opts.counterexamples,
-          context: opts.context,
-        }),
-      );
-    } else {
-      const result = await explain(ctx, fileA, fileB, {
-        commits: opts.commits,
-        counterexamples: opts.counterexamples,
-        contextLines: opts.context,
-      });
-      printExplain(result);
+          contextLines: opts.context,
+        });
+        spinner?.stop();
+        if (style === 'rich') {
+          printRichExplain(result, await resolveRichRenderOptions(global, ctx));
+        } else {
+          printExplain(result);
+        }
+      }
+    } finally {
+      spinner?.stop();
     }
   });
 
@@ -452,29 +598,50 @@ program.action(async () => {
   }
   const global = program.opts<GlobalOptions>();
   const ownersFlag = resolveOwnersFlag();
-  const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-  let changedWithoutHistory = 0;
-  if (!ctx.head) {
-    const changes = await workingTreeChanges(ctx.root);
-    if (changes.length > 0) {
-      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS], owners: ownersFlag }, changes);
-      if (result.changed.some((file) => file.hasHistory)) {
-        if (global.json) printJson({ mode: 'diff', ...result });
-        else printDiff(result);
-        return;
+  const { ctx, style, spinner } = await loadTerminalContext(global, {
+    isMachineOutput: Boolean(global.json),
+  });
+  try {
+    let changedWithoutHistory = 0;
+    if (!ctx.head) {
+      const changes = await workingTreeChanges(ctx.root);
+      if (changes.length > 0) {
+        const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS], owners: ownersFlag }, changes);
+        if (result.changed.some((file) => file.hasHistory)) {
+          spinner?.stop();
+          if (global.json) printJson({ mode: 'diff', ...result });
+          else if (style === 'rich') printRichDiff(result, await resolveRichRenderOptions(global, ctx));
+          else printDiff(result);
+          return;
+        }
+        changedWithoutHistory = result.changed.length;
       }
-      changedWithoutHistory = result.changed.length;
     }
-  }
 
-  const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };
-  const result = scan(ctx, options);
-  if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
-  else {
-    if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
-    printScan(result, options);
-    console.log();
-    console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
+    const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };
+    const result = scan(ctx, options);
+    spinner?.stop();
+    if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
+    else if (style === 'rich') {
+      const richOpts = await resolveRichRenderOptions(global, ctx);
+      if (changedWithoutHistory > 0) {
+        printRichDimLine(
+          `${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.`,
+          richOpts,
+        );
+        process.stdout.write('\n');
+      }
+      printRichScan(result, options, richOpts);
+      process.stdout.write('\n');
+      printRichDimLine('Explore the interactive view with `repo-archaeology map`.', richOpts);
+    } else {
+      if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
+      printScan(result, options);
+      console.log();
+      console.log(c.dim('Explore the interactive view with `repo-archaeology map`.'));
+    }
+  } finally {
+    spinner?.stop();
   }
 });
 

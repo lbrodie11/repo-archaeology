@@ -65,8 +65,20 @@ export function terminalText(value: string): string {
   });
 }
 
+export const sanitizeDisplayText = terminalText;
+
+let activeProgressHandler: ((message: string) => void) | undefined;
+
+export function setProgressHandler(handler: ((message: string) => void) | undefined): void {
+  activeProgressHandler = handler;
+}
+
 /** Progress messages go to stderr so stdout stays clean for --json and pipes. */
 export function progress(message: string): void {
+  if (activeProgressHandler) {
+    activeProgressHandler(message);
+    return;
+  }
   if (process.stderr.isTTY) process.stderr.write(`${c.dim(message)}\n`);
 }
 

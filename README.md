@@ -373,11 +373,15 @@ Global options work with every command:
 | `--half-life <days>` | | Weight recent commits more |
 | `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
 | `--origin-weights <spec>` | `human=1,agent=1,bot=1` | Weight commits by origin, e.g. `bot=0,agent=0.5` (values in `[0, 1]`) |
+| `--style <mode>` | `classic` | Terminal visual style: `classic` (default) or `rich` (FRAME/12 editorial hierarchy; also settable via `REPO_ARCHAEOLOGY_STYLE` for personal preference, or `"style"` in `.repo-archaeology.json` as a team-wide default) |
+| `--ascii` | | Use ASCII-only box rules, arrows, and separators in `--style rich` output |
+| `--no-links` | | Disable OSC 8 clickable commit-receipt hyperlinks in `--style rich` output |
+| `--full-evidence` | | Inline all supporting commit receipts without an `Additional receipts` split in `--style rich` output |
 | `--owners` / `--no-owners` | `false` | Enrich `diff` suggestions with recent human contributor context and `CODEOWNERS` handles |
 | `--no-cache` | | Neither read nor write the [history cache](#history-cache) |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 
-Settings can also live in `.repo-archaeology.json` at the repository root (flags win):
+Settings can also live in `.repo-archaeology.json` at the repository root (flags win). Note that `"style"` in `.repo-archaeology.json` sets a repository-wide default for every contributor (overridable via `REPO_ARCHAEOLOGY_STYLE=classic` or `--style classic`); for a personal terminal preference, export `REPO_ARCHAEOLOGY_STYLE=rich` in your shell profile instead:
 
 ```json
 {

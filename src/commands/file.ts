@@ -1,6 +1,7 @@
 import type { Context } from '../context.js';
 import { toRepoPath, UsageError } from '../context.js';
 import {
+  attachAllEvidence,
   buildMeta,
   describeStrength,
   formatVerdictAnnotation,
@@ -74,10 +75,13 @@ export function fileReport(ctx: Context, input: string, options: FileOptions): F
         const target = model.path(comp.to);
         const relationship = ctx.classifier.classify(path, target);
         const view = toView(ctx, comp, relationship);
-        return {
-          ...view,
-          wouldAlert: comp.confidence >= ctx.thresholds.minConfidence && view.verdict?.kind !== 'expected',
-        };
+        return attachAllEvidence(
+          {
+            ...view,
+            wouldAlert: comp.confidence >= ctx.thresholds.minConfidence && view.verdict?.kind !== 'expected',
+          },
+          view.allEvidence,
+        );
       });
     return {
       meta: buildMeta(ctx),
