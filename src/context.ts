@@ -400,7 +400,10 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       head: { ref: headRef, sha: headSha },
       verdicts: new VerdictMatcher(activeVerdicts, trained.history),
       headVerdicts: headVerdictsRes.loaded,
-      open: () => treeFiles.open(),
+      open: () => {
+        classifier.resetScope();
+        treeFiles.open();
+      },
       close: options?.keepOpen ? () => {} : () => treeFiles.close(),
       closeSession: () => treeFiles.close(),
       historyCache,
@@ -470,6 +473,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     headSha,
     verdicts: new VerdictMatcher(activeVerdicts, trained.history),
     headVerdicts,
+    open: () => classifier.resetScope(),
     historyCache,
   };
 }

@@ -731,6 +731,191 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       r.cleanup();
     }
   });
+
+  it('validates RA-09B import-graph edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage', () => {
+    const r = new FixtureRepo();
+    try {
+      r.write(
+        'package.json',
+        JSON.stringify(
+          {
+            name: 'monorepo-root',
+            private: true,
+            workspaces: ['packages/*'],
+            dependencies: { react: '^18.0.0' },
+          },
+          null,
+          2,
+        ),
+      );
+      r.write(
+        'packages/ui/package.json',
+        JSON.stringify(
+          {
+            name: '@acme/ui',
+            exports: {
+              '.': './dist/index.js',
+              './internal': null,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      r.write('packages/ui/src/index.ts', 'export const Button = () => "button";\n');
+      r.write(
+        'packages/app/package.json',
+        JSON.stringify(
+          {
+            name: '@acme/app',
+            imports: {
+              '#config': './src/config.ts',
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      r.write('packages/app/src/config.ts', 'export const cfg = { port: 3000 };\n');
+      r.write(
+        'packages/app/src/main.ts',
+        [
+          'import { Button } from "@acme/ui";',
+          'import { cfg } from "#config";',
+          'import React from "react";',
+          'import { secret } from "@acme/ui/internal";',
+          'import { ghost } from "undeclared-pkg";',
+          'import { alias } from "~/unmapped";',
+          'import { missing } from "./missing.js";',
+          'export const run = (name: string) => import(name);',
+          'export { Button, cfg, React, secret, ghost, alias, missing };',
+          '',
+        ].join('\n'),
+      );
+      r.write('README.md', '# Monorepo\n');
+      r.git('add', '.');
+      r.commit({ message: 'init monorepo', author: 'Alice' });
+      for (let i = 1; i <= 3; i++) {
+        r.commit({
+          message: `feat: update app and ui ${i}`,
+          author: 'Alice',
+          write: {
+            'packages/ui/src/index.ts': `export const Button = () => "button-${i}";\n`,
+            'packages/app/src/main.ts': [
+              'import { Button } from "@acme/ui";',
+              'import { cfg } from "#config";',
+              'import React from "react";',
+              'import { secret } from "@acme/ui/internal";',
+              'import { ghost } from "undeclared-pkg";',
+              'import { alias } from "~/unmapped";',
+              'import { missing } from "./missing.js";',
+              'export const run = (name: string) => import(name);',
+              `export const v = ${i};`,
+              'export { Button, cfg, React, secret, ghost, alias, missing };',
+              '',
+            ].join('\n'),
+          },
+        });
+      }
+
+      // 1. Full repository `imports --json` has `meta.imports.scope === 'repository'`
+      const importsRes = runCli(['imports', '--json'], r.dir);
+      assert.equal(importsRes.code, 0, importsRes.stderr);
+      const importsJson = JSON.parse(importsRes.stdout);
+      assertMatchesSchema(importsJson, 'import-graph.schema.json');
+
+      assert.equal(importsJson.meta.imports.scope, 'repository');
+      assert.equal(importsJson.meta.imports.filesScanned, 3);
+      assert.equal(importsJson.meta.imports.internalEdges, 2);
+      assert.equal(importsJson.meta.imports.heuristicEdges, 1);
+      assert.equal(importsJson.meta.imports.external, 1);
+      assert.equal(importsJson.meta.imports.unresolved, 4);
+      assert.equal(importsJson.meta.imports.dynamicLoads, 1);
+      assert.ok(importsJson.meta.imports.unsupportedFiles >= 1); // README.md / package.json
+      assert.deepEqual(importsJson.meta.imports.unresolvedByReason, {
+        'alias-unmatched': 1,
+        'unknown-package': 1,
+        'target-missing': 1,
+        'not-exported': 1,
+      });
+
+      // Verify additive `via` and `heuristic` on edges
+      assert.deepEqual(importsJson.edges, [
+        {
+          from: 'packages/app/src/main.ts',
+          to: 'packages/app/src/config.ts',
+          specifier: '#config',
+          kind: 'static',
+          via: 'imports',
+        },
+        {
+          from: 'packages/app/src/main.ts',
+          to: 'packages/ui/src/index.ts',
+          specifier: '@acme/ui',
+          kind: 'static',
+          via: 'exports',
+          heuristic: true,
+        },
+      ]);
+
+      // Verify backwards-compatible `reason: "unmatched"` + additive `reasonCode` on unresolved
+      assert.deepEqual(importsJson.unresolved, [
+        {
+          from: 'packages/app/src/main.ts',
+          specifier: './missing.js',
+          reason: 'unmatched',
+          reasonCode: 'target-missing',
+        },
+        {
+          from: 'packages/app/src/main.ts',
+          specifier: '@acme/ui/internal',
+          reason: 'unmatched',
+          reasonCode: 'not-exported',
+        },
+        {
+          from: 'packages/app/src/main.ts',
+          specifier: '~/unmapped',
+          reason: 'unmatched',
+          reasonCode: 'alias-unmatched',
+        },
+        {
+          from: 'packages/app/src/main.ts',
+          specifier: 'undeclared-pkg',
+          reason: 'unmatched',
+          reasonCode: 'unknown-package',
+        },
+      ]);
+
+      // 2. Scoped `imports --files <file> --json` has `meta.imports.scope === 'analyzed-files'`
+      const scopedImportsRes = runCli(
+        ['imports', '--files', 'packages/app/src/config.ts', '--json'],
+        r.dir,
+      );
+      assert.equal(scopedImportsRes.code, 0, scopedImportsRes.stderr);
+      const scopedImportsJson = JSON.parse(scopedImportsRes.stdout);
+      assertMatchesSchema(scopedImportsJson, 'import-graph.schema.json');
+      assert.equal(scopedImportsJson.meta.imports.scope, 'analyzed-files');
+      assert.equal(scopedImportsJson.meta.imports.filesScanned, 2); // config.ts + importer main.ts
+
+      // 3. `scan --kinds ... --json` reports `meta.imports.scope === 'analyzed-files'` and classifies @acme/ui <- @acme/app as direct
+      const scanRes = runCli(['scan', '--kinds', 'ghost,unknown,indirect,direct,test', '--json'], r.dir);
+      assert.equal(scanRes.code, 0, scanRes.stderr);
+      const scanJson = JSON.parse(scanRes.stdout);
+      assertMatchesSchema(scanJson, 'scan.schema.json');
+      assert.equal(scanJson.meta.imports.scope, 'analyzed-files');
+      assert.equal(scanJson.meta.imports.filesScanned, 2);
+      const uiPair = scanJson.relationships.find(
+        (rel: { from: string; to: string }) =>
+          (rel.from === 'packages/app/src/main.ts' && rel.to === 'packages/ui/src/index.ts') ||
+          (rel.from === 'packages/ui/src/index.ts' && rel.to === 'packages/app/src/main.ts'),
+      );
+      assert.ok(uiPair, 'expected co-changing pair between main.ts and packages/ui/src/index.ts');
+      assert.equal(uiPair.relationship, 'direct');
+      assert.match(uiPair.why, /via heuristic source remap/);
+    } finally {
+      r.cleanup();
+    }
+  });
 });
 
 function resolveSchemaNodeForTest(ref: string): JsonSchemaNode {

@@ -144,6 +144,7 @@ export const EVALUATION_MAX_FILES = 25;
  * among the files that really changed with it, using a frozen training model.
  */
 export function backtest(ctx: Context, options: BacktestOptions): BacktestResult {
+  ctx.classifier.resetScope();
   if (options.ghosts) ctx.open?.();
   try {
     const isGhost = options.ghosts ? (from: string, to: string) => ctx.currentFiles.has(from)

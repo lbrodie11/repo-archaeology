@@ -2,25 +2,40 @@ import { posix, win32 } from 'node:path';
 import { ignorePatterns } from '../config.js';
 import { toRepoPath, UsageError, type Context } from '../context.js';
 import { workingTreeFiles } from '../imports/classify.js';
-import { ImportResolver, type RepoFiles } from '../imports/resolve.js';
+import {
+  IMPORT_UNRESOLVED_REASON_CODES,
+  ImportResolver,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
+  type RepoFiles,
+} from '../imports/resolve.js';
 import { extractDetailedDependencies, type ImportEdgeKind } from '../imports/typescript.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
 import { PathMatcher } from '../util/glob.js';
 import { c, plural, terminalText } from '../util/term.js';
 
-export type { ImportEdgeKind };
+export type {
+  ImportEdgeKind,
+  ImportResolutionVia,
+  ImportsCoverageMeta,
+  ImportUnresolvedReasonCode,
+};
 
 export interface ImportGraphEdge {
   from: string;
   to: string;
   specifier: string;
   kind: ImportEdgeKind;
+  via?: ImportResolutionVia;
+  heuristic?: boolean;
 }
 
 export interface ImportGraphUnresolved {
   from: string;
   specifier: string;
   reason: string;
+  reasonCode?: ImportUnresolvedReasonCode;
 }
 
 export interface ImportGraphOptions {
@@ -36,6 +51,13 @@ export interface ImportGraphResult {
   languages: string[];
 }
 
+interface IndexedFileStats {
+  analyzable: boolean;
+  sourceUnavailable: boolean;
+  external: number;
+  dynamicLoads: number;
+}
+
 const ANALYZABLE = /\.(?:[cm]?[jt]sx?)$/i;
 const TYPESCRIPT_EXT = /\.(?:[cm]?tsx?)$/i;
 
@@ -48,8 +70,10 @@ export interface ImportGraphIndex {
   readonly allFiles: string[];
   readonly edgesByFrom: Map<string, ImportGraphEdge[]>;
   readonly unresolvedByFrom: Map<string, ImportGraphUnresolved[]>;
+  readonly statsByFrom: Map<string, IndexedFileStats>;
   readonly importersByTarget: Map<string, Set<string>>;
   readonly languages: string[];
+  readonly repoUnsupportedFiles: number;
   indexFile(from: string): void;
 }
 
@@ -66,8 +90,10 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   const allFiles: string[] = [];
   const edgesByFrom = new Map<string, ImportGraphEdge[]>();
   const unresolvedByFrom = new Map<string, ImportGraphUnresolved[]>();
+  const statsByFrom = new Map<string, IndexedFileStats>();
   const importersByTarget = new Map<string, Set<string>>();
   const languageSet = new Set<string>();
+  let repoUnsupportedFiles = 0;
 
   const addImporter = (target: string, importer: string): void => {
     let set = importersByTarget.get(target);
@@ -83,38 +109,70 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     if (!ANALYZABLE.test(from) || !ctx.currentFiles.has(from)) {
       edgesByFrom.set(from, []);
       unresolvedByFrom.set(from, []);
+      statsByFrom.set(from, {
+        analyzable: false,
+        sourceUnavailable: false,
+        external: 0,
+        dynamicLoads: 0,
+      });
       return;
     }
     const text = repoFiles.read(from);
     if (text === undefined) {
       edgesByFrom.set(from, []);
       unresolvedByFrom.set(from, []);
+      statsByFrom.set(from, {
+        analyzable: false,
+        sourceUnavailable: true,
+        external: 0,
+        dynamicLoads: 0,
+      });
       return;
     }
     const lang = detectLanguage(from);
     if (lang) languageSet.add(lang);
 
-    const { imports, referencePaths } = extractDetailedDependencies(text, from);
+    const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, from);
     const fileEdges: ImportGraphEdge[] = [];
     const fileUnresolved: ImportGraphUnresolved[] = [];
     const seenEdges = new Set<string>();
     const seenUnresolved = new Set<string>();
+    let externalCount = 0;
 
-    for (const { specifier, kind } of imports) {
-      const resolved = resolver.resolve(from, specifier, kind === 'require' ? 'require' : 'import');
+    for (const { specifier, kind, typeOnly } of imports) {
+      const resolved = resolver.resolveDetailed(
+        from,
+        specifier,
+        kind === 'require' ? 'require' : 'import',
+        { typeOnlyImport: Boolean(typeOnly) },
+      );
       if (resolved.kind === 'file') {
         if (resolved.path !== from && ctx.currentFiles.has(resolved.path)) {
           const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
           if (!seenEdges.has(edgeKey)) {
             seenEdges.add(edgeKey);
-            fileEdges.push({ from, to: resolved.path, specifier, kind });
+            fileEdges.push({
+              from,
+              to: resolved.path,
+              specifier,
+              kind,
+              via: resolved.via,
+              ...(resolved.heuristic ? { heuristic: true } : {}),
+            });
             addImporter(resolved.path, from);
           }
         }
+      } else if (resolved.kind === 'external') {
+        externalCount++;
       } else if (resolved.kind === 'unresolved') {
         if (!seenUnresolved.has(specifier)) {
           seenUnresolved.add(specifier);
-          fileUnresolved.push({ from, specifier, reason: 'unmatched' });
+          fileUnresolved.push({
+            from,
+            specifier,
+            reason: 'unmatched',
+            reasonCode: resolved.reasonCode,
+          });
         }
       }
     }
@@ -122,24 +180,35 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     for (const referencePath of referencePaths) {
       const normRef = referencePath.replace(/\\/g, '/');
       const target = posix.normalize(posix.join(posix.dirname(from), normRef));
-      const invalid =
+      const escapedOrInvalid =
         normRef === '' ||
         posix.isAbsolute(normRef) ||
         win32.parse(normRef).root !== '' ||
         target === '..' ||
         target.startsWith('../') ||
-        !repoFiles.exists(target) ||
-        !ctx.currentFiles.has(target);
-      if (invalid) {
+        Boolean(repoFiles.isInvalidTarget?.(target, ''));
+      const missing = !escapedOrInvalid && (!repoFiles.exists(target) || !ctx.currentFiles.has(target));
+      if (escapedOrInvalid || missing) {
         if (!seenUnresolved.has(referencePath)) {
           seenUnresolved.add(referencePath);
-          fileUnresolved.push({ from, specifier: referencePath, reason: 'unmatched' });
+          fileUnresolved.push({
+            from,
+            specifier: referencePath,
+            reason: 'unmatched',
+            reasonCode: escapedOrInvalid ? 'invalid-target' : 'target-missing',
+          });
         }
       } else if (target !== from) {
         const edgeKey = `${target}\0${referencePath}\0static`;
         if (!seenEdges.has(edgeKey)) {
           seenEdges.add(edgeKey);
-          fileEdges.push({ from, to: target, specifier: referencePath, kind: 'static' });
+          fileEdges.push({
+            from,
+            to: target,
+            specifier: referencePath,
+            kind: 'static',
+            via: 'relative',
+          });
           addImporter(target, from);
         }
       }
@@ -155,11 +224,24 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
 
     edgesByFrom.set(from, fileEdges);
     unresolvedByFrom.set(from, fileUnresolved);
+    statsByFrom.set(from, {
+      analyzable: true,
+      sourceUnavailable: false,
+      external: externalCount,
+      dynamicLoads: nonLiteralLoads,
+    });
   };
 
-  const candidates = [...ctx.currentFiles]
-    .filter((file) => ANALYZABLE.test(file) && !ignoreMatcher.matches(file))
-    .sort();
+  const candidates: string[] = [];
+  for (const file of ctx.currentFiles) {
+    if (ignoreMatcher.matches(file)) continue;
+    if (ANALYZABLE.test(file)) {
+      candidates.push(file);
+    } else {
+      repoUnsupportedFiles++;
+    }
+  }
+  candidates.sort();
 
   for (const file of candidates) {
     indexFile(file);
@@ -170,12 +252,75 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     allFiles,
     edgesByFrom,
     unresolvedByFrom,
+    statsByFrom,
     importersByTarget,
     languages: [...languageSet].sort(),
+    repoUnsupportedFiles,
     indexFile,
   };
   sessionIndexCache.set(ctx, index);
   return index;
+}
+
+function buildGraphCoverage(
+  index: ImportGraphIndex,
+  files: readonly string[],
+  edges: readonly ImportGraphEdge[],
+  unresolved: readonly ImportGraphUnresolved[],
+  scope: 'repository' | 'analyzed-files',
+): ImportsCoverageMeta {
+  let filesScanned = 0;
+  let external = 0;
+  let dynamicLoads = 0;
+  let unsupportedFiles = scope === 'repository' ? index.repoUnsupportedFiles : 0;
+  let sourceUnavailable = 0;
+
+  for (const file of files) {
+    const st = index.statsByFrom.get(file);
+    if (!st) continue;
+    if (st.sourceUnavailable) {
+      sourceUnavailable++;
+    } else if (!st.analyzable) {
+      if (scope === 'analyzed-files') unsupportedFiles++;
+    } else {
+      filesScanned++;
+      external += st.external;
+      dynamicLoads += st.dynamicLoads;
+    }
+  }
+
+  let heuristicEdges = 0;
+  for (const edge of edges) {
+    if (edge.heuristic) heuristicEdges++;
+  }
+
+  const rawReasons: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+  for (const item of unresolved) {
+    const code = item.reasonCode;
+    if (code) {
+      rawReasons[code] = (rawReasons[code] ?? 0) + 1;
+    }
+  }
+  const unresolvedByReason: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+  for (const code of IMPORT_UNRESOLVED_REASON_CODES) {
+    const count = rawReasons[code];
+    if (count) {
+      unresolvedByReason[code] = count;
+    }
+  }
+
+  return {
+    scope,
+    filesScanned,
+    internalEdges: edges.length,
+    external,
+    unresolved: unresolved.length,
+    dynamicLoads,
+    unsupportedFiles,
+    sourceUnavailable,
+    heuristicEdges,
+    unresolvedByReason,
+  };
 }
 
 export function importGraph(ctx: Context, options: ImportGraphOptions = {}): ImportGraphResult {
@@ -187,8 +332,9 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
       const files = [...index.allFiles];
       const edges = files.flatMap((from) => index.edgesByFrom.get(from) ?? []);
       const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
+      const coverage = buildGraphCoverage(index, files, edges, unresolved, 'repository');
       return {
-        meta: buildMeta(ctx),
+        meta: { ...buildMeta(ctx), imports: coverage },
         files,
         edges,
         unresolved,
@@ -221,9 +367,10 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
       if (lang) langSet.add(lang);
     }
     const languages = langSet.size > 0 ? [...langSet].sort() : [...index.languages];
+    const coverage = buildGraphCoverage(index, files, edges, unresolved, 'analyzed-files');
 
     return {
-      meta: buildMeta(ctx),
+      meta: { ...buildMeta(ctx), imports: coverage },
       files,
       edges,
       unresolved,
@@ -236,24 +383,28 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
 
 export function printImports(result: ImportGraphResult): void {
   printHeader('imports', result.meta);
+  const heuristicCount = result.meta.imports?.heuristicEdges ?? 0;
+  const heuristicNote = heuristicCount > 0 ? ` (${heuristicCount} heuristic)` : '';
   console.log(
-    `${plural(result.files.length, 'file')} · ${plural(result.edges.length, 'internal import edge')} · ${plural(result.unresolved.length, 'unresolved specifier')}`,
+    `${plural(result.files.length, 'file')} · ${plural(result.edges.length, 'internal import edge')}${heuristicNote} · ${plural(result.unresolved.length, 'unresolved specifier')}`,
   );
   if (result.edges.length === 0 && result.unresolved.length === 0) {
     return;
   }
   console.log();
   for (const edge of result.edges) {
+    const tag = edge.heuristic ? `${edge.kind}, heuristic` : edge.kind;
     console.log(
-      `  ${c.bold(terminalText(edge.from))} ${c.dim('→')} ${c.bold(terminalText(edge.to))}  ${c.dim(`(${edge.kind}: ${terminalText(edge.specifier)})`)}`,
+      `  ${c.bold(terminalText(edge.from))} ${c.dim('→')} ${c.bold(terminalText(edge.to))}  ${c.dim(`(${tag}: ${terminalText(edge.specifier)})`)}`,
     );
   }
   if (result.unresolved.length > 0) {
     console.log();
     console.log(c.bold(`Unresolved (${result.unresolved.length})`));
     for (const item of result.unresolved) {
+      const detail = item.reasonCode ? `${item.reason}: ${item.reasonCode}` : item.reason;
       console.log(
-        `  ${c.bold(terminalText(item.from))}  ${terminalText(item.specifier)} ${c.dim(`[${terminalText(item.reason)}]`)}`,
+        `  ${c.bold(terminalText(item.from))}  ${terminalText(item.specifier)} ${c.dim(`[${terminalText(detail)}]`)}`,
       );
     }
   }

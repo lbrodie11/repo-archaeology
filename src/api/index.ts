@@ -8,6 +8,9 @@ import {
   type ImportGraphEdge,
   type ImportGraphResult,
   type ImportGraphUnresolved,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
 } from '../commands/imports.js';
 import { scan, type ScanResult } from '../commands/scan.js';
 import {
@@ -19,7 +22,7 @@ import {
 } from '../config.js';
 import { loadContext, UsageError, type Context, type ProgressEvent } from '../context.js';
 import { GitError } from '../git/run.js';
-import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
+import { IMPORT_UNRESOLVED_REASON_CODES, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { parseOriginWeightsSpec, type CommitOrigin, type OriginConfig, type OriginWeights } from '../model/origin.js';
 import {
   VERDICTS_FILE,
@@ -43,6 +46,7 @@ export {
   DEFAULT_IGNORES,
   DEFAULT_SETTINGS,
   GitError,
+  IMPORT_UNRESOLVED_REASON_CODES,
   JSON_SCHEMA_VERSION,
   RELATIONSHIPS,
   UsageError,
@@ -52,6 +56,9 @@ export {
   type ImportEdgeKind,
   type ImportGraphEdge,
   type ImportGraphUnresolved,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
   type OriginConfig,
   type OriginWeights,
   type ProgressEvent,

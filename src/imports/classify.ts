@@ -2,20 +2,29 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
+  candidateFilePaths,
   gitTreeFiles,
+  IMPORT_UNRESOLVED_REASON_CODES,
   ImportResolver,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
   type RepoFiles,
 } from './resolve.js';
 import { extractDetailedDependencies } from './typescript.js';
 
 export {
   gitTreeFiles,
+  IMPORT_UNRESOLVED_REASON_CODES,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
 };
 
 /**
@@ -47,8 +56,14 @@ interface FileImports {
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
+  heuristicImports: Set<string>;
   references: Set<string>;
   unresolved: number;
+  internalEdges: number;
+  heuristicEdges: number;
+  external: number;
+  dynamicLoads: number;
+  unresolvedReasons: Partial<Record<ImportUnresolvedReasonCode, number>>;
 }
 
 /**
@@ -59,18 +74,87 @@ interface FileImports {
  */
 export function workingTreeFiles(root: string, existing: ReadonlySet<string>): RepoFiles {
   let realRoot: string | undefined;
+  const existsCache = new Map<string, boolean>();
+  const realDirCache = new Map<string, string>();
+  const getRealRoot = (): string => {
+    realRoot ??= realpathSync(root);
+    return realRoot;
+  };
+  const getRealDir = (dir: string): string => {
+    let cached = realDirCache.get(dir);
+    if (cached === undefined) {
+      cached = realpathSync(join(root, dir));
+      realDirCache.set(dir, cached);
+    }
+    return cached;
+  };
+  const isInsideRealDir = (realTarget: string, realDir: string): boolean =>
+    realTarget === realDir || realTarget.startsWith(realDir.endsWith(sep) ? realDir : realDir + sep);
+
   return {
-    exists: (path) => existing.has(path),
+    exists: (path) => {
+      if (!existing.has(path)) return false;
+      const cached = existsCache.get(path);
+      if (cached !== undefined) return cached;
+      try {
+        const full = join(root, path);
+        const stat = lstatSync(full);
+        if (!stat.isFile()) {
+          existsCache.set(path, false);
+          return false;
+        }
+        const real = realpathSync(full);
+        const ok = isInsideRealDir(real, getRealRoot());
+        existsCache.set(path, ok);
+        return ok;
+      } catch {
+        existsCache.set(path, false);
+        return false;
+      }
+    },
+    isWithinDir: (path, dir) => {
+      if (!dir) return true;
+      try {
+        const full = join(root, path);
+        const stat = lstatSync(full);
+        if (!stat.isFile()) return false;
+        const real = realpathSync(full);
+        if (!isInsideRealDir(real, getRealRoot())) return false;
+        return isInsideRealDir(real, getRealDir(dir));
+      } catch {
+        return false;
+      }
+    },
+    isInvalidTarget: (path, dir) => {
+      const normalized = posix.normalize(path);
+      if (normalized === '..' || normalized.startsWith('../') || posix.isAbsolute(normalized)) return true;
+      if (dir && normalized !== dir && !normalized.startsWith(`${dir}/`)) return true;
+      for (const candidate of candidateFilePaths(normalized)) {
+        if (!existing.has(candidate)) continue;
+        try {
+          const full = join(root, candidate);
+          const stat = lstatSync(full);
+          if (stat.isSymbolicLink()) return true;
+          if (stat.isFile()) {
+            const real = realpathSync(full);
+            if (!isInsideRealDir(real, getRealRoot())) return true;
+            if (dir && !isInsideRealDir(real, getRealDir(dir))) return true;
+          }
+        } catch {
+          // candidate does not exist on disk
+        }
+      }
+      return false;
+    },
     list: () => existing,
     read: (path) => {
       try {
         const full = join(root, path);
         const stat = lstatSync(full);
         if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) return undefined;
-        realRoot ??= realpathSync(root);
         // A parent folder may itself be a symlink pointing elsewhere.
         const real = realpathSync(full);
-        if (real !== realRoot && !real.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep)) return undefined;
+        if (!isInsideRealDir(real, getRealRoot())) return undefined;
         return readFileSync(full, 'utf8');
       } catch {
         return undefined;
@@ -83,6 +167,7 @@ export class RelationshipClassifier {
   private readonly resolver: ImportResolver;
   private readonly cache = new Map<string, FileImports>();
   private readonly reachCache = new Map<string, Reach>();
+  private readonly accessedInScope = new Set<string>();
   private bridgeReferences?: Map<string, Set<string>>;
   private bridgeUses?: Map<string, SourceReference & { filesUsing: number }>;
 
@@ -91,6 +176,74 @@ export class RelationshipClassifier {
     private readonly includeBridgeFile: (path: string) => boolean = () => true,
   ) {
     this.resolver = new ImportResolver(files);
+  }
+
+  /** Clears the per-operation file access set while preserving parsed AST caches. */
+  resetScope(): void {
+    this.accessedInScope.clear();
+  }
+
+  /**
+   * Returns import resolution coverage for the files analyzed in the current scope
+   * (`scope: 'analyzed-files'`), or `undefined` when no files were analyzed.
+   */
+  coverage(): ImportsCoverageMeta | undefined {
+    if (this.accessedInScope.size === 0) return undefined;
+    let filesScanned = 0;
+    let internalEdges = 0;
+    let external = 0;
+    let unresolved = 0;
+    let dynamicLoads = 0;
+    let unsupportedFiles = 0;
+    let sourceUnavailable = 0;
+    let heuristicEdges = 0;
+    const rawReasons: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+
+    for (const file of [...this.accessedInScope].sort()) {
+      const info = this.cache.get(file);
+      if (!info) continue;
+      if (info.sourceUnavailable) {
+        sourceUnavailable++;
+        continue;
+      }
+      if (!info.analyzable) {
+        unsupportedFiles++;
+        continue;
+      }
+      filesScanned++;
+      internalEdges += info.internalEdges;
+      external += info.external;
+      unresolved += info.unresolved - info.dynamicLoads;
+      dynamicLoads += info.dynamicLoads;
+      heuristicEdges += info.heuristicEdges;
+      for (const code of IMPORT_UNRESOLVED_REASON_CODES) {
+        const count = info.unresolvedReasons[code];
+        if (count) {
+          rawReasons[code] = (rawReasons[code] ?? 0) + count;
+        }
+      }
+    }
+
+    const unresolvedByReason: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+    for (const code of IMPORT_UNRESOLVED_REASON_CODES) {
+      const count = rawReasons[code];
+      if (count) {
+        unresolvedByReason[code] = count;
+      }
+    }
+
+    return {
+      scope: 'analyzed-files',
+      filesScanned,
+      internalEdges,
+      external,
+      unresolved,
+      dynamicLoads,
+      unsupportedFiles,
+      sourceUnavailable,
+      heuristicEdges,
+      unresolvedByReason,
+    };
   }
 
   classify(a: string, b: string): Relationship {
@@ -136,10 +289,18 @@ export class RelationshipClassifier {
         if (isTestFile(a) && isTestFile(b)) return 'two tests that change together';
         return (isTestFile(a) ? testCovers(a, b) : testCovers(b, a)) ? 'a test and the code it covers' : 'a test that changes with this code';
       case 'direct': {
-        if (this.analyze(a).imports.has(b)) return `${posix.basename(a)} imports ${posix.basename(b)}`;
-        if (this.analyze(b).imports.has(a)) return `${posix.basename(b)} imports ${posix.basename(a)}`;
-        if (this.analyze(a).references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
-        if (this.analyze(b).references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
+        const ia = this.analyze(a);
+        const ib = this.analyze(b);
+        if (ia.imports.has(b)) {
+          const suffix = ia.heuristicImports.has(b) ? ' (via heuristic source remap)' : '';
+          return `${posix.basename(a)} imports ${posix.basename(b)}${suffix}`;
+        }
+        if (ib.imports.has(a)) {
+          const suffix = ib.heuristicImports.has(a) ? ' (via heuristic source remap)' : '';
+          return `${posix.basename(b)} imports ${posix.basename(a)}${suffix}`;
+        }
+        if (ia.references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
+        if (ib.references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
       }
       case 'indirect': {
@@ -188,9 +349,22 @@ export class RelationshipClassifier {
   }
 
   analyze(file: string): FileImports {
+    this.accessedInScope.add(file);
     const cached = this.cache.get(file);
     if (cached) return cached;
-    const result: FileImports = { analyzable: false, sourceUnavailable: false, imports: new Set(), references: new Set(), unresolved: 0 };
+    const result: FileImports = {
+      analyzable: false,
+      sourceUnavailable: false,
+      imports: new Set(),
+      heuristicImports: new Set(),
+      references: new Set(),
+      unresolved: 0,
+      internalEdges: 0,
+      heuristicEdges: 0,
+      external: 0,
+      dynamicLoads: 0,
+      unresolvedReasons: {},
+    };
     this.cache.set(file, result);
     if (!ANALYZABLE.test(file)) return result;
     const text = this.files.read(file);
@@ -202,22 +376,64 @@ export class RelationshipClassifier {
     const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, file);
     // A load whose target is computed at runtime could be the partner file.
     result.unresolved += nonLiteralLoads;
-    for (const { specifier, kind } of imports) {
-      const resolved = this.resolver.resolve(file, specifier, kind === 'require' ? 'require' : 'import');
+    result.dynamicLoads += nonLiteralLoads;
+    const seenEdges = new Set<string>();
+    const seenUnresolved = new Set<string>();
+    for (const { specifier, kind, typeOnly } of imports) {
+      const resolved = this.resolver.resolveDetailed(
+        file,
+        specifier,
+        kind === 'require' ? 'require' : 'import',
+        { typeOnlyImport: Boolean(typeOnly) },
+      );
       if (resolved.kind === 'file') {
-        if (resolved.path !== file) result.imports.add(resolved.path);
+        if (resolved.path !== file) {
+          result.imports.add(resolved.path);
+          if (resolved.heuristic) {
+            result.heuristicImports.add(resolved.path);
+          }
+          const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
+          if (!seenEdges.has(edgeKey)) {
+            seenEdges.add(edgeKey);
+            result.internalEdges++;
+            if (resolved.heuristic) {
+              result.heuristicEdges++;
+            }
+          }
+        }
+      } else if (resolved.kind === 'external') {
+        result.external++;
       } else if (resolved.kind === 'unresolved') {
-        result.unresolved++;
+        if (!seenUnresolved.has(specifier)) {
+          seenUnresolved.add(specifier);
+          result.unresolved++;
+          result.unresolvedReasons[resolved.reasonCode] = (result.unresolvedReasons[resolved.reasonCode] ?? 0) + 1;
+        }
       }
     }
     for (const referencePath of referencePaths) {
       const path = referencePath.replace(/\\/g, '/');
       const target = posix.normalize(posix.join(posix.dirname(file), path));
-      if (path === '' || posix.isAbsolute(path) || win32.parse(path).root !== ''
-        || target === '..' || target.startsWith('../') || !this.files.exists(target)) {
-        result.unresolved++;
+      const invalid =
+        path === '' ||
+        posix.isAbsolute(path) ||
+        win32.parse(path).root !== '' ||
+        target === '..' ||
+        target.startsWith('../');
+      if (invalid || !this.files.exists(target)) {
+        if (!seenUnresolved.has(referencePath)) {
+          seenUnresolved.add(referencePath);
+          result.unresolved++;
+          const code: ImportUnresolvedReasonCode = invalid ? 'invalid-target' : 'target-missing';
+          result.unresolvedReasons[code] = (result.unresolvedReasons[code] ?? 0) + 1;
+        }
       } else if (target !== file) {
         result.references.add(target);
+        const edgeKey = `${target}\0${referencePath}\0static`;
+        if (!seenEdges.has(edgeKey)) {
+          seenEdges.add(edgeKey);
+          result.internalEdges++;
+        }
       }
     }
     return result;
@@ -269,9 +485,13 @@ export class RelationshipClassifier {
    */
   private reachable(file: string): Reach {
     const cached = this.reachCache.get(file);
-    if (cached) return cached;
-    const reach: Reach = { files: new Set(), incomplete: false };
+    if (cached) {
+      for (const v of cached.visited) this.accessedInScope.add(v);
+      return cached;
+    }
+    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false };
     const visit = (current: string, depth: number) => {
+      reach.visited.add(current);
       const info = this.analyze(current);
       // An unreadable barrel could re-export anything, so nothing can be ruled out.
       if (info.unresolved > 0 || info.sourceUnavailable) reach.incomplete = true;
@@ -308,6 +528,7 @@ function referencePriority(kind: SourceReferenceKind): number {
 
 interface Reach {
   files: Set<string>;
+  visited: Set<string>;
   incomplete: boolean;
 }
 

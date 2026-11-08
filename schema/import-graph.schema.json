@@ -83,6 +83,12 @@
         },
         "kind": {
           "$ref": "#/$defs/ImportEdgeKind"
+        },
+        "via": {
+          "$ref": "common.schema.json#/$defs/ImportResolutionVia"
+        },
+        "heuristic": {
+          "type": "boolean"
         }
       }
     },
@@ -104,6 +110,9 @@
         "reason": {
           "type": "string",
           "minLength": 1
+        },
+        "reasonCode": {
+          "$ref": "common.schema.json#/$defs/ImportUnresolvedReasonCode"
         }
       }
     }
