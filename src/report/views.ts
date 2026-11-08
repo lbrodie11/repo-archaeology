@@ -116,6 +116,16 @@ export interface Meta {
     origin?: OriginConfig;
   };
   warnings: string[];
+  /** History cache usage for this run (absent only for contexts built without cache configuration). */
+  cache?: CacheMeta;
+}
+
+export interface CacheMeta {
+  enabled: boolean;
+  hits: number;
+  misses: number;
+  /** Repo-relative POSIX path, or `"$REPO_ARCHAEOLOGY_CACHE_DIR"`; never absolute. */
+  dir?: string;
 }
 
 export function buildMeta(ctx: Context): Meta {
@@ -160,6 +170,16 @@ export function buildMeta(ctx: Context): Meta {
       ...(s.origin !== undefined ? { origin: s.origin } : {}),
     },
     warnings: ctx.warnings,
+    ...(ctx.history.cache !== undefined
+      ? {
+          cache: {
+            enabled: ctx.history.cache.enabled,
+            hits: ctx.history.cache.hits,
+            misses: ctx.history.cache.misses,
+            ...(ctx.history.cache.dir !== undefined ? { dir: ctx.history.cache.dir } : {}),
+          },
+        }
+      : {}),
   };
 }
 

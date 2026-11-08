@@ -524,9 +524,22 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       assert.deepEqual(apiSchemaSugg.originShare, { human: 0.75, agent: 0.25, bot: 0 });
       assert.deepEqual(apiBotSugg.originShare, { human: 0, agent: 0, bot: 1 });
 
-      // 2. v1 Schema backward-compatibility: pre-RA-08 v1 payloads (without origins, originShare, or origin) remain valid
+      // 2. v1 Schema backward-compatibility: pre-RA-08 / pre-RA-04 v1 payloads (without origins, originShare, origin, or cache) remain valid
+      assert.deepEqual(diffDefaultJson.meta.cache, {
+        enabled: true,
+        hits: 0,
+        misses: 32,
+        dir: '.git/repo-archaeology/cache',
+      });
+      assert.deepEqual(scanDefaultJson.meta.cache, {
+        enabled: true,
+        hits: 32,
+        misses: 0,
+        dir: '.git/repo-archaeology/cache',
+      });
       const legacyScan = structuredClone(scanDefaultJson);
       delete legacyScan.meta.origins;
+      delete legacyScan.meta.cache;
       for (const rel of legacyScan.relationships) {
         delete rel.originShare;
         for (const ev of rel.evidence) delete ev.origin;
@@ -535,11 +548,19 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
 
       const legacyDiff = structuredClone(diffDefaultJson);
       delete legacyDiff.meta.origins;
+      delete legacyDiff.meta.cache;
       for (const s of legacyDiff.suggestions) {
         delete s.originShare;
         for (const ev of s.evidence) delete ev.origin;
       }
       assertMatchesSchema(legacyDiff, 'diff.schema.json');
+
+      // Invalid values for `meta.cache` are rejected by the schema
+      const badCache = structuredClone(diffDefaultJson);
+      badCache.meta.cache = { enabled: true, hits: -1, misses: 0 };
+      const badCacheErrs: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, badCache, loadSchema('diff.schema.json'), 'diff.schema.json', '$', badCacheErrs);
+      assert.ok(badCacheErrs.some((e) => e.includes('hits')), `expected schema error for invalid meta.cache.hits, got: ${badCacheErrs.join('; ')}`);
 
       // Invalid values for `origin` or `originShare` are rejected by the schema
       const badOrigin = structuredClone(diffDefaultJson);

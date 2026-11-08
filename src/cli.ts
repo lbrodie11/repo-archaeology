@@ -108,6 +108,7 @@ interface GlobalOptions {
   originWeights?: OriginWeights;
   ignore?: string[];
   defaultIgnores: boolean;
+  cache: boolean;
   json?: boolean;
 }
 
@@ -123,6 +124,7 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
     origin: opts.originWeights !== undefined ? { weights: opts.originWeights } : undefined,
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
+    cache: opts.cache === false ? { enabled: false } : undefined,
   };
 }
 
@@ -151,6 +153,7 @@ program
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
+  .option('--no-cache', 'do not read or write the persistent history cache (.git/repo-archaeology/cache/)')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
   .allowExcessArguments(true)

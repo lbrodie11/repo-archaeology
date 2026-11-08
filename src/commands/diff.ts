@@ -1,4 +1,4 @@
-import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, UsageError, type Context } from '../context.js';
+import { isInsideCacheDir, isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, UsageError, type Context } from '../context.js';
 import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
 import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
@@ -162,7 +162,14 @@ export async function collectChanges(ctx: Context, base?: string, warnings?: str
     );
   }
   if (!headSha) {
-    lists.push(await workingTreeChanges(ctx.root));
+    const activeInRepoCacheDir =
+      ctx.historyCache && !ctx.historyCache.unusableReason ? ctx.historyCache.inRepoDir : undefined;
+    const wt = await workingTreeChanges(ctx.root);
+    lists.push(
+      activeInRepoCacheDir !== undefined
+        ? wt.filter((c) => !isInsideCacheDir(c.path, activeInRepoCacheDir))
+        : wt,
+    );
   }
   return mergeChanges(...lists);
 }
