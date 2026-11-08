@@ -24,8 +24,9 @@ import {
   resolveCommit,
   type TreeFileSet,
 } from './git/repo.js';
-import { GitError, runGit } from './git/run.js';
+import { createAbortError, GitError, runGit, type GitSpawnObserver } from './git/run.js';
 import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
+import type { RepoFiles } from './imports/resolve.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
 import { loadHistory, type History } from './model/history.js';
 import { PathMatcher } from './util/glob.js';
@@ -35,13 +36,31 @@ export class UsageError extends Error {
   override name = 'UsageError';
 }
 
+export interface ProgressEvent {
+  phase: string;
+  done?: number;
+  total?: number;
+}
+
 export interface ContextOptions {
   /** Isolate history training to the unique merge-base of `<base>` and `HEAD` (or `<head>`). */
   base?: string;
   /** Analyze the repository as of `<head>` without checking it out or reading the working tree. */
   head?: string;
+  /** Whether to merge `.repo-archaeology.json` under explicit settings (default: `true`). */
+  useConfigFile?: boolean;
+  /** Suppress terminal progress output on `stderr` (used in library API mode). */
+  silent?: boolean;
+  /** Progress callback invoked during history loading and model construction. */
+  onProgress?: (event: ProgressEvent) => void;
+  /** Cancel long history loads. */
+  signal?: AbortSignal;
+  /** Keep any underlying `git cat-file --batch` worker open across command calls until `closeSession()` is called. */
+  keepOpen?: boolean;
   /** Optional overrides for `gitTreeFiles` when `head` is set (for testing). */
   treeFilesOptions?: GitTreeFilesOptions;
+  /** Optional observer invoked when `git log` is spawned during history loading (for testing). */
+  onSpawn?: GitSpawnObserver;
 }
 
 export interface Context {
@@ -54,6 +73,8 @@ export interface Context {
   model: CoChangeModel;
   /** Files that exist now (tracked + untracked, not ignored; or files in `<head>`'s tree). */
   currentFiles: Set<string>;
+  /** Repository file reader (working tree or `<head>` git tree). */
+  files?: RepoFiles;
   classifier: RelationshipClassifier;
   thresholds: Thresholds;
   warnings: string[];
@@ -71,6 +92,8 @@ export interface Context {
   open?: () => void;
   /** Closes any long-lived background process (e.g. `git cat-file --batch`) associated with this context. */
   close?: () => void;
+  /** Permanently closes any session-owned background process (used by `Repository.close()`). */
+  closeSession?: () => void;
 }
 
 export const MIN_FULL_HISTORY_COMMITS = 50;
@@ -130,9 +153,12 @@ async function trainBaseline(
   rev: string,
   shallow = false,
   extraWarnings: readonly string[] = [],
+  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'>,
 ): Promise<{ history: History; model: CoChangeModel; warnings: string[]; ignores: string[] }> {
+  if (options?.signal?.aborted) throw createAbortError(options.signal);
   const skipFilter = compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
   const ignores = ignorePatterns(settings);
+  options?.onProgress?.({ phase: 'history', done: 0, total: settings.maxCommits });
   const history = await loadHistory(root, {
     maxCommits: settings.maxCommits,
     since: settings.since,
@@ -141,7 +167,13 @@ async function trainBaseline(
     skipCommits: skipFilter,
     origin: settings.origin,
     rev,
+    signal: options?.signal,
+    onSpawn: options?.onSpawn,
+    onProgress: options?.onProgress
+      ? (done) => options.onProgress?.({ phase: 'history', done, total: settings.maxCommits })
+      : undefined,
   });
+  if (options?.signal?.aborted) throw createAbortError(options.signal);
   const warnings: string[] = [];
   if (shallow) warnings.push(SHALLOW_WARNING);
   for (const w of extraWarnings) {
@@ -156,28 +188,41 @@ async function trainBaseline(
     halfLifeDays: settings.halfLifeDays,
     originWeights: settings.origin?.weights,
   });
+  options?.onProgress?.({ phase: 'model', done: 1, total: 1 });
   return { history, model, warnings, ignores };
 }
 
-async function loadConfigFromHeadTree(root: string, headSha: string, treeFiles: TreeFileSet): Promise<Partial<Settings>> {
+async function loadConfigFromHeadTree(
+  root: string,
+  headSha: string,
+  treeFiles: TreeFileSet,
+  signal?: AbortSignal,
+): Promise<Partial<Settings>> {
   const mode = treeFiles.modes.get(CONFIG_FILE);
   if (mode === undefined) return {};
   if (!isRegularTreeMode(mode)) {
     throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
   }
   const spec = `${headSha}:${CONFIG_FILE}`;
-  const sizeOut = (await runGit(root, ['cat-file', '-s', '--end-of-options', spec])).trim();
+  const sizeOut = (await runGit(root, ['cat-file', '-s', '--end-of-options', spec], { signal })).trim();
   if (Number(sizeOut) > MAX_CONFIG_BYTES) {
     throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
   }
-  const content = await runGit(root, ['cat-file', 'blob', '--end-of-options', spec]);
+  const content = await runGit(root, ['cat-file', 'blob', '--end-of-options', spec], { signal });
   return parseConfigText(content, CONFIG_FILE);
 }
 
 export async function loadContext(cwdOption: string | undefined, flags: Partial<Settings>, options?: ContextOptions): Promise<Context> {
+  const signal = options?.signal;
+  if (signal?.aborted) throw createAbortError(signal);
   const cwd = resolve(cwdOption ?? process.cwd());
   const root = await findRepoRoot(cwd);
+  if (signal?.aborted) throw createAbortError(signal);
   if (!(await hasCommits(root))) throw new GitError('This repository has no commits yet, so there is no history to analyze.');
+  if (signal?.aborted) throw createAbortError(signal);
+
+  const useConfigFile = options?.useConfigFile ?? true;
+  const emitStderrProgress = !options?.silent && !options?.onProgress;
 
   const headRef = options?.head;
   if (headRef !== undefined) {
@@ -185,29 +230,37 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       resolveHead(root, headRef),
       resolveCommit(root, 'HEAD'),
     ]);
+    if (signal?.aborted) throw createAbortError(signal);
     const [shallow, mergeBaseSha, currentFiles, wtChanges] = await Promise.all([
       isShallow(root),
       options?.base !== undefined ? resolveBaseline(root, options.base, headSha) : Promise.resolve(undefined),
       listTreeFiles(root, headSha),
       headSha === checkedOutHeadSha ? workingTreeChanges(root) : Promise.resolve([]),
     ]);
-    let fileConfig: Partial<Settings>;
+    if (signal?.aborted) throw createAbortError(signal);
+    let fileConfig: Partial<Settings> = {};
     let configWarning: string | undefined;
-    try {
-      fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles);
-    } catch (err) {
-      if (!(err instanceof ConfigError)) throw err;
-      fileConfig = loadConfigFile(root);
-      configWarning = `Ignoring invalid ${CONFIG_FILE} at ${headRef} (${err.message}); using working-tree configuration instead.`;
+    if (useConfigFile) {
+      try {
+        fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles, signal);
+      } catch (err) {
+        if (!(err instanceof ConfigError)) throw err;
+        fileConfig = loadConfigFile(root);
+        configWarning = `Ignoring invalid ${CONFIG_FILE} at ${headRef} (${err.message}); using working-tree configuration instead.`;
+      }
     }
     const settings = resolveSettings(fileConfig, flags);
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
 
-    progress('Reading git history…');
+    if (emitStderrProgress) progress('Reading git history…');
     const extraWarnings: string[] = [];
     if (configWarning !== undefined) extraWarnings.push(configWarning);
     if (wtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
-    const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings);
+    const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings, {
+      onProgress: options?.onProgress,
+      signal,
+      onSpawn: options?.onSpawn,
+    });
     const bridgeIgnores = new PathMatcher(trained.ignores);
     const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);
     const classifier = new RelationshipClassifier(treeFiles, (path) => !bridgeIgnores.matches(path));
@@ -219,6 +272,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       history: trained.history,
       model: trained.model,
       currentFiles,
+      files: treeFiles,
       classifier,
       thresholds: { minShared: settings.minShared, minConfidence: settings.minConfidence },
       warnings: trained.warnings,
@@ -228,27 +282,37 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       headSha,
       head: { ref: headRef, sha: headSha },
       open: () => treeFiles.open(),
-      close: () => treeFiles.close(),
+      close: options?.keepOpen ? () => {} : () => treeFiles.close(),
+      closeSession: () => treeFiles.close(),
     };
   }
 
-  const settings = resolveSettings(loadConfigFile(root), flags);
+  const fileConfig = useConfigFile ? loadConfigFile(root) : {};
+  const settings = resolveSettings(fileConfig, flags);
   compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
 
   const headSha = await resolveCommit(root, 'HEAD');
+  if (signal?.aborted) throw createAbortError(signal);
   const [shallow, mergeBaseSha] = await Promise.all([
     isShallow(root),
     options?.base !== undefined ? resolveBaseline(root, options.base, 'HEAD') : Promise.resolve(undefined),
   ]);
+  if (signal?.aborted) throw createAbortError(signal);
 
-  progress('Reading git history…');
+  if (emitStderrProgress) progress('Reading git history…');
   const [trained, currentFiles] = await Promise.all([
-    trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow),
+    trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow, [], {
+      onProgress: options?.onProgress,
+      signal,
+      onSpawn: options?.onSpawn,
+    }),
     listCurrentFiles(root),
   ]);
+  if (signal?.aborted) throw createAbortError(signal);
 
   const bridgeIgnores = new PathMatcher(trained.ignores);
-  const classifier = new RelationshipClassifier(workingTreeFiles(root, currentFiles), (path) => !bridgeIgnores.matches(path));
+  const files = workingTreeFiles(root, currentFiles);
+  const classifier = new RelationshipClassifier(files, (path) => !bridgeIgnores.matches(path));
   return {
     cwd,
     root,
@@ -257,6 +321,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     history: trained.history,
     model: trained.model,
     currentFiles,
+    files,
     classifier,
     thresholds: { minShared: settings.minShared, minConfidence: settings.minConfidence },
     warnings: trained.warnings,

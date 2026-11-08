@@ -3,6 +3,15 @@
   "version": "0.3.0",
   "description": "Dig through git history to find ghost wires: files that change together without importing each other.",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js",
+      "default": "./dist/api/index.js"
+    },
+    "./schema/*": "./schema/*",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "repo-archaeology": "dist/cli.js"
   },

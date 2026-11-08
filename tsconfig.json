@@ -12,7 +12,7 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "declaration": false,
+    "declaration": true,
     "sourceMap": false,
     "newLine": "lf"
   },

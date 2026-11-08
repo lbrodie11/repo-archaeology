@@ -74,6 +74,8 @@ export interface HistoryOptions extends LogOptions {
   skipCommits?: RegExp;
   /** Commit origin classification overrides. */
   origin?: OriginConfig;
+  /** Optional callback invoked as commits are streamed from git log. */
+  onProgress?: (commitsRead: number) => void;
 }
 
 type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin'>;
@@ -284,8 +286,14 @@ export async function loadHistory(root: string, options: HistoryOptions): Promis
       }
       oldestHash = commit.hash;
       builder.add(commit);
+      if (options.onProgress && (seen === 1 || seen % 100 === 0)) {
+        options.onProgress(seen);
+      }
     },
   );
+  if (options.onProgress && seen > 0 && seen !== 1 && seen % 100 !== 0) {
+    options.onProgress(limit !== undefined ? Math.min(seen, limit) : seen);
+  }
   if (options.since) {
     const truncatedBySince = seen === 0 || (oldestHash !== undefined && (await hasParentCommit(root, oldestHash)));
     builder.markTruncatedBySince(truncatedBySince);

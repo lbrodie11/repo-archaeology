@@ -11,6 +11,28 @@ export class GitError extends Error {
   }
 }
 
+export type GitSpawnObserver = (args: readonly string[], cwd: string) => void;
+
+export interface GitRunOptions {
+  signal?: AbortSignal;
+  onSpawn?: GitSpawnObserver;
+}
+
+/** Creates a standard `AbortError` (`err.name === 'AbortError'`) when an `AbortSignal` fires. */
+export function createAbortError(signal?: AbortSignal): Error {
+  const reason: unknown = signal?.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string' && reason.length > 0
+        ? reason
+        : 'The operation was aborted.';
+  return new DOMException(message, 'AbortError');
+}
+
 /**
  * Config overrides applied to every git call so user settings cannot change the
  * output format we parse (quoted paths, colors, relative paths, signatures) or
@@ -45,8 +67,19 @@ interface SpawnResult {
   stderr: string;
 }
 
-function spawnGit(cwd: string, args: string[], onData: (chunk: string) => void): Promise<SpawnResult> {
+function spawnGit(
+  cwd: string,
+  args: string[],
+  onData: (chunk: string) => void,
+  options?: GitRunOptions,
+): Promise<SpawnResult> {
+  const signal = options?.signal;
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError(signal));
+  }
+  options?.onSpawn?.(args, cwd);
   return new Promise((resolve, reject) => {
+    const isPosix = process.platform !== 'win32';
     const child = spawn('git', [...CONFIG_OVERRIDES, ...args], {
       cwd,
       env: {
@@ -58,20 +91,86 @@ function spawnGit(cwd: string, args: string[], onData: (chunk: string) => void):
         GIT_NO_REPLACE_OBJECTS: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: isPosix && signal !== undefined,
       windowsHide: true,
     });
     let stderr = '';
+    let settled = false;
+    let aborted = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const signalChild = (sig: NodeJS.Signals) => {
+      if (isPosix && signal !== undefined && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, sig);
+        } catch {
+          // ignore if process group already exited
+        }
+      }
+      try {
+        child.kill(sig);
+      } catch {
+        // ignore if already exited
+      }
+    };
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (killTimer) clearTimeout(killTimer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      fn();
+    };
+
+    const onAbort = () => {
+      if (settled || aborted) return;
+      aborted = true;
+      child.stdout.destroy();
+      child.stderr.destroy();
+      signalChild('SIGTERM');
+      killTimer = setTimeout(() => {
+        signalChild('SIGKILL');
+        finish(() => reject(createAbortError(signal)));
+      }, 50);
+      killTimer.unref?.();
+    };
+
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', onData);
+    child.stdout.on('data', (chunk: string) => {
+      if (!aborted) onData(chunk);
+    });
     child.stderr.on('data', (chunk: string) => {
-      if (stderr.length < MAX_STDERR) stderr += chunk;
+      if (!aborted && stderr.length < MAX_STDERR) stderr += chunk;
     });
     child.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') reject(new GitError('git was not found on your PATH. Install git and try again.'));
-      else reject(new GitError(`Failed to run git: ${err.message}`));
+      if (aborted) {
+        finish(() => reject(createAbortError(signal)));
+        return;
+      }
+      if (err.code === 'ENOENT') finish(() => reject(new GitError('git was not found on your PATH. Install git and try again.')));
+      else finish(() => reject(new GitError(`Failed to run git: ${err.message}`)));
     });
-    child.on('close', (code) => resolve({ code, stderr }));
+    child.on('exit', () => {
+      if (aborted) {
+        finish(() => reject(createAbortError(signal)));
+      }
+    });
+    child.on('close', (code) => {
+      if (aborted) {
+        finish(() => reject(createAbortError(signal)));
+        return;
+      }
+      finish(() => resolve({ code, stderr }));
+    });
   });
 }
 
@@ -81,18 +180,23 @@ function failure(args: string[], result: SpawnResult): GitError {
 }
 
 /** Runs git and returns stdout. Rejects with GitError on a non-zero exit code. */
-export async function runGit(cwd: string, args: string[]): Promise<string> {
+export async function runGit(cwd: string, args: string[], options?: GitRunOptions): Promise<string> {
   let out = '';
-  const result = await spawnGit(cwd, args, (chunk) => {
-    out += chunk;
-  });
+  const result = await spawnGit(
+    cwd,
+    args,
+    (chunk) => {
+      out += chunk;
+    },
+    options,
+  );
   if (result.code !== 0) throw failure(args, result);
   return out;
 }
 
 /** Runs git and reports whether it exited with code 0 (for --verify style checks). */
-export async function gitSucceeds(cwd: string, args: string[]): Promise<boolean> {
-  const result = await spawnGit(cwd, args, () => {});
+export async function gitSucceeds(cwd: string, args: string[], options?: GitRunOptions): Promise<boolean> {
+  const result = await spawnGit(cwd, args, () => {}, options);
   return result.code === 0;
 }
 
@@ -104,19 +208,25 @@ export async function streamGitNulTokens(
   cwd: string,
   args: string[],
   onToken: (token: string) => void,
+  options?: GitRunOptions,
 ): Promise<void> {
   let remainder = '';
   let callbackError: unknown;
-  const result = await spawnGit(cwd, args, (chunk) => {
-    if (callbackError) return;
-    const parts = (remainder + chunk).split('\0');
-    remainder = parts.pop() ?? '';
-    try {
-      for (const part of parts) onToken(part);
-    } catch (err) {
-      callbackError = err;
-    }
-  });
+  const result = await spawnGit(
+    cwd,
+    args,
+    (chunk) => {
+      if (callbackError) return;
+      const parts = (remainder + chunk).split('\0');
+      remainder = parts.pop() ?? '';
+      try {
+        for (const part of parts) onToken(part);
+      } catch (err) {
+        callbackError = err;
+      }
+    },
+    options,
+  );
   if (callbackError) throw callbackError;
   if (result.code !== 0) throw failure(args, result);
   if (remainder !== '') onToken(remainder);

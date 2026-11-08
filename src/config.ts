@@ -31,17 +31,17 @@ export interface Settings {
   origin?: OriginConfig;
 }
 
-export const DEFAULT_SETTINGS: Settings = {
+export const DEFAULT_SETTINGS: Settings = Object.freeze({
   maxCommits: 5000,
   maxFilesPerCommit: 25,
   minShared: 3,
   minConfidence: 0.4,
-  ignore: [],
+  ignore: Object.freeze([]) as unknown as string[],
   useDefaultIgnores: true,
-};
+});
 
 /** Files that change "with everything" for mechanical reasons and only add noise. */
-export const DEFAULT_IGNORES = [
+export const DEFAULT_IGNORES: readonly string[] = Object.freeze([
   // lockfiles
   'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'bun.lock',
   'Cargo.lock', 'go.sum', 'poetry.lock', 'uv.lock', 'Pipfile.lock', 'Gemfile.lock', 'composer.lock',
@@ -50,7 +50,7 @@ export const DEFAULT_IGNORES = [
   '*.min.js', '*.min.css', '*.map', '*.generated.*', '*.tsbuildinfo',
   // snapshots and release bookkeeping
   '__snapshots__/', '*.snap', 'CHANGELOG*', 'HISTORY.md',
-];
+]);
 
 export class ConfigError extends Error {
   override name = 'ConfigError';

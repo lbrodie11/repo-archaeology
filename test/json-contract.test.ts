@@ -97,6 +97,7 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       'map.schema.json',
       'backtest.schema.json',
       'default.schema.json',
+      'import-graph.schema.json',
     ];
     for (const file of schemaFiles) {
       const schema = loadSchema(file);
@@ -197,6 +198,18 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     assert.ok(backtestJson.ghostDiagnostics);
     assert.ok(backtestJson.followUpBenchmark);
     assertMatchesSchema(backtestJson, 'backtest.schema.json');
+
+    // 5b. imports --json
+    const importsRes = runCli(['imports', '--json'], repo.dir);
+    assert.equal(importsRes.code, 0, importsRes.stderr);
+    const importsJson = JSON.parse(importsRes.stdout);
+    assert.equal(importsJson.schemaVersion, 1);
+    assert.deepEqual(importsJson.tool, { name: 'repo-archaeology', version: pkgVersion });
+    assert.ok(Array.isArray(importsJson.files));
+    assert.ok(Array.isArray(importsJson.edges));
+    assert.ok(Array.isArray(importsJson.unresolved));
+    assert.ok(Array.isArray(importsJson.languages));
+    assertMatchesSchema(importsJson, 'import-graph.schema.json');
 
     // 6. --head <ref> includes meta.head: { ref, sha } and validates against all schemas
     const headSha = repo.git('rev-parse', 'HEAD~1').trim();
