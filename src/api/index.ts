@@ -280,6 +280,7 @@ export async function openRepository(opts: OpenOptions): Promise<Repository> {
     throw new UsageError('openRepository requires a non-empty `cwd` path.');
   }
   const flagSettings = normalizeSettingsInput(opts.settings);
+  const internalOpts = opts as OpenOptions & { onSpawn?: (args: readonly string[], cwd: string) => void };
   const ctx = await loadContext(opts.cwd, flagSettings, {
     head: opts.head,
     base: opts.base,
@@ -288,6 +289,7 @@ export async function openRepository(opts: OpenOptions): Promise<Repository> {
     onProgress: opts.onProgress,
     signal: opts.signal,
     keepOpen: true,
+    onSpawn: internalOpts.onSpawn,
   });
   return createRepository(ctx);
 }

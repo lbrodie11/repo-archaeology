@@ -18,10 +18,10 @@ import {
   type ExplainJson,
   type FileJson,
   type ImportGraphJson,
+  type OpenOptions,
   type Repository,
   type ScanJson,
 } from '../src/api/index.js';
-import { setGitSpawnObserver } from '../src/git/run.js';
 import {
   loadSchema as loadSchemaFromDir,
   sanitizeGitEnv,
@@ -360,26 +360,21 @@ describe('RA-03 Library API: openRepository() sessions', () => {
 
   it('spawns git log for history loading exactly once across openRepository() and multiple method calls', async () => {
     const spawnedGitArgs: string[][] = [];
-    setGitSpawnObserver((args) => {
-      spawnedGitArgs.push([...args]);
-    });
-
+    const session = await openRepository({
+      cwd: repo.dir,
+      head: headRefSha,
+      onSpawn: (args: readonly string[]) => {
+        spawnedGitArgs.push([...args]);
+      },
+    } as OpenOptions);
     try {
-      const session = await openRepository({
-        cwd: repo.dir,
-        head: headRefSha,
-      });
-      try {
-        await session.scan({ limit: 5 });
-        await session.backtest({ testFraction: 0.2, k: 3 });
-        await session.file('src/adapter/bun/serve-static.ts');
-        await session.importGraph();
-        await session.importGraph({ files: ['src/db.ts'] });
-      } finally {
-        await session.close();
-      }
+      await session.scan({ limit: 5 });
+      await session.backtest({ testFraction: 0.2, k: 3 });
+      await session.file('src/adapter/bun/serve-static.ts');
+      await session.importGraph();
+      await session.importGraph({ files: ['src/db.ts'] });
     } finally {
-      setGitSpawnObserver(undefined);
+      await session.close();
     }
 
     const gitLogCalls = spawnedGitArgs.filter((args) => args[0] === 'log');

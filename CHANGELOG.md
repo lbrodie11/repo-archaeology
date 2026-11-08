@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - **BREAKING — Package `"exports"` Map ([`package.json`](package.json)):** Added an explicit `"exports"` field exposing `.` (`types`, `import`, and `default` for `require('repo-archaeology')` on Node ≥ 22.12), `./schema/*`, and `./package.json`. Unlisted deep internal paths such as `repo-archaeology/dist/*` are no longer importable by consumers.
+- **Shared TypeScript AST Import Extractor ([`src/imports/typescript.ts`](src/imports/typescript.ts), [`src/imports/classify.ts`](src/imports/classify.ts), [`src/commands/imports.ts`](src/commands/imports.ts)):** Relationship import classification (`scan`, `diff`, `file`, `map`, `explain`) now shares `extractDetailedDependencies` (full TypeScript AST walk via `ts.createSourceFile`) with `importGraph()` instead of `ts.preProcessFile`. This discovers nested/type imports (`import('./types.js').Foo`, dynamic `import()` inside functions) and avoids false partial specifiers from UMD wrappers or string concatenation, which can reclassify a few previously `ghost` or `unknown` pairs as `direct`.
 - **`wilsonLowerBound` Default `z` Constant ([`src/util/stats.ts`](src/util/stats.ts)):** Changed `wilsonLowerBound`'s default `z` from `1.96` to `Z_95` (`1.959963984540054`), which shifts `score` by up to `1e-5`.
 
 ## [0.3.0] - 2026-11-01

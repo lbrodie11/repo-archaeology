@@ -24,7 +24,7 @@ import {
   resolveCommit,
   type TreeFileSet,
 } from './git/repo.js';
-import { createAbortError, GitError, runGit } from './git/run.js';
+import { createAbortError, GitError, runGit, type GitSpawnObserver } from './git/run.js';
 import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
 import type { RepoFiles } from './imports/resolve.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
@@ -59,6 +59,8 @@ export interface ContextOptions {
   keepOpen?: boolean;
   /** Optional overrides for `gitTreeFiles` when `head` is set (for testing). */
   treeFilesOptions?: GitTreeFilesOptions;
+  /** Optional observer invoked when `git log` is spawned during history loading (for testing). */
+  onSpawn?: GitSpawnObserver;
 }
 
 export interface Context {
@@ -151,7 +153,7 @@ async function trainBaseline(
   rev: string,
   shallow = false,
   extraWarnings: readonly string[] = [],
-  options?: Pick<ContextOptions, 'onProgress' | 'signal'>,
+  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'>,
 ): Promise<{ history: History; model: CoChangeModel; warnings: string[]; ignores: string[] }> {
   if (options?.signal?.aborted) throw createAbortError(options.signal);
   const skipFilter = compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
@@ -166,6 +168,7 @@ async function trainBaseline(
     origin: settings.origin,
     rev,
     signal: options?.signal,
+    onSpawn: options?.onSpawn,
     onProgress: options?.onProgress
       ? (done) => options.onProgress?.({ phase: 'history', done, total: settings.maxCommits })
       : undefined,
@@ -256,6 +259,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings, {
       onProgress: options?.onProgress,
       signal,
+      onSpawn: options?.onSpawn,
     });
     const bridgeIgnores = new PathMatcher(trained.ignores);
     const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);
@@ -300,6 +304,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow, [], {
       onProgress: options?.onProgress,
       signal,
+      onSpawn: options?.onSpawn,
     }),
     listCurrentFiles(root),
   ]);

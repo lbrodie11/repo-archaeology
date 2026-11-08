@@ -1,4 +1,4 @@
-import { streamGitNulTokens } from './run.js';
+import { streamGitNulTokens, type GitSpawnObserver } from './run.js';
 
 export interface RawChange {
   /** First letter of git's name-status code: A, M, D, R, C, T, U, X, B. */
@@ -35,6 +35,7 @@ export interface LogOptions {
   topoOrder?: boolean;
   reverse?: boolean;
   signal?: AbortSignal;
+  onSpawn?: GitSpawnObserver;
 }
 
 const RS = '\u001e';
@@ -150,6 +151,9 @@ function parseHeader(header: string): RawCommit {
 /** Streams commits newest-first (git's default order). */
 export async function readLog(root: string, options: LogOptions, onCommit: (commit: RawCommit) => void): Promise<void> {
   const parser = new LogParser(onCommit);
-  await streamGitNulTokens(root, logArgs(options), (token) => parser.push(token), { signal: options.signal });
+  await streamGitNulTokens(root, logArgs(options), (token) => parser.push(token), {
+    signal: options.signal,
+    onSpawn: options.onSpawn,
+  });
   parser.end();
 }
