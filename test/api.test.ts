@@ -447,36 +447,42 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'src/adapter/bun/serve-static.ts',
             specifier: './adapter/bun/serve-static.js',
             kind: 'dynamic',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/db.ts',
             specifier: './db.js',
             kind: 'reexport',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/db.ts',
             specifier: './db.js',
             kind: 'static',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/types.d.ts',
             specifier: './types.d.ts',
             kind: 'static',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/util.ts',
             specifier: './util',
             kind: 'require',
+            via: 'relative',
           },
           {
             from: 'src/api.ts',
             to: 'src/util.ts',
             specifier: '@/util',
             kind: 'static',
+            via: 'paths',
           },
         ],
       );
@@ -487,6 +493,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           from: 'src/api.ts',
           specifier: './does-not-exist.js',
           reason: 'unmatched',
+          reasonCode: 'target-missing',
         },
       ]);
 
@@ -500,6 +507,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
           from: 'src/api.ts',
           specifier: './does-not-exist.js',
           reason: 'unmatched',
+          reasonCode: 'target-missing',
         },
       ]);
 
@@ -586,12 +594,14 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'packages/dual/cjs.cjs',
             specifier: 'dual-pkg',
             kind: 'require',
+            via: 'exports',
           },
           {
             from: 'src/entry.cjs',
             to: 'packages/dual/esm.mjs',
             specifier: 'dual-pkg',
             kind: 'dynamic',
+            via: 'exports',
           },
         ]);
         assert.deepEqual(ctsEdges, [
@@ -600,12 +610,14 @@ describe('RA-03 Library API: openRepository() sessions', () => {
             to: 'packages/dual/cjs.cjs',
             specifier: 'dual-pkg',
             kind: 'require',
+            via: 'exports',
           },
           {
             from: 'src/entry.cts',
             to: 'packages/dual/esm.mjs',
             specifier: 'dual-pkg',
             kind: 'dynamic',
+            via: 'exports',
           },
         ]);
 

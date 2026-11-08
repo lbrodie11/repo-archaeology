@@ -480,6 +480,29 @@ export type ImportUnresolvedReasonCode =
   | 'unsupported-config'
   | 'ambiguous-package';
 
+export const IMPORT_UNRESOLVED_REASON_CODES: readonly ImportUnresolvedReasonCode[] = [
+  'alias-unmatched',
+  'unknown-package',
+  'target-missing',
+  'not-exported',
+  'invalid-target',
+  'unsupported-config',
+  'ambiguous-package',
+];
+
+export interface ImportsCoverageMeta {
+  scope: 'repository' | 'analyzed-files';
+  filesScanned: number;
+  internalEdges: number;
+  external: number;
+  unresolved: number;
+  dynamicLoads: number;
+  unsupportedFiles: number;
+  sourceUnavailable: number;
+  heuristicEdges: number;
+  unresolvedByReason: Partial<Record<ImportUnresolvedReasonCode, number>>;
+}
+
 export type Resolution =
   | { kind: 'file'; path: string }
   /** A package from node_modules: not part of this repository. */
@@ -852,15 +875,15 @@ export class ImportResolver {
       if (joined === '..' || joined.startsWith('../') || posix.isAbsolute(joined)) {
         return { kind: 'unresolved', reason: 'unmatched', reasonCode: 'invalid-target' };
       }
-      if (this.files.isInvalidTarget?.(joined, '')) {
-        return { kind: 'unresolved', reason: 'unmatched', reasonCode: 'invalid-target' };
-      }
       const found = resolveFile(joined, this.files);
       if (found) {
         if (this.files.isWithinDir && !this.files.isWithinDir(found, '')) {
           return { kind: 'unresolved', reason: 'unmatched', reasonCode: 'invalid-target' };
         }
         return { kind: 'file', path: found, via: 'relative' };
+      }
+      if (this.files.isInvalidTarget?.(joined, '')) {
+        return { kind: 'unresolved', reason: 'unmatched', reasonCode: 'invalid-target' };
       }
       return { kind: 'unresolved', reason: 'unmatched', reasonCode: 'target-missing' };
     }
@@ -1008,10 +1031,6 @@ export class ImportResolver {
         if (joined.startsWith('node_modules/') || joined.includes('/node_modules/')) {
           sawNodeModulesTarget = true;
         }
-        if (this.files.isInvalidTarget?.(joined, '')) {
-          sawInvalidTarget = true;
-          continue;
-        }
         const found = resolveFile(joined, this.files);
         if (found) {
           if (this.files.isWithinDir && !this.files.isWithinDir(found, '')) {
@@ -1019,6 +1038,9 @@ export class ImportResolver {
             continue;
           }
           return { kind: 'file', path: found, via: 'paths' };
+        }
+        if (this.files.isInvalidTarget?.(joined, '')) {
+          sawInvalidTarget = true;
         }
       }
     }
@@ -1816,10 +1838,6 @@ export class LocalPackages {
       return { status: 'invalid' };
     }
 
-    if (this.files.isInvalidTarget?.(targetInRepo, pkg.dir)) {
-      return { status: 'invalid' };
-    }
-
     const checkResolved = (found: string, heuristic: boolean): TargetEvalResult => {
       if (pkg.dir && found !== pkg.dir && !found.startsWith(`${pkg.dir}/`)) {
         return { status: 'invalid' };
@@ -1835,6 +1853,9 @@ export class LocalPackages {
     if (direct !== undefined) {
       return checkResolved(direct, false);
     }
+    if (this.files.isInvalidTarget?.(targetInRepo, pkg.dir)) {
+      return { status: 'invalid' };
+    }
 
     // 2. Tsconfig-backed `outDir` / `declarationDir` -> `rootDir` remapping (`heuristic: false`)
     const pkgConfig = this.tsconfig?.forPackageDir(pkg.dir);
@@ -1845,12 +1866,12 @@ export class LocalPackages {
           const suffix = targetInRepo.slice(buildDir.length).replace(/^\//, '');
           const swappedSuffix = stripDeclarationExt(suffix);
           const remapped = mapping.rootDir ? posix.join(mapping.rootDir, swappedSuffix) : swappedSuffix;
-          if (this.files.isInvalidTarget?.(remapped, pkg.dir)) {
-            return { status: 'invalid' };
-          }
           const found = resolveFile(remapped, this.files);
           if (found !== undefined) {
             return checkResolved(found, false);
+          }
+          if (this.files.isInvalidTarget?.(remapped, pkg.dir)) {
+            return { status: 'invalid' };
           }
         }
       }
@@ -1859,12 +1880,12 @@ export class LocalPackages {
     // 3. Bounded `dist/` / `lib/` / `build/` / `out/` -> `src/` heuristic (`heuristic: true`)
     const heuristicTarget = sourceForBuildOutput(targetInRepo, pkg.dir);
     if (heuristicTarget !== targetInRepo) {
-      if (this.files.isInvalidTarget?.(heuristicTarget, pkg.dir)) {
-        return { status: 'invalid' };
-      }
       const found = resolveFile(heuristicTarget, this.files);
       if (found !== undefined) {
         return checkResolved(found, true);
+      }
+      if (this.files.isInvalidTarget?.(heuristicTarget, pkg.dir)) {
+        return { status: 'invalid' };
       }
     }
 

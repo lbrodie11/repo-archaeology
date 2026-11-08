@@ -877,5 +877,157 @@ describe('RA-09A: monorepo workspace discovery, exports, #imports, and source re
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it('resolves historical --head monorepo workspaces and exports from the commit tree rather than the dirty working tree', async () => {
+    const { FixtureRepo } = await import('./helpers.js');
+    const { openRepository } = await import('../src/api/index.js');
+    const fixture = new FixtureRepo();
+    try {
+      fixture.write(
+        'pnpm-workspace.yaml',
+        'packages:\n  - "packages/*"\n',
+      );
+      fixture.write(
+        'packages/shared/package.json',
+        JSON.stringify({
+          name: '@hist/shared',
+          exports: { '.': './src/v1.ts' },
+        }),
+      );
+      fixture.write('packages/shared/src/v1.ts', 'export const v = 1;\n');
+      fixture.write('packages/shared/src/v2.ts', 'export const v = 2;\n');
+      fixture.write(
+        'packages/app/package.json',
+        JSON.stringify({
+          name: '@hist/app',
+          imports: { '#helper': './src/helper-v1.ts' },
+        }),
+      );
+      fixture.write('packages/app/src/helper-v1.ts', 'export const h = 1;\n');
+      fixture.write('packages/app/src/helper-v2.ts', 'export const h = 2;\n');
+      fixture.write(
+        'packages/app/src/main.ts',
+        'import { v } from "@hist/shared";\nimport { h } from "#helper";\nexport { v, h };\n',
+      );
+      fixture.git('add', '.');
+      fixture.commit({ message: 'v1 monorepo layout', author: 'Alice' });
+      fixture.git('tag', 'v1');
+
+      // Mutate working tree and commit v2 where exports and #imports point to v2 files and workspaces exclude shared
+      fixture.write(
+        'pnpm-workspace.yaml',
+        'packages:\n  - "packages/*"\n  - "!packages/shared"\n',
+      );
+      fixture.write(
+        'packages/shared/package.json',
+        JSON.stringify({
+          name: '@hist/shared',
+          exports: { '.': './src/v2.ts' },
+        }),
+      );
+      fixture.write(
+        'packages/app/package.json',
+        JSON.stringify({
+          name: '@hist/app',
+          imports: { '#helper': './src/helper-v2.ts' },
+        }),
+      );
+      fixture.git('add', '.');
+      fixture.commit({ message: 'v2 monorepo layout', author: 'Alice' });
+
+      const histSession = await openRepository({ cwd: fixture.dir, head: 'v1' });
+      try {
+        const graph = await histSession.importGraph();
+        assert.deepEqual(graph.edges, [
+          {
+            from: 'packages/app/src/main.ts',
+            to: 'packages/app/src/helper-v1.ts',
+            specifier: '#helper',
+            kind: 'static',
+            via: 'imports',
+          },
+          {
+            from: 'packages/app/src/main.ts',
+            to: 'packages/shared/src/v1.ts',
+            specifier: '@hist/shared',
+            kind: 'static',
+            via: 'exports',
+          },
+        ]);
+        assert.equal(graph.meta.imports?.scope, 'repository');
+        assert.equal(graph.meta.imports?.unresolved, 0);
+      } finally {
+        await histSession.close();
+      }
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('caches workspace manifests and tsconfig across large monorepos (50 workspace packages, 1,000 imports)', () => {
+    const files: Record<string, string> = {
+      'package.json': JSON.stringify({
+        name: 'large-monorepo',
+        private: true,
+        workspaces: ['packages/*'],
+        dependencies: { react: '^18.0.0' },
+      }),
+      'tsconfig.base.json': JSON.stringify({
+        compilerOptions: {
+          customConditions: ['source'],
+        },
+      }),
+      'tsconfig.json': JSON.stringify({
+        extends: './tsconfig.base.json',
+      }),
+    };
+
+    const readCounts = new Map<string, number>();
+    for (let i = 0; i < 50; i++) {
+      const pkgDir = `packages/pkg-${i}`;
+      files[`${pkgDir}/package.json`] = JSON.stringify({
+        name: `@large/pkg-${i}`,
+        exports: {
+          '.': {
+            source: './src/index.ts',
+            import: './dist/index.js',
+          },
+          './utils/*': './src/utils/*.ts',
+        },
+      });
+      files[`${pkgDir}/src/index.ts`] = `export const id = ${i};\n`;
+      files[`${pkgDir}/src/utils/math.ts`] = `export const add = (a: number, b: number) => a + b + ${i};\n`;
+    }
+
+    const trackedRepo: RepoFiles = {
+      exists: (p) => p in files,
+      read: (p) => {
+        readCounts.set(p, (readCounts.get(p) ?? 0) + 1);
+        return files[p];
+      },
+      list: () => Object.keys(files),
+    };
+
+    const resolver = new ImportResolver(trackedRepo);
+    const start = performance.now();
+    for (let i = 0; i < 1000; i++) {
+      const targetPkg = i % 50;
+      const fromPkg = (i + 1) % 50;
+      const fromFile = `packages/pkg-${fromPkg}/src/index.ts`;
+      const spec = i % 2 === 0 ? `@large/pkg-${targetPkg}` : `@large/pkg-${targetPkg}/utils/math`;
+      const res = resolver.resolveDetailed(fromFile, spec);
+      assert.equal(res.kind, 'file');
+    }
+    const elapsedMs = performance.now() - start;
+
+    // Each package.json and tsconfig.json must be read at most once despite 1,000 resolutions
+    assert.equal(readCounts.get('package.json'), 1);
+    assert.equal(readCounts.get('tsconfig.json'), 1);
+    assert.equal(readCounts.get('tsconfig.base.json'), 1);
+    for (let i = 0; i < 50; i++) {
+      assert.equal(readCounts.get(`packages/pkg-${i}/package.json`), 1);
+    }
+    assert.ok(elapsedMs < 1000, `Expected 1,000 monorepo resolutions in <1000ms, took ${elapsedMs.toFixed(1)}ms`);
+  });
 });
 

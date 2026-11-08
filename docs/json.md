@@ -95,6 +95,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
 | `verdicts` | `{ loaded, active, expired, file }` | Optional (always emitted since RA-11) | Summary of `.repo-archaeology.verdicts.json`: total `loaded` entries, `active` entries, `expired` (`until < today`) entries, and `file: ".repo-archaeology.verdicts.json"`. |
+| `imports` | `ImportsCoverageMeta` | Optional | Import resolution coverage and unresolved diagnostics for commands that perform import classification (`scan`, `diff`, `file`, `map`, `explain`, `imports`, and bare `repo-archaeology`). Omitted on `backtest`. |
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
@@ -131,6 +132,23 @@ Teams can commit `<repoRoot>/.repo-archaeology.verdicts.json` (validated against
   - `until` (`YYYY-MM-DD`) is an inclusive UTC date (`until >= today` in UTC is active; `until < today` is expired and emits a warning in `meta.warnings`).
   - In `--head` or `--base` mode, if `.repo-archaeology.verdicts.json` in a historical commit tree is invalid, analysis falls back to no verdicts and records a warning in `meta.warnings`.
 - **Renames vs. globs:** Exact (non-glob) verdict paths are resolved through `RenameTracker` / `History` identities and active branch/working-tree renames (including multi-hop intermediate branch renames and preserving separate file identities when a rename reuses a vacated path), so a verdict on `a.ts` continues to match after `git mv a.ts b.ts`. Glob syntax is recognized when an endpoint contains `*`, `?`, trailing `/`, or comma-separated brace alternation `{a,b}` (literal `[id]` or `{id}` path segments are treated as exact paths), and glob verdicts match current paths only.
+
+#### 5.1.3 Import Resolution Coverage (`meta.imports`, `common.schema.json#/$defs/ImportsCoverageMeta`)
+
+Commands that inspect JS/TS imports (`scan`, `diff`, `file`, `map`, `explain`, `imports`, and the bare default command) include `meta.imports` to report honest import resolution coverage for the exact scope analyzed by that command:
+
+- **`scope`: `"repository" | "analyzed-files"`**
+  - `"repository"` on a full `repo-archaeology imports` / `repo.importGraph()` call (with no `files` filter).
+  - `"analyzed-files"` on `repo.importGraph({ files })` and on `scan`, `diff`, `file`, `map`, and `explain`, where only the files touched by relationship classification during that operation are counted (without parsing unrelated files across the repository).
+- **`filesScanned` (`integer`):** Supported JS/TS files whose imports were parsed within `scope`.
+- **`internalEdges` (`integer`):** Total resolved internal edges originating from `filesScanned`.
+- **`external` (`integer`):** Specifiers classified as external packages (`node:` built-ins, declared `dependencies` / `devDependencies` / `peerDependencies` / `optionalDependencies`, `package.json#imports` mapped to external packages, or `tsconfig.paths` mapped into `node_modules`).
+- **`unresolved` (`integer`):** Specifiers that could not be resolved to an internal file or declared external dependency (always equal to the sum of values in `unresolvedByReason`).
+- **`dynamicLoads` (`integer`):** Files in `scope` containing non-literal dynamic `import(expr)` or `require(expr)` calls.
+- **`unsupportedFiles` (`integer`):** Non-JS/TS files encountered by relationship classification in `scope`.
+- **`sourceUnavailable` (`integer`):** Supported JS/TS files in `scope` whose source contents could not be read (e.g., missing blob or exceeding `MAX_SOURCE_BYTES`).
+- **`heuristicEdges` (`integer`):** Internal edges in `scope` resolved via a heuristic fallback (such as an unconfigured `"source"` export condition or `dist/` → `src/` build-output remapping without a matching `tsconfig` `outDir`/`rootDir`).
+- **`unresolvedByReason` (`Partial<Record<ImportUnresolvedReasonCode, integer>>`, optional):** Non-zero counts of unresolved specifiers grouped by `reasonCode` (`"alias-unmatched"`, `"unknown-package"`, `"target-missing"`, `"not-exported"`, `"invalid-target"`, `"unsupported-config"`, `"ambiguous-package"`).
 
 ---
 
@@ -376,10 +394,10 @@ When `repo-archaeology --json` is invoked with no subcommand, it inspects the wo
 | --- | --- | --- | --- |
 | `schemaVersion` | `1` | Yes | JSON contract major version. |
 | `tool` | `{ name, version }` | Yes | Tool name and semver version. |
-| `meta` | `Meta` | Yes | Repository metadata. |
+| `meta` | `Meta` | Yes | Repository metadata (including `meta.imports` with `scope: "repository"` when unfiltered or `scope: "analyzed-files"` when `--files` is passed). |
 | `files` | `string[]` | Yes | Sorted repository-relative paths included in the graph (`from` candidates). When `files` filter is passed, includes the requested files plus every file that imports them (passing a path outside the repository or a path not present at head throws `UsageError`). |
-| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"` (including triple-slash `/// <reference path="..." />` directives as `"static"`, and resolving dynamic `import()` with the `"import"` package export condition even in `.cjs`/`.cts` files) and `to` is an internal file present at head. |
-| `unresolved` | `ImportGraphUnresolved[]` | Yes | Unresolved local/alias module specifiers (`{ from, specifier, reason }`, e.g. `reason: "unmatched"`). |
+| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind, via?, heuristic? }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"`, `via` is `"relative" \| "paths" \| "workspace" \| "exports" \| "imports"`, `heuristic` is `boolean` (`true` when resolved via a heuristic `dist/` → `src/` remap or unconfigured `"source"` export condition), and `to` is an internal file present at head. |
+| `unresolved` | `ImportGraphUnresolved[]` | Yes | Unresolved module specifiers (`{ from, specifier, reason, reasonCode? }`), preserving `reason: "unmatched"` for `schemaVersion: 1` compatibility and adding `reasonCode`: `"alias-unmatched" \| "unknown-package" \| "target-missing" \| "not-exported" \| "invalid-target" \| "unsupported-config" \| "ambiguous-package"`. |
 | `languages` | `string[]` | Yes | Sorted list of detected source languages (`"javascript"`, `"typescript"`). |
 
 ---

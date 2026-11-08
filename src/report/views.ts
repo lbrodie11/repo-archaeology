@@ -1,6 +1,12 @@
 import { posix } from 'node:path';
 import type { Context } from '../context.js';
-import type { HiddenBridge, Relationship } from '../imports/classify.js';
+import type {
+  HiddenBridge,
+  ImportResolutionVia,
+  ImportsCoverageMeta,
+  ImportUnresolvedReasonCode,
+  Relationship,
+} from '../imports/classify.js';
 import type { Companion, WeightingMode } from '../model/cochange.js';
 import {
   computeOriginShare,
@@ -17,6 +23,11 @@ import {
 import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
+export type {
+  ImportResolutionVia,
+  ImportsCoverageMeta,
+  ImportUnresolvedReasonCode,
+} from '../imports/classify.js';
 export type { RelationshipVerdictView, VerdictsMeta } from '../model/verdicts.js';
 
 export function weightingLabel(item: { weighted?: boolean; weighting?: WeightingMode }): string | undefined {
@@ -90,6 +101,8 @@ export interface Meta {
   origins?: OriginCounts;
   /** Summary of `.repo-archaeology.verdicts.json` entries. */
   verdicts?: VerdictsMeta;
+  /** Scoped import resolution coverage for files inspected during this command. */
+  imports?: ImportsCoverageMeta;
   settings: {
     maxCommits: number;
     since?: string;
@@ -113,6 +126,7 @@ export function buildMeta(ctx: Context): Meta {
     const o: CommitOrigin = commit.origin ?? 'human';
     origins[o]++;
   }
+  const importsCoverage = ctx.classifier.coverage();
   return {
     tool: 'repo-archaeology',
     root: ctx.root,
@@ -132,6 +146,7 @@ export function buildMeta(ctx: Context): Meta {
       expired: 0,
       file: VERDICTS_FILE,
     },
+    ...(importsCoverage !== undefined ? { imports: importsCoverage } : {}),
     settings: {
       maxCommits: s.maxCommits,
       since: s.since,

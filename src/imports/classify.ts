@@ -4,10 +4,13 @@ import { extractSourceReferences, sourceReferenceKey, type SourceReference, type
 import {
   candidateFilePaths,
   gitTreeFiles,
+  IMPORT_UNRESOLVED_REASON_CODES,
   ImportResolver,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
   type ImportUnresolvedReasonCode,
   type RepoFiles,
 } from './resolve.js';
@@ -15,9 +18,13 @@ import { extractDetailedDependencies } from './typescript.js';
 
 export {
   gitTreeFiles,
+  IMPORT_UNRESOLVED_REASON_CODES,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
+  type ImportResolutionVia,
+  type ImportsCoverageMeta,
+  type ImportUnresolvedReasonCode,
 };
 
 /**
@@ -67,9 +74,19 @@ interface FileImports {
  */
 export function workingTreeFiles(root: string, existing: ReadonlySet<string>): RepoFiles {
   let realRoot: string | undefined;
+  const existsCache = new Map<string, boolean>();
+  const realDirCache = new Map<string, string>();
   const getRealRoot = (): string => {
     realRoot ??= realpathSync(root);
     return realRoot;
+  };
+  const getRealDir = (dir: string): string => {
+    let cached = realDirCache.get(dir);
+    if (cached === undefined) {
+      cached = realpathSync(join(root, dir));
+      realDirCache.set(dir, cached);
+    }
+    return cached;
   };
   const isInsideRealDir = (realTarget: string, realDir: string): boolean =>
     realTarget === realDir || realTarget.startsWith(realDir.endsWith(sep) ? realDir : realDir + sep);
@@ -77,26 +94,33 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R
   return {
     exists: (path) => {
       if (!existing.has(path)) return false;
+      const cached = existsCache.get(path);
+      if (cached !== undefined) return cached;
       try {
         const full = join(root, path);
         const stat = lstatSync(full);
-        if (!stat.isFile()) return false;
+        if (!stat.isFile()) {
+          existsCache.set(path, false);
+          return false;
+        }
         const real = realpathSync(full);
-        return isInsideRealDir(real, getRealRoot());
+        const ok = isInsideRealDir(real, getRealRoot());
+        existsCache.set(path, ok);
+        return ok;
       } catch {
+        existsCache.set(path, false);
         return false;
       }
     },
     isWithinDir: (path, dir) => {
+      if (!dir) return true;
       try {
         const full = join(root, path);
         const stat = lstatSync(full);
         if (!stat.isFile()) return false;
         const real = realpathSync(full);
         if (!isInsideRealDir(real, getRealRoot())) return false;
-        if (!dir) return true;
-        const realDir = realpathSync(join(root, dir));
-        return isInsideRealDir(real, realDir);
+        return isInsideRealDir(real, getRealDir(dir));
       } catch {
         return false;
       }
@@ -106,6 +130,7 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R
       if (normalized === '..' || normalized.startsWith('../') || posix.isAbsolute(normalized)) return true;
       if (dir && normalized !== dir && !normalized.startsWith(`${dir}/`)) return true;
       for (const candidate of candidateFilePaths(normalized)) {
+        if (!existing.has(candidate)) continue;
         try {
           const full = join(root, candidate);
           const stat = lstatSync(full);
@@ -113,10 +138,7 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R
           if (stat.isFile()) {
             const real = realpathSync(full);
             if (!isInsideRealDir(real, getRealRoot())) return true;
-            if (dir) {
-              const realDir = realpathSync(join(root, dir));
-              if (!isInsideRealDir(real, realDir)) return true;
-            }
+            if (dir && !isInsideRealDir(real, getRealDir(dir))) return true;
           }
         } catch {
           // candidate does not exist on disk
@@ -145,6 +167,7 @@ export class RelationshipClassifier {
   private readonly resolver: ImportResolver;
   private readonly cache = new Map<string, FileImports>();
   private readonly reachCache = new Map<string, Reach>();
+  private readonly accessedInScope = new Set<string>();
   private bridgeReferences?: Map<string, Set<string>>;
   private bridgeUses?: Map<string, SourceReference & { filesUsing: number }>;
 
@@ -153,6 +176,74 @@ export class RelationshipClassifier {
     private readonly includeBridgeFile: (path: string) => boolean = () => true,
   ) {
     this.resolver = new ImportResolver(files);
+  }
+
+  /** Clears the per-operation file access set while preserving parsed AST caches. */
+  resetScope(): void {
+    this.accessedInScope.clear();
+  }
+
+  /**
+   * Returns import resolution coverage for the files analyzed in the current scope
+   * (`scope: 'analyzed-files'`), or `undefined` when no files were analyzed.
+   */
+  coverage(): ImportsCoverageMeta | undefined {
+    if (this.accessedInScope.size === 0) return undefined;
+    let filesScanned = 0;
+    let internalEdges = 0;
+    let external = 0;
+    let unresolved = 0;
+    let dynamicLoads = 0;
+    let unsupportedFiles = 0;
+    let sourceUnavailable = 0;
+    let heuristicEdges = 0;
+    const rawReasons: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+
+    for (const file of [...this.accessedInScope].sort()) {
+      const info = this.cache.get(file);
+      if (!info) continue;
+      if (info.sourceUnavailable) {
+        sourceUnavailable++;
+        continue;
+      }
+      if (!info.analyzable) {
+        unsupportedFiles++;
+        continue;
+      }
+      filesScanned++;
+      internalEdges += info.internalEdges;
+      external += info.external;
+      unresolved += info.unresolved - info.dynamicLoads;
+      dynamicLoads += info.dynamicLoads;
+      heuristicEdges += info.heuristicEdges;
+      for (const code of IMPORT_UNRESOLVED_REASON_CODES) {
+        const count = info.unresolvedReasons[code];
+        if (count) {
+          rawReasons[code] = (rawReasons[code] ?? 0) + count;
+        }
+      }
+    }
+
+    const unresolvedByReason: Partial<Record<ImportUnresolvedReasonCode, number>> = {};
+    for (const code of IMPORT_UNRESOLVED_REASON_CODES) {
+      const count = rawReasons[code];
+      if (count) {
+        unresolvedByReason[code] = count;
+      }
+    }
+
+    return {
+      scope: 'analyzed-files',
+      filesScanned,
+      internalEdges,
+      external,
+      unresolved,
+      dynamicLoads,
+      unsupportedFiles,
+      sourceUnavailable,
+      heuristicEdges,
+      unresolvedByReason,
+    };
   }
 
   classify(a: string, b: string): Relationship {
@@ -258,6 +349,7 @@ export class RelationshipClassifier {
   }
 
   analyze(file: string): FileImports {
+    this.accessedInScope.add(file);
     const cached = this.cache.get(file);
     if (cached) return cached;
     const result: FileImports = {
@@ -285,6 +377,8 @@ export class RelationshipClassifier {
     // A load whose target is computed at runtime could be the partner file.
     result.unresolved += nonLiteralLoads;
     result.dynamicLoads += nonLiteralLoads;
+    const seenEdges = new Set<string>();
+    const seenUnresolved = new Set<string>();
     for (const { specifier, kind, typeOnly } of imports) {
       const resolved = this.resolver.resolveDetailed(
         file,
@@ -298,16 +392,23 @@ export class RelationshipClassifier {
           if (resolved.heuristic) {
             result.heuristicImports.add(resolved.path);
           }
-        }
-        result.internalEdges++;
-        if (resolved.heuristic) {
-          result.heuristicEdges++;
+          const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
+          if (!seenEdges.has(edgeKey)) {
+            seenEdges.add(edgeKey);
+            result.internalEdges++;
+            if (resolved.heuristic) {
+              result.heuristicEdges++;
+            }
+          }
         }
       } else if (resolved.kind === 'external') {
         result.external++;
       } else if (resolved.kind === 'unresolved') {
-        result.unresolved++;
-        result.unresolvedReasons[resolved.reasonCode] = (result.unresolvedReasons[resolved.reasonCode] ?? 0) + 1;
+        if (!seenUnresolved.has(specifier)) {
+          seenUnresolved.add(specifier);
+          result.unresolved++;
+          result.unresolvedReasons[resolved.reasonCode] = (result.unresolvedReasons[resolved.reasonCode] ?? 0) + 1;
+        }
       }
     }
     for (const referencePath of referencePaths) {
@@ -320,12 +421,19 @@ export class RelationshipClassifier {
         target === '..' ||
         target.startsWith('../');
       if (invalid || !this.files.exists(target)) {
-        result.unresolved++;
-        const code: ImportUnresolvedReasonCode = invalid ? 'invalid-target' : 'target-missing';
-        result.unresolvedReasons[code] = (result.unresolvedReasons[code] ?? 0) + 1;
+        if (!seenUnresolved.has(referencePath)) {
+          seenUnresolved.add(referencePath);
+          result.unresolved++;
+          const code: ImportUnresolvedReasonCode = invalid ? 'invalid-target' : 'target-missing';
+          result.unresolvedReasons[code] = (result.unresolvedReasons[code] ?? 0) + 1;
+        }
       } else if (target !== file) {
         result.references.add(target);
-        result.internalEdges++;
+        const edgeKey = `${target}\0${referencePath}\0static`;
+        if (!seenEdges.has(edgeKey)) {
+          seenEdges.add(edgeKey);
+          result.internalEdges++;
+        }
       }
     }
     return result;
@@ -377,9 +485,13 @@ export class RelationshipClassifier {
    */
   private reachable(file: string): Reach {
     const cached = this.reachCache.get(file);
-    if (cached) return cached;
-    const reach: Reach = { files: new Set(), incomplete: false };
+    if (cached) {
+      for (const v of cached.visited) this.accessedInScope.add(v);
+      return cached;
+    }
+    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false };
     const visit = (current: string, depth: number) => {
+      reach.visited.add(current);
       const info = this.analyze(current);
       // An unreadable barrel could re-export anything, so nothing can be ruled out.
       if (info.unresolved > 0 || info.sourceUnavailable) reach.incomplete = true;
@@ -416,6 +528,7 @@ function referencePriority(kind: SourceReferenceKind): number {
 
 interface Reach {
   files: Set<string>;
+  visited: Set<string>;
   incomplete: boolean;
 }
 
