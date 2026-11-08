@@ -684,15 +684,55 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       } finally {
         cfgRepo.git('checkout', '-q', 'main');
       }
+
+      // 4. An old ref with a .repo-archaeology.json this version rejects falls back to working-tree config and records a meta.warnings entry
+      cfgRepo.commit({
+        message: 'chore: commit unrecognized config key at old ref',
+        author: 'Alice',
+        write: {
+          '.repo-archaeology.json': JSON.stringify({ unsupportedLegacyKey: true, minShared: 4 }),
+        },
+      });
+      const shaWithInvalidConfig = cfgRepo.git('rev-parse', 'HEAD').trim();
+
+      // Fix the config in a subsequent commit on main (working tree now has a valid config with minShared: 4)
+      cfgRepo.commit({
+        message: 'chore: fix config on main',
+        author: 'Alice',
+        write: {
+          '.repo-archaeology.json': JSON.stringify({ minShared: 4 }),
+          'src/a.ts': 'export const a = 99;\n',
+        },
+      });
+
+      const fallbackCtx = await loadContext(cfgRepo.dir, {}, { head: shaWithInvalidConfig });
+      assert.equal(fallbackCtx.settings.minShared, 4, 'must fall back to working-tree config when <head> config is rejected');
+      assert.ok(
+        fallbackCtx.warnings.some((w) => w.includes('Ignoring invalid .repo-archaeology.json') && w.includes('using working-tree configuration instead')),
+        `expected config fallback warning in ctx.warnings, got: ${JSON.stringify(fallbackCtx.warnings)}`,
+      );
+      const fallbackScan = scan(fallbackCtx, { limit: 10, kinds: [...RELATIONSHIPS] });
+      assert.ok(
+        fallbackScan.meta.warnings.some((w) => w.includes('Ignoring invalid .repo-archaeology.json')),
+        'scan meta.warnings must include the config fallback warning',
+      );
+      const fallbackDiff = await diff(fallbackCtx, { base: shaWithoutConfig, limit: 10, kinds: [...RELATIONSHIPS] });
+      assert.ok(
+        fallbackDiff.meta.warnings.some((w) => w.includes('Ignoring invalid .repo-archaeology.json')),
+        'diff meta.warnings must preserve the config fallback warning across isolateBaselineContext',
+      );
     } finally {
       cfgRepo.cleanup();
     }
   });
 
-  it('symlinks: preserves historical paths in file/explain despite checkout symlinks and classifies committed symlinks as unknown', async () => {
+  it('symlinks: preserves historical paths and /var + /tmp root aliases in file/explain despite checkout symlinks and classifies committed symlinks as unknown', async () => {
     const symRepo = new FixtureRepo();
     const externalDir = mkdtempSync(join(tmpdir(), 'repo-arch-ext-sym-'));
+    const tmpRoot = process.platform === 'darwin' && existsSync('/tmp') ? '/tmp' : tmpdir();
+    const tmpAlias = join(tmpRoot, `repo-arch-tmp-alias-${process.pid}-${Date.now()}`);
     try {
+      symlinkSync(symRepo.dir, tmpAlias);
       const externalTarget = join(externalDir, 'outside.ts');
       writeFileSync(externalTarget, 'export const outside = true;\n');
 
@@ -750,6 +790,29 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       assert.equal(explainExtB.from, 'src/ext.ts');
       assert.equal(explainExtB.to, 'src/b.ts');
 
+      // Absolute paths through /var (symRepo.dir on macOS) and /tmp (tmpAlias) aliases must succeed in file and explain
+      // while still not following checkout symlinks inside the repository
+      for (const aliasRoot of [symRepo.dir, tmpAlias]) {
+        const absA = join(aliasRoot, 'src/a.ts');
+        const absB = join(aliasRoot, 'src/b.ts');
+        const absExt = join(aliasRoot, 'src/ext.ts');
+
+        assert.equal(fileReport(oldCtx, absA, { limit: 5 }).path, 'src/a.ts');
+        assert.equal(fileReport(oldCtx, absExt, { limit: 5 }).path, 'src/ext.ts');
+
+        const absExplainAB = await explain(oldCtx, absA, absB);
+        assert.equal(absExplainAB.from, 'src/a.ts');
+        assert.equal(absExplainAB.to, 'src/b.ts');
+
+        const absExplainExtB = await explain(oldCtx, absExt, absB);
+        assert.equal(absExplainExtB.from, 'src/ext.ts');
+        assert.equal(absExplainExtB.to, 'src/b.ts');
+
+        const cliFileRes = runCli(['file', absA, '--head', regularHeadSha, '--json'], symRepo.dir);
+        assert.equal(cliFileRes.code, 0, cliFileRes.stderr);
+        assert.equal(JSON.parse(cliFileRes.stdout).path, 'src/a.ts');
+      }
+
       // 2. Finding 3: At symlinkHeadSha (where src/a.ts is a committed 120000 symlink),
       //    gitTreeFiles.read('src/a.ts') must return undefined and classification must be 'unknown' (matching workingTreeFiles)
       const symCtx = await loadContext(symRepo.dir, { minShared: 3, minConfidence: 0.4 }, { head: symlinkHeadSha });
@@ -772,6 +835,7 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
         directTreeFiles.close();
       }
     } finally {
+      rmSync(tmpAlias, { force: true });
       symRepo.cleanup();
       rmSync(externalDir, { recursive: true, force: true });
     }

@@ -187,12 +187,22 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       listTreeFiles(root, headSha),
       headSha === checkedOutHeadSha ? workingTreeChanges(root) : Promise.resolve([]),
     ]);
-    const fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles);
+    let fileConfig: Partial<Settings>;
+    let configWarning: string | undefined;
+    try {
+      fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles);
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+      fileConfig = loadConfigFile(root);
+      configWarning = `Ignoring invalid ${CONFIG_FILE} at ${headRef} (${err.message}); using working-tree configuration instead.`;
+    }
     const settings = resolveSettings(fileConfig, flags);
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
 
     progress('Reading git history…');
-    const extraWarnings = wtChanges.length > 0 ? [DIRTY_WORKTREE_HEAD_WARNING] : [];
+    const extraWarnings: string[] = [];
+    if (configWarning !== undefined) extraWarnings.push(configWarning);
+    if (wtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings);
     const bridgeIgnores = new PathMatcher(trained.ignores);
     const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);
@@ -261,7 +271,9 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
 export async function isolateBaselineContext(ctx: Context, base?: string): Promise<Context> {
   const shallow = ctx.shallow ?? ctx.warnings.includes(SHALLOW_WARNING);
   const targetHead = ctx.head?.sha ?? 'HEAD';
-  const extraWarnings = ctx.warnings.includes(DIRTY_WORKTREE_HEAD_WARNING) ? [DIRTY_WORKTREE_HEAD_WARNING] : [];
+  const isCommitCountWarning = (w: string): boolean =>
+    w.startsWith('No usable commits were found') || w.startsWith('Only ');
+  const extraWarnings = ctx.warnings.filter((w) => w !== SHALLOW_WARNING && !isCommitCountWarning(w));
   if (base === undefined) {
     if (ctx.base === undefined) return ctx;
     const headSha = ctx.headSha ?? (await resolveCommit(ctx.root, targetHead));
@@ -298,25 +310,58 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
   };
 }
 
+function isWithinRoot(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/**
+ * Resolves symlink aliases at or above `realRoot` (such as `/var` -> `/private/var` or
+ * `/tmp` -> `/private/tmp` on macOS) while preserving the lexical path beneath `realRoot`
+ * so checkout symlinks inside the repository are never followed for historical `--head` paths.
+ */
+function normalizeAtRepoRoot(path: string, realRoot: string): string {
+  const resolved = resolve(path);
+  if (isWithinRoot(realRoot, resolved)) return resolved;
+
+  const chain: { dir: string; suffix: string[] }[] = [];
+  let cursor = resolved;
+  const parts: string[] = [];
+  while (true) {
+    chain.push({ dir: cursor, suffix: [...parts] });
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    parts.unshift(basename(cursor));
+    cursor = parent;
+  }
+  chain.reverse();
+
+  for (const { dir, suffix } of chain) {
+    try {
+      if (realpathSync.native(dir) === realRoot) {
+        return suffix.length > 0 ? resolve(realRoot, ...suffix) : realRoot;
+      }
+    } catch {
+      // Non-existent path segment; cannot be the repository root on disk.
+      break;
+    }
+  }
+  return resolved;
+}
+
 /** Converts a user-supplied path (relative to cwd, or absolute) to a repo-relative POSIX path. */
 export function toRepoPath(ctx: Pick<Context, 'cwd' | 'root' | 'head'>, input: string): string {
   const realRoot = realpathLenient(ctx.root);
   if (ctx.head !== undefined) {
-    const rawRoot = resolve(ctx.root);
-    const resolvedCwd = resolve(ctx.cwd);
-    const cwdInRaw = relative(rawRoot, resolvedCwd);
-    const baseCwd =
-      cwdInRaw === '' || (!cwdInRaw.startsWith(`..${sep}`) && cwdInRaw !== '..' && !isAbsolute(cwdInRaw))
-        ? resolve(realRoot, cwdInRaw)
-        : realpathLenient(ctx.cwd);
-    const target = isAbsolute(input) ? resolve(input) : resolve(baseCwd, input);
-    for (const rootCandidate of [realRoot, rawRoot]) {
-      const rel = relative(rootCandidate, target);
-      if (rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
-        return rel.split(sep).join('/');
-      }
+    const normalizedCwd = normalizeAtRepoRoot(ctx.cwd, realRoot);
+    const baseCwd = isWithinRoot(realRoot, normalizedCwd) ? normalizedCwd : realpathLenient(ctx.cwd);
+    const rawTarget = isAbsolute(input) ? resolve(input) : resolve(baseCwd, input);
+    const target = normalizeAtRepoRoot(rawTarget, realRoot);
+    const rel = relative(realRoot, target);
+    if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+      throw new UsageError(`${input} is outside the repository at ${ctx.root}.`);
     }
-    throw new UsageError(`${input} is outside the repository at ${ctx.root}.`);
+    return rel.split(sep).join('/');
   }
   const absolute = realpathLenient(isAbsolute(input) ? input : resolve(ctx.cwd, input));
   const rel = relative(realRoot, absolute);

@@ -138,7 +138,7 @@ port.on('message', (msg) => {
     if (childExited) {
       finishClose();
       return;
-    };
+    }
     child.once('close', finishClose);
     try {
       child.stdin.end();
@@ -256,6 +256,13 @@ export function gitTreeFiles(
     if (treeModes !== undefined) return treeModes;
     const res = spawnSync('git', [...CONFIG_OVERRIDES, 'ls-tree', '-r', '-z', '--end-of-options', headSha], {
       cwd: root,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_OPTIONAL_LOCKS: '0',
+        GIT_PAGER: 'cat',
+        GIT_NO_REPLACE_OBJECTS: '1',
+      },
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       windowsHide: true,

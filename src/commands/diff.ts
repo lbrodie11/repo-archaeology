@@ -119,9 +119,6 @@ const MERGE_FALLBACK_WARNING =
 export async function collectChanges(ctx: Context, base?: string, warnings?: string[]): Promise<ChangedFile[]> {
   const lists: ChangedFile[][] = [];
   const headSha = ctx.head?.sha;
-  if (headSha && !base) {
-    throw new UsageError('diff --head requires --base <ref>.');
-  }
   if (base) {
     const mergeBaseSha = ctx.base === base && ctx.mergeBaseSha !== undefined
       ? ctx.mergeBaseSha

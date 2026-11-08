@@ -158,9 +158,6 @@ program
       cmd: Command,
     ) => {
       const global = cmd.optsWithGlobals<GlobalOptions>();
-      if (global.head !== undefined && !opts.base) {
-        throw new UsageError('diff --head requires --base <ref>.');
-      }
       if (global.json && opts.format === 'markdown') {
         throw new UsageError(
           '--json and --format markdown cannot be used together on stdout; use --format markdown --json-out <file> instead.',

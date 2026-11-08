@@ -299,7 +299,7 @@ repo-archaeology diff --head <sha> --base <sha>
 repo-archaeology backtest --head v1.2.0
 ```
 
-`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). JSON outputs include `meta.head: { ref, sha }`.
+`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). If `<ref>` contains a `.repo-archaeology.json` that the current version rejects, Repo Archaeology falls back to the working-tree configuration and records a warning in `meta.warnings`. JSON outputs include `meta.head: { ref, sha }`.
 
 ## How to read the results
 
