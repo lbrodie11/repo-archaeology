@@ -2,11 +2,13 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
+  candidateFilePaths,
   gitTreeFiles,
   ImportResolver,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
+  type ImportUnresolvedReasonCode,
   type RepoFiles,
 } from './resolve.js';
 import { extractDetailedDependencies } from './typescript.js';
@@ -47,8 +49,14 @@ interface FileImports {
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
+  heuristicImports: Set<string>;
   references: Set<string>;
   unresolved: number;
+  internalEdges: number;
+  heuristicEdges: number;
+  external: number;
+  dynamicLoads: number;
+  unresolvedReasons: Partial<Record<ImportUnresolvedReasonCode, number>>;
 }
 
 /**
@@ -59,18 +67,72 @@ interface FileImports {
  */
 export function workingTreeFiles(root: string, existing: ReadonlySet<string>): RepoFiles {
   let realRoot: string | undefined;
+  const getRealRoot = (): string => {
+    realRoot ??= realpathSync(root);
+    return realRoot;
+  };
+  const isInsideRealDir = (realTarget: string, realDir: string): boolean =>
+    realTarget === realDir || realTarget.startsWith(realDir.endsWith(sep) ? realDir : realDir + sep);
+
   return {
-    exists: (path) => existing.has(path),
+    exists: (path) => {
+      if (!existing.has(path)) return false;
+      try {
+        const full = join(root, path);
+        const stat = lstatSync(full);
+        if (!stat.isFile()) return false;
+        const real = realpathSync(full);
+        return isInsideRealDir(real, getRealRoot());
+      } catch {
+        return false;
+      }
+    },
+    isWithinDir: (path, dir) => {
+      try {
+        const full = join(root, path);
+        const stat = lstatSync(full);
+        if (!stat.isFile()) return false;
+        const real = realpathSync(full);
+        if (!isInsideRealDir(real, getRealRoot())) return false;
+        if (!dir) return true;
+        const realDir = realpathSync(join(root, dir));
+        return isInsideRealDir(real, realDir);
+      } catch {
+        return false;
+      }
+    },
+    isInvalidTarget: (path, dir) => {
+      const normalized = posix.normalize(path);
+      if (normalized === '..' || normalized.startsWith('../') || posix.isAbsolute(normalized)) return true;
+      if (dir && normalized !== dir && !normalized.startsWith(`${dir}/`)) return true;
+      for (const candidate of candidateFilePaths(normalized)) {
+        try {
+          const full = join(root, candidate);
+          const stat = lstatSync(full);
+          if (stat.isSymbolicLink()) return true;
+          if (stat.isFile()) {
+            const real = realpathSync(full);
+            if (!isInsideRealDir(real, getRealRoot())) return true;
+            if (dir) {
+              const realDir = realpathSync(join(root, dir));
+              if (!isInsideRealDir(real, realDir)) return true;
+            }
+          }
+        } catch {
+          // candidate does not exist on disk
+        }
+      }
+      return false;
+    },
     list: () => existing,
     read: (path) => {
       try {
         const full = join(root, path);
         const stat = lstatSync(full);
         if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) return undefined;
-        realRoot ??= realpathSync(root);
         // A parent folder may itself be a symlink pointing elsewhere.
         const real = realpathSync(full);
-        if (real !== realRoot && !real.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep)) return undefined;
+        if (!isInsideRealDir(real, getRealRoot())) return undefined;
         return readFileSync(full, 'utf8');
       } catch {
         return undefined;
@@ -136,10 +198,18 @@ export class RelationshipClassifier {
         if (isTestFile(a) && isTestFile(b)) return 'two tests that change together';
         return (isTestFile(a) ? testCovers(a, b) : testCovers(b, a)) ? 'a test and the code it covers' : 'a test that changes with this code';
       case 'direct': {
-        if (this.analyze(a).imports.has(b)) return `${posix.basename(a)} imports ${posix.basename(b)}`;
-        if (this.analyze(b).imports.has(a)) return `${posix.basename(b)} imports ${posix.basename(a)}`;
-        if (this.analyze(a).references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
-        if (this.analyze(b).references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
+        const ia = this.analyze(a);
+        const ib = this.analyze(b);
+        if (ia.imports.has(b)) {
+          const suffix = ia.heuristicImports.has(b) ? ' (via heuristic source remap)' : '';
+          return `${posix.basename(a)} imports ${posix.basename(b)}${suffix}`;
+        }
+        if (ib.imports.has(a)) {
+          const suffix = ib.heuristicImports.has(a) ? ' (via heuristic source remap)' : '';
+          return `${posix.basename(b)} imports ${posix.basename(a)}${suffix}`;
+        }
+        if (ia.references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
+        if (ib.references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
       }
       case 'indirect': {
@@ -190,7 +260,19 @@ export class RelationshipClassifier {
   analyze(file: string): FileImports {
     const cached = this.cache.get(file);
     if (cached) return cached;
-    const result: FileImports = { analyzable: false, sourceUnavailable: false, imports: new Set(), references: new Set(), unresolved: 0 };
+    const result: FileImports = {
+      analyzable: false,
+      sourceUnavailable: false,
+      imports: new Set(),
+      heuristicImports: new Set(),
+      references: new Set(),
+      unresolved: 0,
+      internalEdges: 0,
+      heuristicEdges: 0,
+      external: 0,
+      dynamicLoads: 0,
+      unresolvedReasons: {},
+    };
     this.cache.set(file, result);
     if (!ANALYZABLE.test(file)) return result;
     const text = this.files.read(file);
@@ -202,22 +284,48 @@ export class RelationshipClassifier {
     const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, file);
     // A load whose target is computed at runtime could be the partner file.
     result.unresolved += nonLiteralLoads;
-    for (const { specifier, kind } of imports) {
-      const resolved = this.resolver.resolve(file, specifier, kind === 'require' ? 'require' : 'import');
+    result.dynamicLoads += nonLiteralLoads;
+    for (const { specifier, kind, typeOnly } of imports) {
+      const resolved = this.resolver.resolveDetailed(
+        file,
+        specifier,
+        kind === 'require' ? 'require' : 'import',
+        { typeOnlyImport: Boolean(typeOnly) },
+      );
       if (resolved.kind === 'file') {
-        if (resolved.path !== file) result.imports.add(resolved.path);
+        if (resolved.path !== file) {
+          result.imports.add(resolved.path);
+          if (resolved.heuristic) {
+            result.heuristicImports.add(resolved.path);
+          }
+        }
+        result.internalEdges++;
+        if (resolved.heuristic) {
+          result.heuristicEdges++;
+        }
+      } else if (resolved.kind === 'external') {
+        result.external++;
       } else if (resolved.kind === 'unresolved') {
         result.unresolved++;
+        result.unresolvedReasons[resolved.reasonCode] = (result.unresolvedReasons[resolved.reasonCode] ?? 0) + 1;
       }
     }
     for (const referencePath of referencePaths) {
       const path = referencePath.replace(/\\/g, '/');
       const target = posix.normalize(posix.join(posix.dirname(file), path));
-      if (path === '' || posix.isAbsolute(path) || win32.parse(path).root !== ''
-        || target === '..' || target.startsWith('../') || !this.files.exists(target)) {
+      const invalid =
+        path === '' ||
+        posix.isAbsolute(path) ||
+        win32.parse(path).root !== '' ||
+        target === '..' ||
+        target.startsWith('../');
+      if (invalid || !this.files.exists(target)) {
         result.unresolved++;
+        const code: ImportUnresolvedReasonCode = invalid ? 'invalid-target' : 'target-missing';
+        result.unresolvedReasons[code] = (result.unresolvedReasons[code] ?? 0) + 1;
       } else if (target !== file) {
         result.references.add(target);
+        result.internalEdges++;
       }
     }
     return result;

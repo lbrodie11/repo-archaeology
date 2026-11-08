@@ -526,6 +526,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
     // while require() selects the "require" condition in package.json exports.
     const cjsEsmRepo = new FixtureRepo();
     try {
+      cjsEsmRepo.write('package.json', JSON.stringify({ name: 'root', private: true, workspaces: ['packages/*'] }, null, 2));
       cjsEsmRepo.write(
         'packages/dual/package.json',
         JSON.stringify(

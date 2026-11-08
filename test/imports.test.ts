@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { isTestFile, isTestPair, RelationshipClassifier, testCovers } from '../src/imports/classify.js';
+import { isTestFile, isTestPair, RelationshipClassifier, testCovers, workingTreeFiles } from '../src/imports/classify.js';
 import { ImportResolver, resolveFile, type RepoFiles } from '../src/imports/resolve.js';
 import { extractSourceReferences } from '../src/imports/references.js';
 import { extractDependencies, extractSpecifiers } from '../src/imports/typescript.js';
@@ -21,11 +24,10 @@ describe('import resolution', () => {
     'src/util/index.ts': '',
     'src/data.json': '',
     'src/esm.ts': '',
-    'dist/index.js': 'export const built = true',
     'lib/legacy.js': '',
     'tsconfig.base.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], "@exact": ["src/a.ts"] } } }',
     'tsconfig.json': '{ // comments are allowed\n "extends": "./tsconfig.base", "compilerOptions": { "strict": true, } }',
-    'package.json': '{ "name": "my-lib", "exports": { ".": "./dist/index.js", "./util": { "import": "./dist/util/index.js" } } }',
+    'package.json': '{ "name": "my-lib", "workspaces": ["packages/*"], "exports": { ".": "./dist/index.js", "./util": { "import": "./dist/util/index.js" } } }',
     'packages/ui/package.json': '{ "name": "@acme/ui", "main": "dist/index.js" }',
     'packages/ui/src/index.ts': '',
     'packages/ui/src/button.tsx': '',
@@ -285,3 +287,595 @@ describe('relationship classification', () => {
     assert.ok(!isTestPair('src/a.ts', 'src/b.ts'));
   });
 });
+
+describe('RA-09A: monorepo workspace discovery, exports, #imports, and source remapping', () => {
+  it('discovers workspaces from package.json#workspaces (array & object), pnpm-workspace.yaml, and lerna.json with !negation', () => {
+    // 1. package.json#workspaces.packages object form + negation
+    const objWorkspaces = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({
+          workspaces: { packages: ['packages/*', '!packages/legacy'] },
+          dependencies: { react: '^18.0.0' },
+        }),
+        'packages/active/package.json': JSON.stringify({ name: '@acme/active', main: './src/index.ts' }),
+        'packages/active/src/index.ts': 'export const ok = true;',
+        'packages/legacy/package.json': JSON.stringify({ name: '@acme/legacy', main: './src/index.ts' }),
+        'packages/legacy/src/index.ts': 'export const old = true;',
+        'examples/demo/package.json': JSON.stringify({ name: '@acme/demo', main: './src/index.ts' }),
+        'examples/demo/src/index.ts': 'export const demo = true;',
+      }),
+    );
+
+    assert.deepEqual(objWorkspaces.resolveDetailed('apps/web/index.ts', '@acme/active'), {
+      kind: 'file',
+      path: 'packages/active/src/index.ts',
+      via: 'workspace',
+    });
+    // Negated workspace package and undeclared nested package.json are not workspace packages
+    assert.deepEqual(objWorkspaces.resolveDetailed('apps/web/index.ts', '@acme/legacy'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+    assert.deepEqual(objWorkspaces.resolveDetailed('apps/web/index.ts', '@acme/demo'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+    // Declared external vs undeclared external
+    assert.deepEqual(objWorkspaces.resolveDetailed('apps/web/index.ts', 'react'), {
+      kind: 'external',
+    });
+    assert.deepEqual(objWorkspaces.resolveDetailed('apps/web/index.ts', 'undeclared-npm-pkg'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+
+    // 2. pnpm-workspace.yaml with comments, negation, and catalog dependencies
+    const pnpmWorkspaces = new ImportResolver(
+      memoryRepo({
+        'pnpm-workspace.yaml': [
+          '# pnpm workspace config',
+          'packages:',
+          '  - "packages/*"',
+          "  - 'apps/*'",
+          '  - "!packages/ignored"',
+          'catalog:',
+          '  zod: ^3.23.0',
+        ].join('\n'),
+        'packages/core/package.json': JSON.stringify({
+          name: '@pnpm-monorepo/core',
+          exports: './src/index.ts',
+        }),
+        'packages/core/src/index.ts': 'export const core = 1;',
+        'packages/ignored/package.json': JSON.stringify({
+          name: '@pnpm-monorepo/ignored',
+          exports: './src/index.ts',
+        }),
+        'packages/ignored/src/index.ts': 'export const ignored = 1;',
+      }),
+    );
+
+    assert.deepEqual(pnpmWorkspaces.resolveDetailed('apps/web/app.ts', '@pnpm-monorepo/core'), {
+      kind: 'file',
+      path: 'packages/core/src/index.ts',
+      via: 'exports',
+    });
+    assert.deepEqual(pnpmWorkspaces.resolveDetailed('apps/web/app.ts', '@pnpm-monorepo/ignored'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+    assert.deepEqual(pnpmWorkspaces.resolveDetailed('apps/web/app.ts', 'zod'), {
+      kind: 'external',
+    });
+
+    // 3. lerna.json workspace discovery
+    const lernaWorkspaces = new ImportResolver(
+      memoryRepo({
+        'lerna.json': JSON.stringify({ packages: ['modules/*'] }),
+        'modules/auth/package.json': JSON.stringify({ name: '@lerna-repo/auth', module: 'src/index.ts' }),
+        'modules/auth/src/index.ts': 'export const auth = true;',
+      }),
+    );
+    assert.deepEqual(lernaWorkspaces.resolveDetailed('src/main.ts', '@lerna-repo/auth'), {
+      kind: 'file',
+      path: 'modules/auth/src/index.ts',
+      via: 'workspace',
+    });
+  });
+
+  it('reports ambiguous-package on duplicate workspace package names and unsupported-config on conflicting/malformed manifests', () => {
+    const duplicateResolver = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/a/package.json': JSON.stringify({ name: '@acme/dup', exports: './src/index.ts' }),
+        'packages/a/src/index.ts': 'export const a = 1;',
+        'packages/b/package.json': JSON.stringify({ name: '@acme/dup', exports: './src/index.ts' }),
+        'packages/b/src/index.ts': 'export const b = 2;',
+      }),
+    );
+
+    assert.deepEqual(duplicateResolver.resolveDetailed('src/app.ts', '@acme/dup'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'ambiguous-package',
+    });
+
+    // Conflicting workspace manifests (package.json vs pnpm-workspace.yaml disagreeing on packages/only-pnpm)
+    const conflictingResolver = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/shared'] }),
+        'pnpm-workspace.yaml': 'packages:\n  - packages/shared\n  - packages/only-pnpm\n',
+        'packages/shared/package.json': JSON.stringify({ name: '@acme/shared', exports: './src/index.ts' }),
+        'packages/shared/src/index.ts': 'export const shared = 1;',
+        'packages/only-pnpm/package.json': JSON.stringify({ name: '@acme/only-pnpm', exports: './src/index.ts' }),
+        'packages/only-pnpm/src/index.ts': 'export const onlyPnpm = 1;',
+      }),
+    );
+
+    assert.deepEqual(conflictingResolver.resolveDetailed('src/app.ts', '@acme/only-pnpm'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unsupported-config',
+    });
+
+    // Malformed exports mixing '.' subpath keys and condition keys at top level
+    const invalidExportsResolver = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/bad/package.json': JSON.stringify({
+          name: '@acme/bad',
+          exports: { '.': './src/index.ts', import: './src/esm.ts' },
+        }),
+        'packages/bad/src/index.ts': '',
+      }),
+    );
+    assert.deepEqual(invalidExportsResolver.resolveDetailed('src/app.ts', '@acme/bad'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unsupported-config',
+    });
+  });
+
+  it('enforces exports encapsulation, PATTERN_KEY_COMPARE specificity, and null target blocking', () => {
+    const resolver = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/pkg/package.json': JSON.stringify({
+          name: '@acme/pkg',
+          main: './src/index.ts',
+          exports: {
+            '.': './src/index.ts',
+            './features/*': './src/features/*.ts',
+            './features/internal/*': null,
+            './*.js': './src/js/*.ts',
+            './*': './src/wild/*.ts',
+            './cjs-blocked': {
+              require: null,
+              default: './src/cjs-blocked.ts',
+            },
+          },
+        }),
+        'packages/pkg/src/index.ts': 'export const root = 1;',
+        'packages/pkg/src/secret.ts': 'export const secret = 1;',
+        'packages/pkg/src/features/login.ts': 'export const login = 1;',
+        'packages/pkg/src/features/internal/token.ts': 'export const token = 1;',
+        'packages/pkg/src/wild/features/internal/token.ts': 'export const fallbackToken = 1;',
+        'packages/pkg/src/js/item.ts': 'export const jsItem = 1;',
+        'packages/pkg/src/wild/item.js.ts': 'export const wildItem = 1;',
+        'packages/pkg/src/wild/plain.ts': 'export const plain = 1;',
+        'packages/pkg/src/cjs-blocked.ts': 'export const blocked = 1;',
+      }),
+    );
+
+    // Longer prefix before '*' wins: './features/*' beats './*'
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/features/login'), {
+      kind: 'file',
+      path: 'packages/pkg/src/features/login.ts',
+      via: 'exports',
+    });
+
+    // Tied prefix before '*': longer suffix after '*' wins ('./*.js' beats './*')
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/item.js'), {
+      kind: 'file',
+      path: 'packages/pkg/src/js/item.ts',
+      via: 'exports',
+    });
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/plain'), {
+      kind: 'file',
+      path: 'packages/pkg/src/wild/plain.ts',
+      via: 'exports',
+    });
+
+    // More specific pattern './features/internal/*' mapping to `null` blocks less-specific './*'
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/features/internal/token'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+
+    // Condition mapping to `null` blocks `default` fallback
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/cjs-blocked', 'require'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+    assert.deepEqual(resolver.resolveDetailed('src/a.ts', '@acme/pkg/cjs-blocked', 'import'), {
+      kind: 'file',
+      path: 'packages/pkg/src/cjs-blocked.ts',
+      via: 'exports',
+    });
+
+    // Encapsulation: when `exports` has only '.', deep subpath './secret' is not-exported even if src/secret.ts exists
+    const encapsulated = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/strict/package.json': JSON.stringify({
+          name: '@acme/strict',
+          main: './src/index.ts',
+          exports: { '.': './src/index.ts' },
+        }),
+        'packages/strict/src/index.ts': '',
+        'packages/strict/src/secret.ts': '',
+      }),
+    );
+    assert.deepEqual(encapsulated.resolveDetailed('src/a.ts', '@acme/strict/secret'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+  });
+
+  it('orders conditions correctly: default last, configured vs heuristic source, and type-only exports', () => {
+    // 1. `default` never overrides a more specific matching condition even if listed first;
+    //    `source` is heuristic fallback when not in tsconfig customConditions
+    const baseFiles: Record<string, string> = {
+      'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+      'packages/cond/package.json': JSON.stringify({
+        name: '@acme/cond',
+        exports: {
+          '.': {
+            default: './src/default.ts',
+            import: './src/import.ts',
+            require: './src/require.ts',
+          },
+          './source-only': {
+            source: './src/from-source.ts',
+            import: './dist/missing-built.js',
+          },
+          './types-only': {
+            types: './src/types-only.d.ts',
+          },
+        },
+      }),
+      'packages/cond/src/default.ts': '',
+      'packages/cond/src/import.ts': '',
+      'packages/cond/src/require.ts': '',
+      'packages/cond/src/from-source.ts': '',
+      'packages/cond/src/types-only.d.ts': 'export interface T {}',
+      'src/app.ts': 'import type { T } from "@acme/cond/types-only";\nexport {};\n',
+      'src/runtime.ts': 'import { T } from "@acme/cond/types-only";\nexport { T };\n',
+    };
+
+    const unconfiguredResolver = new ImportResolver(memoryRepo(baseFiles));
+    assert.deepEqual(unconfiguredResolver.resolveDetailed('src/app.ts', '@acme/cond', 'import'), {
+      kind: 'file',
+      path: 'packages/cond/src/import.ts',
+      via: 'exports',
+    });
+    assert.deepEqual(unconfiguredResolver.resolveDetailed('src/app.ts', '@acme/cond', 'require'), {
+      kind: 'file',
+      path: 'packages/cond/src/require.ts',
+      via: 'exports',
+    });
+    // `source` used as heuristic fallback when `import` target is missing and `source` is not in customConditions
+    assert.deepEqual(unconfiguredResolver.resolveDetailed('src/app.ts', '@acme/cond/source-only', 'import'), {
+      kind: 'file',
+      path: 'packages/cond/src/from-source.ts',
+      via: 'exports',
+      heuristic: true,
+    });
+    // `types`-only export does NOT resolve for runtime import, but DOES resolve for type-only import
+    assert.deepEqual(
+      unconfiguredResolver.resolveDetailed('src/runtime.ts', '@acme/cond/types-only', 'import', {
+        typeOnlyImport: false,
+      }),
+      {
+        kind: 'unresolved',
+        reason: 'unmatched',
+        reasonCode: 'not-exported',
+      },
+    );
+    assert.deepEqual(
+      unconfiguredResolver.resolveDetailed('src/app.ts', '@acme/cond/types-only', 'import', {
+        typeOnlyImport: true,
+      }),
+      {
+        kind: 'file',
+        path: 'packages/cond/src/types-only.d.ts',
+        via: 'exports',
+      },
+    );
+
+    // 2. When tsconfig declares `customConditions: ["source"]`, `source` is non-heuristic!
+    const configuredResolver = new ImportResolver(
+      memoryRepo({
+        ...baseFiles,
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: { customConditions: ['source'] },
+        }),
+      }),
+    );
+    assert.deepEqual(configuredResolver.resolveDetailed('src/app.ts', '@acme/cond/source-only', 'import'), {
+      kind: 'file',
+      path: 'packages/cond/src/from-source.ts',
+      via: 'exports',
+    });
+  });
+
+  it('prioritizes existing built targets, then tsconfig outDir/declarationDir -> rootDir, then heuristic dist -> src', () => {
+    const repo = memoryRepo({
+      'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+      // Package 1: built dist file actually exists in repo -> must respect dist/index.js without heuristic rewrite
+      'packages/built/package.json': JSON.stringify({
+        name: '@acme/built',
+        exports: { '.': './dist/index.js' },
+      }),
+      'packages/built/dist/index.js': 'export const built = true;',
+      'packages/built/src/index.ts': 'export const built = true;',
+
+      // Package 2: tsconfig outDir & declarationDir -> rootDir mapping (non-heuristic!)
+      'packages/tsconfig-mapped/package.json': JSON.stringify({
+        name: '@acme/tsconfig-mapped',
+        exports: {
+          '.': './compiled/index.js',
+          './button': './dts-out/components/button.d.ts',
+        },
+      }),
+      'packages/tsconfig-mapped/tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          rootDir: './source',
+          outDir: './compiled',
+          declarationDir: './dts-out',
+        },
+      }),
+      'packages/tsconfig-mapped/source/index.ts': 'export const mapped = true;',
+      'packages/tsconfig-mapped/source/components/button.tsx': 'export const Button = () => null;',
+
+      // Package 3: no tsconfig outDir, dist/ is gitignored -> bounded dist/ -> src/ heuristic (heuristic: true)
+      'packages/heuristic/package.json': JSON.stringify({
+        name: '@acme/heuristic',
+        exports: { '.': './dist/esm/index.js' },
+      }),
+      'packages/heuristic/src/index.ts': 'export const h = true;',
+      'apps/web/main.ts': 'import { h } from "@acme/heuristic";\nexport { h };\n',
+    });
+
+    const resolver = new ImportResolver(repo);
+
+    // 1. Existing dist/ file wins directly without heuristic flag
+    assert.deepEqual(resolver.resolveDetailed('apps/web/main.ts', '@acme/built'), {
+      kind: 'file',
+      path: 'packages/built/dist/index.js',
+      via: 'exports',
+    });
+
+    // 2. Tsconfig outDir/declarationDir -> rootDir resolves with heuristic: false
+    assert.deepEqual(resolver.resolveDetailed('apps/web/main.ts', '@acme/tsconfig-mapped'), {
+      kind: 'file',
+      path: 'packages/tsconfig-mapped/source/index.ts',
+      via: 'exports',
+    });
+    assert.deepEqual(resolver.resolveDetailed('apps/web/main.ts', '@acme/tsconfig-mapped/button'), {
+      kind: 'file',
+      path: 'packages/tsconfig-mapped/source/components/button.tsx',
+      via: 'exports',
+    });
+
+    // 3. Heuristic dist/esm/ -> src/ sets heuristic: true and explain() notes it
+    assert.deepEqual(resolver.resolveDetailed('apps/web/main.ts', '@acme/heuristic'), {
+      kind: 'file',
+      path: 'packages/heuristic/src/index.ts',
+      via: 'exports',
+      heuristic: true,
+    });
+    const classifier = new RelationshipClassifier(repo);
+    assert.equal(classifier.classify('apps/web/main.ts', 'packages/heuristic/src/index.ts'), 'direct');
+    assert.match(
+      classifier.explain('apps/web/main.ts', 'packages/heuristic/src/index.ts', 'direct'),
+      /via heuristic source remap/,
+    );
+  });
+
+  it('resolves package.json#imports (#...) including wildcards, conditions, null blocking, workspace/external targets, recursion, and cycles', () => {
+    const resolver = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({
+          workspaces: ['packages/*'],
+          dependencies: { lodash: '^4.17.21' },
+        }),
+        'packages/ui/package.json': JSON.stringify({
+          name: '@acme/ui',
+          exports: { './*': './src/*.tsx' },
+        }),
+        'packages/ui/src/button.tsx': 'export const Button = 1;',
+        'packages/app/package.json': JSON.stringify({
+          name: '@acme/app',
+          imports: {
+            '#db': './src/db/client.ts',
+            '#env': {
+              import: './src/env.esm.ts',
+              require: './src/env.cjs.ts',
+            },
+            '#internal/*': './src/internal/*.ts',
+            '#internal/secret/*': null,
+            '#ui/*': '@acme/ui/*',
+            '#lodash': 'lodash',
+            '#undeclared': 'not-installed-pkg',
+            '#alias-to-db': '#db',
+            '#cycle-a': '#cycle-b',
+            '#cycle-b': '#cycle-a',
+            '#escape': '../ui/src/button.tsx',
+          },
+        }),
+        'packages/app/src/index.ts': '',
+        'packages/app/src/db/client.ts': 'export const db = {};',
+        'packages/app/src/env.esm.ts': 'export const env = "esm";',
+        'packages/app/src/env.cjs.ts': 'export const env = "cjs";',
+        'packages/app/src/internal/auth.ts': 'export const auth = true;',
+        'packages/app/src/internal/secret/key.ts': 'export const key = "secret";',
+      }),
+    );
+
+    const from = 'packages/app/src/index.ts';
+
+    // Exact #imports
+    assert.deepEqual(resolver.resolveDetailed(from, '#db'), {
+      kind: 'file',
+      path: 'packages/app/src/db/client.ts',
+      via: 'imports',
+    });
+
+    // Conditional #imports
+    assert.deepEqual(resolver.resolveDetailed(from, '#env', 'import'), {
+      kind: 'file',
+      path: 'packages/app/src/env.esm.ts',
+      via: 'imports',
+    });
+    assert.deepEqual(resolver.resolveDetailed(from, '#env', 'require'), {
+      kind: 'file',
+      path: 'packages/app/src/env.cjs.ts',
+      via: 'imports',
+    });
+
+    // Wildcard #imports and null blocking
+    assert.deepEqual(resolver.resolveDetailed(from, '#internal/auth'), {
+      kind: 'file',
+      path: 'packages/app/src/internal/auth.ts',
+      via: 'imports',
+    });
+    assert.deepEqual(resolver.resolveDetailed(from, '#internal/secret/key'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+    assert.deepEqual(resolver.resolveDetailed(from, '#unmapped'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+
+    // Target pointing to workspace package
+    assert.deepEqual(resolver.resolveDetailed(from, '#ui/button'), {
+      kind: 'file',
+      path: 'packages/ui/src/button.tsx',
+      via: 'imports',
+    });
+
+    // Target pointing to declared external package vs unknown package
+    assert.deepEqual(resolver.resolveDetailed(from, '#lodash'), {
+      kind: 'external',
+      via: 'imports',
+    });
+    assert.deepEqual(resolver.resolveDetailed(from, '#undeclared'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+
+    // Recursive #imports (#alias-to-db -> #db)
+    assert.deepEqual(resolver.resolveDetailed(from, '#alias-to-db'), {
+      kind: 'file',
+      path: 'packages/app/src/db/client.ts',
+      via: 'imports',
+    });
+
+    // Cycle detection (#cycle-a -> #cycle-b -> #cycle-a)
+    assert.deepEqual(resolver.resolveDetailed(from, '#cycle-a'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'invalid-target',
+    });
+
+    // Escaping package directory via ../ in #imports
+    assert.deepEqual(resolver.resolveDetailed(from, '#escape'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'invalid-target',
+    });
+  });
+
+  it('rejects path traversal and symlink targets escaping package or repository boundaries as invalid-target', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'ra09-symlink-'));
+    try {
+      mkdirSync(join(tmp, 'packages/pkg-a/src'), { recursive: true });
+      mkdirSync(join(tmp, 'packages/pkg-b/src'), { recursive: true });
+
+      writeFileSync(
+        join(tmp, 'package.json'),
+        JSON.stringify({ workspaces: ['packages/*'] }),
+      );
+      writeFileSync(
+        join(tmp, 'packages/pkg-a/package.json'),
+        JSON.stringify({
+          name: '@acme/pkg-a',
+          exports: {
+            './escape-dots': '../pkg-b/src/secret.ts',
+            './symlink-file': './src/link-to-b.ts',
+            './symlink-dir/*': './src/linked-dir/*.ts',
+          },
+        }),
+      );
+      writeFileSync(join(tmp, 'packages/pkg-a/src/index.ts'), 'export const a = 1;\n');
+      writeFileSync(join(tmp, 'packages/pkg-b/src/secret.ts'), 'export const secret = 2;\n');
+
+      // Symlink file and symlink directory pointing out of pkg-a into pkg-b
+      symlinkSync(join(tmp, 'packages/pkg-b/src/secret.ts'), join(tmp, 'packages/pkg-a/src/link-to-b.ts'));
+      symlinkSync(join(tmp, 'packages/pkg-b/src'), join(tmp, 'packages/pkg-a/src/linked-dir'));
+
+      const tracked = new Set([
+        'package.json',
+        'packages/pkg-a/package.json',
+        'packages/pkg-a/src/index.ts',
+        'packages/pkg-a/src/link-to-b.ts',
+        'packages/pkg-a/src/linked-dir/secret.ts',
+        'packages/pkg-b/src/secret.ts',
+      ]);
+      const files = workingTreeFiles(tmp, tracked);
+      const resolver = new ImportResolver(files);
+
+      // 1. '../' traversal out of package root
+      assert.deepEqual(resolver.resolveDetailed('packages/pkg-a/src/index.ts', '@acme/pkg-a/escape-dots'), {
+        kind: 'unresolved',
+        reason: 'unmatched',
+        reasonCode: 'invalid-target',
+      });
+
+      // 2. Symlinked file inside package
+      assert.deepEqual(resolver.resolveDetailed('packages/pkg-a/src/index.ts', '@acme/pkg-a/symlink-file'), {
+        kind: 'unresolved',
+        reason: 'unmatched',
+        reasonCode: 'invalid-target',
+      });
+
+      // 3. Regular file reached through a symlinked directory that escapes pkg-a into pkg-b
+      assert.deepEqual(resolver.resolveDetailed('packages/pkg-a/src/index.ts', '@acme/pkg-a/symlink-dir/secret'), {
+        kind: 'unresolved',
+        reason: 'unmatched',
+        reasonCode: 'invalid-target',
+      });
+
+      // 4. Relative import escaping repository root
+      assert.deepEqual(resolver.resolveDetailed('packages/pkg-a/src/index.ts', '../../../../outside'), {
+        kind: 'unresolved',
+        reason: 'unmatched',
+        reasonCode: 'invalid-target',
+      });
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
