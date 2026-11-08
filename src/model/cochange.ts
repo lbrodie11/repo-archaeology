@@ -28,6 +28,8 @@ export interface PairStat {
   evidence: number[];
 }
 
+export type WeightingMode = 'none' | 'recency' | 'origin' | 'recency+origin';
+
 export interface Thresholds {
   minShared: number;
   minConfidence: number;
@@ -139,6 +141,16 @@ export class CoChangeModel {
   /** Whether confidence is recency- or origin-weighted. */
   get weighted(): boolean {
     return this.halfLifeSeconds !== undefined || this.hasOriginWeights;
+  }
+
+  /** Which weighting mode is active (`none`, `recency`, `origin`, or `recency+origin`). */
+  get weighting(): WeightingMode {
+    const recency = this.halfLifeSeconds !== undefined;
+    const origin = this.hasOriginWeights;
+    if (recency && origin) return 'recency+origin';
+    if (recency) return 'recency';
+    if (origin) return 'origin';
+    return 'none';
   }
 
   /** Effective shared count used for `minShared` threshold checks. */

@@ -1,6 +1,6 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_ORIGIN_PATTERN_LENGTH, type OriginConfig, type OriginWeights } from './model/origin.js';
+import { MAX_ORIGIN_PATTERN_LENGTH, riskyOriginPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -222,6 +222,10 @@ function validateOriginConfig(raw: unknown, source: string): OriginConfig {
         new RegExp(item, 'i');
       } catch (err) {
         throw new ConfigError(`${source}: "origin.${field}" has invalid regular expression "${item}": ${(err as Error).message}`);
+      }
+      const problem = riskyOriginPattern(item);
+      if (problem) {
+        throw new ConfigError(`${source}: "origin.${field}" pattern "${item}" ${problem}.`);
       }
       list.push(item);
     }

@@ -6,6 +6,7 @@ import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js'
 import { runGit } from '../git/run.js';
 import { parallelImplementation, type HiddenBridge, type Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
+import type { WeightingMode } from '../model/cochange.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
 import type { CommitOrigin, OriginShare } from '../model/origin.js';
@@ -78,6 +79,7 @@ export interface MapEdge {
   score: number;
   overviewPriority: number;
   weighted: boolean;
+  weighting?: WeightingMode;
   lastTogether: string;
   crossesDirectories: boolean;
   originShare?: OriginShare;
@@ -105,6 +107,7 @@ export interface MapUndrawnPair {
   reverseInterval: WilsonInterval;
   score: number;
   weighted: boolean;
+  weighting?: WeightingMode;
   lastTogether: string;
   originShare?: OriginShare;
   evidence: { hash: string; date: string; subject: string; origin?: CommitOrigin }[];
@@ -264,6 +267,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         score: companion.score,
         overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
         weighted: view.weighted,
+        ...(view.weighting ? { weighting: view.weighting } : {}),
         lastTogether: view.lastTogether,
         crossesDirectories: view.crossesDirectories,
         originShare: view.originShare,
@@ -307,6 +311,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
             reverseInterval: rel.reverseInterval,
             score: rel.score,
             weighted: rel.weighted,
+            ...(rel.weighting ? { weighting: rel.weighting } : {}),
             lastTogether: rel.lastTogether,
             originShare: rel.originShare,
             evidence: rel.evidence.slice(0, 3).map((ev) => ({

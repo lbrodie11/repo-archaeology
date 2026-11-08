@@ -364,7 +364,6 @@
             "date",
             "author",
             "subject",
-            "origin",
             "files"
           ],
           "properties": {
@@ -400,7 +399,6 @@
             "date",
             "author",
             "subject",
-            "origin",
             "laterFiles"
           ],
           "properties": {
@@ -565,6 +563,41 @@
         }
       }
     },
+    "OriginSliceMetrics": {
+      "type": "object",
+      "required": [
+        "queries",
+        "fired",
+        "coverage",
+        "precision",
+        "hitRate"
+      ],
+      "properties": {
+        "queries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
     "OriginWeightRunMetrics": {
       "type": "object",
       "required": [
@@ -616,6 +649,25 @@
           "items": {
             "$ref": "#/$defs/StrategyScore"
           }
+        },
+        "byOrigin": {
+          "type": "object",
+          "required": [
+            "human",
+            "agent",
+            "bot"
+          ],
+          "properties": {
+            "human": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            },
+            "agent": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            },
+            "bot": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            }
+          }
         }
       }
     },
@@ -661,13 +713,37 @@
         "weights",
         "default",
         "weighted",
-        "deltas",
-        "delta"
+        "deltas"
       ],
       "properties": {
         "spec": {
           "type": "string",
           "minLength": 1
+        },
+        "defaultWeights": {
+          "type": "object",
+          "required": [
+            "human",
+            "agent",
+            "bot"
+          ],
+          "properties": {
+            "human": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "agent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "bot": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
         },
         "weights": {
           "type": "object",
@@ -703,8 +779,8 @@
         "deltas": {
           "$ref": "#/$defs/OriginWeightDeltaMetrics"
         },
-        "delta": {
-          "$ref": "#/$defs/OriginWeightDeltaMetrics"
+        "caveat": {
+          "type": "string"
         }
       }
     }

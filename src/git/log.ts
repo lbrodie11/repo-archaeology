@@ -40,9 +40,10 @@ const RS = '\u001e';
 const US = '\u001f';
 const GS = '\u001d';
 export const MAX_TRAILERS_PER_COMMIT = 20;
-/** Bumped whenever RawCommit's serialized shape changes (e.g. RA-08 trailers), invalidating RA-04 log caches. */
-export const RAW_COMMIT_CACHE_VERSION = 2;
-export const LOG_CACHE_VERSION = RAW_COMMIT_CACHE_VERSION;
+/**
+ * `%(trailers:only,unfold,separator=%x1d)` requires Git >= 2.22.0 (released June 2019).
+ * Trailers are placed before `%s` so commit subjects containing control separators remain intact.
+ */
 const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
 
 /**

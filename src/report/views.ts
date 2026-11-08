@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
 import type { Context } from '../context.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
-import type { Companion } from '../model/cochange.js';
+import type { Companion, WeightingMode } from '../model/cochange.js';
 import {
   computeOriginShare,
   type CommitOrigin,
@@ -11,6 +11,13 @@ import {
 } from '../model/origin.js';
 import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
+
+export function weightingLabel(item: { weighted?: boolean; weighting?: WeightingMode }): string | undefined {
+  if (!item.weighted && (!item.weighting || item.weighting === 'none')) return undefined;
+  if (item.weighting === 'origin') return 'origin-weighted';
+  if (item.weighting === 'recency+origin') return 'recency+origin-weighted';
+  return 'recency-weighted';
+}
 
 export interface EvidenceView {
   hash: string;
@@ -44,6 +51,8 @@ export interface RelationshipView {
   score: number;
   /** True when confidence is recency-weighted (--half-life) or origin-weighted (--origin-weights), so it is not simply shared / fromChanges. */
   weighted: boolean;
+  /** Which weighting mode is active when `weighted` is true (`recency`, `origin`, or `recency+origin`). */
+  weighting?: WeightingMode;
   lastTogether: string;
   crossesDirectories: boolean;
   /** Share of all shared commits by commit origin (human, agent, bot), summing to 1. */
@@ -145,6 +154,7 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
     reverseInterval: roundInterval(wilsonInterval(shared, toChanges)),
     score: round(companion.score),
     weighted: model.weighted,
+    ...(model.weighted ? { weighting: model.weighting } : {}),
     lastTogether: isoDate(companion.stat.lastTime),
     crossesDirectories: posix.dirname(from) !== posix.dirname(to),
     originShare: computeOriginShare(companion.stat.originCounts),
@@ -216,9 +226,10 @@ export function printEvidence(view: RelationshipView, indent = '    '): void {
 }
 
 export function describeStrength(view: RelationshipView): string {
-  // With a half-life the percentage is weighted, so it is not shared/total: say so, and keep the raw CI next to the raw count.
+  // With a half-life or origin weights the percentage is weighted, so it is not shared/total: say so, and keep the raw CI next to the raw count.
+  const wLabel = weightingLabel(view);
   const countsAndRate = view.weighted
-    ? `${view.shared} of ${view.fromChanges} commits ${formatIntervalCi(view.interval, true)} (${pct(view.confidence)} recency-weighted)`
+    ? `${view.shared} of ${view.fromChanges} commits ${formatIntervalCi(view.interval, true)} (${pct(view.confidence)} ${wLabel})`
     : `${view.shared} of ${view.fromChanges} commits (${pct(view.confidence)}) ${formatIntervalCi(view.interval)}`;
   return `${countsAndRate} · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
 }

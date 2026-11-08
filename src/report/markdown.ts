@@ -1,7 +1,12 @@
 import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
 import type { Settings } from '../config.js';
+<<<<<<< HEAD
 import { formatIntervalCi, NAMES } from './views.js';
+=======
+import { formatOriginWeightsSpec, hasNonDefaultOriginWeights } from '../model/origin.js';
+import { NAMES, weightingLabel } from './views.js';
+>>>>>>> 8e606bd (fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional)
 import { pct, plural, shortHash } from '../util/term.js';
 
 /**
@@ -120,16 +125,23 @@ function formatCommitEvidenceLine(
   return `  - ${sha} (${date}) — ${subject}`;
 }
 
-function formatDirectionalEvidence(s: Suggestion): string {
+function formatDirectionalEvidence(s: Suggestion, settings?: Partial<Settings>): string {
   const fromCode = formatMarkdownCode(s.from);
   const conf = pct(s.confidence);
   const revConf = pct(s.reverseConfidence);
   const ci = formatIntervalCi(s.interval, s.weighted);
   const lastTogether = s.lastTogether ? ` · last together ${escapeMarkdownInline(s.lastTogether, 20)}` : '';
   if (s.weighted) {
+    let wLabel = weightingLabel(s);
+    if (!s.weighting && settings) {
+      const recency = settings.halfLifeDays !== undefined;
+      const origin = hasNonDefaultOriginWeights(settings.origin?.weights);
+      if (recency && origin) wLabel = 'recency+origin-weighted';
+      else if (origin) wLabel = 'origin-weighted';
+    }
     return (
       `Changed with ${fromCode} in **${s.shared} of ${s.fromChanges} commits** ${ci} ` +
-      `(**${conf}** recency-weighted · reverse **${revConf}** recency-weighted across ${s.shared}/${s.toChanges} raw commits)` +
+      `(**${conf}** ${wLabel} · reverse **${revConf}** ${wLabel} across ${s.shared}/${s.toChanges} raw commits)` +
       lastTogether
     );
   }
@@ -156,7 +168,7 @@ function renderSuggestionBlock(
       : '';
 
   lines.push(`${index + 1}. **${formatMarkdownCode(s.to)}** — \`${kindLabel}\``);
-  lines.push(`   - ${formatDirectionalEvidence(s)}${alsoNote}`);
+  lines.push(`   - ${formatDirectionalEvidence(s, settings)}${alsoNote}`);
   lines.push(`   - ${escapeMarkdownInline(s.why, 240)}`);
 
   const topCommits = s.evidence.slice(0, 3);
@@ -284,10 +296,14 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
     skippedParts.push(`${plural(meta.subjectSkipped, 'filtered commit')} skipped`);
   }
   const skippedNote = skippedParts.length > 0 ? ` · ${skippedParts.join(', ')}` : '';
-  const weightNote =
+  const halfLifeNote =
     meta.settings.halfLifeDays !== undefined
       ? ` · recency half-life ${meta.settings.halfLifeDays}d`
       : '';
+  const originWeightsNote = hasNonDefaultOriginWeights(meta.settings.origin?.weights)
+    ? ` · origin weights ${formatOriginWeightsSpec(meta.settings.origin!.weights!)}`
+    : '';
+  const weightNote = `${halfLifeNote}${originWeightsNote}`;
   headerLines.push(
     `${scopeParts.join(' ')} · **${plural(meta.commitsAnalyzed, 'commit')} analyzed**${range}` +
       ` (thresholds: ≥${meta.settings.minShared} shared, ≥${pct(meta.settings.minConfidence)} confidence${weightNote})${skippedNote}.`,

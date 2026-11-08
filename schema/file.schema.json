@@ -96,7 +96,6 @@
         "weighted",
         "lastTogether",
         "crossesDirectories",
-        "originShare",
         "evidence",
         "wouldAlert"
       ],
@@ -151,6 +150,9 @@
         },
         "weighted": {
           "type": "boolean"
+        },
+        "weighting": {
+          "$ref": "common.schema.json#/$defs/WeightingMode"
         },
         "lastTogether": {
           "type": "string"

@@ -75,6 +75,15 @@
         "bot"
       ]
     },
+    "WeightingMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "recency",
+        "origin",
+        "recency+origin"
+      ]
+    },
     "OriginCounts": {
       "type": "object",
       "required": [
@@ -254,7 +263,6 @@
         "subjectSkipped",
         "renamesFollowed",
         "files",
-        "origins",
         "settings",
         "warnings"
       ],
@@ -322,8 +330,7 @@
         "hash",
         "date",
         "author",
-        "subject",
-        "origin"
+        "subject"
       ],
       "properties": {
         "hash": {
@@ -381,7 +388,6 @@
         "weighted",
         "lastTogether",
         "crossesDirectories",
-        "originShare",
         "evidence"
       ],
       "properties": {
@@ -436,6 +442,9 @@
         "weighted": {
           "type": "boolean"
         },
+        "weighting": {
+          "$ref": "#/$defs/WeightingMode"
+        },
         "lastTogether": {
           "type": "string"
         },
@@ -460,7 +469,6 @@
         "date",
         "author",
         "subject",
-        "origin",
         "membersTouched",
         "totalMembers",
         "touchesAllMembers",
@@ -796,7 +804,6 @@
         "weighted",
         "lastTogether",
         "crossesDirectories",
-        "originShare",
         "evidence",
         "alsoLinkedFrom"
       ],
@@ -851,6 +858,9 @@
         },
         "weighted": {
           "type": "boolean"
+        },
+        "weighting": {
+          "$ref": "#/$defs/WeightingMode"
         },
         "lastTogether": {
           "type": "string"

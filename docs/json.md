@@ -91,7 +91,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `files` | `integer` | Yes | Distinct tracked file identities in the co-change model. |
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
-| `origins` | `{ human, agent, bot }` | Yes | Counts of analyzed commits classified as `human`, `agent`, or `bot`. |
+| `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
@@ -280,13 +280,14 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `why` | `string` | Yes | Human-readable classification explanation. |
 | `hiddenBridge` | `HiddenBridge` | Optional | Shared AST signal when `relationship === "ghost"`. |
 | `meetsThresholds` | `boolean` | Yes | Whether the pair meets active `--min-shared` and `--min-confidence` in at least one direction. |
-| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts (stay raw even when `--half-life` or `--origin-weights` is set; `interval` from RA-05 stays raw as well). |
+| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts (stay raw even when `--half-life` or `--origin-weights` is set, while `minShared` uses the origin-weighted shared count when origin weights are active; `interval` from RA-05 stays raw as well). |
 | `confidence`, `reverseConfidence`, `score` | `number` | Yes | Directional confidences and Wilson score. |
 | `interval`, `reverseInterval` | `WilsonInterval` | Optional (always emitted) | Two-sided 95% Wilson score intervals (`{ low, high }`) for unweighted directional and reverse confidence. |
 | `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting or `--origin-weights` origin weighting is active. |
+| `weighting` | `"none" \| "recency" \| "origin" \| "recency+origin"` | Optional | Emitted when `weighted === true` to distinguish recency weighting (`"recency"`), origin weighting (`"origin"`), or both (`"recency+origin"`). |
 | `lastTogether` | `string` | Optional | ISO date of most recent shared commit (omitted when `shared === 0`). |
 | `crossesDirectories` | `boolean` | Yes | `true` when `dirname(from) !== dirname(to)`. |
-| `originShare` | `{ human, agent, bot }` | Yes | Share of all shared commits by origin (`human`, `agent`, `bot`), rounded to 3 decimals and summing to 1 (or all `0` when `shared === 0`). |
+| `originShare` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Share of all shared commits by origin (`human`, `agent`, `bot`), rounded to 3 decimals and summing to 1 (or all `0` when `shared === 0`). Optional in `schemaVersion: 1` for backward compatibility with older v1 payloads. |
 | `sharedCommits` | `SharedCommitEvidence[]` | Yes | Recent shared commits with `origin` (`"human" \| "agent" \| "bot"`) and bounded diff hunks (`fileA`, `fileB`). |
 | `counterexamples` | `object` | Yes | `fromWithoutToTotal`, `toWithoutFromTotal`, `fromWithoutTo`, `toWithoutFrom` (each commit includes `origin`). |
 | `bounds` | `ExplainBoundsSummary` | Yes | Active line/hunk/byte/timeout budgets and truncation flags. |
@@ -326,7 +327,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `notes` | `string[]` | Yes | Methodological notes. |
 | `ghostDiagnostics` | `GhostDiagnostics` | Optional | Present when `--ghosts` was passed. |
 | `followUpBenchmark` | `FollowUpBenchmarkResult` | Optional | Present when `--follow-ups` was passed (each case's `initialCommit` and `followUpCommit` includes `origin`). |
-| `comparisons` | `OriginWeightComparison[]` | Optional | Present when `--compare-origin-weights <spec>` was passed; reports `default`, `weighted`, and `deltas` (`precision`, `hitRate`, `lift`, `coverage`, `falseAlarmRate`, `recall`, `fired`) on the same split. |
+| `comparisons` | `OriginWeightComparison[]` | Optional | Present when `--compare-origin-weights <spec>` was passed; reports `defaultWeights` (`{ human: 1, agent: 1, bot: 1 }`), resolved `weights` (keys omitted in `<spec>` inherit from `origin.weights` in `.repo-archaeology.json`), `default`, `weighted` (each including `byOrigin` slices for `human`, `agent`, and `bot` held-out commits), `deltas` (`precision`, `hitRate`, `lift`, `coverage`, `falseAlarmRate`, `recall`, `fired`), and `caveat` on the same split. |
 
 ---
 

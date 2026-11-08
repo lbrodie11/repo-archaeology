@@ -6,6 +6,7 @@ import {
   formatOriginWeightsSpec,
   parseOriginWeightsSpec,
   resolveOriginWeights,
+  type CommitOrigin,
   type OriginWeights,
 } from '../model/origin.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
@@ -38,6 +39,14 @@ export interface BacktestOptions {
   compareOriginWeights?: string | readonly string[];
 }
 
+export interface OriginSliceMetrics {
+  queries: number;
+  fired: number;
+  coverage: number;
+  precision: number;
+  hitRate: number;
+}
+
 export interface OriginWeightRunMetrics {
   fired: number;
   coverage: number;
@@ -47,6 +56,7 @@ export interface OriginWeightRunMetrics {
   recall: number;
   lift: number;
   strategies: StrategyScore[];
+  byOrigin?: Record<CommitOrigin, OriginSliceMetrics>;
 }
 
 export interface OriginWeightDeltaMetrics {
@@ -61,11 +71,12 @@ export interface OriginWeightDeltaMetrics {
 
 export interface OriginWeightComparison {
   spec: string;
+  defaultWeights?: Required<OriginWeights>;
   weights: Required<OriginWeights>;
   default: OriginWeightRunMetrics;
   weighted: OriginWeightRunMetrics;
   deltas: OriginWeightDeltaMetrics;
-  delta: OriginWeightDeltaMetrics;
+  caveat?: string;
 }
 
 export interface GhostDiagnostics {
@@ -199,7 +210,8 @@ export function backtestCommits(
         : [...options.compareOriginWeights];
   const parsedCompareSpecs = rawCompareSpecs.map((spec) => {
     try {
-      const weights = resolveOriginWeights(parseOriginWeightsSpec(spec, '--compare-origin-weights'));
+      const parsed = parseOriginWeightsSpec(spec, '--compare-origin-weights');
+      const weights = resolveOriginWeights({ ...options.originWeights, ...parsed });
       return { spec: spec.trim() || formatOriginWeightsSpec(weights), weights };
     } catch (err) {
       throw new UsageError((err as Error).message);
@@ -240,18 +252,25 @@ export function backtestCommits(
 
     const tallies = strategies.map(() => ({ fired: 0, suggestions: 0, correct: 0, hitQueries: 0 }));
     const ghostTally = { fired: 0, suggestions: 0, correct: 0, hitQueries: 0 };
+    const originTallies: Record<CommitOrigin, { queries: number; fired: number; suggestions: number; correct: number; hitQueries: number }> = {
+      human: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+      agent: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+      bot: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+    };
     let queries = 0;
     let soloQueries = 0;
     let expectedTotal = 0;
 
     for (const commit of [...testTimeline].reverse()) {
       if (commit.files.length <= EVALUATION_MAX_FILES) {
+        const commitOrigin: CommitOrigin = commit.origin ?? 'human';
         for (const file of commit.files) {
           const id = model.id(file);
           if (id === undefined) continue; // a file born after the split: nothing to learn from
           const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
           const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
           queries++;
+          originTallies[commitOrigin].queries++;
           if (commit.files.length === 1) soloQueries++;
           expectedTotal += expected.size + unseen;
           strategies.forEach(([, recommend], i) => {
@@ -272,6 +291,13 @@ export function backtestCommits(
             const hits = suggested.filter((s) => expected.has(s)).length;
             t.correct += hits;
             if (hits > 0) t.hitQueries++;
+            if (i === 0) {
+              const ot = originTallies[commitOrigin];
+              ot.fired++;
+              ot.suggestions += suggested.length;
+              ot.correct += hits;
+              if (hits > 0) ot.hitQueries++;
+            }
           });
         }
       }
@@ -291,13 +317,26 @@ export function backtestCommits(
       };
     });
 
-    return { scores, ghostTally, queries, soloQueries };
+    const toSlice = (ot: { queries: number; fired: number; suggestions: number; correct: number; hitQueries: number }): OriginSliceMetrics => ({
+      queries: ot.queries,
+      fired: ot.fired,
+      coverage: ratio(ot.fired, ot.queries),
+      precision: ratio(ot.correct, ot.suggestions),
+      hitRate: ratio(ot.hitQueries, ot.fired),
+    });
+    const byOrigin: Record<CommitOrigin, OriginSliceMetrics> = {
+      human: toSlice(originTallies.human),
+      agent: toSlice(originTallies.agent),
+      bot: toSlice(originTallies.bot),
+    };
+
+    return { scores, ghostTally, queries, soloQueries, byOrigin };
   };
 
   const primary = evaluateSplit(options.originWeights, Boolean(options.ghosts));
   const { scores, ghostTally, queries, soloQueries } = primary;
 
-  const toRunMetrics = (runScores: StrategyScore[]): OriginWeightRunMetrics => {
+  const toRunMetrics = (runScores: StrategyScore[], byOrigin: Record<CommitOrigin, OriginSliceMetrics>): OriginWeightRunMetrics => {
     const cochange = runScores[0]!;
     const baseline = runScores[3]!;
     const lift = ratio(cochange.hitRate, baseline.hitRate);
@@ -310,19 +349,21 @@ export function backtestCommits(
       recall: cochange.recall,
       lift,
       strategies: runScores,
+      byOrigin,
     };
   };
 
   let comparisons: OriginWeightComparison[] | undefined;
   if (parsedCompareSpecs.length > 0) {
+    const defaultWeights: Required<OriginWeights> = { human: 1, agent: 1, bot: 1 };
     const defaultEval =
       options.originWeights === undefined
         ? primary
         : evaluateSplit(undefined, false);
-    const defaultMetrics = toRunMetrics(defaultEval.scores);
+    const defaultMetrics = toRunMetrics(defaultEval.scores, defaultEval.byOrigin);
     comparisons = parsedCompareSpecs.map(({ spec, weights }) => {
       const weightedEval = evaluateSplit(weights, false);
-      const weightedMetrics = toRunMetrics(weightedEval.scores);
+      const weightedMetrics = toRunMetrics(weightedEval.scores, weightedEval.byOrigin);
       const deltas: OriginWeightDeltaMetrics = {
         fired: weightedMetrics.fired - defaultMetrics.fired,
         coverage: weightedMetrics.coverage - defaultMetrics.coverage,
@@ -334,11 +375,13 @@ export function backtestCommits(
       };
       return {
         spec,
+        defaultWeights,
         weights,
         default: defaultMetrics,
         weighted: weightedMetrics,
         deltas,
-        delta: deltas,
+        caveat:
+          'Overall metrics replay all held-out commits (including agent and bot commits). Inspect byOrigin.human to see accuracy on human-authored held-out commits alone.',
       };
     });
   }
@@ -457,12 +500,14 @@ export function printBacktest(result: BacktestResult): void {
     const signedPct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
     const signedLift = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}×`;
     for (const comp of result.comparisons) {
+      const resolvedDefaultSpec = formatOriginWeightsSpec(comp.defaultWeights ?? { human: 1, agent: 1, bot: 1 });
+      const resolvedWeightedSpec = formatOriginWeightsSpec(comp.weights);
       console.log();
-      console.log(c.bold(`Origin weight comparison (${comp.spec})`));
+      console.log(c.bold(`Origin weight comparison (${comp.spec} → ${resolvedWeightedSpec})`));
       const cHeader = ['run', 'speaks up', `hit@${result.k}`, 'precision', 'lift', 'false alarms', 'recall'];
       const cRows = [
         [
-          'default (all=1)',
+          `default (${resolvedDefaultSpec})`,
           pct(comp.default.coverage),
           pct(comp.default.hitRate),
           pct(comp.default.precision),
@@ -471,7 +516,7 @@ export function printBacktest(result: BacktestResult): void {
           pct(comp.default.recall),
         ],
         [
-          `weighted (${comp.spec})`,
+          `weighted (${resolvedWeightedSpec})`,
           pct(comp.weighted.coverage),
           pct(comp.weighted.hitRate),
           pct(comp.weighted.precision),
@@ -494,6 +539,21 @@ export function printBacktest(result: BacktestResult): void {
         cells.map((cell, i) => (i === 0 ? cell.padEnd(cWidths[i]!) : cell.padStart(cWidths[i]!))).join('   ');
       console.log(c.bold(cLine(cHeader)));
       for (const row of cRows) console.log(cLine(row));
+      if (comp.default.byOrigin && comp.weighted.byOrigin) {
+        const dH = comp.default.byOrigin.human;
+        const wH = comp.weighted.byOrigin.human;
+        const nonHumanQueries = comp.default.byOrigin.agent.queries + comp.default.byOrigin.bot.queries;
+        if (nonHumanQueries > 0) {
+          console.log(
+            c.dim(
+              `human-only test queries (${dH.queries}): default hit@${result.k} ${pct(dH.hitRate)} / precision ${pct(dH.precision)} → weighted hit@${result.k} ${pct(wH.hitRate)} / precision ${pct(wH.precision)}`,
+            ),
+          );
+        }
+      }
+      if (comp.caveat) {
+        console.log(c.dim(comp.caveat));
+      }
     }
   }
 }

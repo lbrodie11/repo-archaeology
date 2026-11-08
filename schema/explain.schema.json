@@ -21,7 +21,6 @@
     "score",
     "weighted",
     "crossesDirectories",
-    "originShare",
     "sharedCommits",
     "counterexamples",
     "bounds",
@@ -93,6 +92,9 @@
     },
     "weighted": {
       "type": "boolean"
+    },
+    "weighting": {
+      "$ref": "common.schema.json#/$defs/WeightingMode"
     },
     "lastTogether": {
       "type": "string"
@@ -309,7 +311,6 @@
         "date",
         "author",
         "subject",
-        "origin",
         "fileA",
         "fileB"
       ],
@@ -346,7 +347,6 @@
         "date",
         "author",
         "subject",
-        "origin",
         "historicalPath",
         "status"
       ],

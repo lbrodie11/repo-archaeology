@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolveSettings, validatePartial, ConfigError, compileSkipPattern } from '../src/config.js';
 import { mergeChanges, parseNameStatus, parsePorcelainStatus, reconcileBranchLineage } from '../src/git/changes.js';
-import { LogParser, MAX_TRAILERS_PER_COMMIT, RAW_COMMIT_CACHE_VERSION, readLog, type RawCommit } from '../src/git/log.js';
+import { LogParser, MAX_TRAILERS_PER_COMMIT, readLog, type RawCommit } from '../src/git/log.js';
 import { embedJson, renderMapHtml } from '../src/map/template.js';
 import { CoChangeModel } from '../src/model/cochange.js';
 import { processCommits, type HistoryCommit } from '../src/model/history.js';
@@ -14,8 +14,10 @@ import {
   DEFAULT_AGENT_TRAILER_PATTERNS,
   DEFAULT_BOT_PATTERNS,
   parseOriginWeightsSpec,
+  riskyOriginPattern,
 } from '../src/model/origin.js';
-import { describeStrength, formatIntervalCi, roundInterval } from '../src/report/views.js';
+import { renderDiffMarkdown } from '../src/report/markdown.js';
+import { describeStrength, formatIntervalCi, roundInterval, weightingLabel, type RelationshipView } from '../src/report/views.js';
 import { globToRegExp, PathMatcher } from '../src/util/glob.js';
 import { wilsonInterval, wilsonLowerBound, Z_95 } from '../src/util/stats.js';
 import { pct, terminalText } from '../src/util/term.js';
@@ -406,17 +408,16 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
   const US = '\u001f';
   const GS = '\u001d';
 
-  it('parses trailers (including multi-line unfolded values, cap at 20, lower-cased keys) and subjects with tabs, |, unicode, RS/US/GS', async () => {
-    assert.ok(RAW_COMMIT_CACHE_VERSION >= 2, 'RAW_COMMIT_CACHE_VERSION should be bumped for RawCommit.trailers');
+  it('parses trailers (including multi-line unfolded values, values with colons, cap at 20, lower-cased keys) and subjects with tabs, |, unicode, RS/US/GS', async () => {
     const out: RawCommit[] = [];
     const p = new LogParser((c) => out.push(c));
 
-    // 25 trailers: should cap at MAX_TRAILERS_PER_COMMIT (20) and lower-case keys
-    const trailerBlock = Array.from({ length: 25 }, (_, i) =>
-      i === 0
-        ? 'Co-Authored-By: Claude\n  <noreply@anthropic.com>'
-        : `X-Trailer-${i}: val:${i}`,
-    ).join(GS);
+    // 25 trailers: should cap at MAX_TRAILERS_PER_COMMIT (20), lower-case keys, and preserve ':' in trailer values
+    const trailerBlock = Array.from({ length: 25 }, (_, i) => {
+      if (i === 0) return 'Co-Authored-By: Claude\n  <noreply@anthropic.com>';
+      if (i === 1) return 'Assisted-By: agent:v2:https://ampcode.com:8080/session:123';
+      return `X-Trailer-${i}: val:${i}:extra`;
+    }).join(GS);
     const trickySubject = `feat(core):\thandle | pipes | café 🚀 ${RS} ${US} ${GS} end`;
     p.push(`${RS}abc1234${US}Alice${US}alice@example.com${US}100${US}200${GS}${trailerBlock}${US}${trickySubject}`);
     p.push('\nM');
@@ -430,9 +431,13 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       key: 'co-authored-by',
       value: 'Claude <noreply@anthropic.com>',
     });
+    assert.deepEqual(out[0]!.trailers[1], {
+      key: 'assisted-by',
+      value: 'agent:v2:https://ampcode.com:8080/session:123',
+    });
     assert.deepEqual(out[0]!.trailers[19], {
       key: 'x-trailer-19',
-      value: 'val:19',
+      value: 'val:19:extra',
     });
 
     // Also verify real `git log` integration with multi-line unfolded trailers and special subject characters
@@ -464,12 +469,21 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
     }
   });
 
-  it('classifies human, agent, and bot commits in priority order and supports custom patterns + replaceDefaults', () => {
+  it('classifies human, agent, and bot commits in priority order without false positives on human names/emails, and supports custom patterns + replaceDefaults', () => {
     assert.ok(DEFAULT_AGENT_AUTHOR_PATTERNS.length >= 8);
     assert.ok(DEFAULT_BOT_PATTERNS.length >= 12);
-    assert.ok(DEFAULT_AGENT_TRAILER_PATTERNS.length >= 14);
+    assert.ok(DEFAULT_AGENT_TRAILER_PATTERNS.length >= 10);
 
-    // Table tests required by prompt:
+    // Every built-in pattern must pass riskyOriginPattern
+    for (const p of [
+      ...DEFAULT_AGENT_AUTHOR_PATTERNS,
+      ...DEFAULT_BOT_PATTERNS,
+      ...DEFAULT_AGENT_TRAILER_PATTERNS,
+    ]) {
+      assert.equal(riskyOriginPattern(p), undefined, `default pattern "${p}" should be safe`);
+    }
+
+    // True positives:
     // 1. dependabot[bot] -> bot
     assert.equal(
       classifyCommitOrigin({
@@ -484,6 +498,15 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       classifyCommitOrigin({
         authorName: 'renovate[bot]',
         authorEmail: '29139614+renovate[bot]@users.noreply.github.com',
+        trailers: [],
+      }),
+      'bot',
+    );
+    // 2b. github-actions[bot] -> bot
+    assert.equal(
+      classifyCommitOrigin({
+        authorName: 'github-actions[bot]',
+        authorEmail: '41898282+github-actions[bot]@users.noreply.github.com',
         trailers: [],
       }),
       'bot',
@@ -518,15 +541,26 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       }),
       'agent',
     );
-    // Assisted-by / Generated-by / AI-Assisted also classify as agent
+    // Genuine Amp and other agent trailer attributions -> agent
     assert.equal(
       classifyCommitOrigin({
         authorName: 'Jane Developer',
         authorEmail: 'jane@example.com',
-        trailers: [{ key: 'assisted-by', value: 'Windsurf' }],
+        trailers: [{ key: 'co-authored-by', value: 'Amp <amp@ampcode.com>' }],
       }),
       'agent',
     );
+    for (const tool of ['Amp', 'Windsurf', 'Aider', 'Cline', 'Argon']) {
+      assert.equal(
+        classifyCommitOrigin({
+          authorName: 'Jane Developer',
+          authorEmail: 'jane@example.com',
+          trailers: [{ key: 'assisted-by', value: tool }],
+        }),
+        'agent',
+        `expected Assisted-by: ${tool} to classify as agent`,
+      );
+    }
     // 5. bot commit carrying an agent trailer -> bot (bot step runs before trailers)
     assert.equal(
       classifyCommitOrigin({
@@ -536,23 +570,69 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       }),
       'bot',
     );
-    // 6. plain human -> human (including human Co-authored-by trailer)
-    assert.equal(
-      classifyCommitOrigin({
-        authorName: 'Jane Developer',
-        authorEmail: 'jane@example.com',
-        trailers: [{ key: 'co-authored-by', value: 'Bob Reviewer <bob@acme.org>' }],
-      }),
-      'human',
-    );
+    // 6. False-positive regression checks: ordinary humans whose names or emails contain
+    // agent substrings ("amp" in example.com / Campbell / Ampofo, "claude" in Jean-Claude / Claude Monet,
+    // "devin" in Devin Smith, "@openai.com" human employee, "Jules Verne", "Gemini Patel", "Codex Team", "Argonaut")
+    // MUST classify as human!
+    const humanTrailerCases = [
+      'Bob <bob@example.com>',
+      'Pam Campbell <pam@corp.io>',
+      'Sam Ampofo <sam@corp.io>',
+      'Jean-Claude Van <jc@corp.io>',
+      'Devin Smith <devin.smith@corp.io>',
+      'Alice <alice@openai.com>',
+    ];
+    for (const trailerValue of humanTrailerCases) {
+      assert.equal(
+        classifyCommitOrigin({
+          authorName: 'Jane Developer',
+          authorEmail: 'jane@example.com',
+          trailers: [{ key: 'co-authored-by', value: trailerValue }],
+        }),
+        'human',
+        `expected Co-authored-by "${trailerValue}" to classify as human`,
+      );
+    }
+    const humanAuthorCases: Array<[string, string]> = [
+      ['Claude Monet', 'claude.monet@impressionism.fr'],
+      ['Jules Verne', 'jules.verne@books.fr'],
+      ['Gemini Patel', 'gemini.patel@company.com'],
+      ['Codex Team', 'codex-team@company.com'],
+      ['Argonaut', 'argonaut@company.com'],
+    ];
+    for (const [authorName, authorEmail] of humanAuthorCases) {
+      assert.equal(
+        classifyCommitOrigin({ authorName, authorEmail, trailers: [] }),
+        'human',
+        `expected author "${authorName} <${authorEmail}>" to classify as human`,
+      );
+    }
+
+    // 4 human-authored commits with Co-authored-by: Bob <bob@example.com> stay human and are not dropped by agent=0
+    const bobRawCommits: RawCommit[] = Array.from({ length: 4 }, (_, i) => ({
+      hash: `bob-${i}`,
+      authorName: 'Alice',
+      authorEmail: 'alice@example.com',
+      authorTime: (i + 1) * 10,
+      commitTime: (i + 1) * 10,
+      subject: `feat: change ${i}`,
+      trailers: [{ key: 'co-authored-by', value: 'Bob <bob@example.com>' }],
+      changes: [{ status: 'M', path: 'a.ts' }, { status: 'M', path: 'b.ts' }],
+    }));
+    const bobHistory = processCommits(bobRawCommits, { maxFilesPerCommit: 25, ignore: [] });
+    assert.ok(bobHistory.commits.every((c) => c.origin === 'human'));
+    const bobModel = new CoChangeModel(bobHistory.commits, { originWeights: { agent: 0 } });
+    assert.equal(bobModel.companions(bobModel.id('a.ts')!, { minShared: 3, minConfidence: 0.4 }).length, 1);
 
     // Custom patterns via config: extending defaults
-    const extended = createOriginClassifier({
+    const customConfig = {
       agentAuthorPatterns: ['^acme-codegen'],
       botPatterns: ['^internal-sync-bot'],
       agentTrailerPatterns: ['AcmeCopilot'],
-    });
+    };
+    const extended = createOriginClassifier(customConfig);
     assert.equal(extended({ authorName: 'acme-codegen[bot]', authorEmail: '', trailers: [] }), 'agent');
+    assert.equal(classifyCommitOrigin({ authorName: 'acme-codegen[bot]', authorEmail: '', trailers: [] }, customConfig), 'agent');
     assert.equal(extended({ authorName: 'internal-sync-bot', authorEmail: '', trailers: [] }), 'bot');
     assert.equal(
       extended({
@@ -593,7 +673,7 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
     );
   });
 
-  it('validates origin config regexes (rejecting invalid regexes and patterns > 200 chars) and weight specs', () => {
+  it('validates origin config regexes (rejecting invalid, >200 char, and catastrophic-backtracking regexes) and weight specs', () => {
     assert.throws(
       () => validatePartial({ origin: { agentAuthorPatterns: ['(unclosed'] } }, 'cfg'),
       ConfigError,
@@ -601,6 +681,27 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
     assert.throws(
       () => validatePartial({ origin: { botPatterns: ['a'.repeat(201)] } }, 'cfg'),
       /longer than 200 characters/,
+    );
+    // Rejects catastrophic backtracking / backreference / excessive quantifier patterns across all 3 lists without executing them
+    assert.throws(
+      () => validatePartial({ origin: { agentAuthorPatterns: ['^(a+)+$'] } }, 'cfg'),
+      /repeats a group that contains a quantifier or alternation/,
+    );
+    assert.throws(
+      () => validatePartial({ origin: { botPatterns: ['(a|aa)*'] } }, 'cfg'),
+      /repeats a group that contains a quantifier or alternation/,
+    );
+    assert.throws(
+      () => validatePartial({ origin: { agentTrailerPatterns: ['(x)\\1'] } }, 'cfg'),
+      /uses a backreference/,
+    );
+    assert.throws(
+      () => validatePartial({ origin: { agentAuthorPatterns: ['a+b+c+'] } }, 'cfg'),
+      /more than 2 repetition quantifiers/,
+    );
+    assert.throws(
+      () => createOriginClassifier({ agentAuthorPatterns: ['^(a+)+$'] }),
+      /repeats a group/,
     );
     assert.throws(
       () => validatePartial({ origin: { weights: { bot: 1.5 } } }, 'cfg'),
@@ -677,31 +778,101 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
     ];
 
     const defaultModel = new CoChangeModel(commits);
-    const weightedModel = new CoChangeModel(commits, { originWeights: { bot: 0 } });
+    const originOnlyModel = new CoChangeModel(commits, { originWeights: { bot: 0 } });
+    const recencyOnlyModel = new CoChangeModel(commits, { halfLifeDays: 90 });
+    const bothWeightedModel = new CoChangeModel(commits, { halfLifeDays: 90, originWeights: { bot: 0 } });
 
-    const idA = weightedModel.id('a.ts')!;
-    const idB = weightedModel.id('b.ts')!;
-    const idBotOnly = weightedModel.id('botOnly.ts')!;
+    assert.equal(defaultModel.weighted, false);
+    assert.equal(defaultModel.weighting, 'none');
+    assert.equal(originOnlyModel.weighted, true);
+    assert.equal(originOnlyModel.weighting, 'origin');
+    assert.equal(recencyOnlyModel.weighted, true);
+    assert.equal(recencyOnlyModel.weighting, 'recency');
+    assert.equal(bothWeightedModel.weighted, true);
+    assert.equal(bothWeightedModel.weighting, 'recency+origin');
+
+    // Verify weighting labels for only --origin-weights, only --half-life, and both
+    const sampleView = (weighting?: 'recency' | 'origin' | 'recency+origin'): RelationshipView => ({
+      from: 'a.ts',
+      to: 'b.ts',
+      relationship: 'ghost',
+      why: 'changed together',
+      shared: 6,
+      fromChanges: 9,
+      toChanges: 6,
+      confidence: 0.5,
+      reverseConfidence: 1,
+      interval: roundInterval(wilsonInterval(6, 9)),
+      reverseInterval: roundInterval(wilsonInterval(6, 6)),
+      score: 0.25,
+      weighted: Boolean(weighting),
+      ...(weighting ? { weighting } : {}),
+      lastTogether: '2025-01-01',
+      crossesDirectories: false,
+      originShare: { human: 0.5, agent: 0, bot: 0.5 },
+      evidence: [],
+    });
+    assert.equal(weightingLabel(sampleView(undefined)), undefined);
+    assert.equal(weightingLabel(sampleView('recency')), 'recency-weighted');
+    assert.equal(weightingLabel(sampleView('origin')), 'origin-weighted');
+    assert.equal(weightingLabel(sampleView('recency+origin')), 'recency+origin-weighted');
+    assert.match(describeStrength(sampleView('origin')), /50% origin-weighted/);
+    assert.match(describeStrength(sampleView('recency')), /50% recency-weighted/);
+    assert.match(describeStrength(sampleView('recency+origin')), /50% recency\+origin-weighted/);
+
+    const mdFor = (weighting: 'recency' | 'origin' | 'recency+origin', halfLifeDays?: number, originWeights?: { bot?: number }) =>
+      renderDiffMarkdown({
+        meta: {
+          tool: 'repo-archaeology',
+          root: '/repo',
+          commitsRead: 9,
+          commitsAnalyzed: 9,
+          sweepsSkipped: 0,
+          subjectSkipped: 0,
+          renamesFollowed: 0,
+          files: 2,
+          settings: {
+            maxCommits: 5000,
+            maxFilesPerCommit: 25,
+            minShared: 3,
+            minConfidence: 0.4,
+            ...(halfLifeDays !== undefined ? { halfLifeDays } : {}),
+            ignore: [],
+            useDefaultIgnores: true,
+            ...(originWeights ? { origin: { weights: originWeights } } : {}),
+          },
+          warnings: [],
+        },
+        changed: [{ path: 'a.ts', deleted: false, sources: ['unstaged'], hasHistory: true }],
+        suggestions: [{ ...sampleView(weighting), alsoLinkedFrom: [] }],
+      });
+    assert.match(mdFor('origin', undefined, { bot: 0 }), /\*\*50%\*\* origin-weighted · reverse \*\*100%\*\* origin-weighted/);
+    assert.match(mdFor('recency', 90, undefined), /\*\*50%\*\* recency-weighted · reverse \*\*100%\*\* recency-weighted/);
+    assert.match(mdFor('recency+origin', 90, { bot: 0 }), /\*\*50%\*\* recency\+origin-weighted · reverse \*\*100%\*\* recency\+origin-weighted/);
+
+    const idA = originOnlyModel.id('a.ts')!;
+    const idB = originOnlyModel.id('b.ts')!;
+    const idBotOnly = originOnlyModel.id('botOnly.ts')!;
 
     // Raw shared (stat.count) and raw fromChanges (changeCount) stay raw (6 and 9)
-    const statAB = weightedModel.pair(idA, idB)!;
+    const statAB = originOnlyModel.pair(idA, idB)!;
     assert.equal(statAB.count, 6);
-    assert.equal(weightedModel.changeCount[idA], 9);
+    assert.equal(originOnlyModel.changeCount[idA], 9);
 
     // Default confidence(a -> b) is 6/9; with bot=0 it is 3/6 = 0.5
     assert.ok(Math.abs(defaultModel.confidence(defaultModel.pair(defaultModel.id('a.ts')!, defaultModel.id('b.ts')!)!, defaultModel.id('a.ts')!) - 6 / 9) < 1e-9);
-    assert.ok(Math.abs(weightedModel.confidence(statAB, idA) - 3 / 6) < 1e-9);
+    assert.ok(Math.abs(originOnlyModel.confidence(statAB, idA) - 3 / 6) < 1e-9);
 
     // Bot-only pair (a.ts -> botOnly.ts) has raw shared=3, but with bot=0 its confidence is 0 and it is removed from companions
-    const statABot = weightedModel.pair(idA, idBotOnly)!;
+    const statABot = originOnlyModel.pair(idA, idBotOnly)!;
     assert.equal(statABot.count, 3);
-    assert.equal(weightedModel.confidence(statABot, idA), 0);
-    const companions = weightedModel.companions(idA, { minShared: 3, minConfidence: 0.4 });
-    assert.deepEqual(companions.map((c) => weightedModel.path(c.to)), ['b.ts']);
+    assert.equal(originOnlyModel.confidence(statABot, idA), 0);
+    const companions = originOnlyModel.companions(idA, { minShared: 3, minConfidence: 0.4 });
+    assert.deepEqual(companions.map((c) => originOnlyModel.path(c.to)), ['b.ts']);
     assert.equal(companions[0]!.stat.count, 6);
   });
 
-  it('backtest --compare-origin-weights runs default and weighted on the exact same split and reports precision, hitRate, lift, and deltas', () => {
+  it('backtest --compare-origin-weights runs default and weighted on the exact same split, resolves spec on top of config weights, and reports single deltas + byOrigin', () => {
     const commits: HistoryCommit[] = [];
     let t = 1;
     // Older training history:
@@ -720,20 +891,26 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
     // Newest-first order as History.commits expects
     commits.reverse();
 
+    // Pass originWeights: { agent: 0.5 } (simulating .repo-archaeology.json origin.weights) and compareOriginWeights: 'bot=0'
     const res = backtestCommits(
       commits,
       { minShared: 3, minConfidence: 0.3 },
-      { testFraction: 0.2, k: 1, compareOriginWeights: 'bot=0,agent=0.5' },
+      { testFraction: 0.2, k: 1, originWeights: { agent: 0.5 }, compareOriginWeights: 'bot=0' },
     );
     assert.ok(res.comparisons && res.comparisons.length === 1);
     const comp = res.comparisons[0]!;
-    assert.equal(comp.spec, 'bot=0,agent=0.5');
+    assert.equal(comp.spec, 'bot=0');
+    // Default run is always unweighted (all=1), while weighted spec inherits agent=0.5 from config and overrides bot=0
+    assert.deepEqual(comp.defaultWeights, { human: 1, agent: 1, bot: 1 });
     assert.deepEqual(comp.weights, { human: 1, agent: 0.5, bot: 0 });
-    // Default run matches the primary unweighted backtest strategies on the same split
-    assert.deepEqual(comp.default.strategies, res.strategies);
+    // Single `deltas` field (no duplicate `delta` field)
+    assert.equal('delta' in (comp as unknown as Record<string, unknown>), false);
+    assert.equal('deltas' in comp, true);
     // Weighted run (bot=0) drops the noisy bot companions so top-1 recommendation on a.ts is b.ts (higher precision & hitRate)
     assert.ok(comp.weighted.precision > comp.default.precision);
     assert.ok(comp.weighted.hitRate > comp.default.hitRate);
+    assert.ok(comp.default.byOrigin && comp.weighted.byOrigin);
+    assert.ok(comp.weighted.byOrigin.human.hitRate > comp.default.byOrigin.human.hitRate);
     assert.ok(Math.abs(comp.deltas.precision - (comp.weighted.precision - comp.default.precision)) < 1e-9);
     assert.ok(Math.abs(comp.deltas.hitRate - (comp.weighted.hitRate - comp.default.hitRate)) < 1e-9);
     assert.ok(Math.abs(comp.deltas.lift - (comp.weighted.lift - comp.default.lift)) < 1e-9);

@@ -253,7 +253,7 @@ program
   .option('--ghosts', 'diagnose the ghost subset using current imports (contains future information)')
   .option('--follow-ups', 'also evaluate candidate temporal follow-up commits in the held-out window')
   .option('--follow-up-window <hours>', 'maximum hours between an initial commit and a candidate follow-up (default 48)', positiveNumber)
-  .option('--compare-origin-weights <spec>', 'compare default weights against <spec> (e.g. "bot=0,agent=0.5") on the same split', collectCompareOriginWeights)
+  .option('--compare-origin-weights <spec>', 'compare unweighted default (all=1) against <spec> (e.g. "bot=0,agent=0.5"; omitted keys inherit config origin.weights)', collectCompareOriginWeights)
   .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean; followUps?: boolean; followUpWindow?: number; compareOriginWeights?: string[] }, cmd: Command) => {
     if (opts.followUpWindow !== undefined && !opts.followUps) {
       throw new UsageError('--follow-up-window requires --follow-ups.');

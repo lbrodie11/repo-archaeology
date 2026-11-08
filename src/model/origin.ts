@@ -48,16 +48,24 @@ export interface OriginShare {
  * Heuristic default patterns matched (case-insensitively) against author name
  * and email to identify coding-agent commits. Checked before bot patterns
  * because agent accounts frequently end in `[bot]`.
+ *
+ * Patterns are anchored to exact agent handles, `[bot]` accounts, or agent
+ * noreply addresses so human names like "Claude Monet", "Jules Verne",
+ * "Gemini Patel", "Codex Team", or "Argonaut" stay `human`.
  */
 export const DEFAULT_AGENT_AUTHOR_PATTERNS: readonly string[] = [
-  '^copilot-swe-agent',
-  '^devin-ai-integration',
-  '^cursor-agent',
-  '^codex',
-  '^jules',
-  '^claude',
-  '^gemini',
-  '^argon',
+  '^copilot-swe-agent(?:\\[bot\\])?$',
+  '^devin-ai-integration(?:\\[bot\\])?$',
+  '^cursor-agent(?:\\[bot\\])?$',
+  '^(?:openai-)?codex(?:-agent)?\\[bot\\]$',
+  '^(?:google-labs-)?jules\\[bot\\]$',
+  '^claude(?:-code)?\\[bot\\]$',
+  '^gemini(?:-code-assist)?\\[bot\\]$',
+  '^argon(?:-agent)?\\[bot\\]$',
+  '^(?:\\d+\\+)?(?:copilot-swe-agent|devin-ai-integration|cursor-agent|codex|openai-codex)\\[bot\\]@users\\.noreply\\.github\\.com$',
+  '^(?:\\d+\\+)?(?:jules|google-labs-jules|claude|gemini|gemini-code-assist|argon)\\[bot\\]@users\\.noreply\\.github\\.com$',
+  '^noreply@anthropic\\.com$',
+  '^(?:amp|noreply)@ampcode\\.com$',
 ];
 
 /**
@@ -67,16 +75,16 @@ export const DEFAULT_AGENT_AUTHOR_PATTERNS: readonly string[] = [
 export const DEFAULT_BOT_PATTERNS: readonly string[] = [
   '\\[bot\\]$',
   '\\[bot\\]@users\\.noreply\\.github\\.com$',
-  '^dependabot',
-  '^renovate',
-  '^github-actions',
-  '^snyk-bot',
-  '^greenkeeper',
-  '^semantic-release-bot',
-  '^allcontributors',
-  '^pre-commit-ci',
-  '^mergify',
-  '^imgbot',
+  '^dependabot(?:\\[bot\\])?$',
+  '^renovate(?:\\[bot\\])?$',
+  '^github-actions(?:\\[bot\\])?$',
+  '^snyk-bot(?:\\[bot\\])?$',
+  '^greenkeeper(?:\\[bot\\])?$',
+  '^semantic-release-bot(?:\\[bot\\])?$',
+  '^allcontributors(?:\\[bot\\])?$',
+  '^pre-commit-ci(?:\\[bot\\])?$',
+  '^mergify(?:\\[bot\\])?$',
+  '^imgbot(?:\\[bot\\])?$',
 ];
 
 /**
@@ -94,22 +102,26 @@ const AGENT_TRAILER_KEY_SET = new Set<string>(AGENT_TRAILER_KEYS);
 /**
  * Heuristic default patterns matched (case-insensitively) against values of
  * `Co-authored-by`, `Assisted-by`, `Generated-by`, and `AI-Assisted` trailers.
+ *
+ * Uses bounded agent noreply emails and exact agent identities rather than
+ * unanchored substrings so ordinary humans ("Bob <bob@example.com>",
+ * "Pam Campbell", "Sam Ampofo", "Jean-Claude Van", "Devin Smith", or human
+ * `@openai.com` addresses) are never misclassified as agents.
  */
 export const DEFAULT_AGENT_TRAILER_PATTERNS: readonly string[] = [
-  'Claude',
-  'noreply@anthropic.com',
-  'Copilot',
-  'Codex',
-  'openai',
-  'Cursor',
-  'Devin',
-  'Gemini',
-  'Jules',
-  'Argon',
-  'Aider',
-  'Windsurf',
-  'Cline',
-  'Amp',
+  '(?:^|<)noreply@anthropic\\.com(?:>|$)',
+  '(?:^|<)(?:amp|noreply)@ampcode\\.com(?:>|$)',
+  '(?:^|<)(?:cursoragent|noreply)@cursor\\.com(?:>|$)',
+  '(?:^|<)(?:devin|noreply)@cognition\\.ai(?:>|$)',
+  '(?:^|<)(?:aider|noreply)@aider\\.chat(?:>|$)',
+  '(?:^|<)(?:codex|noreply)@openai\\.com(?:>|$)',
+  '(?:^|<)copilot@github\\.com(?:>|$)',
+  '(?:^|<)(?:\\d+\\+)?(?:copilot|copilot-swe-agent|devin-ai-integration|cursor-agent|codex|openai-codex)(?:\\[bot\\])?@users\\.noreply\\.github\\.com(?:>|$)',
+  '(?:^|<)(?:\\d+\\+)?(?:jules|google-labs-jules|claude|gemini|gemini-code-assist|argon)(?:\\[bot\\])?@users\\.noreply\\.github\\.com(?:>|$)',
+  '^(?:github )?copilot(?:\\[bot\\])?(?: <[^<>]+>)?$',
+  '^(?:copilot-swe-agent|devin-ai-integration|cursor-agent)(?:\\[bot\\])?(?: <[^<>]+>)?$',
+  '^(?:claude code|openai codex|cursor agent|gemini code assist)(?: <[^<>]+>)?$',
+  '^(?:amp|aider|windsurf|cline|argon)(?:\\[bot\\])?$',
 ];
 
 export interface CommitIdentityInput {
@@ -120,8 +132,49 @@ export interface CommitIdentityInput {
 
 export type OriginClassifier = (commit: CommitIdentityInput) => CommitOrigin;
 
+/**
+ * Rejects regular expressions that could backtrack catastrophically or exceed length bounds:
+ * - longer than `MAX_ORIGIN_PATTERN_LENGTH` (200 chars)
+ * - backreferences (`\1`..`\9`, `\k<...>`)
+ * - a quantified group containing a quantifier or alternation (`(a+)+`, `(a|aa)*`)
+ * - more than 2 repetition quantifiers (`*`, `+`, `{n,m}`)
+ */
+export function riskyOriginPattern(pattern: string): string | undefined {
+  if (pattern.length > MAX_ORIGIN_PATTERN_LENGTH) return `is longer than ${MAX_ORIGIN_PATTERN_LENGTH} characters`;
+  if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
+  let quantifierCount = 0;
+  const stack: number[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '[') {
+      for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
+      continue;
+    }
+    if (ch === '*' || ch === '+' || ch === '{') quantifierCount++;
+    if (ch === '(') stack.push(i);
+    else if (ch === ')' && stack.length > 0) {
+      const start = stack.pop()!;
+      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(pattern.slice(i + 1));
+      if (quantified && /(?:^|[^\\])(?:[*+|]|\{\d*,?\d*\})/.test(pattern.slice(start + 1, i).replace(/\[(?:\\.|[^\]])*\]/g, 'x'))) {
+        return 'repeats a group that contains a quantifier or alternation, which can hang analysis';
+      }
+    }
+  }
+  if (quantifierCount > 2) {
+    return 'has more than 2 repetition quantifiers (*, +, {n,m})';
+  }
+  return undefined;
+}
+
 function compilePatternList(patterns: readonly string[]): RegExp[] {
-  return patterns.map((p) => new RegExp(p, 'i'));
+  return patterns.map((p) => {
+    const problem = riskyOriginPattern(p);
+    if (problem) {
+      throw new Error(`Unsafe origin pattern "${p}": ${problem}.`);
+    }
+    return new RegExp(p, 'i');
+  });
 }
 
 function resolvePatternStrings(
@@ -199,11 +252,17 @@ export function createOriginClassifier(config?: OriginConfig): OriginClassifier 
 }
 
 const defaultClassifier = createOriginClassifier();
+const classifierCache = new WeakMap<OriginConfig, OriginClassifier>();
 
-/** Classifies a commit's origin using default or custom `OriginConfig` patterns. */
+/** Classifies a commit's origin using default or custom `OriginConfig` patterns (cached per config object). */
 export function classifyCommitOrigin(commit: CommitIdentityInput, config?: OriginConfig): CommitOrigin {
   if (!config) return defaultClassifier(commit);
-  return createOriginClassifier(config)(commit);
+  let classifier = classifierCache.get(config);
+  if (!classifier) {
+    classifier = createOriginClassifier(config);
+    classifierCache.set(config, classifier);
+  }
+  return classifier(commit);
 }
 
 /**
