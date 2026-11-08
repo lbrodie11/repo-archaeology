@@ -8,13 +8,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  release:
-    name: Verify, publish to npm, and create GitHub Release
+  verify:
+    name: Verify, extract changelog, and smoke-test tarball
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: read
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      version: ${{ steps.prep.outputs.version }}
+      is_prerelease: ${{ steps.prep.outputs.is_prerelease }}
+      npm_dist_tag: ${{ steps.prep.outputs.npm_dist_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -22,15 +30,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Verify tagged commit is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "error: Tagged commit $(git rev-parse HEAD) is not an ancestor of origin/main." >&2
+            exit 1
+          fi
+
       - name: Set up Node.js 22
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
-
-      - name: Update npm CLI for OIDC Trusted Publishing
-        run: npm install --global npm@11
 
       - name: Configure git for test fixtures
         run: |
@@ -50,70 +63,117 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Smoke-test release tarball
-        run: node scripts/smoke-pack.mjs
-
-      - name: Verify tag version and extract CHANGELOG section
-        id: changelog
+      - name: Validate tag version and extract CHANGELOG section
+        id: prep
         shell: bash
         env:
           TAG_NAME: ${{ github.ref_name }}
-          NOTES_PATH: ${{ runner.temp }}/release-notes.md
+          BUNDLE_DIR: ${{ runner.temp }}/release-bundle
         run: |
-          node -e '
-            const fs = require("node:fs");
-            const tag = process.env.TAG_NAME || "";
-            const notesPath = process.env.NOTES_PATH;
-            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-            const expectedTag = `v${pkg.version}`;
-            if (tag !== expectedTag) {
-              console.error(`error: Git tag "${tag}" does not match package.json version "${expectedTag}".`);
-              process.exit(1);
-            }
-            const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
-            const escapedVersion = pkg.version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const headingRe = new RegExp(`^## \\[${escapedVersion}\\](?:\\s+-\\s+(\\S+))?\\s*$`, "m");
-            const match = headingRe.exec(changelog);
-            if (!match) {
-              console.error(`error: Could not find "## [${pkg.version}]" section in CHANGELOG.md.`);
-              process.exit(1);
-            }
-            if (match[1] === "YYYY-MM-DD") {
-              console.error(`error: CHANGELOG.md section for ${pkg.version} still has placeholder date YYYY-MM-DD.`);
-              process.exit(1);
-            }
-            const afterHeading = changelog.slice(match.index + match[0].length);
-            const nextHeading = /^## \[/m.exec(afterHeading);
-            const sectionBody = (nextHeading ? afterHeading.slice(0, nextHeading.index) : afterHeading).trim();
-            if (!sectionBody) {
-              console.error(`error: CHANGELOG.md section for ${pkg.version} is empty.`);
-              process.exit(1);
-            }
-            fs.writeFileSync(notesPath, `${sectionBody}\n`, "utf8");
-          '
+          mkdir -p "$BUNDLE_DIR"
+          node scripts/release-helper.mjs prepare \
+            --tag "$TAG_NAME" \
+            --notes-out "$BUNDLE_DIR/release-notes.md" \
+            --github-output "$GITHUB_OUTPUT"
 
-      # Publishes using npm Trusted Publishing (OIDC) via `permissions: id-token: write`.
-      # No long-lived `NPM_TOKEN` secret is required when `lbrodie11/repo-archaeology`
-      # (`release.yml`) is configured as a Trusted Publisher on npmjs.com.
+      - name: Pack and smoke-test release tarball
+        shell: bash
+        env:
+          BUNDLE_DIR: ${{ runner.temp }}/release-bundle
+        run: node scripts/smoke-pack.mjs --pack-out "$BUNDLE_DIR"
+
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-bundle-${{ steps.prep.outputs.version }}
+          path: ${{ runner.temp }}/release-bundle/*
+          if-no-files-found: error
+          retention-days: 5
+
+  publish:
+    name: Publish verified tarball to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout release helper scripts
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22 for npm registry
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Install pinned npm CLI for OIDC Trusted Publishing
+        run: npm install --global npm@11.21.2
+
+      - name: Download verified release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-bundle-${{ needs.verify.outputs.version }}
+          path: ${{ runner.temp }}/release-bundle
+
+      # Publishes the exact smoke-tested `.tgz` artifact using npm Trusted Publishing (OIDC)
+      # via `permissions: id-token: write`. No long-lived `NPM_TOKEN` secret is required
+      # when `lbrodie11/repo-archaeology` (`release.yml`) is configured as a Trusted Publisher
+      # on npmjs.com. If a prior attempt already published this exact `.tgz` (verified by
+      # matching `dist.integrity` and `dist.shasum`), publication is safely skipped so retries
+      # can proceed to GitHub Release creation.
       #
       # Token fallback (if Trusted Publishing is not yet configured on npmjs.com):
       #   1. Create a granular access token on npmjs.com with publish permission for `repo-archaeology`.
       #   2. Save it as the `NPM_TOKEN` repository secret in GitHub Settings -> Secrets and variables -> Actions.
-      #   3. Uncomment the `env` block below:
-      # env:
-      #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Publish to npm with provenance
-        run: npm publish --provenance --access public
+      #   3. Uncomment `NODE_AUTH_TOKEN` in the `env` block below:
+      - name: Publish verified tarball to npm with provenance
+        shell: bash
+        env:
+          BUNDLE_DIR: ${{ runner.temp }}/release-bundle
+          PKG_VERSION: ${{ needs.verify.outputs.version }}
+          NPM_DIST_TAG: ${{ needs.verify.outputs.npm_dist_tag }}
+          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          TARBALL_NAME=$(tr -d '\r\n' < "$BUNDLE_DIR/tarball-filename.txt")
+          TARBALL_PATH="$BUNDLE_DIR/$TARBALL_NAME"
+          node scripts/release-helper.mjs publish-or-skip \
+            --tarball "$TARBALL_PATH" \
+            --name "repo-archaeology" \
+            --version "$PKG_VERSION" \
+            --dist-tag "$NPM_DIST_TAG"
 
-      - name: Create GitHub Release from CHANGELOG
+  github-release:
+    name: Create GitHub Release
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-bundle-${{ needs.verify.outputs.version }}
+          path: ${{ runner.temp }}/release-bundle
+
+      - name: Create or update GitHub Release from CHANGELOG
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
-          NOTES_PATH: ${{ runner.temp }}/release-notes.md
+          REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.verify.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.verify.outputs.is_prerelease }}
+          NOTES_PATH: ${{ runner.temp }}/release-bundle/release-notes.md
         run: |
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release edit "$TAG_NAME" --title "$TAG_NAME" --notes-file "$NOTES_PATH"
+          PRERELEASE_FLAG=()
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG=(--prerelease)
+          fi
+          if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --repo "$REPO" --title "$TAG_NAME" --notes-file "$NOTES_PATH" "${PRERELEASE_FLAG[@]}"
           else
-            gh release create "$TAG_NAME" --title "$TAG_NAME" --notes-file "$NOTES_PATH" --verify-tag
+            gh release create "$TAG_NAME" --repo "$REPO" --title "$TAG_NAME" --notes-file "$NOTES_PATH" --verify-tag "${PRERELEASE_FLAG[@]}"
           fi

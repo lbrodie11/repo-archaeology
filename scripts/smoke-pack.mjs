@@ -2,70 +2,76 @@
 /**
  * Release tarball smoke test (`scripts/smoke-pack.mjs`).
  *
- * 1. Runs `npm pack` into a temporary directory.
- * 2. Creates a throwaway Git repository with ~40 synthetic commits including a known co-change pair.
+ * 1. Runs `npm pack --json` into a temporary directory (or `--pack-out <dir>`),
+ *    reading the tarball filename and verifying that only `dist/`, `schema/`,
+ *    `README.md`, `LICENSE`, and `package.json` are included.
+ * 2. Creates a throwaway Git repository with ~40 synthetic commits including a known co-change pair,
+ *    stripping all ambient `GIT_*` environment variables so git hooks cannot leak into the outer repo.
  * 3. Installs the packed tarball into a separate temporary prefix.
- * 4. Runs `repo-archaeology diff --base <first-branch-point> --json` and `repo-archaeology backtest --json`.
+ * 4. Runs the installed `repo-archaeology` binary (`node_modules/.bin/repo-archaeology` / `npm exec`)
+ *    for `diff --base <first-branch-point> --json` and `backtest --json`.
  * 5. Validates both outputs against `schema/diff.schema.json` and `schema/backtest.schema.json`
- *    using a dependency-free recursive JSON Schema validator (supporting `$ref`, `required`, types, enums, and bounds).
+ *    using the shared recursive JSON Schema validator (`scripts/schema-validator.mjs`).
  * 6. Exits non-zero on any failure.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveNpmCliJs } from './release-helper.mjs';
+import { sanitizeGitEnv, validateAgainstSchema } from './schema-validator.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, '..');
 const SCHEMA_DIR = join(ROOT_DIR, 'schema');
 
-function resolveNpmCliJs(env = process.env) {
-  if (env.npm_execpath && existsSync(env.npm_execpath)) {
-    return resolve(env.npm_execpath);
+const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.js|schema\/.+\.schema\.json)$/;
+
+export function assertPackedFileList(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error('npm pack --json returned an empty file list.');
   }
-  const execDir = dirname(process.execPath);
-  const candidates = [
-    join(execDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    join(execDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-  const pathVar = env.PATH ?? env.Path ?? '';
-  for (const dir of pathVar.split(delimiter)) {
-    const trimmed = dir.trim();
-    if (!trimmed) continue;
-    candidates.push(join(trimmed, 'node_modules', 'npm', 'bin', 'npm-cli.js'));
-    candidates.push(join(trimmed, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  const paths = files.map((entry) => (typeof entry === 'string' ? entry : entry?.path)).filter(Boolean);
+  const unexpected = paths.filter((p) => !ALLOWED_PACKED_FILE_RE.test(p));
+  if (unexpected.length > 0) {
+    throw new Error(
+      `Tarball contains unexpected files outside dist/, schema/, README.md, LICENSE, package.json: ${unexpected.join(', ')}`,
+    );
   }
-  for (const candidate of candidates) {
-    try {
-      if (existsSync(candidate) && lstatSync(candidate).isFile()) {
-        return realpathSync.native(candidate);
-      }
-    } catch {
-      // continue searching
+  for (const requiredFile of ['package.json', 'README.md', 'LICENSE', 'dist/cli.js', 'schema/diff.schema.json', 'schema/backtest.schema.json']) {
+    if (!paths.includes(requiredFile)) {
+      throw new Error(`Tarball is missing required file '${requiredFile}'.`);
     }
   }
-  return undefined;
 }
 
 function runNpm(args, cwd) {
-  const npmCliJs = resolveNpmCliJs();
+  const cleanEnv = sanitizeGitEnv(process.env);
+  const npmCliJs = resolveNpmCliJs(cleanEnv);
   const res = npmCliJs
     ? spawnSync(process.execPath, [npmCliJs, ...args], {
         cwd,
+        env: cleanEnv,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120_000,
       })
     : spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
         cwd,
+        env: cleanEnv,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
+        timeout: 120_000,
       });
+  if (res.error) {
+    throw new Error(`npm ${args.join(' ')} failed to spawn: ${res.error.message}`);
+  }
   if (res.status !== 0) {
     throw new Error(
-      `npm ${args.join(' ')} failed (exit ${res.status}):\n${res.stderr || res.stdout || ''}`.trim(),
+      `npm ${args.join(' ')} failed (exit ${res.status}):\n${(res.stderr || res.stdout || '').trim()}`,
     );
   }
   return (res.stdout ?? '').trim();
@@ -76,161 +82,9 @@ function runGit(cwd, args, extraEnv = {}) {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', ...extraEnv },
+    timeout: 30_000,
+    env: sanitizeGitEnv(process.env, extraEnv),
   }).trim();
-}
-
-const schemaCache = new Map();
-
-function loadSchema(schemaDir, fileName) {
-  const key = `${schemaDir}:${fileName}`;
-  if (schemaCache.has(key)) return schemaCache.get(key);
-  const fullPath = join(schemaDir, fileName);
-  const parsed = JSON.parse(readFileSync(fullPath, 'utf8'));
-  schemaCache.set(key, parsed);
-  return parsed;
-}
-
-function resolveSchemaRef(schemaDir, ref, currentSchemaFile) {
-  const [filePart, pointerPart] = ref.split('#');
-  const targetFile = filePart && filePart.length > 0 ? filePart : currentSchemaFile;
-  const rootSchema = loadSchema(schemaDir, targetFile);
-  if (!pointerPart || pointerPart === '' || pointerPart === '/') {
-    return { node: rootSchema, file: targetFile };
-  }
-  const segments = pointerPart.replace(/^\//, '').split('/');
-  let cursor = rootSchema;
-  for (const seg of segments) {
-    if (cursor && typeof cursor === 'object' && seg in cursor) {
-      cursor = cursor[seg];
-    } else {
-      throw new Error(`Unresolved JSON Schema $ref '${ref}' in ${currentSchemaFile}`);
-    }
-  }
-  return { node: cursor, file: targetFile };
-}
-
-function validateSchemaNode(schemaDir, value, schema, schemaFile, path, errors) {
-  if (schema.$ref) {
-    const resolved = resolveSchemaRef(schemaDir, schema.$ref, schemaFile);
-    validateSchemaNode(schemaDir, value, resolved.node, resolved.file, path, errors);
-    return;
-  }
-
-  if (schema.oneOf) {
-    const branchErrors = [];
-    let matchedCount = 0;
-    for (const branch of schema.oneOf) {
-      const localErrs = [];
-      validateSchemaNode(schemaDir, value, branch, schemaFile, path, localErrs);
-      if (localErrs.length === 0) {
-        matchedCount++;
-      } else {
-        branchErrors.push(localErrs);
-      }
-    }
-    if (matchedCount !== 1) {
-      errors.push(
-        `${path}: expected value to match exactly 1 oneOf branch (matched ${matchedCount}): ${branchErrors
-          .map((b) => b.join('; '))
-          .join(' | ')}`,
-      );
-    }
-    return;
-  }
-
-  if (schema.const !== undefined && value !== schema.const) {
-    errors.push(`${path}: expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(value)}`);
-    return;
-  }
-
-  if (schema.enum !== undefined && !schema.enum.includes(value)) {
-    errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(value)}`);
-    return;
-  }
-
-  if (schema.type !== undefined) {
-    const allowedTypes = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const matchesType = allowedTypes.some((t) => {
-      if (t === 'null') return value === null;
-      if (t === 'array') return Array.isArray(value);
-      if (t === 'integer') return typeof value === 'number' && Number.isInteger(value);
-      if (t === 'number') return typeof value === 'number' && Number.isFinite(value);
-      if (t === 'object') return typeof value === 'object' && value !== null && !Array.isArray(value);
-      return typeof value === t;
-    });
-    if (!matchesType) {
-      errors.push(
-        `${path}: expected type ${JSON.stringify(schema.type)}, got ${value === null ? 'null' : typeof value}`,
-      );
-      return;
-    }
-  }
-
-  if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push(`${path}: string length ${value.length} < minLength ${schema.minLength}`);
-    }
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) {
-      errors.push(`${path}: string ${JSON.stringify(value)} does not match pattern ${schema.pattern}`);
-    }
-  }
-
-  if (typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum) {
-      errors.push(`${path}: number ${value} < minimum ${schema.minimum}`);
-    }
-    if (schema.maximum !== undefined && value > schema.maximum) {
-      errors.push(`${path}: number ${value} > maximum ${schema.maximum}`);
-    }
-    if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
-      errors.push(`${path}: number ${value} <= exclusiveMinimum ${schema.exclusiveMinimum}`);
-    }
-  }
-
-  if (Array.isArray(value)) {
-    if (schema.minItems !== undefined && value.length < schema.minItems) {
-      errors.push(`${path}: array length ${value.length} < minItems ${schema.minItems}`);
-    }
-    if (schema.items) {
-      value.forEach((item, idx) => {
-        validateSchemaNode(schemaDir, item, schema.items, schemaFile, `${path}[${idx}]`, errors);
-      });
-    }
-  }
-
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    if (schema.required) {
-      for (const reqKey of schema.required) {
-        if (!(reqKey in value) || value[reqKey] === undefined) {
-          errors.push(`${path}: missing required property '${reqKey}'`);
-        }
-      }
-    }
-    if (schema.additionalProperties === false && schema.properties) {
-      for (const key of Object.keys(value)) {
-        if (!(key in schema.properties)) {
-          errors.push(`${path}: unexpected additional property '${key}'`);
-        }
-      }
-    }
-    if (schema.properties) {
-      for (const [propKey, propSchema] of Object.entries(schema.properties)) {
-        if (propKey in value && value[propKey] !== undefined) {
-          validateSchemaNode(schemaDir, value[propKey], propSchema, schemaFile, `${path}.${propKey}`, errors);
-        }
-      }
-    }
-  }
-}
-
-function validateAgainstSchema(schemaDir, payload, schemaFile) {
-  const schema = loadSchema(schemaDir, schemaFile);
-  const errors = [];
-  validateSchemaNode(schemaDir, payload, schema, schemaFile, '$', errors);
-  if (errors.length > 0) {
-    throw new Error(`Schema validation failed against ${schemaFile}:\n  - ${errors.join('\n  - ')}`);
-  }
 }
 
 function writeRepoFile(repoDir, relPath, content) {
@@ -256,11 +110,11 @@ function commitFiles(repoDir, dayOffset, message, files, author = 'Alice') {
   );
 }
 
-function main() {
+export function runSmokePack(options = {}) {
   const tempRoot = mkdtempSync(join(tmpdir(), 'repo-archaeology-smoke-pack-'));
   const packDir = join(tempRoot, 'pack');
   const installDir = join(tempRoot, 'install');
-  const repoDir = join(tempRoot, 'repo');
+  const repoDir = options.repoDir ? resolve(options.repoDir) : join(tempRoot, 'repo');
 
   try {
     mkdirSync(packDir, { recursive: true });
@@ -269,10 +123,24 @@ function main() {
 
     const pkg = JSON.parse(readFileSync(join(ROOT_DIR, 'package.json'), 'utf8'));
 
-    // 1. Run `npm pack` into packDir.
-    console.log('1. Packing tarball with `npm pack`...');
-    runNpm(['pack', '--pack-destination', packDir], ROOT_DIR);
-    const tarballPath = join(packDir, `${pkg.name}-${pkg.version}.tgz`);
+    // 1. Run `npm pack --json` into packDir and verify packed file list.
+    console.log('1. Packing tarball with `npm pack --json`...');
+    const packStdout = runNpm(['pack', '--json', '--pack-destination', packDir], ROOT_DIR);
+    let packMeta;
+    try {
+      const parsed = JSON.parse(packStdout);
+      packMeta = Array.isArray(parsed) ? parsed[0] : parsed;
+    } catch (err) {
+      throw new Error(
+        `Failed to parse npm pack --json output (${err instanceof Error ? err.message : String(err)}):\n${packStdout}`,
+      );
+    }
+    if (!packMeta || typeof packMeta.filename !== 'string' || !packMeta.filename) {
+      throw new Error(`npm pack --json did not return a valid filename: ${packStdout}`);
+    }
+    assertPackedFileList(packMeta.files);
+
+    const tarballPath = join(packDir, packMeta.filename);
     if (!existsSync(tarballPath)) {
       throw new Error(`Expected tarball at ${tarballPath}, but it was not created.`);
     }
@@ -331,27 +199,73 @@ function main() {
     runNpm(['install', '--prefix', installDir, tarballPath, '--no-audit', '--no-fund'], installDir);
 
     const installedPkgRoot = join(installDir, 'node_modules', 'repo-archaeology');
-    const installedCli = join(installedPkgRoot, 'dist', 'cli.js');
     const installedSchemaDir = join(installedPkgRoot, 'schema');
-    if (!existsSync(installedCli)) {
-      throw new Error(`Installed CLI entry point missing at ${installedCli}`);
+    const binPathPosix = join(installDir, 'node_modules', '.bin', 'repo-archaeology');
+    const binPathWin = join(installDir, 'node_modules', '.bin', 'repo-archaeology.cmd');
+    const expectedBin = process.platform === 'win32' ? binPathWin : binPathPosix;
+    if (!existsSync(expectedBin)) {
+      throw new Error(`Installed CLI bin wrapper missing at ${expectedBin}`);
     }
     if (!existsSync(join(installedSchemaDir, 'diff.schema.json'))) {
       throw new Error(`Installed schema directory missing diff.schema.json at ${installedSchemaDir}`);
     }
 
     const runInstalledCli = (args) => {
-      const res = spawnSync(process.execPath, [installedCli, ...args], {
-        cwd: repoDir,
-        encoding: 'utf8',
-        env: { ...process.env, NO_COLOR: '1' },
-      });
+      const cliEnv = sanitizeGitEnv(process.env, { NO_COLOR: '1' });
+      const npmCliJs = resolveNpmCliJs(cliEnv);
+      // On POSIX, execute `node_modules/.bin/repo-archaeology` directly to verify both the bin symlink
+      // and the `#!/usr/bin/env node` shebang. On Windows, invoke via `npm exec --prefix <installDir>`
+      // with `-C <repoDir>` to exercise the installed bin entry without cmd.exe quoting hazards.
+      const res =
+        process.platform !== 'win32'
+          ? spawnSync(binPathPosix, args, {
+              cwd: repoDir,
+              encoding: 'utf8',
+              env: cliEnv,
+              stdio: ['ignore', 'pipe', 'pipe'],
+              timeout: 120_000,
+            })
+          : npmCliJs
+            ? spawnSync(
+                process.execPath,
+                [npmCliJs, 'exec', '--prefix', installDir, '--', 'repo-archaeology', '-C', repoDir, ...args],
+                {
+                  cwd: installDir,
+                  encoding: 'utf8',
+                  env: cliEnv,
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                  timeout: 120_000,
+                },
+              )
+            : spawnSync(
+                'npm.cmd',
+                ['exec', '--prefix', installDir, '--', 'repo-archaeology', '-C', repoDir, ...args],
+                {
+                  cwd: installDir,
+                  encoding: 'utf8',
+                  env: cliEnv,
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                  shell: true,
+                  timeout: 120_000,
+                },
+              );
+      if (res.error) {
+        throw new Error(`repo-archaeology ${args.join(' ')} failed to spawn: ${res.error.message}`);
+      }
       if (res.status !== 0) {
         throw new Error(
           `repo-archaeology ${args.join(' ')} exited with status ${res.status}:\n${res.stderr || res.stdout}`,
         );
       }
-      return JSON.parse(res.stdout);
+      try {
+        return JSON.parse(res.stdout);
+      } catch (err) {
+        throw new Error(
+          `Failed to parse JSON output from 'repo-archaeology ${args.join(' ')}' (${
+            err instanceof Error ? err.message : String(err)
+          }):\nstdout: ${res.stdout}\nstderr: ${res.stderr}`,
+        );
+      }
     };
 
     // 4. Run `repo-archaeology diff --base <first-branch-point> --json` and `repo-archaeology backtest --json`.
@@ -363,9 +277,12 @@ function main() {
     console.log('5. Validating JSON outputs against v1 schemas...');
     validateAgainstSchema(SCHEMA_DIR, diffJson, 'diff.schema.json');
     validateAgainstSchema(SCHEMA_DIR, backtestJson, 'backtest.schema.json');
-    // Also verify the schemas shipped inside the tarball itself validate identically.
     validateAgainstSchema(installedSchemaDir, diffJson, 'diff.schema.json');
     validateAgainstSchema(installedSchemaDir, backtestJson, 'backtest.schema.json');
+
+    if (diffJson.tool?.version !== pkg.version) {
+      throw new Error(`Expected diff --json tool.version '${pkg.version}', got '${diffJson.tool?.version}'`);
+    }
 
     const hasKnownPair =
       Array.isArray(diffJson.suggestions) &&
@@ -395,15 +312,57 @@ function main() {
       );
     }
 
+    let exportedTarballPath;
+    if (options.packOutDir) {
+      const destDir = resolve(options.packOutDir);
+      mkdirSync(destDir, { recursive: true });
+      exportedTarballPath = join(destDir, packMeta.filename);
+      copyFileSync(tarballPath, exportedTarballPath);
+      writeFileSync(join(destDir, 'tarball-filename.txt'), `${packMeta.filename}\n`, 'utf8');
+    }
+
     console.log('Smoke test passed: tarball packed, installed, executed, and validated against schemas.');
+    return {
+      filename: packMeta.filename,
+      tarballPath: exportedTarballPath,
+      filesCount: packMeta.files.length,
+    };
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
 }
 
-try {
-  main();
-} catch (err) {
-  console.error(`error: smoke-pack failed: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
+function parseSmokeArgs(argv) {
+  let packOutDir;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--pack-out') {
+      const next = argv[i + 1];
+      if (!next || next.startsWith('--')) {
+        throw new Error('Missing directory path after --pack-out');
+      }
+      packOutDir = next;
+      i++;
+    }
+  }
+  return { packOutDir };
+}
+
+const isMain =
+  process.argv[1] !== undefined &&
+  (() => {
+    try {
+      return realpathSync.native(resolve(process.argv[1])) === realpathSync.native(fileURLToPath(import.meta.url));
+    } catch {
+      return false;
+    }
+  })();
+
+if (isMain) {
+  try {
+    const opts = parseSmokeArgs(process.argv.slice(2));
+    runSmokePack(opts);
+  } catch (err) {
+    console.error(`error: smoke-pack failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }

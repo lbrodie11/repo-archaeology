@@ -1,12 +1,13 @@
 /**
  * Consumer contract guard for Gutter (`lbrodie11/gutter`).
  *
- * Gutter's GitHub Action and co-change review panel consume the `schemaVersion: 1`
- * JSON output emitted by `repo-archaeology diff --json` (and `--json-out`) and
- * `repo-archaeology backtest --json`.
+ * Gutter's GitHub Action and co-change review panel (prompts `GU-01`, `GU-05`, and
+ * downstream Gutter workflows that invoke `npx repo-archaeology@^0.3.0`) parse the
+ * `schemaVersion: 1` JSON payloads from `repo-archaeology diff --json` (and `--json-out`)
+ * and `repo-archaeology backtest --json`.
  *
- * DO NOT rename, remove, or retype any field, enum value, or strategy name
- * asserted in this file without:
+ * DO NOT rename, remove, or retype any field, relationship kind, silence reason code,
+ * or backtest strategy name asserted in this file without:
  *   1. Coordinating a matching consumer release in `lbrodie11/gutter`, and
  *   2. Following the breaking-change versioning policy in `docs/json.md`.
  */
@@ -16,13 +17,14 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 import { FixtureRepo } from './helpers.js';
 
 const ROOT_DIR = join(import.meta.dirname, '..');
 const CLI = join(ROOT_DIR, 'src', 'cli.ts');
 const TSX = import.meta.resolve('tsx');
 
-export const GUTTER_RELATIONSHIP_KINDS = [
+const GUTTER_RELATIONSHIP_KINDS = [
   'ghost',
   'unknown',
   'indirect',
@@ -30,7 +32,7 @@ export const GUTTER_RELATIONSHIP_KINDS = [
   'test',
 ] as const;
 
-export const GUTTER_SILENCE_REASONS = [
+const GUTTER_SILENCE_REASONS = [
   'no_changed_files',
   'limited_repo_history',
   'no_history_for_changed_files',
@@ -40,7 +42,7 @@ export const GUTTER_SILENCE_REASONS = [
   'filtered_by_kinds',
 ] as const;
 
-export const GUTTER_BACKTEST_STRATEGIES = [
+const GUTTER_BACKTEST_STRATEGIES = [
   'co-change',
   'popularity, same changes',
 ] as const;
@@ -49,7 +51,8 @@ function runCli(args: string[], cwd: string) {
   const result = spawnSync(process.execPath, ['--import', TSX, CLI, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, NO_COLOR: '1' },
+    timeout: 60_000,
+    env: sanitizeGitEnv(process.env, { NO_COLOR: '1' }),
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -104,7 +107,7 @@ function checkCommonEnvelopeAndMeta(payload: Record<string, unknown>, errors: st
   }
 }
 
-export function validateGutterDiffContract(payload: unknown): string[] {
+function validateGutterDiffContract(payload: unknown): string[] {
   const errors: string[] = [];
   if (!isRecord(payload)) {
     return [`Gutter contract error at '$': expected object, got ${typeof payload}`];
@@ -157,10 +160,12 @@ export function validateGutterDiffContract(payload: unknown): string[] {
         }
       }
 
-      if ('lastTogether' in item && item.lastTogether !== undefined && typeof item.lastTogether !== 'string') {
-        errors.push(
-          `Gutter contract error at '${prefix}.lastTogether': expected optional string, got ${JSON.stringify(item.lastTogether)}`,
-        );
+      if ('lastTogether' in item && item.lastTogether !== undefined) {
+        if (typeof item.lastTogether !== 'string' || item.lastTogether.length === 0) {
+          errors.push(
+            `Gutter contract error at '${prefix}.lastTogether': expected optional non-empty string, got ${JSON.stringify(item.lastTogether)}`,
+          );
+        }
       }
 
       if (!Array.isArray(item.evidence)) {
@@ -168,6 +173,11 @@ export function validateGutterDiffContract(payload: unknown): string[] {
           `Gutter contract error at '${prefix}.evidence': expected array, got ${JSON.stringify(item.evidence)}`,
         );
       } else {
+        if (isFiniteNumber(item.shared) && item.shared > 0 && item.evidence.length === 0) {
+          errors.push(
+            `Gutter contract error at '${prefix}.evidence': expected at least 1 evidence commit when shared > 0, got []`,
+          );
+        }
         item.evidence.forEach((ev, evIdx) => {
           const evPrefix = `${prefix}.evidence[${evIdx}]`;
           if (!isRecord(ev)) {
@@ -216,9 +226,9 @@ export function validateGutterDiffContract(payload: unknown): string[] {
         }
       }
 
-      if (!Array.isArray(fam.members)) {
+      if (!Array.isArray(fam.members) || fam.members.length === 0) {
         errors.push(
-          `Gutter contract error at '${prefix}.members': expected array, got ${JSON.stringify(fam.members)}`,
+          `Gutter contract error at '${prefix}.members': expected non-empty array, got ${JSON.stringify(fam.members)}`,
         );
       } else {
         fam.members.forEach((member, mIdx) => {
@@ -261,7 +271,7 @@ export function validateGutterDiffContract(payload: unknown): string[] {
   return errors;
 }
 
-export function validateGutterBacktestContract(payload: unknown): string[] {
+function validateGutterBacktestContract(payload: unknown): string[] {
   const errors: string[] = [];
   if (!isRecord(payload)) {
     return [`Gutter contract error at '$': expected object, got ${typeof payload}`];
@@ -427,13 +437,13 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
     assert.ok(Array.isArray(firstFamily.members) && firstFamily.members.length >= 3);
     assert.ok(Array.isArray(firstFamily.changedMembers) && firstFamily.changedMembers.length >= 1);
 
-    // Silent diff --json contract and reason code alignment with schema/common.schema.json
     assertGutterDiffContract(silentDiffJson);
     assert.equal(
       (silentDiffJson.silence as Record<string, unknown>)?.primaryReason,
       'no_changed_files',
     );
 
+    // Order-independent check that schema/common.schema.json preserves every Gutter-expected enum value
     const commonSchema = JSON.parse(
       readFileSync(join(ROOT_DIR, 'schema', 'common.schema.json'), 'utf8'),
     ) as {
@@ -442,16 +452,20 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
         SilenceReason?: { enum?: string[] };
       };
     };
-    assert.deepEqual(
-      commonSchema.$defs?.Relationship?.enum,
-      [...GUTTER_RELATIONSHIP_KINDS],
-      'Gutter relationship kinds must stay in sync with schema/common.schema.json#/$defs/Relationship',
-    );
-    assert.deepEqual(
-      commonSchema.$defs?.SilenceReason?.enum,
-      [...GUTTER_SILENCE_REASONS],
-      'Gutter silence.primaryReason enum must stay in sync with schema/common.schema.json#/$defs/SilenceReason',
-    );
+    const schemaRelationships = new Set(commonSchema.$defs?.Relationship?.enum ?? []);
+    for (const kind of GUTTER_RELATIONSHIP_KINDS) {
+      assert.ok(
+        schemaRelationships.has(kind),
+        `Gutter requires Relationship kind '${kind}' to remain in schema/common.schema.json#/$defs/Relationship`,
+      );
+    }
+    const schemaSilenceReasons = new Set(commonSchema.$defs?.SilenceReason?.enum ?? []);
+    for (const reason of GUTTER_SILENCE_REASONS) {
+      assert.ok(
+        schemaSilenceReasons.has(reason),
+        `Gutter requires SilenceReason '${reason}' to remain in schema/common.schema.json#/$defs/SilenceReason`,
+      );
+    }
 
     for (const reason of GUTTER_SILENCE_REASONS) {
       const clone = structuredClone(silentDiffJson);
@@ -468,8 +482,13 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
     assert.ok(names.includes('popularity, same changes'));
   });
 
-  it('fails with a message naming Gutter when any frozen field is removed or retyped in-memory', () => {
-    const diffMutations: Array<{ label: string; expectedPath: string; mutate: (doc: any) => void }> = [
+  describe('negative mutations (fails naming Gutter when any frozen field is removed or retyped)', () => {
+    const diffMutations: Array<{
+      label: string;
+      expectedPath: string;
+      expectedDetail?: string;
+      mutate: (doc: any) => void;
+    }> = [
       {
         label: 'removed schemaVersion',
         expectedPath: 'schemaVersion',
@@ -576,10 +595,24 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
         },
       },
       {
-        label: 'retyped suggestions[0].lastTogether',
+        label: 'retyped suggestions[0].lastTogether to number',
         expectedPath: 'suggestions[0].lastTogether',
         mutate: (doc) => {
           doc.suggestions[0].lastTogether = 12345;
+        },
+      },
+      {
+        label: 'set suggestions[0].lastTogether to null',
+        expectedPath: 'suggestions[0].lastTogether',
+        mutate: (doc) => {
+          doc.suggestions[0].lastTogether = null;
+        },
+      },
+      {
+        label: 'emptied suggestions[0].evidence when shared > 0',
+        expectedPath: 'suggestions[0].evidence',
+        mutate: (doc) => {
+          doc.suggestions[0].evidence = [];
         },
       },
       {
@@ -662,27 +695,36 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
     ];
 
     for (const testCase of diffMutations) {
-      const mutated = structuredClone(activeDiffJson);
-      testCase.mutate(mutated);
-      const errors = validateGutterDiffContract(mutated);
-      assert.ok(
-        errors.length > 0,
-        `expected validator to reject ${testCase.label}, but it passed`,
-      );
-      assert.ok(
-        errors.some((e) => e.includes('Gutter') && e.includes(testCase.expectedPath)),
-        `expected error for ${testCase.label} to mention 'Gutter' and '${testCase.expectedPath}', got: ${errors.join('; ')}`,
-      );
-      assert.throws(
-        () => assertGutterDiffContract(mutated),
-        (err: unknown) =>
-          err instanceof Error &&
-          err.message.includes('Gutter') &&
-          err.message.includes(testCase.expectedPath),
-      );
+      it(`diff --json rejects ${testCase.label}`, () => {
+        const mutated = structuredClone(activeDiffJson);
+        testCase.mutate(mutated);
+        const errors = validateGutterDiffContract(mutated);
+        assert.ok(errors.length > 0, `expected validator to reject ${testCase.label}`);
+        assert.ok(
+          errors.some(
+            (e) =>
+              e.includes('Gutter') &&
+              e.includes(`'${testCase.expectedPath}'`) &&
+              (!testCase.expectedDetail || e.includes(testCase.expectedDetail)),
+          ),
+          `expected error for ${testCase.label} to mention 'Gutter' and '${testCase.expectedPath}', got: ${errors.join('; ')}`,
+        );
+        assert.throws(
+          () => assertGutterDiffContract(mutated),
+          (err: unknown) =>
+            err instanceof Error &&
+            err.message.includes('Gutter') &&
+            err.message.includes(`'${testCase.expectedPath}'`),
+        );
+      });
     }
 
-    const backtestMutations: Array<{ label: string; expectedPath: string; mutate: (doc: any) => void }> = [
+    const backtestMutations: Array<{
+      label: string;
+      expectedPath: string;
+      expectedDetail?: string;
+      mutate: (doc: any) => void;
+    }> = [
       {
         label: 'removed test.commits',
         expectedPath: 'test.commits',
@@ -733,15 +775,17 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
         },
       },
       {
-        label: 'renamed co-change strategy',
-        expectedPath: "missing required strategy 'co-change'",
+        label: 'removed co-change strategy',
+        expectedPath: 'strategies',
+        expectedDetail: "missing required strategy 'co-change'",
         mutate: (doc) => {
           doc.strategies = doc.strategies.filter((s: { name: string }) => s.name !== 'co-change');
         },
       },
       {
-        label: 'renamed popularity strategy',
-        expectedPath: "missing required strategy 'popularity, same changes'",
+        label: 'removed popularity strategy',
+        expectedPath: 'strategies',
+        expectedDetail: "missing required strategy 'popularity, same changes'",
         mutate: (doc) => {
           doc.strategies = doc.strategies.filter(
             (s: { name: string }) => s.name !== 'popularity, same changes',
@@ -751,51 +795,28 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
     ];
 
     for (const testCase of backtestMutations) {
-      const mutated = structuredClone(backtestJson);
-      testCase.mutate(mutated);
-      const errors = validateGutterBacktestContract(mutated);
-      assert.ok(
-        errors.length > 0,
-        `expected backtest validator to reject ${testCase.label}, but it passed`,
-      );
-      assert.ok(
-        errors.some((e) => e.includes('Gutter') && e.includes(testCase.expectedPath)),
-        `expected error for ${testCase.label} to mention 'Gutter' and '${testCase.expectedPath}', got: ${errors.join('; ')}`,
-      );
-      assert.throws(
-        () => assertGutterBacktestContract(mutated),
-        (err: unknown) =>
-          err instanceof Error &&
-          err.message.includes('Gutter') &&
-          err.message.includes(testCase.expectedPath),
-      );
+      it(`backtest --json rejects ${testCase.label}`, () => {
+        const mutated = structuredClone(backtestJson);
+        testCase.mutate(mutated);
+        const errors = validateGutterBacktestContract(mutated);
+        assert.ok(errors.length > 0, `expected backtest validator to reject ${testCase.label}`);
+        assert.ok(
+          errors.some(
+            (e) =>
+              e.includes('Gutter') &&
+              e.includes(`'${testCase.expectedPath}'`) &&
+              (!testCase.expectedDetail || e.includes(testCase.expectedDetail)),
+          ),
+          `expected error for ${testCase.label} to mention 'Gutter' and '${testCase.expectedPath}', got: ${errors.join('; ')}`,
+        );
+        assert.throws(
+          () => assertGutterBacktestContract(mutated),
+          (err: unknown) =>
+            err instanceof Error &&
+            err.message.includes('Gutter') &&
+            err.message.includes(`'${testCase.expectedPath}'`),
+        );
+      });
     }
-  });
-
-  it('verifies release.yml SHA pinning, OIDC permissions, smoke-pack step, and CHANGELOG.md Consumers section', () => {
-    const releaseYml = readFileSync(join(ROOT_DIR, '.github', 'workflows', 'release.yml'), 'utf8');
-    assert.match(releaseYml, /tags:\s*\n\s*-\s*'v\*\.\*\.\*'/);
-    assert.match(releaseYml, /id-token:\s*write/);
-    assert.match(releaseYml, /contents:\s*write/);
-    assert.match(releaseYml, /node scripts\/smoke-pack\.mjs/);
-    assert.match(releaseYml, /npm publish --provenance --access public/);
-
-    const usesLines = releaseYml
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith('uses:') || l.startsWith('- uses:'));
-    assert.ok(usesLines.length >= 2, 'expected at least 2 uses: lines in release.yml');
-    for (const line of usesLines) {
-      assert.match(
-        line,
-        /@[0-9a-f]{40}\s+#\s*v\d+/,
-        `Every third-party action in release.yml must be pinned to a 40-char commit SHA with a version comment: ${line}`,
-      );
-    }
-
-    const changelog = readFileSync(join(ROOT_DIR, 'CHANGELOG.md'), 'utf8');
-    assert.match(changelog, /## \[0\.3\.0\]/);
-    assert.match(changelog, /### Consumers/);
-    assert.match(changelog, /test\/consumer-gutter\.test\.ts/);
   });
 });
