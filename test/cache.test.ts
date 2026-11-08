@@ -8,16 +8,18 @@ import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 import {
   CACHE_DIR_ENV,
   CACHE_FORMAT_SIGNATURE,
+  CACHE_GITIGNORE_FILE,
   CACHE_INDEX_FILE,
   CACHE_LOCK_FILE,
   CACHE_TAG_FILE,
   CACHE_VERSION,
   gitVersion,
   loadCache,
+  serializeRecord,
   writeCache,
   type CacheIndex,
 } from '../src/git/cache.js';
-import { FORMAT, type RawCommit } from '../src/git/log.js';
+import { FORMAT, LogParser, type RawCommit } from '../src/git/log.js';
 import { CACHE_SHALLOW_WARNING } from '../src/model/history.js';
 import { FixtureRepo } from './helpers.js';
 
@@ -268,14 +270,35 @@ describe('RA-04 history cache: integrity, versioning, shallow clones, concurrenc
     assert.equal(warmAfterPatch.meta.cache?.misses, 0);
   });
 
-  it('guards the record format: changing FORMAT requires bumping CACHE_VERSION', () => {
-    // If this assertion fails you changed what `git log` prints: bump CACHE_VERSION in src/git/cache.ts
-    // (and update both values here) so stale records are discarded instead of served.
+  it('guards the record format: changing FORMAT, LogParser, or serializeRecord requires bumping CACHE_VERSION', () => {
+    // If this assertion fails you changed what `git log` prints or how LogParser/serializeRecord
+    // encodes commits: bump CACHE_VERSION in src/git/cache.ts (and update values here) so stale
+    // records are discarded instead of served.
     assert.equal(FORMAT, '--format=\u001e%H\u001f%an\u001f%ae\u001f%at\u001f%ct\u001d%(trailers:only,unfold,separator=%x1d)\u001f%s');
     assert.equal(CACHE_VERSION, 1);
+
+    const parsed: RawCommit[] = [];
+    const parser = new LogParser((c) => parsed.push(c));
+    const h1 = '1'.repeat(40);
+    const h2 = '2'.repeat(40);
+    const rawStream = [
+      `\u001e${h1}\u001fAlice\u001falice@example.com\u001f1700000100\u001f1700000200\u001dCo-authored-by: Claude <noreply@anthropic.com>\u001dSigned-off-by: Alice\u001ffeat: rename & edit\u0000` +
+        `R095\u0000src/old.ts\u0000src/new.ts\u0000M\u0000src/a.ts\u0000`,
+      `\u001e${h2}\u001fBob\u001fbob@example.com\u001f1700000000\u001f1700000050\u001d\u001finit\u0000A\u0000src/a.ts\u0000A\u0000src/old.ts\u0000`,
+    ].join('');
+    for (const token of rawStream.split('\u0000')) parser.push(token);
+    parser.end();
+
+    assert.deepEqual(
+      parsed.map((c) => serializeRecord(c)),
+      [
+        `{"hash":"${h1}","authorName":"Alice","authorEmail":"alice@example.com","authorTime":1700000100,"commitTime":1700000200,"subject":"feat: rename & edit","trailers":[{"key":"co-authored-by","value":"Claude <noreply@anthropic.com>"},{"key":"signed-off-by","value":"Alice"}],"changes":[{"status":"R","oldPath":"src/old.ts","path":"src/new.ts"},{"status":"M","path":"src/a.ts"}]}`,
+        `{"hash":"${h2}","authorName":"Bob","authorEmail":"bob@example.com","authorTime":1700000000,"commitTime":1700000050,"subject":"init","trailers":[],"changes":[{"status":"A","path":"src/a.ts"},{"status":"A","path":"src/old.ts"}]}`,
+      ],
+    );
   });
 
-  it('a shallow clone never writes the cache, re-parses boundary commits, and adds a warning', () => {
+  it('a shallow clone never writes the cache, re-parses boundary commits, and adds a warning only when commits are missed', () => {
     const repo = freshRepo(14);
     const shallowDir = mkdtempSync(join(tmpdir(), 'repo-archaeology-shallow-'));
     tmpDirs.push(shallowDir);
@@ -304,6 +327,11 @@ describe('RA-04 history cache: integrity, versioning, shallow clones, concurrenc
       cachedComparable.meta.warnings = cachedComparable.meta.warnings.filter((w) => w !== CACHE_SHALLOW_WARNING);
       assert.deepEqual(cachedComparable, withoutCache(uncached), `${command[0]}: shallow cached and --no-cache differ`);
     }
+    // When --max-commits stops before the shallow boundary, misses === 0 so no shallow-cache warning is emitted.
+    const shallowAllHits = runJson(['--max-commits', '5', 'scan'], clone, { [CACHE_DIR_ENV]: shared });
+    assert.equal(shallowAllHits.meta.cache?.hits, 5);
+    assert.equal(shallowAllHits.meta.cache?.misses, 0);
+    assert.equal(shallowAllHits.meta.warnings.includes(CACHE_SHALLOW_WARNING), false);
     assert.equal(readFileSync(join(shared, CACHE_INDEX_FILE), 'utf8'), indexBefore, 'shallow clones must not modify a shared cache');
   });
 
@@ -414,6 +442,124 @@ describe('RA-04 history cache: integrity, versioning, shallow clones, concurrenc
         chmodSync(roParent, 0o700);
       }
     }
+  });
+
+  it('rejects a symlinked CACHEDIR.TAG marker without overwriting the external target file', () => {
+    const repo = freshRepo();
+    const externalDir = mkdtempSync(join(tmpdir(), 'repo-archaeology-ext-target-'));
+    tmpDirs.push(externalDir);
+    const externalFile = join(externalDir, 'victim.txt');
+    writeFileSync(externalFile, 'IMPORTANT EXTERNAL DATA\n', 'utf8');
+
+    // 1. Committed CACHEDIR.TAG symlink in .cache/ra configured via .repo-archaeology.json
+    mkdirSync(join(repo.dir, '.cache', 'ra'), { recursive: true });
+    symlinkSync(externalFile, join(repo.dir, '.cache', 'ra', CACHE_TAG_FILE));
+    repo.write('.repo-archaeology.json', JSON.stringify({ cache: { dir: '.cache/ra' } }));
+    repo.git('add', '.cache/ra/CACHEDIR.TAG', '.repo-archaeology.json');
+    repo.git('commit', '-q', '-m', 'chore: add symlinked cache marker');
+
+    const committedRes = runJson(['scan'], repo.dir);
+    assert.equal(readFileSync(externalFile, 'utf8'), 'IMPORTANT EXTERNAL DATA\n', 'external symlink target must remain untouched');
+    assert.ok(
+      committedRes.meta.warnings.some((w) => w.includes('could not be updated')),
+      `expected cache warning, got ${JSON.stringify(committedRes.meta.warnings)}`,
+    );
+
+    // 2. Untracked CACHEDIR.TAG symlink in an external cache directory
+    const untrackedCacheDir = join(externalDir, 'untracked-cache');
+    mkdirSync(untrackedCacheDir, { recursive: true });
+    symlinkSync(externalFile, join(untrackedCacheDir, CACHE_TAG_FILE));
+    const untrackedRes = runJson(['scan'], repo.dir, { [CACHE_DIR_ENV]: untrackedCacheDir });
+    assert.equal(readFileSync(externalFile, 'utf8'), 'IMPORTANT EXTERNAL DATA\n', 'external symlink target must remain untouched');
+    assert.ok(
+      untrackedRes.meta.warnings.some((w) => w.includes('could not be updated (the cache directory contains a symbolic link)')),
+      `expected symlink warning, got ${JSON.stringify(untrackedRes.meta.warnings)}`,
+    );
+  });
+
+  it('ignores forged git-tracked cache records in the repository and preserves real co-change results', async () => {
+    const repo = new FixtureRepo();
+    repos.push(repo);
+    repo.commit({ message: 'init', write: { 'src/a.ts': 'a0\n', 'src/b.ts': 'b0\n' } });
+    for (let i = 1; i <= 4; i++) {
+      repo.touch(['src/a.ts', 'src/b.ts'], `feat: cochange ${i}`);
+    }
+
+    const uncachedBefore = runJson(['--no-cache', 'scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    const baselineRels = uncachedBefore.relationships as Array<{ from: string; to: string; shared: number }>;
+    assert.ok(baselineRels.length > 0, 'expected real co-change relationship between src/a.ts and src/b.ts');
+    assert.equal(baselineRels[0]!.shared, 5);
+
+    // Build a forged cache with real commit hashes and valid SHA-256 checksums, but with src/b.ts stripped from changes.
+    const hashes = repo.git('rev-list', 'HEAD').trim().split('\n');
+    const ver = await gitVersion(repo.dir);
+    const forgedRecords: RawCommit[] = hashes.map((hash, i) => ({
+      hash,
+      authorName: 'Attacker',
+      authorEmail: 'attacker@example.com',
+      authorTime: 1_700_000_000 + i,
+      commitTime: 1_700_000_000 + i,
+      subject: `forged ${i}`,
+      trailers: [],
+      changes: [{ status: 'M', path: 'src/a.ts' }], // src/b.ts omitted to hide relationship
+    }));
+
+    const inRepoCacheDir = join(repo.dir, '.cache', 'ra');
+    await writeCache(inRepoCacheDir, {
+      mode: 'rebuild',
+      records: forgedRecords,
+      gitVersion: ver,
+      raVersion: '0.3.0',
+      reachable: async () => new Set(hashes),
+    });
+    // Remove .gitignore so git tracks the forged cache artifacts, then commit them with .repo-archaeology.json
+    rmSync(join(inRepoCacheDir, CACHE_GITIGNORE_FILE), { force: true });
+    repo.write('.repo-archaeology.json', JSON.stringify({ cache: { dir: '.cache/ra' } }));
+    repo.git('add', '-f', '.cache/ra', '.repo-archaeology.json');
+    repo.git('commit', '-q', '-m', 'chore: commit forged cache');
+
+    const cachedScan = runJson(['scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    const uncachedScan = runJson(['--no-cache', 'scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    assert.ok(
+      cachedScan.meta.warnings.some((w) => w.includes('could not be updated (the directory contains git-tracked files)')),
+      `expected tracked-cache warning, got ${JSON.stringify(cachedScan.meta.warnings)}`,
+    );
+    assert.equal(cachedScan.meta.cache?.hits, 0, 'forged tracked cache records must never be counted as hits');
+    assert.deepEqual(cachedScan.relationships, uncachedScan.relationships, 'forged tracked cache must not alter scan relationships');
+
+    // Also verify --head HEAD rejects the tracked cache files in the commit tree
+    const cachedHeadScan = runJson(['--head', 'HEAD', 'scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    assert.equal(cachedHeadScan.meta.cache?.hits, 0);
+    assert.deepEqual(cachedHeadScan.relationships, uncachedScan.relationships);
+  });
+
+  it('excludes generated in-repository cache files from git status and working-tree diff analysis', () => {
+    const repo = freshRepo();
+    repo.write('.repo-archaeology.json', JSON.stringify({ cache: { dir: '.cache/ra' } }));
+    repo.git('add', '.repo-archaeology.json');
+    repo.git('commit', '-q', '-m', 'chore: configure in-repo cache dir');
+
+    const uncachedDiff = runJson(['--no-cache', 'diff'], repo.dir);
+    assert.deepEqual(uncachedDiff.changed, []);
+    assert.equal((uncachedDiff.silence as { primaryReason?: string } | undefined)?.primaryReason, 'no_changed_files');
+
+    // First cached diff (cold: creates .cache/ra/CACHEDIR.TAG, .gitignore, commits-1.jsonl, index.json)
+    const coldDiff = runJson(['diff'], repo.dir);
+    assert.equal(coldDiff.meta.cache?.dir, '.cache/ra');
+    assert.ok(existsSync(join(repo.dir, '.cache', 'ra', CACHE_GITIGNORE_FILE)));
+    assert.deepEqual(coldDiff.changed, [], 'generated cache files must not appear in diff.changed');
+    assert.equal((coldDiff.silence as { primaryReason?: string } | undefined)?.primaryReason, 'no_changed_files');
+    assert.deepEqual(withoutCache(coldDiff), withoutCache(uncachedDiff));
+
+    // Second cached diff (warm: .cache/ra already populated on disk when diff starts)
+    const warmDiff = runJson(['diff'], repo.dir);
+    assert.equal(warmDiff.meta.cache?.misses, 0);
+    assert.deepEqual(warmDiff.changed, []);
+    assert.equal((warmDiff.silence as { primaryReason?: string } | undefined)?.primaryReason, 'no_changed_files');
+    assert.deepEqual(withoutCache(warmDiff), withoutCache(uncachedDiff));
+
+    // git status --porcelain must remain completely clean
+    assert.equal(repo.git('status', '--porcelain').trim(), '');
   });
 });
 

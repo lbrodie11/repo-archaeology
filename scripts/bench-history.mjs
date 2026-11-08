@@ -165,9 +165,9 @@ function newState() {
   return { random, files, clusters, clusterOf, n: 0, head: '' };
 }
 
-function timeRun(cwd, cmdArgs, cacheDir) {
+function timeRun(cwd, cmdArgs, cacheDir, maxCommitsOverride = MAX_COMMITS) {
   const start = process.hrtime.bigint();
-  const r = spawnSync(process.execPath, [CLI, ...cmdArgs, '--max-commits', String(MAX_COMMITS), '--json'], {
+  const r = spawnSync(process.execPath, [CLI, ...cmdArgs, '--max-commits', String(maxCommitsOverride), '--json'], {
     cwd,
     encoding: 'utf8',
     env: { ...gitEnv, NO_COLOR: '1', REPO_ARCHAEOLOGY_CACHE_DIR: cacheDir },
@@ -182,23 +182,24 @@ function timeRun(cwd, cmdArgs, cacheDir) {
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const fmt = (ms) => `${(ms / 1000).toFixed(2)} s`;
 
-const API = join(ROOT, 'dist', 'api', 'index.js');
 const LOG = join(ROOT, 'dist', 'git', 'log.js');
 const CACHE = join(ROOT, 'dist', 'git', 'cache.js');
 const HISTORY = join(ROOT, 'dist', 'model', 'history.js');
 /**
- * Measures the raw-history loading stage breakdown (git rev-list, cache read+parse,
+ * Measures the raw-history loading stage breakdown (git rev-list, cache scan+parse,
  * and HistoryBuilder) vs uncached `readLog` (`git log --name-status`).
  */
-function timeRawStages(cwd, cacheDir) {
+function timeRawStages(cwd, cacheDir, maxCommits = MAX_COMMITS) {
   const script = `
+    import { statSync } from 'node:fs';
+    import { join } from 'node:path';
     import { readLog, listLogHashes } from ${JSON.stringify(pathToFileURL(LOG).href)};
-    import { gitVersion, loadCache, parseCachedRecord } from ${JSON.stringify(pathToFileURL(CACHE).href)};
+    import { gitVersion, scanCachedCommits, parseCachedRecord } from ${JSON.stringify(pathToFileURL(CACHE).href)};
     import { HistoryBuilder } from ${JSON.stringify(pathToFileURL(HISTORY).href)};
 
     const root = ${JSON.stringify(cwd)};
     const cacheDir = ${JSON.stringify(cacheDir)};
-    const maxCommits = ${MAX_COMMITS};
+    const maxCommits = ${maxCommits};
 
     // 1. Uncached git log --name-status + LogParser
     const t0 = performance.now();
@@ -206,18 +207,21 @@ function timeRawStages(cwd, cacheDir) {
     await readLog(root, { maxCommits }, () => { count++; });
     const gitLogMs = performance.now() - t0;
 
-    // 2. Warm cache: git rev-list + loadCache + parseCachedRecord
+    // 2. Warm cache: git rev-list + scanCachedCommits + parseCachedRecord
     const ver = await gitVersion(root);
     const t1 = performance.now();
     const hashes = await listLogHashes(root, { maxCommits });
     const revListMs = performance.now() - t1;
 
     const t2 = performance.now();
-    const loaded = loadCache(cacheDir, ver);
+    const scanned = scanCachedCommits(cacheDir, ver, hashes, new Set());
     const parsed = [];
-    for (const h of hashes) {
-      const line = loaded.lines.get(h);
-      if (line) parsed.push(parseCachedRecord(line, h));
+    for (let i = 0; i < hashes.length; i++) {
+      const bufIdx = scanned.segOf[i];
+      if (bufIdx >= 0) {
+        const line = scanned.buffers[bufIdx].toString('utf8', scanned.startOf[i], scanned.endOf[i]);
+        parsed.push(parseCachedRecord(line, hashes[i]));
+      }
     }
     const cacheReadParseMs = performance.now() - t2;
 
@@ -228,8 +232,9 @@ function timeRawStages(cwd, cacheDir) {
     builder.finish();
     const builderMs = performance.now() - t3;
 
+    const bytes = scanned.index.segments.reduce((n, s) => n + (s.bytes ?? statSync(join(cacheDir, s.file)).size), 0);
     const rssMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-    process.stdout.write(JSON.stringify({ count, gitLogMs, revListMs, cacheReadParseMs, warmRawMs: revListMs + cacheReadParseMs, builderMs, bytes: loaded.bytes, rssMb }));
+    process.stdout.write(JSON.stringify({ count, gitLogMs, revListMs, cacheReadParseMs, warmRawMs: revListMs + cacheReadParseMs, builderMs, bytes, rssMb }));
   `;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd,
@@ -276,9 +281,35 @@ async function main() {
       }
       rows.push({ command: command[0], results, last });
     }
-    // Ensure the warm cache is populated for all current commits before measuring raw stages.
+    // Ensure the warm cache is populated for all current commits in a single compacted segment before measuring stages and bounded --max-commits.
+    rmSync(cacheDir, { recursive: true, force: true });
     timeRun(repo, ['diff'], cacheDir);
     const stages = timeRawStages(repo, cacheDir);
+
+    const boundedRows = [];
+    for (const maxC of [5000, 500]) {
+      for (const cmd of ['diff', 'backtest']) {
+        const noCacheTimes = [];
+        const warmTimes = [];
+        let hits = 0;
+        for (let rep = 0; rep < REPEATS; rep++) {
+          noCacheTimes.push(timeRun(repo, ['--no-cache', cmd], cacheDir, maxC).ms);
+          const w = timeRun(repo, [cmd], cacheDir, maxC);
+          warmTimes.push(w.ms);
+          hits = w.cache.hits;
+        }
+        const rawSub = timeRawStages(repo, cacheDir, maxC);
+        boundedRows.push({
+          maxCommits: maxC,
+          command: cmd,
+          noCacheMs: median(noCacheTimes),
+          warmMs: median(warmTimes),
+          hits,
+          rawGitLogMs: rawSub.gitLogMs,
+          rawWarmMs: rawSub.warmRawMs,
+        });
+      }
+    }
 
     console.log('| Command (end-to-end CLI) | --no-cache | Cold (empty cache) | Warm (no new commits) | Warm + 100 new commits | Cold ÷ Warm |');
     console.log('| :--- | ---: | ---: | ---: | ---: | ---: |');
@@ -287,6 +318,15 @@ async function main() {
       const warm = median(results.warm);
       console.log(
         `| \`${command}\` | ${fmt(median(results.noCache))} | ${fmt(cold)} (${last.cold.cache.misses} misses) | ${fmt(warm)} (${last.warm.cache.hits} hits) | ${fmt(median(results.warm100))} (${last.warm100.cache.misses} misses) | ${(cold / warm).toFixed(1)}× |`,
+      );
+    }
+    console.log('');
+    console.log('Bounded `--max-commits` against warm 20k-commit cache (`O(maxCommits)` prefix scan vs `--no-cache`):\n');
+    console.log('| Command | `--max-commits` | `--no-cache` (CLI) | Warm 20k cache (CLI) | Raw `git log` | Raw warm scan+parse | Raw speedup |');
+    console.log('| :--- | ---: | ---: | ---: | ---: | ---: | ---: |');
+    for (const b of boundedRows) {
+      console.log(
+        `| \`${b.command}\` | ${b.maxCommits} | ${fmt(b.noCacheMs)} | ${fmt(b.warmMs)} (${b.hits} hits) | ${fmt(b.rawGitLogMs)} | ${fmt(b.rawWarmMs)} | ${(b.rawGitLogMs / b.rawWarmMs).toFixed(1)}× |`,
       );
     }
     console.log('');

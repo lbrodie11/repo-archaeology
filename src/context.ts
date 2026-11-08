@@ -12,7 +12,7 @@ import {
   type Settings,
 } from './config.js';
 import { workingTreeChanges } from './git/changes.js';
-import { readShallowBoundary, resolveCacheLocation, type CacheSettings } from './git/cache.js';
+import { hasTrackedCacheFiles, readShallowBoundary, resolveCacheLocation, type CacheSettings } from './git/cache.js';
 import {
   findRepoRoot,
   hasCommits,
@@ -114,9 +114,15 @@ export interface Context {
   historyCache?: HistoryCacheOptions | false;
 }
 
+export function isInsideCacheDir(path: string, inRepoDir?: string): boolean {
+  return inRepoDir !== undefined && (path === inRepoDir || path.startsWith(`${inRepoDir}/`));
+}
+
 /**
  * Resolves the history cache for this run. Shallow clones read valid records but never write,
  * and their shallow-boundary commits (which git reports as root commits) are always re-parsed.
+ * In-repository cache directories that contain git-tracked files are marked unusable so committed
+ * repository artifacts can never be trusted as cache records.
  */
 async function resolveHistoryCache(
   root: string,
@@ -124,12 +130,24 @@ async function resolveHistoryCache(
   flags: CacheSettings | undefined,
   shallow: boolean,
   signal?: AbortSignal,
+  headTreeFiles?: ReadonlySet<string>,
 ): Promise<HistoryCacheOptions | false> {
   const location = await resolveCacheLocation(root, { file, flags, env: process.env, signal });
   if (!location.enabled || location.dir === undefined) return false;
+  let unusableReason: string | undefined;
+  if (location.inRepoDir !== undefined) {
+    const trackedInHeadTree =
+      headTreeFiles !== undefined &&
+      [...headTreeFiles].some((p) => isInsideCacheDir(p, location.inRepoDir));
+    if (trackedInHeadTree || (await hasTrackedCacheFiles(root, location.inRepoDir, { signal }))) {
+      unusableReason = 'the directory contains git-tracked files';
+    }
+  }
   return {
     dir: location.dir,
     ...(location.display !== undefined ? { display: location.display } : {}),
+    ...(location.inRepoDir !== undefined ? { inRepoDir: location.inRepoDir } : {}),
+    ...(unusableReason !== undefined ? { unusableReason } : {}),
     writable: !shallow,
     ...(shallow ? { shallowBoundary: await readShallowBoundary(root, { signal }) } : {}),
     raVersion: getToolVersion(),
@@ -340,15 +358,20 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
 
     if (emitStderrProgress) progress('Reading git history…');
+    const historyCache = await resolveHistoryCache(root, fileConfig.cache, flags.cache, shallow, signal, currentFiles);
+    const activeInRepoCacheDir = historyCache && !historyCache.unusableReason ? historyCache.inRepoDir : undefined;
+    const filteredWtChanges =
+      activeInRepoCacheDir !== undefined
+        ? wtChanges.filter((c) => !isInsideCacheDir(c.path, activeInRepoCacheDir))
+        : wtChanges;
     const extraWarnings: string[] = [];
     if (configWarning !== undefined) extraWarnings.push(configWarning);
     if (headVerdictsRes.warning !== undefined) extraWarnings.push(headVerdictsRes.warning);
     if (baseVerdictsRes.warning !== undefined && baseVerdictsRes.warning !== headVerdictsRes.warning) {
       extraWarnings.push(baseVerdictsRes.warning);
     }
-    if (wtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
+    if (filteredWtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
     for (const w of activeVerdicts.warnings) extraWarnings.push(w);
-    const historyCache = await resolveHistoryCache(root, fileConfig.cache, flags.cache, shallow, signal);
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings, {
       onProgress: options?.onProgress,
       signal,
@@ -418,6 +441,13 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     listCurrentFiles(root),
   ]);
   if (signal?.aborted) throw createAbortError(signal);
+
+  const activeInRepoCacheDir = historyCache && !historyCache.unusableReason ? historyCache.inRepoDir : undefined;
+  if (activeInRepoCacheDir !== undefined) {
+    for (const p of [...currentFiles]) {
+      if (isInsideCacheDir(p, activeInRepoCacheDir)) currentFiles.delete(p);
+    }
+  }
 
   const bridgeIgnores = new PathMatcher(trained.ignores);
   const files = workingTreeFiles(root, currentFiles);
