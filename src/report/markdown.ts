@@ -174,6 +174,56 @@ function renderSuggestionBlock(
     const attr = metaParts.length > 0 ? ` (${metaParts.join(', ')})` : '';
     lines.push(`   - **${label}**${attr}: ${escapeMarkdownInline(s.verdict.reason, 300)}`);
   }
+  if (s.codeowners && s.codeowners.length > 0) {
+    const provLabel =
+      s.ownersSample?.codeownersSource === 'base'
+        ? 'base CODEOWNERS'
+        : s.ownersSample?.codeownersSource === 'head'
+          ? 'head CODEOWNERS'
+          : 'CODEOWNERS';
+    const handles = s.codeowners.map((h) => escapeMarkdownInline(h, 140)).join(', ');
+    lines.push(`   - **Designated code owners** (${provLabel}): ${handles}`);
+  }
+  if (s.owners !== undefined) {
+    const sample = s.ownersSample;
+    const lookbackDays = sample?.lookbackDays ?? 365;
+    const qualifying = sample?.qualifyingCommits ?? s.owners.reduce((sum, o) => sum + o.commits, 0);
+    const metaNotes: string[] = [];
+    if (sample && sample.agentAssistedCommits > 0) {
+      metaNotes.push(`${plural(sample.agentAssistedCommits, 'AI-assisted commit')} included`);
+    }
+    if (sample?.incompleteCoverage) {
+      metaNotes.push('incomplete history coverage');
+    }
+    const notesSuffix = metaNotes.length > 0 ? `, ${metaNotes.join(', ')}` : '';
+    if (s.owners.length === 0) {
+      lines.push(
+        `   - **People who may have context:** no qualifying recent human changes in the last ${lookbackDays}d${notesSuffix}.`,
+      );
+    } else if (qualifying <= 1) {
+      const o = s.owners[0]!;
+      const loginPart = o.login ? ` (${escapeMarkdownInline(o.login, 40)})` : '';
+      lines.push(
+        `   - **People who may have context** _(limited sample: 1 qualifying recent change in ${lookbackDays}d${notesSuffix})_: ` +
+          `${escapeMarkdownInline(o.name, 120)}${loginPart} (1 of 1 change, last ${escapeMarkdownInline(o.lastDate, 16)}) — ` +
+          `_Historical activity suggests familiarity, not current ownership or availability._`,
+      );
+    } else {
+      const people = s.owners
+        .map((o) => {
+          const loginPart = o.login ? ` (${escapeMarkdownInline(o.login, 40)})` : '';
+          return (
+            `${escapeMarkdownInline(o.name, 120)}${loginPart} ` +
+            `(contributed to ${o.commits} of ${qualifying} qualifying recent changes, last ${escapeMarkdownInline(o.lastDate, 16)})`
+          );
+        })
+        .join('; ');
+      lines.push(
+        `   - **People who may have context** (${lookbackDays}d window${notesSuffix}): ${people} — ` +
+          `_Historical activity suggests familiarity, not current ownership or availability._`,
+      );
+    }
+  }
 
   const topCommits = s.evidence.slice(0, 3);
   for (const ev of topCommits) {

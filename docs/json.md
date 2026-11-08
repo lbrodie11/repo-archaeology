@@ -95,8 +95,12 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
 | `verdicts` | `{ loaded, active, expired, file }` | Optional (always emitted since RA-11) | Summary of `.repo-archaeology.verdicts.json`: total `loaded` entries, `active` entries, `expired` (`until < today`) entries, and `file: ".repo-archaeology.verdicts.json"`. |
+<<<<<<< HEAD
 | `imports` | `ImportsCoverageMeta` | Optional | Import resolution coverage and unresolved diagnostics for commands that perform import classification (`scan`, `diff`, `file`, `map`, `explain`, `imports`, and bare `repo-archaeology`). Omitted on `backtest`. |
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
+=======
+| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`, `owners`). |
+>>>>>>> 3f4fc84 (feat(owners): add historical contributor context and CODEOWNERS (RA-12))
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 | `cache` | `{ enabled: boolean, hits: integer, misses: integer, dir?: string }` | Optional (always emitted by the CLI since RA-04) | History cache usage for this run (`common.schema.json#/$defs/CacheMeta`). `hits` counts needed commits served from the persistent raw-commit cache; `misses` counts commits parsed from `git log` in this run (all of them when `enabled: false`, i.e. `--no-cache`). `dir` is relative to the repository root with POSIX separators, or the literal `"$REPO_ARCHAEOLOGY_CACHE_DIR"` when that environment variable chose the directory; it is never an absolute path and is omitted when no relative path exists (e.g. another drive on Windows). Cached and `--no-cache` runs are otherwise identical, so consumers comparing outputs should exclude `meta.cache`. Cache rebuilds (corruption, checksum mismatch, version change) and read-only shallow clones add a message to `warnings`. |
 
@@ -150,6 +154,22 @@ Commands that inspect JS/TS imports (`scan`, `diff`, `file`, `map`, `explain`, `
 - **`sourceUnavailable` (`integer`):** Supported JS/TS files in `scope` whose source contents could not be read (e.g., missing blob or exceeding `MAX_SOURCE_BYTES`).
 - **`heuristicEdges` (`integer`):** Internal edges in `scope` resolved via a heuristic fallback (such as an unconfigured `"source"` export condition, `dist/` → `src/` build-output remapping without a matching `tsconfig` `outDir`/`rootDir`, or a nested `package.json` in a repository with no explicit workspace manifest). For example, on `shadcn-ui`, all `441` workspace `exports` edges resolve via `dist/` → `src/` fallback and are counted in `heuristicEdges: 441` (and surfaced as `(441 heuristic)` in the human `repo-archaeology imports` terminal summary).
 - **`unresolvedByReason` (`Partial<Record<ImportUnresolvedReasonCode, integer>>`, optional):** Non-zero counts of unresolved specifiers grouped by `reasonCode` (`"alias-unmatched"`, `"unknown-package"`, `"target-missing"`, `"not-exported"`, `"invalid-target"`, `"unsupported-config"`, `"ambiguous-package"`). When a bare specifier matches an in-repo `package.json` `name` that is not in an active workspace, it is never silently treated as `"external"` even if listed in `dependencies`: unparseable/conflicting workspace manifests report `"unsupported-config"`, and packages excluded from a valid workspace manifest report `"unknown-package"`.
+
+#### 5.1.4 Historical Contributor Context and `CODEOWNERS` (`--owners`, `common.schema.json#/$defs/SuggestionOwner`)
+
+When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is enabled on `diff` (or bare `repo-archaeology` in `diff` mode), each `DiffSuggestion` in `suggestions[]` is enriched with optional contributor and `CODEOWNERS` context for the suggested companion file (`to`):
+
+- **`owners`: `SuggestionOwner[]`** (`{ name: string, login?: string, commits: integer, lastDate: string }`):
+  - Aggregates up to `owners.max` (default `3`, `1..5`) human contributors across up to `owners.maxCommits` (default `100`, `1..1000`) recent commits touching the canonical `to` file identity (following renames) within `owners.lookbackDays` (default `365`, `1..3650`) relative to the analyzed snapshot's reference committer timestamp.
+  - Canonicalizes contributor identities via `.mailmap` (`gitmailmap(5)` forms 1–4) loaded from the analyzed revision (so a newer working-tree `.mailmap` never rewrites `--head` or `--base` historical attribution) while keeping raw `evidence[].author`, `file` `authors`, and `origin` unchanged.
+  - Excludes bot-authored and non-human coding-agent commits while including human-authored, agent-assisted commits.
+  - Infers optional `login` strictly from GitHub noreply email formats (`ID+USERNAME@users.noreply.github.com` and `USERNAME@users.noreply.github.com`, falling back to raw commit emails when `.mailmap` maps to a corporate address) and omits conflicting or ambiguous logins.
+  - Never emits raw or canonical email addresses in any field.
+- **`ownersSample`: `SuggestionOwnersSample`**:
+  - Auditable sample summary: `{ qualifyingCommits, lookbackDays, maxCommits, fromDate, toDate, agentAssistedCommits, excludedNonHumanCommits, incompleteCoverage, codeownersSource?, codeownersFile? }`.
+- **`codeowners`: `string[]`** (optional):
+  - Matching `@user` and `@org/team` handles from `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS` (read from `merge-base` when `--base` is passed, `<head>` when `--head` is passed without `--base`, and the working tree otherwise), using case-sensitive last-valid-match precedence. Email-based `CODEOWNERS` entries are skipped without exposing their email.
+  - Rendered Markdown and terminal output insert a zero-width space (`\u200B`) after `@` in handles so copying output into a pull-request comment never triggers accidental GitHub notifications.
 
 ---
 

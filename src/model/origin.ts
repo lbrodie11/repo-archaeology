@@ -285,6 +285,17 @@ export function classifyCommitOrigin(commit: CommitIdentityInput, config?: Origi
 }
 
 /**
+ * Returns true when an author identity (`authorName` / `authorEmail`, ignoring commit trailers)
+ * does not match any configured or default agent-author or bot pattern.
+ */
+export function isHumanAuthorIdentity(
+  identity: { authorName?: string; authorEmail?: string },
+  config?: OriginConfig,
+): boolean {
+  return classifyCommitOrigin({ authorName: identity.authorName, authorEmail: identity.authorEmail }, config) === 'human';
+}
+
+/**
  * Converts raw `{ human, agent, bot }` commit counts into 3-decimal fractions
  * guaranteed to sum to 1 (when total > 0) using the Largest Remainder Method.
  */

@@ -14,7 +14,18 @@ import { listLogHashes, readCommitsByHash, readLog, type LogOptions, type RawCom
 import { hasParentCommit } from '../git/repo.js';
 import { GitError } from '../git/run.js';
 import { PathMatcher } from '../util/glob.js';
-import { createOriginClassifier, type CommitOrigin, type OriginClassifier, type OriginConfig } from './origin.js';
+import {
+  createOriginClassifier,
+  isHumanAuthorIdentity,
+  type CommitOrigin,
+  type OriginClassifier,
+  type OriginConfig,
+} from './origin.js';
+import {
+  loadCommitTreeMailmap,
+  loadWorkingTreeMailmap,
+  type Mailmap,
+} from './owners.js';
 
 export interface CommitFileChange {
   /** First letter of git's name-status code in this commit (A, M, D, R, C, T, etc.). */
@@ -32,6 +43,16 @@ export interface HistoryCommit {
   author: string;
   /** Normalized author email when present in git log, used for same-author matching. */
   authorEmail?: string;
+  /** Raw unmapped git author name (`%an`), preserved for ownership attribution. */
+  rawAuthorName?: string;
+  /** Raw unmapped git author email (`%ae`, lower-cased), preserved for GitHub noreply login inference. */
+  rawAuthorEmail?: string;
+  /** Mailmap-canonicalized author name at the analyzed revision, used for contributor aggregation. */
+  canonicalAuthor?: string;
+  /** Mailmap-canonicalized author email (lower-cased) at the analyzed revision, used for contributor aggregation. */
+  canonicalEmail?: string;
+  /** True when the commit's author identity (raw and mailmapped) is human rather than a bot or non-human coding agent. */
+  humanAuthor?: boolean;
   /** Author time, for display ("last changed together 18 days ago"). */
   time: number;
   /** Committer time, for chronological ordering (backtests). */
@@ -66,6 +87,8 @@ export interface HistoryStats {
   truncatedBySince?: boolean;
   oldestTime?: number;
   newestTime?: number;
+  /** Committer timestamp of the analyzed head/baseline tip commit (used as the lookback reference time). */
+  referenceCommitTime?: number;
 }
 
 export interface History {
@@ -120,6 +143,8 @@ export interface HistoryOptions extends LogOptions {
   skipCommits?: RegExp;
   /** Commit origin classification overrides. */
   origin?: OriginConfig;
+  /** Revision-specific `.mailmap` resolver for canonical contributor identity aggregation. */
+  mailmap?: Mailmap;
   /** Optional callback invoked as commits are streamed from git log. */
   onProgress?: (commitsRead: number) => void;
   /**
@@ -129,7 +154,7 @@ export interface HistoryOptions extends LogOptions {
   cache?: HistoryCacheOptions | false;
 }
 
-type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin'>;
+type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin' | 'mailmap'>;
 
 /** Separates a path from the lifetime marker of an earlier, deleted file at that path. */
 const LIFETIME_SEPARATOR = '\u0000';
@@ -252,6 +277,9 @@ export class HistoryBuilder {
   add(commit: RawCommit): void {
     const stats = this.stats;
     const logOrder = stats.commitsRead;
+    if (stats.commitsRead === 0) {
+      stats.referenceCommitTime = commit.commitTime;
+    }
     stats.commitsRead++;
     // Renames must be tracked even for skipped commits, or older history would be orphaned.
     const names = this.renames.apply(commit);
@@ -271,13 +299,32 @@ export class HistoryBuilder {
         ...(change.oldPath !== undefined ? { oldPath: change.oldPath } : {}),
       };
     });
+    const rawName = commit.authorName.trim();
     const email = commit.authorEmail.trim().toLowerCase();
+    const resolvedMailmap = this.options.mailmap
+      ? this.options.mailmap.resolve(commit.authorName, commit.authorEmail)
+      : {
+          name: (commit.mailmapName ?? commit.authorName).trim(),
+          email: (commit.mailmapEmail ?? commit.authorEmail).trim().toLowerCase(),
+        };
     const origin = this.classifyOrigin(commit);
+    const humanAuthor =
+      origin !== 'bot' &&
+      isHumanAuthorIdentity({ authorName: rawName, authorEmail: email }, this.options.origin) &&
+      isHumanAuthorIdentity(
+        { authorName: resolvedMailmap.name, authorEmail: resolvedMailmap.email },
+        this.options.origin,
+      );
     const entry: HistoryCommit = {
       hash: commit.hash,
       logOrder,
       author: commit.authorName || commit.authorEmail,
       ...(email ? { authorEmail: email } : {}),
+      rawAuthorName: rawName,
+      ...(email ? { rawAuthorEmail: email } : {}),
+      canonicalAuthor: resolvedMailmap.name,
+      ...(resolvedMailmap.email ? { canonicalEmail: resolvedMailmap.email } : {}),
+      humanAuthor,
       time: commit.authorTime,
       commitTime: commit.commitTime,
       subject: commit.subject,
@@ -344,9 +391,19 @@ export function processCommits(raw: Iterable<RawCommit>, options: BuilderOptions
 }
 
 export async function loadHistory(root: string, options: HistoryOptions): Promise<History> {
-  if (options.cache) return loadHistoryCached(root, options, options.cache);
-  const history = await loadHistoryFromLog(root, options);
-  if (options.cache === false) {
+  const resolvedOptions: HistoryOptions =
+    options.mailmap !== undefined
+      ? options
+      : {
+          ...options,
+          mailmap:
+            options.rev !== undefined && options.rev !== 'HEAD'
+              ? await loadCommitTreeMailmap(root, options.rev, undefined, options.signal)
+              : loadWorkingTreeMailmap(root),
+        };
+  if (resolvedOptions.cache) return loadHistoryCached(root, resolvedOptions, resolvedOptions.cache);
+  const history = await loadHistoryFromLog(root, resolvedOptions);
+  if (resolvedOptions.cache === false) {
     history.cache = { enabled: false, hits: 0, misses: history.stats.commitsRead, warnings: [] };
   }
   return history;

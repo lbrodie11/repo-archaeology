@@ -106,13 +106,25 @@ interface GlobalOptions {
   halfLife?: number;
   skipCommits?: string;
   originWeights?: OriginWeights;
+  owners?: boolean;
   ignore?: string[];
   defaultIgnores: boolean;
   cache: boolean;
   json?: boolean;
 }
 
-function settingsFrom(opts: GlobalOptions): Partial<Settings> {
+function resolveOwnersFlag(cmd?: Command): boolean | undefined {
+  if (cmd && cmd.getOptionValueSource('owners') === 'cli') {
+    return Boolean(cmd.opts<{ owners?: boolean }>().owners);
+  }
+  if (program.getOptionValueSource('owners') === 'cli') {
+    return Boolean(program.opts<{ owners?: boolean }>().owners);
+  }
+  return undefined;
+}
+
+function settingsFrom(opts: GlobalOptions, cmd?: Command): Partial<Settings> {
+  const ownersFlag = resolveOwnersFlag(cmd);
   return {
     maxCommits: opts.maxCommits,
     since: opts.since,
@@ -122,6 +134,7 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
     halfLifeDays: opts.halfLife,
     skipCommits: opts.skipCommits,
     origin: opts.originWeights !== undefined ? { weights: opts.originWeights } : undefined,
+    owners: ownersFlag !== undefined ? { enabled: ownersFlag } : undefined,
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
     cache: opts.cache === false ? { enabled: false } : undefined,
@@ -150,6 +163,8 @@ program
   .option('--min-confidence <p>', 'minimum confidence, 0-1 or a percentage (default 0.4)', fraction)
   .option('--half-life <days>', 'weight recent commits more: a commit this many days old counts half', positiveNumber)
   .option('--origin-weights <spec>', 'weight commits by origin, e.g. "bot=0,agent=0.5" (values 0..1)', originWeightsValue)
+  .option('--owners', 'include recent human contributor context and CODEOWNERS on diff suggestions')
+  .option('--no-owners', 'disable contributor context and CODEOWNERS on diff suggestions')
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
@@ -187,6 +202,8 @@ program
   .addOption(new Option('--format <format>', 'output format for stdout').choices(['text', 'markdown']).default('text'))
   .option('--json-out <file>', 'also write the versioned JSON result to <file> in the same run')
   .option('--apply-branch-verdicts', 'apply verdicts added or changed on this branch before merging (when using --base)')
+  .option('--owners', 'include recent human contributor context and CODEOWNERS on diff suggestions')
+  .option('--no-owners', 'disable contributor context and CODEOWNERS on diff suggestions')
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
   .action(
     async (
@@ -197,6 +214,7 @@ program
         format: 'text' | 'markdown';
         jsonOut?: string;
         applyBranchVerdicts?: boolean;
+        owners?: boolean;
         exitCode?: boolean;
       },
       cmd: Command,
@@ -210,8 +228,9 @@ program
       if (opts.jsonOut !== undefined) {
         validateJsonOutPath(opts.jsonOut);
       }
-      const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-      const result = await createRepository(ctx).diff(opts);
+      const ownersFlag = resolveOwnersFlag(cmd);
+      const ctx = await loadContext(global.cwd, settingsFrom(global, cmd), { base: opts.base, head: global.head });
+      const result = await createRepository(ctx).diff({ ...opts, owners: ownersFlag });
       if (opts.jsonOut !== undefined) {
         writeJsonContractFile(opts.jsonOut, result);
       }
@@ -432,12 +451,13 @@ program.action(async () => {
     program.error(`error: unknown command '${terminalText(unexpected)}'${suggestion ? `\n(Did you mean ${suggestion}?)` : ''}`, { exitCode: 2, code: 'commander.unknownCommand' });
   }
   const global = program.opts<GlobalOptions>();
+  const ownersFlag = resolveOwnersFlag();
   const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
   let changedWithoutHistory = 0;
   if (!ctx.head) {
     const changes = await workingTreeChanges(ctx.root);
     if (changes.length > 0) {
-      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
+      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS], owners: ownersFlag }, changes);
       if (result.changed.some((file) => file.hasHistory)) {
         if (global.json) printJson({ mode: 'diff', ...result });
         else printDiff(result);
