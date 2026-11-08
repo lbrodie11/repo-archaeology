@@ -20,6 +20,9 @@
     "tool": {
       "$ref": "common.schema.json#/$defs/ToolInfo"
     },
+    "meta": {
+      "$ref": "common.schema.json#/$defs/Meta"
+    },
     "file": {
       "type": "string",
       "minLength": 1

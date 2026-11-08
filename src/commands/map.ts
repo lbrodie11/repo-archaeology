@@ -132,7 +132,9 @@ export interface MapData {
 }
 
 export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | 'kinds' | 'uncheckedCap'>): MapData {
-  const generatedAt = new Date().toISOString();
+  ctx.open?.();
+  try {
+    const generatedAt = new Date().toISOString();
   // "Past year" is measured back from the newest analyzed commit, not from today: an inactive
   // repository, or a run with --before, would otherwise have nothing that counts as recent.
   const newest = ctx.history.stats.newestTime;
@@ -321,6 +323,9 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
   // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
   const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
   return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges, families };
+  } finally {
+    ctx.close?.();
+  }
 }
 
 /**

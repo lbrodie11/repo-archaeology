@@ -174,11 +174,16 @@ export async function workingTreeChanges(root: string): Promise<ChangedFile[]> {
 export async function branchChanges(
   root: string,
   base: string,
-  options?: { onMergeFallback?: () => void },
+  options?: { onMergeFallback?: () => void; head?: string },
 ): Promise<ChangedFile[]> {
+  const head = options?.head ?? 'HEAD';
+  const diffArgs =
+    options?.head !== undefined
+      ? ['diff', '--name-status', '-z', '-M', '--no-ext-diff', '--end-of-options', base, head, '--']
+      : ['diff', '--name-status', '-z', '-M', '--no-ext-diff', '--end-of-options', `${base}...HEAD`, '--'];
   const [out, hasMerges] = await Promise.all([
-    runGit(root, ['diff', '--name-status', '-z', '-M', '--no-ext-diff', '--end-of-options', `${base}...HEAD`, '--']),
-    hasMergesInRange(root, base, 'HEAD'),
+    runGit(root, diffArgs),
+    hasMergesInRange(root, base, head),
   ]);
   const netFiles = parseNameStatus(out);
   if (hasMerges) {
@@ -187,8 +192,8 @@ export async function branchChanges(
   }
   const commits: RawCommit[] = [];
   const [, headFiles] = await Promise.all([
-    readLog(root, { rev: `${base}..HEAD`, topoOrder: true, reverse: true }, (c) => commits.push(c)),
-    listTreeFiles(root, 'HEAD'),
+    readLog(root, { rev: `${base}..${head}`, topoOrder: true, reverse: true }, (c) => commits.push(c)),
+    listTreeFiles(root, head),
   ]);
   return reconcileBranchLineage(netFiles, commits, headFiles);
 }

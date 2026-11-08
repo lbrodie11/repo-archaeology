@@ -41,9 +41,15 @@ export interface RelationshipView {
   evidence: EvidenceView[];
 }
 
+export interface HeadInfo {
+  ref: string;
+  sha: string;
+}
+
 export interface Meta {
   tool: 'repo-archaeology';
   root: string;
+  head?: HeadInfo;
   commitsRead: number;
   commitsAnalyzed: number;
   sweepsSkipped: number;
@@ -72,6 +78,7 @@ export function buildMeta(ctx: Context): Meta {
   return {
     tool: 'repo-archaeology',
     root: ctx.root,
+    ...(ctx.head !== undefined ? { head: { ref: ctx.head.ref, sha: ctx.head.sha } } : {}),
     commitsRead: stats.commitsRead,
     commitsAnalyzed: ctx.history.commits.length,
     sweepsSkipped: stats.sweepsSkipped,

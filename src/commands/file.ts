@@ -26,37 +26,42 @@ export interface FileResult {
 }
 
 export function fileReport(ctx: Context, input: string, options: FileOptions): FileResult {
-  const path = toRepoPath(ctx, input);
-  const { model } = ctx;
-  const id = model.id(path);
-  if (id === undefined) {
-    const reason = ctx.currentFiles.has(path)
-      ? 'it has no usable history yet (new, ignored, or only changed in sweeping commits)'
-      : 'no such file in the history or the working tree';
-    throw new UsageError(`Nothing to show for ${path}: ${reason}.`);
+  ctx.open?.();
+  try {
+    const path = toRepoPath(ctx, input);
+    const { model } = ctx;
+    const id = model.id(path);
+    if (id === undefined) {
+      const reason = ctx.currentFiles.has(path)
+        ? 'it has no usable history yet (new, ignored, or only changed in sweeping commits)'
+        : 'no such file in the history or the working tree';
+      throw new UsageError(`Nothing to show for ${path}: ${reason}.`);
+    }
+    const counts = model.changeCount;
+    const mine = counts[id] ?? 0;
+    const below = counts.filter((n) => n < mine).length;
+    // Show weaker links too (min confidence 0), flagging the ones `diff` would raise.
+    const companions = model
+      .companions(id, { minShared: ctx.thresholds.minShared, minConfidence: 0 })
+      .filter((comp) => ctx.currentFiles.has(model.path(comp.to)))
+      .slice(0, options.limit)
+      .map((comp) => {
+        const relationship = ctx.classifier.classify(path, model.path(comp.to));
+        return { ...toView(ctx, comp, relationship), wouldAlert: comp.confidence >= ctx.thresholds.minConfidence };
+      });
+    return {
+      meta: buildMeta(ctx),
+      path,
+      changes: mine,
+      churnPercentile: counts.length > 0 ? below / counts.length : 0,
+      medianChanges: median(counts),
+      lastChanged: isoDate(model.lastTime[id] ?? 0),
+      authors: model.topAuthors(id, 3),
+      companions,
+    };
+  } finally {
+    ctx.close?.();
   }
-  const counts = model.changeCount;
-  const mine = counts[id] ?? 0;
-  const below = counts.filter((n) => n < mine).length;
-  // Show weaker links too (min confidence 0), flagging the ones `diff` would raise.
-  const companions = model
-    .companions(id, { minShared: ctx.thresholds.minShared, minConfidence: 0 })
-    .filter((comp) => ctx.currentFiles.has(model.path(comp.to)))
-    .slice(0, options.limit)
-    .map((comp) => {
-      const relationship = ctx.classifier.classify(path, model.path(comp.to));
-      return { ...toView(ctx, comp, relationship), wouldAlert: comp.confidence >= ctx.thresholds.minConfidence };
-    });
-  return {
-    meta: buildMeta(ctx),
-    path,
-    changes: mine,
-    churnPercentile: counts.length > 0 ? below / counts.length : 0,
-    medianChanges: median(counts),
-    lastChanged: isoDate(model.lastTime[id] ?? 0),
-    authors: model.topAuthors(id, 3),
-    companions,
-  };
 }
 
 export function printFile(result: FileResult): void {

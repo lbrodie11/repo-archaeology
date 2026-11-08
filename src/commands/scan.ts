@@ -58,41 +58,46 @@ export function classifiedPairs(ctx: Context, max = MAX_CLASSIFIED): ClassifiedP
 }
 
 export function scan(ctx: Context, options: ScanOptions): ScanResult {
-  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
-  const selected: RelationshipView[] = [];
-  const pending: ClassifiedCompanion[] = [];
-  const classified = classifiedPairs(ctx);
-  for (const entry of classified.entries) {
-    counts[entry.relationship]++;
-    if (options.kinds.includes(entry.relationship)) pending.push(entry);
-  }
-  if (options.uncheckedCap === undefined) {
-    for (const entry of pending.slice(0, options.limit)) selected.push(toView(ctx, entry.companion, entry.relationship));
-  } else {
-    // Checked results first; unchecked ones only fill the remaining space, up to the cap.
-    const checked = pending.filter((e) => e.relationship !== 'unknown').slice(0, options.limit);
-    const room = Math.min(options.uncheckedCap, options.limit - checked.length);
-    const filler = room > 0 ? pending.filter((e) => e.relationship === 'unknown').slice(0, room) : [];
-    for (const entry of [...checked, ...filler]) selected.push(toView(ctx, entry.companion, entry.relationship));
-  }
-  const familyCandidates: RelationshipView[] = [];
-  for (const entry of pending) {
-    const fromPath = ctx.model.path(entry.companion.from);
-    const toPath = ctx.model.path(entry.companion.to);
-    if (parallelImplementation(fromPath, toPath) !== undefined) {
-      familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
+  ctx.open?.();
+  try {
+    const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
+    const selected: RelationshipView[] = [];
+    const pending: ClassifiedCompanion[] = [];
+    const classified = classifiedPairs(ctx);
+    for (const entry of classified.entries) {
+      counts[entry.relationship]++;
+      if (options.kinds.includes(entry.relationship)) pending.push(entry);
     }
+    if (options.uncheckedCap === undefined) {
+      for (const entry of pending.slice(0, options.limit)) selected.push(toView(ctx, entry.companion, entry.relationship));
+    } else {
+      // Checked results first; unchecked ones only fill the remaining space, up to the cap.
+      const checked = pending.filter((e) => e.relationship !== 'unknown').slice(0, options.limit);
+      const room = Math.min(options.uncheckedCap, options.limit - checked.length);
+      const filler = room > 0 ? pending.filter((e) => e.relationship === 'unknown').slice(0, room) : [];
+      for (const entry of [...checked, ...filler]) selected.push(toView(ctx, entry.companion, entry.relationship));
+    }
+    const familyCandidates: RelationshipView[] = [];
+    for (const entry of pending) {
+      const fromPath = ctx.model.path(entry.companion.from);
+      const toPath = ctx.model.path(entry.companion.to);
+      if (parallelImplementation(fromPath, toPath) !== undefined) {
+        familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
+      }
+    }
+    const families = buildFindingFamilies(ctx, familyCandidates, { allowedKinds: options.kinds }).slice(0, options.limit);
+    return {
+      meta: buildMeta(ctx),
+      counts,
+      qualifying: classified.qualifying,
+      classified: classified.entries.length,
+      truncated: classified.truncated,
+      relationships: selected,
+      families,
+    };
+  } finally {
+    ctx.close?.();
   }
-  const families = buildFindingFamilies(ctx, familyCandidates, { allowedKinds: options.kinds }).slice(0, options.limit);
-  return {
-    meta: buildMeta(ctx),
-    counts,
-    qualifying: classified.qualifying,
-    classified: classified.entries.length,
-    truncated: classified.truncated,
-    relationships: selected,
-    families,
-  };
 }
 
 export function printScan(result: ScanResult, options: ScanOptions): void {
