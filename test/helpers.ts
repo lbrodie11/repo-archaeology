@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 
 export interface FixtureCommit {
   message: string;
@@ -29,7 +30,7 @@ export class FixtureRepo {
   }
 
   git(...args: string[]): string {
-    return execFileSync('git', args, { cwd: this.dir, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1' } });
+    return execFileSync('git', args, { cwd: this.dir, encoding: 'utf8', env: sanitizeGitEnv(process.env) });
   }
 
   write(path: string, content: string): void {
@@ -56,7 +57,7 @@ export class FixtureRepo {
     const author = spec.author ?? 'Test';
     execFileSync('git', ['commit', '-q', '--allow-empty', '-m', spec.message, `--author=${author} <${author.toLowerCase().replace(/\W+/g, '.')}@example.com>`], {
       cwd: this.dir,
-      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date, GIT_CONFIG_NOSYSTEM: '1' },
+      env: sanitizeGitEnv(process.env, { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }),
     });
     return this;
   }

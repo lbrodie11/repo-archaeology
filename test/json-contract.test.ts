@@ -5,6 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { getToolVersion, JSON_SCHEMA_VERSION, validateJsonOutPath, writeJsonContractFile } from '../src/report/contract.js';
+import {
+  loadSchema as loadSchemaFromDir,
+  sanitizeGitEnv,
+  validateSchemaNode,
+  type JsonSchemaNode,
+} from '../scripts/schema-validator.mjs';
 import { FixtureRepo } from './helpers.js';
 
 const ROOT_DIR = join(import.meta.dirname, '..');
@@ -16,188 +22,20 @@ function runCli(args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}) {
   const result = spawnSync(process.execPath, ['--import', TSX, CLI, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, NO_COLOR: '1', ...extraEnv },
+    env: sanitizeGitEnv(process.env, { NO_COLOR: '1', ...extraEnv }),
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-interface JsonSchemaNode {
-  $schema?: string;
-  $id?: string;
-  $ref?: string;
-  title?: string;
-  description?: string;
-  type?: string | string[];
-  const?: unknown;
-  enum?: unknown[];
-  oneOf?: JsonSchemaNode[];
-  required?: string[];
-  additionalProperties?: boolean;
-  properties?: Record<string, JsonSchemaNode>;
-  items?: JsonSchemaNode;
-  minItems?: number;
-  minimum?: number;
-  maximum?: number;
-  exclusiveMinimum?: number;
-  minLength?: number;
-  pattern?: string;
-  $defs?: Record<string, JsonSchemaNode>;
-}
-
-const schemaCache = new Map<string, JsonSchemaNode>();
-
 function loadSchema(fileName: string): JsonSchemaNode {
-  const cached = schemaCache.get(fileName);
-  if (cached) return cached;
-  const fullPath = join(SCHEMA_DIR, fileName);
-  const parsed = JSON.parse(readFileSync(fullPath, 'utf8')) as JsonSchemaNode;
-  schemaCache.set(fileName, parsed);
-  return parsed;
-}
-
-function resolveSchemaRef(ref: string, currentSchemaFile: string): { node: JsonSchemaNode; file: string } {
-  const [filePart, pointerPart] = ref.split('#');
-  const targetFile = filePart && filePart.length > 0 ? filePart : currentSchemaFile;
-  const rootSchema = loadSchema(targetFile);
-  if (!pointerPart || pointerPart === '' || pointerPart === '/') {
-    return { node: rootSchema, file: targetFile };
-  }
-  const segments = pointerPart.replace(/^\//, '').split('/');
-  let cursor: unknown = rootSchema;
-  for (const seg of segments) {
-    if (cursor && typeof cursor === 'object' && seg in (cursor as Record<string, unknown>)) {
-      cursor = (cursor as Record<string, unknown>)[seg];
-    } else {
-      throw new Error(`Unresolved JSON Schema $ref '${ref}' in ${currentSchemaFile}`);
-    }
-  }
-  return { node: cursor as JsonSchemaNode, file: targetFile };
-}
-
-function validateSchemaNode(
-  value: unknown,
-  schema: JsonSchemaNode,
-  schemaFile: string,
-  path: string,
-  errors: string[],
-): void {
-  if (schema.$ref) {
-    const resolved = resolveSchemaRef(schema.$ref, schemaFile);
-    validateSchemaNode(value, resolved.node, resolved.file, path, errors);
-    return;
-  }
-
-  if (schema.oneOf) {
-    const branchErrors: string[][] = [];
-    let matchedCount = 0;
-    for (const branch of schema.oneOf) {
-      const localErrs: string[] = [];
-      validateSchemaNode(value, branch, schemaFile, path, localErrs);
-      if (localErrs.length === 0) {
-        matchedCount++;
-      } else {
-        branchErrors.push(localErrs);
-      }
-    }
-    if (matchedCount !== 1) {
-      errors.push(
-        `${path}: expected value to match exactly 1 oneOf branch (matched ${matchedCount}): ${branchErrors
-          .map((b) => b.join('; '))
-          .join(' | ')}`,
-      );
-    }
-    return;
-  }
-
-  if (schema.const !== undefined && value !== schema.const) {
-    errors.push(`${path}: expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(value)}`);
-    return;
-  }
-
-  if (schema.enum !== undefined && !schema.enum.includes(value)) {
-    errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(value)}`);
-    return;
-  }
-
-  if (schema.type !== undefined) {
-    const allowedTypes = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const matchesType = allowedTypes.some((t) => {
-      if (t === 'null') return value === null;
-      if (t === 'array') return Array.isArray(value);
-      if (t === 'integer') return typeof value === 'number' && Number.isInteger(value);
-      if (t === 'number') return typeof value === 'number' && Number.isFinite(value);
-      if (t === 'object') return typeof value === 'object' && value !== null && !Array.isArray(value);
-      return typeof value === t;
-    });
-    if (!matchesType) {
-      errors.push(`${path}: expected type ${JSON.stringify(schema.type)}, got ${value === null ? 'null' : typeof value}`);
-      return;
-    }
-  }
-
-  if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push(`${path}: string length ${value.length} < minLength ${schema.minLength}`);
-    }
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) {
-      errors.push(`${path}: string ${JSON.stringify(value)} does not match pattern ${schema.pattern}`);
-    }
-  }
-
-  if (typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum) {
-      errors.push(`${path}: number ${value} < minimum ${schema.minimum}`);
-    }
-    if (schema.maximum !== undefined && value > schema.maximum) {
-      errors.push(`${path}: number ${value} > maximum ${schema.maximum}`);
-    }
-    if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
-      errors.push(`${path}: number ${value} <= exclusiveMinimum ${schema.exclusiveMinimum}`);
-    }
-  }
-
-  if (Array.isArray(value)) {
-    if (schema.minItems !== undefined && value.length < schema.minItems) {
-      errors.push(`${path}: array length ${value.length} < minItems ${schema.minItems}`);
-    }
-    if (schema.items) {
-      value.forEach((item, idx) => {
-        validateSchemaNode(item, schema.items!, schemaFile, `${path}[${idx}]`, errors);
-      });
-    }
-  }
-
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    if (schema.required) {
-      for (const reqKey of schema.required) {
-        if (!(reqKey in record) || record[reqKey] === undefined) {
-          errors.push(`${path}: missing required property '${reqKey}'`);
-        }
-      }
-    }
-    if (schema.additionalProperties === false && schema.properties) {
-      for (const key of Object.keys(record)) {
-        if (!(key in schema.properties)) {
-          errors.push(`${path}: unexpected additional property '${key}'`);
-        }
-      }
-    }
-    if (schema.properties) {
-      for (const [propKey, propSchema] of Object.entries(schema.properties)) {
-        if (propKey in record && record[propKey] !== undefined) {
-          validateSchemaNode(record[propKey], propSchema, schemaFile, `${path}.${propKey}`, errors);
-        }
-      }
-    }
-  }
+  return loadSchemaFromDir(SCHEMA_DIR, fileName);
 }
 
 function assertMatchesSchema(value: unknown, schemaFile: string): void {
   const schema = loadSchema(schemaFile);
   assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');
   const errors: string[] = [];
-  validateSchemaNode(value, schema, schemaFile, '$', errors);
+  validateSchemaNode(SCHEMA_DIR, value, schema, schemaFile, '$', errors);
   assert.deepEqual(errors, [], `Schema validation failed for ${schemaFile}:\n${errors.join('\n')}`);
 }
 
@@ -459,4 +297,53 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       rmSync(tmpOutDir, { recursive: true, force: true });
     }
   });
+
+  it('shared schema validator rejects invalid payloads, unknown schema keywords, and enforces sibling keywords beside $ref', () => {
+    const validTool = { name: 'repo-archaeology', version: '0.3.0' };
+    const toolSchema = resolveSchemaNodeForTest('common.schema.json#/$defs/ToolInfo');
+
+    const badErrors: string[] = [];
+    validateSchemaNode(SCHEMA_DIR, { name: 'wrong', version: '' }, toolSchema, 'common.schema.json', '$', badErrors);
+    assert.ok(badErrors.length >= 2, `expected errors for invalid ToolInfo, got: ${badErrors.join('; ')}`);
+
+    // Rejects unsupported JSON Schema keywords instead of silently skipping them
+    assert.throws(
+      () => {
+        const errs: string[] = [];
+        validateSchemaNode(
+          SCHEMA_DIR,
+          validTool,
+          { type: 'object', anyOf: [{ required: ['name'] }] },
+          'common.schema.json',
+          '$',
+          errs,
+        );
+      },
+      /Unsupported JSON Schema keyword 'anyOf'/,
+    );
+
+    // Enforces sibling keywords alongside $ref
+    const siblingErrs: string[] = [];
+    validateSchemaNode(
+      SCHEMA_DIR,
+      validTool,
+      {
+        $ref: 'common.schema.json#/$defs/ToolInfo',
+        properties: {
+          version: { type: 'string', pattern: '^99\\.' },
+        },
+      },
+      'common.schema.json',
+      '$',
+      siblingErrs,
+    );
+    assert.equal(siblingErrs.length, 1);
+    assert.match(siblingErrs[0]!, /does not match pattern \^99\\\./);
+  });
 });
+
+function resolveSchemaNodeForTest(ref: string): JsonSchemaNode {
+  const [file, pointer] = ref.split('#/$defs/');
+  const root = loadSchema(file!);
+  return root.$defs![pointer!]!;
+}
