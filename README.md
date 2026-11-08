@@ -198,9 +198,12 @@ Use `--format markdown` to render a GitHub-Flavored Markdown pull request summar
 
 ```bash
 repo-archaeology diff --base main
+repo-archaeology diff --base main --owners
 repo-archaeology diff --base main --format markdown --json-out diff.json
 repo-archaeology diff --exit-code   # exit 1 when something looks missed (for hooks/CI)
 ```
+
+Pass `--owners` (or set `"owners": { "enabled": true }` in `.repo-archaeology.json`; override with `--no-owners`) to enrich each suggested companion file with **People who may have context** (up to `owners.max` recent human contributors within `owners.lookbackDays`, canonicalized via `.mailmap` and excluding bots/non-human agents, without exposing email addresses) and **Designated code owners** from `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS` (read from `merge-base` when `--base` is used, and rendered with a zero-width break after `@` so copying output into a PR comment never pings teammates).
 
 ### GitHub Action (Pull Request Summaries)
 
@@ -374,6 +377,7 @@ Global options work with every command:
 | `--ascii` | | Use ASCII-only box rules, arrows, and separators in `--style rich` output |
 | `--no-links` | | Disable OSC 8 clickable commit-receipt hyperlinks in `--style rich` output |
 | `--full-evidence` | | Inline all supporting commit receipts without an `Additional receipts` split in `--style rich` output |
+| `--owners` / `--no-owners` | `false` | Enrich `diff` suggestions with recent human contributor context and `CODEOWNERS` handles |
 | `--no-cache` | | Neither read nor write the [history cache](#history-cache) |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 
@@ -386,7 +390,13 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
   "maxFilesPerCommit": 25,
   "ignore": ["docs/generated/", "*.pb.go"],
   "skipCommitPrefixes": ["chore", "deps"],
-  "skipCommits": "^chore\\(deps\\)"
+  "skipCommits": "^chore\\(deps\\)",
+  "owners": {
+    "enabled": false,
+    "max": 3,
+    "lookbackDays": 365,
+    "maxCommits": 100
+  }
 }
 ```
 

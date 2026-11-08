@@ -201,6 +201,65 @@ function formatRichVerdict(verdict: RelationshipVerdictView, styler: RichStyler)
   return `${badge}${metaStr}: ${sanitizeRichText(verdict.reason)}`;
 }
 
+function renderRichSuggestionOwnership(s: Suggestion, styler: RichStyler, unicode: boolean): string[] {
+  if (s.owners === undefined && s.codeowners === undefined) return [];
+  const out: string[] = [];
+  const sample = s.ownersSample;
+  if (s.codeowners && s.codeowners.length > 0) {
+    const provLabel =
+      sample?.codeownersSource === 'base'
+        ? 'base CODEOWNERS'
+        : sample?.codeownersSource === 'head'
+          ? 'head CODEOWNERS'
+          : 'CODEOWNERS';
+    const handles = s.codeowners
+      .map((h) => {
+        const safe = sanitizeRichText(h);
+        return unicode ? safe.replace(/@([A-Za-z0-9_-]+)/g, '@\u200B$1') : safe;
+      })
+      .join(', ');
+    out.push(`    ${styler.bold('Designated code owners')} ${styler.dim(`(${provLabel})`)}: ${handles}`);
+  }
+  if (s.owners !== undefined) {
+    const lookbackDays = sample?.lookbackDays ?? 365;
+    const qualifying = sample?.qualifyingCommits ?? s.owners.reduce((sum, o) => sum + o.commits, 0);
+    const metaNotes: string[] = [];
+    if (sample && sample.agentAssistedCommits > 0) {
+      metaNotes.push(`${plural(sample.agentAssistedCommits, 'AI-assisted commit')} included`);
+    }
+    if (sample?.incompleteCoverage) {
+      metaNotes.push('incomplete history coverage');
+    }
+    const notesSuffix = metaNotes.length > 0 ? `, ${metaNotes.join(', ')}` : '';
+    if (s.owners.length === 0) {
+      out.push(
+        `    ${styler.bold('People who may have context')}: ${styler.dim(`no qualifying recent human changes in the last ${lookbackDays}d${notesSuffix}`)}`,
+      );
+      return out;
+    }
+    if (qualifying <= 1) {
+      const o = s.owners[0]!;
+      const loginPart = o.login ? ` (${sanitizeRichText(o.login)})` : '';
+      out.push(
+        `    ${styler.bold('People who may have context')} ${styler.dim(`(limited sample: 1 qualifying recent change in ${lookbackDays}d${notesSuffix})`)}: ${sanitizeRichText(o.name)}${loginPart} ${styler.dim(`(1 of 1 change, last ${sanitizeRichText(o.lastDate)})`)}`,
+      );
+      out.push(styler.dim('    Historical activity suggests familiarity, not current ownership or availability.'));
+      return out;
+    }
+    const people = s.owners
+      .map((o) => {
+        const loginPart = o.login ? ` (${sanitizeRichText(o.login)})` : '';
+        return `${sanitizeRichText(o.name)}${loginPart} ${styler.dim(`(contributed to ${o.commits} of ${qualifying} qualifying recent changes, last ${sanitizeRichText(o.lastDate)})`)}`;
+      })
+      .join('; ');
+    out.push(
+      `    ${styler.bold('People who may have context')} ${styler.dim(`(${lookbackDays}d window${notesSuffix})`)}: ${people}`,
+    );
+    out.push(styler.dim('    Historical activity suggests familiarity, not current ownership or availability.'));
+  }
+  return out;
+}
+
 function formatRichIntervalCi(interval: WilsonInterval, raw = false, unicode = true): string {
   const dash = unicode ? '–' : '-';
   return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100 + 1e-9)}${dash}${Math.ceil(interval.high * 100 - 1e-9)}%)`;
@@ -580,6 +639,7 @@ export function formatRichDiff(result: DiffResult, renderOpts: RichRenderOptions
     if (s.verdict) {
       lines.push(`    ${formatRichVerdict(s.verdict, styler)}`);
     }
+    lines.push(...renderRichSuggestionOwnership(s, styler, caps.unicode));
     const explainCmd = formatExplainCommand(
       s.from,
       s.to,

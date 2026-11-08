@@ -32,6 +32,7 @@ import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFil
 import type { RepoFiles } from './imports/resolve.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
 import { loadHistory, type History, type HistoryCacheOptions } from './model/history.js';
+import { loadCommitTreeMailmap, loadWorkingTreeMailmap } from './model/owners.js';
 import {
   emptyLoadedVerdicts,
   loadVerdictsFile,
@@ -214,11 +215,19 @@ async function trainBaseline(
   rev: string,
   shallow = false,
   extraWarnings: readonly string[] = [],
-  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'> & { cache?: HistoryCacheOptions | false },
+  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'> & {
+    cache?: HistoryCacheOptions | false;
+    treeFiles?: TreeFileSet;
+  },
 ): Promise<{ history: History; model: CoChangeModel; warnings: string[]; ignores: string[] }> {
   if (options?.signal?.aborted) throw createAbortError(options.signal);
   const skipFilter = compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
   const ignores = ignorePatterns(settings);
+  const mailmap =
+    rev === 'HEAD'
+      ? loadWorkingTreeMailmap(root)
+      : await loadCommitTreeMailmap(root, rev, options?.treeFiles, options?.signal);
+  if (options?.signal?.aborted) throw createAbortError(options.signal);
   options?.onProgress?.({ phase: 'history', done: 0, total: settings.maxCommits });
   const history = await loadHistory(root, {
     maxCommits: settings.maxCommits,
@@ -227,6 +236,7 @@ async function trainBaseline(
     ignore: ignores,
     skipCommits: skipFilter,
     origin: settings.origin,
+    mailmap,
     rev,
     signal: options?.signal,
     onSpawn: options?.onSpawn,
@@ -381,6 +391,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       signal,
       onSpawn: options?.onSpawn,
       cache: historyCache,
+      treeFiles: mergeBaseSha === undefined || mergeBaseSha === headSha ? currentFiles : undefined,
     });
     const bridgeIgnores = new PathMatcher(trained.ignores);
     const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);

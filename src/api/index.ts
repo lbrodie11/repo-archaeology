@@ -1,5 +1,5 @@
 import { backtest, type BacktestResult } from '../commands/backtest.js';
-import { diff, type DiffResult } from '../commands/diff.js';
+import { diff, type DiffResult, type SuggestionOwner, type SuggestionOwnersSample } from '../commands/diff.js';
 import { explain, type ExplainResult } from '../commands/explain.js';
 import { fileReport, type FileResult } from '../commands/file.js';
 import {
@@ -24,6 +24,7 @@ import { loadContext, UsageError, type Context, type ProgressEvent } from '../co
 import { GitError } from '../git/run.js';
 import { IMPORT_UNRESOLVED_REASON_CODES, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { parseOriginWeightsSpec, type CommitOrigin, type OriginConfig, type OriginWeights } from '../model/origin.js';
+import { DEFAULT_OWNERS_CONFIG, type CodeownersProvenance, type OwnersConfig } from '../model/owners.js';
 import {
   VERDICTS_FILE,
   VERDICTS_SCHEMA_URL,
@@ -44,6 +45,7 @@ import type { Meta } from '../report/views.js';
 export {
   ConfigError,
   DEFAULT_IGNORES,
+  DEFAULT_OWNERS_CONFIG,
   DEFAULT_SETTINGS,
   GitError,
   IMPORT_UNRESOLVED_REASON_CODES,
@@ -52,6 +54,7 @@ export {
   UsageError,
   VERDICTS_FILE,
   VERDICTS_SCHEMA_URL,
+  type CodeownersProvenance,
   type CommitOrigin,
   type ImportEdgeKind,
   type ImportGraphEdge,
@@ -61,10 +64,13 @@ export {
   type ImportUnresolvedReasonCode,
   type OriginConfig,
   type OriginWeights,
+  type OwnersConfig,
   type ProgressEvent,
   type Relationship,
   type RelationshipVerdictView,
   type Settings,
+  type SuggestionOwner,
+  type SuggestionOwnersSample,
   type ToolInfo,
   type VerdictEntry,
   type VerdictKind,
@@ -139,6 +145,7 @@ export interface Repository {
     kinds?: Relationship[];
     base?: string;
     applyBranchVerdicts?: boolean;
+    owners?: boolean;
   }): Promise<DiffJson>;
   scan(opts?: {
     limit?: number;
@@ -242,6 +249,7 @@ export function createRepository(ctx: Context): Repository {
         limit: opts?.limit ?? 10,
         kinds: opts?.kinds ?? [...RELATIONSHIPS],
         applyBranchVerdicts: opts?.applyBranchVerdicts,
+        owners: opts?.owners,
       });
       return withJsonContract(result);
     },

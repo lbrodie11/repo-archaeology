@@ -255,7 +255,18 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       assert.equal(activeDiffJson.totalSuggestions, 2);
       assert.ok(activeDiffJson.families.length >= 1);
       assert.equal(activeDiffJson.silence, undefined);
+      assert.equal(activeDiffJson.suggestions[0].owners, undefined);
+      assert.equal(activeDiffJson.suggestions[0].ownersSample, undefined);
       assertMatchesSchema(activeDiffJson, 'diff.schema.json');
+
+      const ownersDiffRes = runCli(['diff', '--owners', '--limit', '1', '--json'], repo.dir);
+      assert.equal(ownersDiffRes.code, 0, ownersDiffRes.stderr);
+      const ownersDiffJson = JSON.parse(ownersDiffRes.stdout);
+      assert.equal(ownersDiffJson.suggestions.length, 1);
+      assert.ok(Array.isArray(ownersDiffJson.suggestions[0].owners));
+      assert.ok(ownersDiffJson.suggestions[0].owners.length >= 1);
+      assert.ok(ownersDiffJson.suggestions[0].ownersSample);
+      assertMatchesSchema(ownersDiffJson, 'diff.schema.json');
 
       // Forward-compatibility: additive fields keep schemaVersion: 1 valid
       assertMatchesSchema(

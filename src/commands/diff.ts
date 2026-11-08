@@ -4,6 +4,16 @@ import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
 import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } from '../model/families.js';
 import type { OriginWeights } from '../model/origin.js';
+import {
+  CodeownersMatcher,
+  computeFileOwnership,
+  loadCommitTreeCodeowners,
+  loadWorkingTreeCodeowners,
+  resolveOwnersConfig,
+  type OwnersConfig,
+  type SuggestionOwner,
+  type SuggestionOwnersSample,
+} from '../model/owners.js';
 import { isSameVerdictEntry, VerdictMatcher } from '../model/verdicts.js';
 import {
   attachAllEvidence,
@@ -20,6 +30,8 @@ import {
 } from '../report/views.js';
 import { c, pct, plural, terminalText } from '../util/term.js';
 
+export type { SuggestionOwner, SuggestionOwnersSample } from '../model/owners.js';
+
 export interface DiffOptions {
   /** Compare the branch against this ref (merge-base) in addition to uncommitted changes. */
   base?: string;
@@ -27,6 +39,10 @@ export interface DiffOptions {
   kinds: Relationship[];
   /** When true, apply verdicts added or modified on the branch during `diff --base` before merging. */
   applyBranchVerdicts?: boolean;
+  /** Override `settings.owners.enabled` for this diff run (`--owners` / `--no-owners`). */
+  owners?: boolean;
+  /** Optional preloaded `CodeownersMatcher` (used when `suggestMissing` is called directly). */
+  codeowners?: CodeownersMatcher;
 }
 
 export interface ChangedFileView extends ChangedFile {
@@ -42,6 +58,12 @@ export interface ChangedFileView extends ChangedFile {
 export interface Suggestion extends RelationshipView {
   /** Other changed files that also point at this suggestion. */
   alsoLinkedFrom: string[];
+  /** Historically active human contributors to `to` within the configured lookback window (present when `owners` enrichment is enabled). */
+  owners?: SuggestionOwner[];
+  /** Sample denominator, lookback window, and coverage metadata for `owners` (present when `owners` enrichment is enabled). */
+  ownersSample?: SuggestionOwnersSample;
+  /** Designated GitHub `@user` or `@org/team` handles from `CODEOWNERS` (present when `owners` enrichment is enabled and a matching rule exists). */
+  codeowners?: string[];
 }
 
 export interface DiffFamilyView extends FindingFamilyView {
@@ -119,6 +141,7 @@ export interface DiffEvaluation {
     since?: string;
     skipCommits?: string;
     originWeights?: OriginWeights;
+    owners?: OwnersConfig;
   };
 }
 
@@ -509,7 +532,7 @@ function buildDiffFamilies(
 export function suggestMissing(
   ctx: Context,
   changes: ChangedFile[],
-  options: Pick<DiffOptions, 'base' | 'limit' | 'kinds'>,
+  options: Pick<DiffOptions, 'base' | 'limit' | 'kinds' | 'owners' | 'codeowners'>,
 ): {
   changed: ChangedFileView[];
   totalSuggestions: number;
@@ -522,6 +545,10 @@ export function suggestMissing(
   const verdictMatcher = ctx.verdicts?.withChanges(changes);
   const verdictCtx: Context =
     verdictMatcher && verdictMatcher !== ctx.verdicts ? { ...ctx, verdicts: verdictMatcher } : ctx;
+  const ownersConfig = resolveOwnersConfig({
+    ...verdictCtx.settings?.owners,
+    ...(options.owners !== undefined ? { enabled: options.owners } : {}),
+  });
   const touched = new Set<string>();
   for (const f of changes) {
     touched.add(f.path);
@@ -588,13 +615,33 @@ export function suggestMissing(
   const totalSuggestions = allEntries.length;
   const topEntries = allEntries.slice(0, options.limit);
   const suggestions: Suggestion[] = topEntries.map((entry) => {
-    const view = toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath);
+    const baseView = toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath);
+    const alsoLinkedFrom = [...entry.linkedFrom].filter((p) => p !== entry.fromPath);
+    if (!ownersConfig.enabled) {
+      return attachAllEvidence(
+        {
+          ...baseView,
+          alsoLinkedFrom,
+        },
+        baseView.allEvidence,
+      );
+    }
+    const ownership = computeFileOwnership(baseView.to, {
+      history: verdictCtx.history,
+      ownersConfig,
+      originConfig: verdictCtx.settings.origin,
+      shallow: verdictCtx.shallow,
+      codeowners: options.codeowners,
+    });
     return attachAllEvidence(
       {
-        ...view,
-        alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
+        ...baseView,
+        alsoLinkedFrom,
+        owners: ownership.owners,
+        ownersSample: ownership.ownersSample,
+        ...(ownership.codeowners !== undefined ? { codeowners: ownership.codeowners } : {}),
       },
-      view.allEvidence,
+      baseView.allEvidence,
     );
   });
   const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
@@ -618,7 +665,35 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
   try {
     const isolatedCtx = await isolateBaselineContext(ctx, options.base);
     const localWarnings = [...isolatedCtx.warnings];
-    const effectiveCtx: Context = { ...isolatedCtx, warnings: localWarnings };
+    const effectiveSettings =
+      options.owners !== undefined
+        ? {
+            ...isolatedCtx.settings,
+            owners: {
+              ...isolatedCtx.settings.owners,
+              enabled: options.owners,
+            },
+          }
+        : isolatedCtx.settings;
+    const effectiveCtx: Context = {
+      ...isolatedCtx,
+      settings: effectiveSettings,
+      warnings: localWarnings,
+    };
+    const ownersConfig = resolveOwnersConfig(effectiveSettings.owners);
+    let codeowners: CodeownersMatcher | undefined = options.codeowners;
+    if (ownersConfig.enabled && codeowners === undefined) {
+      if (options.base !== undefined && effectiveCtx.mergeBaseSha !== undefined) {
+        codeowners = await loadCommitTreeCodeowners(effectiveCtx.root, effectiveCtx.mergeBaseSha, 'base');
+      } else if (effectiveCtx.head !== undefined) {
+        codeowners = await loadCommitTreeCodeowners(effectiveCtx.root, effectiveCtx.head.sha, 'head');
+      } else {
+        codeowners = loadWorkingTreeCodeowners(effectiveCtx.root);
+      }
+      for (const w of codeowners.loaded.warnings) {
+        if (!localWarnings.includes(w)) localWarnings.push(w);
+      }
+    }
     let addedInBranch = 0;
     if (options.base !== undefined && isolatedCtx.headVerdicts !== undefined) {
       const baseEntries = isolatedCtx.verdicts?.loaded.activeEntries ?? [];
@@ -635,7 +710,11 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
       }
     }
     changes ??= await collectChanges(effectiveCtx, options.base, localWarnings);
-    const { changed, totalSuggestions, suggestions, families, verdicts, silence } = suggestMissing(effectiveCtx, changes, options);
+    const { changed, totalSuggestions, suggestions, families, verdicts, silence } = suggestMissing(
+      effectiveCtx,
+      changes,
+      { ...options, codeowners },
+    );
     const silencedCount = verdicts?.silenced ?? 0;
     const mergedVerdicts =
       silencedCount > 0 || addedInBranch > 0
@@ -670,6 +749,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
         ...(meta.settings.since !== undefined ? { since: meta.settings.since } : {}),
         ...(meta.settings.skipCommits !== undefined ? { skipCommits: meta.settings.skipCommits } : {}),
         ...(meta.settings.origin?.weights !== undefined ? { originWeights: meta.settings.origin.weights } : {}),
+        ...(meta.settings.owners !== undefined ? { owners: meta.settings.owners } : {}),
       },
     };
     return {
@@ -748,8 +828,65 @@ export function printDiff(result: DiffResult): void {
     if (s.alsoLinkedFrom.length > 0) console.log(c.dim(`    also linked to: ${s.alsoLinkedFrom.map(terminalText).join(', ')}`));
     console.log(c.dim(`    ${terminalText(s.why)}`));
     if (s.verdict) console.log(`    ${formatVerdictAnnotation(s.verdict)}`);
+    printSuggestionOwnership(s);
     printEvidence(s);
     console.log();
   }
   console.log(c.dim(DISCLAIMER));
+}
+
+function neutralizeHandleMention(handle: string): string {
+  return handle.replace(/@([A-Za-z0-9_-]+)/g, '@\u200B$1');
+}
+
+function printSuggestionOwnership(s: Suggestion): void {
+  if (s.owners === undefined && s.codeowners === undefined) return;
+  const sample = s.ownersSample;
+  if (s.codeowners && s.codeowners.length > 0) {
+    const provLabel =
+      sample?.codeownersSource === 'base'
+        ? 'base CODEOWNERS'
+        : sample?.codeownersSource === 'head'
+          ? 'head CODEOWNERS'
+          : 'CODEOWNERS';
+    const handles = s.codeowners.map((h) => terminalText(neutralizeHandleMention(h))).join(', ');
+    console.log(`    ${c.bold('Designated code owners')} ${c.dim(`(${provLabel})`)}: ${handles}`);
+  }
+  if (s.owners !== undefined) {
+    const lookbackDays = sample?.lookbackDays ?? 365;
+    const qualifying = sample?.qualifyingCommits ?? s.owners.reduce((sum, o) => sum + o.commits, 0);
+    const metaNotes: string[] = [];
+    if (sample && sample.agentAssistedCommits > 0) {
+      metaNotes.push(`${plural(sample.agentAssistedCommits, 'AI-assisted commit')} included`);
+    }
+    if (sample?.incompleteCoverage) {
+      metaNotes.push('incomplete history coverage');
+    }
+    const notesSuffix = metaNotes.length > 0 ? `, ${metaNotes.join(', ')}` : '';
+    if (s.owners.length === 0) {
+      console.log(
+        `    ${c.bold('People who may have context')}: ${c.dim(`no qualifying recent human changes in the last ${lookbackDays}d${notesSuffix}`)}`,
+      );
+      return;
+    }
+    if (qualifying <= 1) {
+      const o = s.owners[0]!;
+      const loginPart = o.login ? ` (${terminalText(o.login)})` : '';
+      console.log(
+        `    ${c.bold('People who may have context')} ${c.dim(`(limited sample: 1 qualifying recent change in ${lookbackDays}d${notesSuffix})`)}: ${terminalText(o.name)}${loginPart} ${c.dim(`(1 of 1 change, last ${terminalText(o.lastDate)})`)}`,
+      );
+      console.log(c.dim('    Historical activity suggests familiarity, not current ownership or availability.'));
+      return;
+    }
+    const people = s.owners
+      .map((o) => {
+        const loginPart = o.login ? ` (${terminalText(o.login)})` : '';
+        return `${terminalText(o.name)}${loginPart} ${c.dim(`(contributed to ${o.commits} of ${qualifying} qualifying recent changes, last ${terminalText(o.lastDate)})`)}`;
+      })
+      .join('; ');
+    console.log(
+      `    ${c.bold('People who may have context')} ${c.dim(`(${lookbackDays}d window${notesSuffix})`)}: ${people}`,
+    );
+    console.log(c.dim('    Historical activity suggests familiarity, not current ownership or availability.'));
+  }
 }

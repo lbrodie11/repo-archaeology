@@ -15,6 +15,7 @@ import {
   type OriginCounts,
   type OriginShare,
 } from '../model/origin.js';
+import type { OwnersConfig } from '../model/owners.js';
 import {
   VERDICTS_FILE,
   type RelationshipVerdictView,
@@ -130,6 +131,7 @@ export interface Meta {
     ignore: string[];
     useDefaultIgnores: boolean;
     origin?: OriginConfig;
+    owners?: OwnersConfig;
   };
   warnings: string[];
   /** History cache usage for this run (absent only for contexts built without cache configuration). */
@@ -184,6 +186,7 @@ export function buildMeta(ctx: Context): Meta {
       ignore: [...s.ignore],
       useDefaultIgnores: s.useDefaultIgnores,
       ...(s.origin !== undefined ? { origin: s.origin } : {}),
+      ...(s.owners !== undefined ? { owners: s.owners } : {}),
     },
     warnings: ctx.warnings,
     ...(ctx.history.cache !== undefined
