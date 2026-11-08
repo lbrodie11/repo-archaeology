@@ -56,9 +56,34 @@ export class ConfigError extends Error {
  * runs on fresh clones), so its values are limited: it must not be able to hang the
  * tool or exhaust memory. Command-line flags are typed by the user and stay unrestricted.
  */
-const MAX_CONFIG_BYTES = 64 * 1024;
+export const MAX_CONFIG_BYTES = 64 * 1024;
 export const MAX_FILES_PER_COMMIT_FROM_FILE = 1000;
 const MAX_SKIP_PATTERN_LENGTH = 200;
+
+/** Parses and validates raw JSON text from `.repo-archaeology.json`. */
+export function parseConfigText(content: string, source = CONFIG_FILE): Partial<Settings> {
+  if (Buffer.byteLength(content, 'utf8') > MAX_CONFIG_BYTES) {
+    throw new ConfigError(`${source} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch (err) {
+    throw new ConfigError(`${source} is not valid JSON: ${(err as Error).message}`);
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ConfigError(`${source} must contain a JSON object.`);
+  }
+  const settings = validatePartial(raw as Record<string, unknown>, source);
+  if (settings.maxFilesPerCommit !== undefined && settings.maxFilesPerCommit > MAX_FILES_PER_COMMIT_FROM_FILE) {
+    throw new ConfigError(`${source}: "maxFilesPerCommit" must be at most ${MAX_FILES_PER_COMMIT_FROM_FILE} (use --max-files for more).`);
+  }
+  if (settings.skipCommits !== undefined) {
+    const problem = riskySkipPattern(settings.skipCommits);
+    if (problem) throw new ConfigError(`${source}: "skipCommits" ${problem}. Pass it with --skip-commits if you trust it.`);
+  }
+  return settings;
+}
 
 /** Reads `.repo-archaeology.json` from the repository root, if present. */
 export function loadConfigFile(root: string): Partial<Settings> {
@@ -68,24 +93,7 @@ export function loadConfigFile(root: string): Partial<Settings> {
   if (!stat) return {};
   if (!stat.isFile()) throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
   if (stat.size > MAX_CONFIG_BYTES) throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(file, 'utf8'));
-  } catch (err) {
-    throw new ConfigError(`${CONFIG_FILE} is not valid JSON: ${(err as Error).message}`);
-  }
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new ConfigError(`${CONFIG_FILE} must contain a JSON object.`);
-  }
-  const settings = validatePartial(raw as Record<string, unknown>, CONFIG_FILE);
-  if (settings.maxFilesPerCommit !== undefined && settings.maxFilesPerCommit > MAX_FILES_PER_COMMIT_FROM_FILE) {
-    throw new ConfigError(`${CONFIG_FILE}: "maxFilesPerCommit" must be at most ${MAX_FILES_PER_COMMIT_FROM_FILE} (use --max-files for more).`);
-  }
-  if (settings.skipCommits !== undefined) {
-    const problem = riskySkipPattern(settings.skipCommits);
-    if (problem) throw new ConfigError(`${CONFIG_FILE}: "skipCommits" ${problem}. Pass it with --skip-commits if you trust it.`);
-  }
-  return settings;
+  return parseConfigText(readFileSync(file, 'utf8'), CONFIG_FILE);
 }
 
 /**

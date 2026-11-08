@@ -289,7 +289,7 @@ Use it to choose thresholds for your repo. To avoid fooling yourself, tune with 
 
 ### Analyze a past commit (`--head <ref>`)
 
-Pass `--head <ref>` to run any command (`scan`, `diff`, `file`, `explain`, `backtest`, or `map`) as if `<ref>` were checked out, without touching `HEAD`, `.git/index`, or your working tree. History is restricted to ancestors of `<ref>`, current files come from `git ls-tree <ref>`, and import classification reads blobs from `<ref>` via a single `git cat-file --batch` session:
+Pass `--head <ref>` to run any command (`scan`, `diff`, `file`, `explain`, `backtest`, or `map`) as if `<ref>` were checked out, without touching `HEAD`, `.git/index`, or your working tree. History is restricted to ancestors of `<ref>`, `.repo-archaeology.json` is loaded from `<ref>`'s tree (with CLI flags retaining precedence), current files come from `git ls-tree <ref>`, and import classification reads regular-file blobs from `<ref>` via a single `git cat-file --batch` session:
 
 ```bash
 # Replay a historical pull request at its exact head and base commits
@@ -299,7 +299,7 @@ repo-archaeology diff --head <sha> --base <sha>
 repo-archaeology backtest --head v1.2.0
 ```
 
-When `--head` is used on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings`. JSON outputs include `meta.head: { ref, sha }`.
+`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). JSON outputs include `meta.head: { ref, sha }`.
 
 ## How to read the results
 

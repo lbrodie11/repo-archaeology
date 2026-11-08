@@ -316,220 +316,220 @@ export async function explain(
       ? mergeChanges(await branchChanges(ctx.root, ctx.mergeBaseSha, { head: ctx.head?.sha }), wtChanges)
       : wtChanges;
     const resolvedA = resolveExplainIdentity(rawFrom, changes);
-  const resolvedB = resolveExplainIdentity(rawTo, changes);
-  const currentFrom = resolvedA.currentPath;
-  const currentTo = resolvedB.currentPath;
-  if (
-    currentFrom === currentTo ||
-    (resolvedA.historyPath !== undefined && resolvedA.historyPath === resolvedB.historyPath)
-  ) {
-    throw new UsageError('Please provide two different files to explain.');
-  }
-
-  const idA = ensureFileInHistory(ctx, resolvedA.historyPath, currentFrom);
-  const idB = ensureFileInHistory(ctx, resolvedB.historyPath, currentTo);
-  const historyFrom = resolvedA.historyPath!;
-  const historyTo = resolvedB.historyPath!;
-
-  const requestedCommits = options.commits ?? options.limit ?? DEFAULT_EXPLAIN_COMMITS;
-  const maxCommits = Math.min(MAX_EXPLAIN_COMMITS, Math.max(1, Math.floor(requestedCommits)));
-  const maxPatchBytes = options.maxPatchBytes ?? DEFAULT_MAX_PATCH_BYTES;
-  const maxHunksPerFile = options.maxHunksPerFile ?? DEFAULT_MAX_HUNKS_PER_FILE;
-  const maxLinesPerHunk = options.maxLinesPerHunk ?? DEFAULT_MAX_LINES_PER_HUNK;
-  const maxTotalPatchLines = options.maxTotalPatchLines ?? DEFAULT_MAX_TOTAL_PATCH_LINES;
-  const perCommitTimeoutMs = options.timeoutMs ?? DEFAULT_PATCH_TIMEOUT_MS;
-  const totalTimeoutMs = options.totalTimeoutMs ?? DEFAULT_TOTAL_TIMEOUT_MS;
-  const requestedContext = options.contextLines ?? DEFAULT_CONTEXT_LINES;
-  const contextLines = Math.min(MAX_CONTEXT_LINES, Math.max(0, Math.floor(requestedContext)));
-  const contextClamped = requestedContext !== contextLines;
-
-  const { model } = ctx;
-  const stat = model.pair(idA, idB);
-  const shared = stat?.count ?? 0;
-  const fromChanges = model.changeCount[idA] ?? 0;
-  const toChanges = model.changeCount[idB] ?? 0;
-  const confidence = stat ? model.confidence(stat, idA) : 0;
-  const reverseConfidence = stat ? model.confidence(stat, idB) : 0;
-  const score = wilsonLowerBound(confidence, model.effectiveChanges(idA));
-  const meetsThresholds =
-    shared >= ctx.thresholds.minShared &&
-    (confidence >= ctx.thresholds.minConfidence || reverseConfidence >= ctx.thresholds.minConfidence);
-
-  const relationship = ctx.classifier.classify(currentFrom, currentTo);
-  const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(currentFrom, currentTo) : undefined;
-  const why = ctx.classifier.explain(currentFrom, currentTo, relationship, hiddenBridge);
-
-  const sharedIndices: number[] = [];
-  const aOnlyIndices: number[] = [];
-  const bOnlyIndices: number[] = [];
-
-  model.commits.forEach((commit, idx) => {
-    const hasA = commit.files.includes(historyFrom);
-    const hasB = commit.files.includes(historyTo);
-    if (hasA && hasB) sharedIndices.push(idx);
-    else if (hasA) aOnlyIndices.push(idx);
-    else if (hasB) bOnlyIndices.push(idx);
-  });
-
-  const sortedShared = sortCommitsNewestFirst(model.commits, sharedIndices);
-  const sortedAOnly = sortCommitsNewestFirst(model.commits, aOnlyIndices);
-  const sortedBOnly = sortCommitsNewestFirst(model.commits, bOnlyIndices);
-
-  const selectedShared = sortedShared.slice(0, maxCommits);
-  const commitsTruncated = requestedCommits > MAX_EXPLAIN_COMMITS || sortedShared.length > selectedShared.length;
-
-  let remainingLines = maxTotalPatchLines;
-  let outputTruncated = false;
-  let timedOut = false;
-  const startMs = Date.now();
-  const deadlineMs = startMs + totalTimeoutMs;
-
-  const patchBounds: PatchBoundsOptions = {
-    contextLines,
-    maxPatchBytes,
-    maxHunksPerFile,
-    maxLinesPerHunk,
-    maxLineLength: options.maxLineLength,
-    timeoutMs: perCommitTimeoutMs,
-    deadlineMs,
-  };
-
-  const sharedCommits: SharedCommitEvidence[] = [];
-  for (const idx of selectedShared) {
-    const commit = model.commits[idx]!;
-    const changeA = resolveCommitFileChange(commit, historyFrom);
-    const changeB = resolveCommitFileChange(commit, historyTo);
-    const remainingMs = deadlineMs - Date.now();
-    if (remainingMs <= 0) {
-      timedOut = true;
-      break;
-    }
-    const budgetMs = Math.min(perCommitTimeoutMs, remainingMs);
-    const { patchA: rawA, patchB: rawB, timedOut: pairTimedOut } = await fetchPairCommitPatches(
-      ctx.root,
-      commit.hash,
-      currentFrom,
-      changeA,
-      currentTo,
-      changeB,
-      { ...patchBounds, timeoutMs: budgetMs, deadlineMs },
-    );
-    if (pairTimedOut) timedOut = true;
-
-    // Reserve at least half of remainingLines for fileB when both have hunks so fileA cannot starve fileB.
-    const rawBLines = countPatchLines(rawB);
-    const reserveForB = rawBLines > 0 ? Math.min(rawBLines, Math.max(2, Math.floor(remainingLines / 2))) : 0;
-    const budgetForA = Math.max(0, remainingLines - reserveForB);
-    const boundedA = enforceTotalLineBudget(rawA, budgetForA);
-    remainingLines = Math.max(0, remainingLines - boundedA.usedLines);
-    const boundedB = enforceTotalLineBudget(rawB, remainingLines);
-    remainingLines = Math.max(0, remainingLines - boundedB.usedLines);
-    if (boundedA.clippedByTotal || boundedB.clippedByTotal) {
-      outputTruncated = true;
+    const resolvedB = resolveExplainIdentity(rawTo, changes);
+    const currentFrom = resolvedA.currentPath;
+    const currentTo = resolvedB.currentPath;
+    if (
+      currentFrom === currentTo ||
+      (resolvedA.historyPath !== undefined && resolvedA.historyPath === resolvedB.historyPath)
+    ) {
+      throw new UsageError('Please provide two different files to explain.');
     }
 
-    sharedCommits.push({
-      hash: commit.hash,
-      date: isoDate(commit.time),
-      author: commit.author,
-      subject: commit.subject,
-      fileA: boundedA.patch,
-      fileB: boundedB.patch,
+    const idA = ensureFileInHistory(ctx, resolvedA.historyPath, currentFrom);
+    const idB = ensureFileInHistory(ctx, resolvedB.historyPath, currentTo);
+    const historyFrom = resolvedA.historyPath!;
+    const historyTo = resolvedB.historyPath!;
+
+    const requestedCommits = options.commits ?? options.limit ?? DEFAULT_EXPLAIN_COMMITS;
+    const maxCommits = Math.min(MAX_EXPLAIN_COMMITS, Math.max(1, Math.floor(requestedCommits)));
+    const maxPatchBytes = options.maxPatchBytes ?? DEFAULT_MAX_PATCH_BYTES;
+    const maxHunksPerFile = options.maxHunksPerFile ?? DEFAULT_MAX_HUNKS_PER_FILE;
+    const maxLinesPerHunk = options.maxLinesPerHunk ?? DEFAULT_MAX_LINES_PER_HUNK;
+    const maxTotalPatchLines = options.maxTotalPatchLines ?? DEFAULT_MAX_TOTAL_PATCH_LINES;
+    const perCommitTimeoutMs = options.timeoutMs ?? DEFAULT_PATCH_TIMEOUT_MS;
+    const totalTimeoutMs = options.totalTimeoutMs ?? DEFAULT_TOTAL_TIMEOUT_MS;
+    const requestedContext = options.contextLines ?? DEFAULT_CONTEXT_LINES;
+    const contextLines = Math.min(MAX_CONTEXT_LINES, Math.max(0, Math.floor(requestedContext)));
+    const contextClamped = requestedContext !== contextLines;
+
+    const { model } = ctx;
+    const stat = model.pair(idA, idB);
+    const shared = stat?.count ?? 0;
+    const fromChanges = model.changeCount[idA] ?? 0;
+    const toChanges = model.changeCount[idB] ?? 0;
+    const confidence = stat ? model.confidence(stat, idA) : 0;
+    const reverseConfidence = stat ? model.confidence(stat, idB) : 0;
+    const score = wilsonLowerBound(confidence, model.effectiveChanges(idA));
+    const meetsThresholds =
+      shared >= ctx.thresholds.minShared &&
+      (confidence >= ctx.thresholds.minConfidence || reverseConfidence >= ctx.thresholds.minConfidence);
+
+    const relationship = ctx.classifier.classify(currentFrom, currentTo);
+    const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(currentFrom, currentTo) : undefined;
+    const why = ctx.classifier.explain(currentFrom, currentTo, relationship, hiddenBridge);
+
+    const sharedIndices: number[] = [];
+    const aOnlyIndices: number[] = [];
+    const bOnlyIndices: number[] = [];
+
+    model.commits.forEach((commit, idx) => {
+      const hasA = commit.files.includes(historyFrom);
+      const hasB = commit.files.includes(historyTo);
+      if (hasA && hasB) sharedIndices.push(idx);
+      else if (hasA) aOnlyIndices.push(idx);
+      else if (hasB) bOnlyIndices.push(idx);
     });
-  }
 
-  const buildCounterexamples = async (
-    indices: number[],
-    historyPath: string,
-    canonicalPath: string,
-  ): Promise<CounterexampleCommitEvidence[]> => {
-    const result: CounterexampleCommitEvidence[] = [];
-    for (const idx of indices.slice(0, MAX_COUNTEREXAMPLES_PER_SIDE)) {
+    const sortedShared = sortCommitsNewestFirst(model.commits, sharedIndices);
+    const sortedAOnly = sortCommitsNewestFirst(model.commits, aOnlyIndices);
+    const sortedBOnly = sortCommitsNewestFirst(model.commits, bOnlyIndices);
+
+    const selectedShared = sortedShared.slice(0, maxCommits);
+    const commitsTruncated = requestedCommits > MAX_EXPLAIN_COMMITS || sortedShared.length > selectedShared.length;
+
+    let remainingLines = maxTotalPatchLines;
+    let outputTruncated = false;
+    let timedOut = false;
+    const startMs = Date.now();
+    const deadlineMs = startMs + totalTimeoutMs;
+
+    const patchBounds: PatchBoundsOptions = {
+      contextLines,
+      maxPatchBytes,
+      maxHunksPerFile,
+      maxLinesPerHunk,
+      maxLineLength: options.maxLineLength,
+      timeoutMs: perCommitTimeoutMs,
+      deadlineMs,
+    };
+
+    const sharedCommits: SharedCommitEvidence[] = [];
+    for (const idx of selectedShared) {
       const commit = model.commits[idx]!;
-      const change = resolveCommitFileChange(commit, historyPath);
-      const entry: CounterexampleCommitEvidence = {
+      const changeA = resolveCommitFileChange(commit, historyFrom);
+      const changeB = resolveCommitFileChange(commit, historyTo);
+      const remainingMs = deadlineMs - Date.now();
+      if (remainingMs <= 0) {
+        timedOut = true;
+        break;
+      }
+      const budgetMs = Math.min(perCommitTimeoutMs, remainingMs);
+      const { patchA: rawA, patchB: rawB, timedOut: pairTimedOut } = await fetchPairCommitPatches(
+        ctx.root,
+        commit.hash,
+        currentFrom,
+        changeA,
+        currentTo,
+        changeB,
+        { ...patchBounds, timeoutMs: budgetMs, deadlineMs },
+      );
+      if (pairTimedOut) timedOut = true;
+
+      // Reserve at least half of remainingLines for fileB when both have hunks so fileA cannot starve fileB.
+      const rawBLines = countPatchLines(rawB);
+      const reserveForB = rawBLines > 0 ? Math.min(rawBLines, Math.max(2, Math.floor(remainingLines / 2))) : 0;
+      const budgetForA = Math.max(0, remainingLines - reserveForB);
+      const boundedA = enforceTotalLineBudget(rawA, budgetForA);
+      remainingLines = Math.max(0, remainingLines - boundedA.usedLines);
+      const boundedB = enforceTotalLineBudget(rawB, remainingLines);
+      remainingLines = Math.max(0, remainingLines - boundedB.usedLines);
+      if (boundedA.clippedByTotal || boundedB.clippedByTotal) {
+        outputTruncated = true;
+      }
+
+      sharedCommits.push({
         hash: commit.hash,
         date: isoDate(commit.time),
         author: commit.author,
         subject: commit.subject,
-        historicalPath: change.path,
-        ...(change.oldPath !== undefined ? { oldPath: change.oldPath } : {}),
-        status: change.status,
-      };
-      if (options.counterexamples) {
-        const remainingMs = deadlineMs - Date.now();
-        if (remainingMs <= 0) {
-          timedOut = true;
-        } else {
-          const budgetMs = Math.min(perCommitTimeoutMs, remainingMs);
-          const rawPatch = await fetchSingleFilePatch(ctx.root, commit.hash, canonicalPath, change, {
-            ...patchBounds,
-            timeoutMs: budgetMs,
-            deadlineMs,
-          });
-          if (rawPatch.timedOut) timedOut = true;
-          const bounded = enforceTotalLineBudget(rawPatch, remainingLines);
-          remainingLines = Math.max(0, remainingLines - bounded.usedLines);
-          if (bounded.clippedByTotal) outputTruncated = true;
-          entry.patch = bounded.patch;
-        }
-      }
-      result.push(entry);
+        fileA: boundedA.patch,
+        fileB: boundedB.patch,
+      });
     }
-    return result;
-  };
 
-  const fromWithoutTo = await buildCounterexamples(sortedAOnly, historyFrom, currentFrom);
-  const toWithoutFrom = await buildCounterexamples(sortedBOnly, historyTo, currentTo);
+    const buildCounterexamples = async (
+      indices: number[],
+      historyPath: string,
+      canonicalPath: string,
+    ): Promise<CounterexampleCommitEvidence[]> => {
+      const result: CounterexampleCommitEvidence[] = [];
+      for (const idx of indices.slice(0, MAX_COUNTEREXAMPLES_PER_SIDE)) {
+        const commit = model.commits[idx]!;
+        const change = resolveCommitFileChange(commit, historyPath);
+        const entry: CounterexampleCommitEvidence = {
+          hash: commit.hash,
+          date: isoDate(commit.time),
+          author: commit.author,
+          subject: commit.subject,
+          historicalPath: change.path,
+          ...(change.oldPath !== undefined ? { oldPath: change.oldPath } : {}),
+          status: change.status,
+        };
+        if (options.counterexamples) {
+          const remainingMs = deadlineMs - Date.now();
+          if (remainingMs <= 0) {
+            timedOut = true;
+          } else {
+            const budgetMs = Math.min(perCommitTimeoutMs, remainingMs);
+            const rawPatch = await fetchSingleFilePatch(ctx.root, commit.hash, canonicalPath, change, {
+              ...patchBounds,
+              timeoutMs: budgetMs,
+              deadlineMs,
+            });
+            if (rawPatch.timedOut) timedOut = true;
+            const bounded = enforceTotalLineBudget(rawPatch, remainingLines);
+            remainingLines = Math.max(0, remainingLines - bounded.usedLines);
+            if (bounded.clippedByTotal) outputTruncated = true;
+            entry.patch = bounded.patch;
+          }
+        }
+        result.push(entry);
+      }
+      return result;
+    };
 
-  return {
-    meta: buildMeta(ctx),
-    from: currentFrom,
-    to: currentTo,
-    relationship,
-    why,
-    ...(hiddenBridge ? { hiddenBridge } : {}),
-    meetsThresholds,
-    shared,
-    fromChanges,
-    toChanges,
-    confidence: round(confidence),
-    reverseConfidence: round(reverseConfidence),
-    interval: roundInterval(wilsonInterval(shared, fromChanges)),
-    reverseInterval: roundInterval(wilsonInterval(shared, toChanges)),
-    score: round(score),
-    weighted: model.weighted,
-    ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
-    crossesDirectories: posix.dirname(currentFrom) !== posix.dirname(currentTo),
-    sharedCommits,
-    counterexamples: {
-      fromWithoutToTotal: sortedAOnly.length,
-      toWithoutFromTotal: sortedBOnly.length,
-      fromWithoutTo,
-      toWithoutFrom,
-    },
-    bounds: {
-      maxCommits,
-      contextLines,
-      ...(contextClamped ? { contextClamped: true } : {}),
-      maxPatchBytes,
-      maxHunksPerFile,
-      maxLinesPerHunk,
-      maxTotalPatchLines,
-      timeoutMs: totalTimeoutMs,
-      commitsTruncated,
-      outputTruncated,
-      timedOut,
-    },
-    cliCommand: formatExplainCommand(
-      currentFrom,
-      currentTo,
-      ctx.settings,
-      ctx.flagSettings,
-      ctx.base ? { base: ctx.mergeBaseSha ?? ctx.base } : undefined,
-    ),
-    disclaimer: EXPLAIN_DISCLAIMER,
-  };
+    const fromWithoutTo = await buildCounterexamples(sortedAOnly, historyFrom, currentFrom);
+    const toWithoutFrom = await buildCounterexamples(sortedBOnly, historyTo, currentTo);
+
+    return {
+      meta: buildMeta(ctx),
+      from: currentFrom,
+      to: currentTo,
+      relationship,
+      why,
+      ...(hiddenBridge ? { hiddenBridge } : {}),
+      meetsThresholds,
+      shared,
+      fromChanges,
+      toChanges,
+      confidence: round(confidence),
+      reverseConfidence: round(reverseConfidence),
+      interval: roundInterval(wilsonInterval(shared, fromChanges)),
+      reverseInterval: roundInterval(wilsonInterval(shared, toChanges)),
+      score: round(score),
+      weighted: model.weighted,
+      ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
+      crossesDirectories: posix.dirname(currentFrom) !== posix.dirname(currentTo),
+      sharedCommits,
+      counterexamples: {
+        fromWithoutToTotal: sortedAOnly.length,
+        toWithoutFromTotal: sortedBOnly.length,
+        fromWithoutTo,
+        toWithoutFrom,
+      },
+      bounds: {
+        maxCommits,
+        contextLines,
+        ...(contextClamped ? { contextClamped: true } : {}),
+        maxPatchBytes,
+        maxHunksPerFile,
+        maxLinesPerHunk,
+        maxTotalPatchLines,
+        timeoutMs: totalTimeoutMs,
+        commitsTruncated,
+        outputTruncated,
+        timedOut,
+      },
+      cliCommand: formatExplainCommand(
+        currentFrom,
+        currentTo,
+        ctx.settings,
+        ctx.flagSettings,
+        ctx.base ? { base: ctx.mergeBaseSha ?? ctx.base } : undefined,
+      ),
+      disclaimer: EXPLAIN_DISCLAIMER,
+    };
   } finally {
     ctx.close?.();
   }

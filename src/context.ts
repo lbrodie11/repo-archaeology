@@ -1,10 +1,31 @@
 import { realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { compileSkipPattern, ignorePatterns, loadConfigFile, resolveSettings, type Settings } from './config.js';
+import {
+  compileSkipPattern,
+  CONFIG_FILE,
+  ConfigError,
+  ignorePatterns,
+  loadConfigFile,
+  MAX_CONFIG_BYTES,
+  parseConfigText,
+  resolveSettings,
+  type Settings,
+} from './config.js';
 import { workingTreeChanges } from './git/changes.js';
-import { findRepoRoot, hasCommits, isShallow, listCurrentFiles, listTreeFiles, mergeBases, refExists, resolveCommit } from './git/repo.js';
-import { GitError } from './git/run.js';
-import { gitTreeFiles, RelationshipClassifier, workingTreeFiles } from './imports/classify.js';
+import {
+  findRepoRoot,
+  hasCommits,
+  isRegularTreeMode,
+  isShallow,
+  listCurrentFiles,
+  listTreeFiles,
+  mergeBases,
+  refExists,
+  resolveCommit,
+  type TreeFileSet,
+} from './git/repo.js';
+import { GitError, runGit } from './git/run.js';
+import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
 import { loadHistory, type History } from './model/history.js';
 import { PathMatcher } from './util/glob.js';
@@ -19,6 +40,8 @@ export interface ContextOptions {
   base?: string;
   /** Analyze the repository as of `<head>` without checking it out or reading the working tree. */
   head?: string;
+  /** Optional overrides for `gitTreeFiles` when `head` is set (for testing). */
+  treeFilesOptions?: GitTreeFilesOptions;
 }
 
 export interface Context {
@@ -132,30 +155,47 @@ async function trainBaseline(
   return { history, model, warnings, ignores };
 }
 
+async function loadConfigFromHeadTree(root: string, headSha: string, treeFiles: TreeFileSet): Promise<Partial<Settings>> {
+  const mode = treeFiles.modes.get(CONFIG_FILE);
+  if (mode === undefined) return {};
+  if (!isRegularTreeMode(mode)) {
+    throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
+  }
+  const spec = `${headSha}:${CONFIG_FILE}`;
+  const sizeOut = (await runGit(root, ['cat-file', '-s', '--end-of-options', spec])).trim();
+  if (Number(sizeOut) > MAX_CONFIG_BYTES) {
+    throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
+  }
+  const content = await runGit(root, ['cat-file', 'blob', '--end-of-options', spec]);
+  return parseConfigText(content, CONFIG_FILE);
+}
+
 export async function loadContext(cwdOption: string | undefined, flags: Partial<Settings>, options?: ContextOptions): Promise<Context> {
   const cwd = resolve(cwdOption ?? process.cwd());
   const root = await findRepoRoot(cwd);
   if (!(await hasCommits(root))) throw new GitError('This repository has no commits yet, so there is no history to analyze.');
-  const settings = resolveSettings(loadConfigFile(root), flags);
-  compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
 
   const headRef = options?.head;
-  const headSha = headRef !== undefined ? await resolveHead(root, headRef) : await resolveCommit(root, 'HEAD');
-  const [shallow, mergeBaseSha] = await Promise.all([
-    isShallow(root),
-    options?.base !== undefined ? resolveBaseline(root, options.base, headRef !== undefined ? headSha : 'HEAD') : Promise.resolve(undefined),
-  ]);
-
-  progress('Reading git history…');
   if (headRef !== undefined) {
-    const [wtChanges, currentFiles] = await Promise.all([
-      workingTreeChanges(root),
-      listTreeFiles(root, headSha),
+    const [headSha, checkedOutHeadSha] = await Promise.all([
+      resolveHead(root, headRef),
+      resolveCommit(root, 'HEAD'),
     ]);
+    const [shallow, mergeBaseSha, currentFiles, wtChanges] = await Promise.all([
+      isShallow(root),
+      options?.base !== undefined ? resolveBaseline(root, options.base, headSha) : Promise.resolve(undefined),
+      listTreeFiles(root, headSha),
+      headSha === checkedOutHeadSha ? workingTreeChanges(root) : Promise.resolve([]),
+    ]);
+    const fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles);
+    const settings = resolveSettings(fileConfig, flags);
+    compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
+
+    progress('Reading git history…');
     const extraWarnings = wtChanges.length > 0 ? [DIRTY_WORKTREE_HEAD_WARNING] : [];
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings);
     const bridgeIgnores = new PathMatcher(trained.ignores);
-    const treeFiles = gitTreeFiles(root, headSha, currentFiles);
+    const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);
     const classifier = new RelationshipClassifier(treeFiles, (path) => !bridgeIgnores.matches(path));
     return {
       cwd,
@@ -178,6 +218,16 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     };
   }
 
+  const settings = resolveSettings(loadConfigFile(root), flags);
+  compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
+
+  const headSha = await resolveCommit(root, 'HEAD');
+  const [shallow, mergeBaseSha] = await Promise.all([
+    isShallow(root),
+    options?.base !== undefined ? resolveBaseline(root, options.base, 'HEAD') : Promise.resolve(undefined),
+  ]);
+
+  progress('Reading git history…');
   const [trained, currentFiles] = await Promise.all([
     trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow),
     listCurrentFiles(root),
@@ -249,9 +299,27 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
 }
 
 /** Converts a user-supplied path (relative to cwd, or absolute) to a repo-relative POSIX path. */
-export function toRepoPath(ctx: Pick<Context, 'cwd' | 'root'>, input: string): string {
+export function toRepoPath(ctx: Pick<Context, 'cwd' | 'root' | 'head'>, input: string): string {
+  const realRoot = realpathLenient(ctx.root);
+  if (ctx.head !== undefined) {
+    const rawRoot = resolve(ctx.root);
+    const resolvedCwd = resolve(ctx.cwd);
+    const cwdInRaw = relative(rawRoot, resolvedCwd);
+    const baseCwd =
+      cwdInRaw === '' || (!cwdInRaw.startsWith(`..${sep}`) && cwdInRaw !== '..' && !isAbsolute(cwdInRaw))
+        ? resolve(realRoot, cwdInRaw)
+        : realpathLenient(ctx.cwd);
+    const target = isAbsolute(input) ? resolve(input) : resolve(baseCwd, input);
+    for (const rootCandidate of [realRoot, rawRoot]) {
+      const rel = relative(rootCandidate, target);
+      if (rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
+        return rel.split(sep).join('/');
+      }
+    }
+    throw new UsageError(`${input} is outside the repository at ${ctx.root}.`);
+  }
   const absolute = realpathLenient(isAbsolute(input) ? input : resolve(ctx.cwd, input));
-  const rel = relative(realpathLenient(ctx.root), absolute);
+  const rel = relative(realRoot, absolute);
   if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new UsageError(`${input} is outside the repository at ${ctx.root}.`);
   }

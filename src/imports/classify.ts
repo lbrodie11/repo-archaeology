@@ -2,14 +2,9 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
-  getActiveCatFilePids,
-  getCatFileSpawnCount,
-  getLastCatFilePid,
   gitTreeFiles,
-   ImportResolver,
+  ImportResolver,
   MAX_SOURCE_BYTES,
-  onCatFileSpawn,
-  resetCatFileStats,
   type GitTreeFiles,
   type GitTreeFilesOptions,
   type RepoFiles,
@@ -17,13 +12,8 @@ import {
 import { extractDependencies } from './typescript.js';
 
 export {
-  getActiveCatFilePids,
-  getCatFileSpawnCount,
-  getLastCatFilePid,
   gitTreeFiles,
   MAX_SOURCE_BYTES,
-  onCatFileSpawn,
-  resetCatFileStats,
   type GitTreeFiles,
   type GitTreeFilesOptions,
 };

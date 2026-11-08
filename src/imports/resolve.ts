@@ -1,9 +1,12 @@
+import { spawnSync } from 'node:child_process';
 import { posix } from 'node:path';
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
+import { isRegularTreeMode, parseLsTree, type TreeFileSet } from '../git/repo.js';
 import { CONFIG_OVERRIDES, GitError } from '../git/run.js';
 import { typescript } from './typescript.js';
 
 export const MAX_SOURCE_BYTES = 1_000_000;
+const DEFAULT_CAT_FILE_TIMEOUT_MS = 10_000;
 
 /** Read access to the repository, using repo-relative POSIX paths. */
 export interface RepoFiles {
@@ -22,40 +25,6 @@ export interface GitTreeFiles extends RepoFiles {
   close(): void;
   readonly pid: number | undefined;
   [Symbol.dispose](): void;
-}
-
-const activeCatFilePids = new Set<number>();
-let catFileSpawnCount = 0;
-let lastCatFilePid: number | undefined;
-const catFileSpawnListeners = new Set<(pid: number) => void>();
-
-/** Test hook: returns PIDs of currently active `git cat-file --batch` child processes. */
-export function getActiveCatFilePids(): number[] {
-  return [...activeCatFilePids];
-}
-
-/** Test hook: returns the total number of `git cat-file --batch` processes spawned since the last reset. */
-export function getCatFileSpawnCount(): number {
-  return catFileSpawnCount;
-}
-
-/** Test hook: returns the most recently spawned `git cat-file --batch` PID, if any. */
-export function getLastCatFilePid(): number | undefined {
-  return lastCatFilePid;
-}
-
-/** Test hook: resets the `git cat-file --batch` spawn counter and last-seen PID. */
-export function resetCatFileStats(): void {
-  catFileSpawnCount = 0;
-  lastCatFilePid = undefined;
-}
-
-/** Test hook: registers a listener called whenever a `git cat-file --batch` child process is spawned. */
-export function onCatFileSpawn(listener: (pid: number) => void): () => void {
-  catFileSpawnListeners.add(listener);
-  return () => {
-    catFileSpawnListeners.delete(listener);
-  };
 }
 
 const CAT_FILE_WORKER_CODE = `
@@ -78,6 +47,7 @@ const child = spawn('git', [...configOverrides, 'cat-file', '--batch'], {
 });
 
 let childExited = false;
+let stderrText = '';
 const chunks = [];
 let totalBuffered = 0;
 let pendingStep = null;
@@ -138,9 +108,16 @@ child.stdout.on('data', (chunk) => {
   if (pendingStep) pendingStep();
 });
 
-child.stderr.on('data', () => {});
+child.stderr.on('data', (chunk) => {
+  if (stderrText.length < 4096) {
+    stderrText += chunk.toString('utf8');
+  }
+});
 
-child.on('error', () => {
+child.on('error', (err) => {
+  if (stderrText.length < 4096 && err && err.message) {
+    stderrText += err.message;
+  }
   childExited = true;
   if (pendingStep) pendingStep();
 });
@@ -161,7 +138,7 @@ port.on('message', (msg) => {
     if (childExited) {
       finishClose();
       return;
-    }
+    };
     child.once('close', finishClose);
     try {
       child.stdin.end();
@@ -178,7 +155,7 @@ port.on('message', (msg) => {
   if (msg.type === 'read') {
     const { spec, maxBytes, lock } = msg;
     if (childExited || !child.stdin.writable) {
-      port.postMessage({ content: undefined, dead: true });
+      port.postMessage({ content: undefined, dead: true, stderr: stderrText });
       notifyWaiter(lock, 1);
       return;
     }
@@ -190,7 +167,7 @@ port.on('message', (msg) => {
 
     const finishRead = (content, dead = false) => {
       pendingStep = null;
-      port.postMessage({ content, dead });
+      port.postMessage({ content, dead, stderr: dead ? stderrText : undefined });
       notifyWaiter(lock, 1);
     };
 
@@ -248,8 +225,13 @@ notifyWaiter(initLock, 1);
 
 export interface GitTreeFilesOptions {
   maxBytes?: number;
+  timeoutMs?: number;
   /** Optional hook called inside `read(path)` after fetching blob content (for testing error handling). */
   onRead?: (path: string, content: string | undefined) => void;
+  /** Optional hook called when a `git cat-file --batch` child process is spawned. */
+  onSpawn?: (pid: number) => void;
+  /** Optional hook called when a `git cat-file --batch` child process is closed. */
+  onClose?: (pid: number) => void;
 }
 
 /**
@@ -266,14 +248,37 @@ export function gitTreeFiles(
     throw new GitError(`Invalid revision: ${headSha}`);
   }
   const maxBytes = options?.maxBytes ?? MAX_SOURCE_BYTES;
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_CAT_FILE_TIMEOUT_MS;
   const cache = new Map<string, string | undefined>();
+  let treeModes: ReadonlyMap<string, string> | undefined = (existing as Partial<TreeFileSet>).modes;
+
+  const ensureTreeModes = (): ReadonlyMap<string, string> => {
+    if (treeModes !== undefined) return treeModes;
+    const res = spawnSync('git', [...CONFIG_OVERRIDES, 'ls-tree', '-r', '-z', '--end-of-options', headSha], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
+    });
+    if (res.status !== 0) {
+      throw new GitError(`git ls-tree failed for ${headSha}`, res.stderr ?? '', res.status);
+    }
+    treeModes = parseLsTree(res.stdout ?? '').modes;
+    return treeModes;
+  };
 
   let worker: Worker | undefined;
   let port: MessageChannel['port1'] | undefined;
   let lock: Int32Array | undefined;
   let currentPid: number | undefined;
+  let exitListenerAttached = false;
+  let explicitlyClosed = false;
 
-  const close = (): void => {
+  const closeInternal = (): void => {
+    if (exitListenerAttached) {
+      process.removeListener('exit', onProcessExit);
+      exitListenerAttached = false;
+    }
     const activeWorker = worker;
     const activePort = port;
     const activeLock = lock;
@@ -283,10 +288,10 @@ export function gitTreeFiles(
     lock = undefined;
     currentPid = undefined;
 
-    if (pid !== undefined) {
-      activeCatFilePids.delete(pid);
+    if (!activeWorker || !activePort || !activeLock) {
+      if (pid !== undefined) options?.onClose?.(pid);
+      return;
     }
-    if (!activeWorker || !activePort || !activeLock) return;
     try {
       Atomics.store(activeLock, 0, 0);
       activePort.postMessage({ type: 'close', lock: activeLock });
@@ -301,14 +306,16 @@ export function gitTreeFiles(
         activePort.close();
       } catch {}
       void activeWorker.terminate();
+      if (pid !== undefined) options?.onClose?.(pid);
     }
   };
 
   const onProcessExit = (): void => {
-    close();
+    closeInternal();
   };
 
   const open = (): void => {
+    explicitlyClosed = false;
     if (worker) return;
     const channel = new MessageChannel();
     const sab = new SharedArrayBuffer(4);
@@ -336,17 +343,18 @@ export function gitTreeFiles(
     const initMsg = receiveMessageOnPort(channel.port1)?.message as { type?: string; pid?: number | null } | undefined;
     if (initMsg?.pid) {
       currentPid = initMsg.pid;
-      lastCatFilePid = initMsg.pid;
-      catFileSpawnCount++;
-      activeCatFilePids.add(initMsg.pid);
-      for (const listener of catFileSpawnListeners) {
-        listener(initMsg.pid);
-      }
+      options?.onSpawn?.(initMsg.pid);
     }
-    process.once('exit', onProcessExit);
+    if (!exitListenerAttached) {
+      process.once('exit', onProcessExit);
+      exitListenerAttached = true;
+    }
   };
 
   const read = (path: string): string | undefined => {
+    if (explicitlyClosed) {
+      throw new GitError(`Cannot read "${path}" after gitTreeFiles has been closed; call open() before reading again.`);
+    }
     if (!existing.has(path) || path.includes('\n') || path.includes('\r') || path.includes('\0')) {
       return undefined;
     }
@@ -355,8 +363,18 @@ export function gitTreeFiles(
       options?.onRead?.(path, cached);
       return cached;
     }
+    // Only regular files (100644/100755) may be read as source; symlinks (120000) and gitlinks (160000) return undefined.
+    const modes = ensureTreeModes();
+    const mode = modes.get(path);
+    if (mode !== undefined && !isRegularTreeMode(mode)) {
+      cache.set(path, undefined);
+      options?.onRead?.(path, undefined);
+      return undefined;
+    }
     open();
-    if (!port || !lock) return undefined;
+    if (!port || !lock) {
+      throw new GitError(`Failed to initialize git cat-file --batch worker for ${headSha}.`);
+    }
     try {
       Atomics.store(lock, 0, 0);
       port.postMessage({
@@ -365,21 +383,26 @@ export function gitTreeFiles(
         maxBytes,
         lock,
       });
-      const waitRes = Atomics.wait(lock, 0, 0, 10_000);
+      const waitRes = Atomics.wait(lock, 0, 0, timeoutMs);
       if (waitRes === 'timed-out') {
-        close();
-        return undefined;
+        closeInternal();
+        throw new GitError(`Timed out reading ${headSha}:${path} from git cat-file --batch after ${timeoutMs}ms.`);
       }
-      const msg = receiveMessageOnPort(port)?.message as { content?: string; dead?: boolean } | undefined;
-      if (msg?.dead) {
-        close();
+      const msg = receiveMessageOnPort(port)?.message as { content?: string; dead?: boolean; stderr?: string } | undefined;
+      if (!msg || msg.dead) {
+        closeInternal();
+        const detail = msg?.stderr?.trim();
+        throw new GitError(
+          `git cat-file --batch exited unexpectedly while reading ${headSha}:${path}.${detail ? ` ${detail}` : ''}`,
+          msg?.stderr ?? '',
+        );
       }
-      const content = msg?.content;
+      const content = msg.content;
       cache.set(path, content);
       options?.onRead?.(path, content);
       return content;
     } catch (err) {
-      close();
+      closeInternal();
       throw err;
     }
   };
@@ -390,15 +413,15 @@ export function gitTreeFiles(
     read,
     open,
     close: () => {
-      process.removeListener('exit', onProcessExit);
-      close();
+      explicitlyClosed = true;
+      closeInternal();
     },
     get pid() {
       return currentPid;
     },
     [Symbol.dispose]() {
-      process.removeListener('exit', onProcessExit);
-      close();
+      explicitlyClosed = true;
+      closeInternal();
     },
   };
 }

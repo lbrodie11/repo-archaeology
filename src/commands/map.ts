@@ -135,194 +135,194 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
   ctx.open?.();
   try {
     const generatedAt = new Date().toISOString();
-  // "Past year" is measured back from the newest analyzed commit, not from today: an inactive
-  // repository, or a run with --before, would otherwise have nothing that counts as recent.
-  const newest = ctx.history.stats.newestTime;
-  const recencyReference = newest !== undefined ? newest * 1000 : Date.parse(generatedAt);
-  const nodes: MapNode[] = [];
-  const nodeIndex = new Map<string, number>();
-  const nodeFor = (path: string): number => {
-    let index = nodeIndex.get(path);
-    if (index === undefined) {
-      const id = ctx.model.id(path)!;
-      const [top] = ctx.model.topAuthors(id, 1);
-      index = nodes.length;
-      nodeIndex.set(path, index);
-      nodes.push({
-        path,
-        dir: posix.dirname(path) === '.' ? '(root)' : posix.dirname(path),
-        changes: ctx.model.changeCount[id] ?? 0,
-        topAuthor: top?.author,
-        topAuthorShare: top ? Math.round(top.share * 100) / 100 : undefined,
+    // "Past year" is measured back from the newest analyzed commit, not from today: an inactive
+    // repository, or a run with --before, would otherwise have nothing that counts as recent.
+    const newest = ctx.history.stats.newestTime;
+    const recencyReference = newest !== undefined ? newest * 1000 : Date.parse(generatedAt);
+    const nodes: MapNode[] = [];
+    const nodeIndex = new Map<string, number>();
+    const nodeFor = (path: string): number => {
+      let index = nodeIndex.get(path);
+      if (index === undefined) {
+        const id = ctx.model.id(path)!;
+        const [top] = ctx.model.topAuthors(id, 1);
+        index = nodes.length;
+        nodeIndex.set(path, index);
+        nodes.push({
+          path,
+          dir: posix.dirname(path) === '.' ? '(root)' : posix.dirname(path),
+          changes: ctx.model.changeCount[id] ?? 0,
+          topAuthor: top?.author,
+          topAuthorShare: top ? Math.round(top.share * 100) / 100 : undefined,
+        });
+      }
+      return index;
+    };
+
+    // Index commit indices by file ID (sorted newest first by author time) for fast counterexample lookup.
+    const commitsByFile: number[][] = Array.from({ length: ctx.model.fileCount }, () => []);
+    const commitFileSets: Set<number>[] = [];
+    const sortedCommitIndices = ctx.model.commits
+      .map((_, idx) => idx)
+      .sort((x, y) => {
+        const cx = ctx.model.commits[x]!;
+        const cy = ctx.model.commits[y]!;
+        return cy.time - cx.time || cy.commitTime - cx.commitTime || x - y;
       });
+    for (let i = 0; i < ctx.model.commits.length; i++) {
+      const cIds = new Set<number>();
+      for (const f of ctx.model.commits[i]!.files) {
+        const fid = ctx.model.id(f);
+        if (fid !== undefined) cIds.add(fid);
+      }
+      commitFileSets.push(cIds);
     }
-    return index;
-  };
-
-  // Index commit indices by file ID (sorted newest first by author time) for fast counterexample lookup.
-  const commitsByFile: number[][] = Array.from({ length: ctx.model.fileCount }, () => []);
-  const commitFileSets: Set<number>[] = [];
-  const sortedCommitIndices = ctx.model.commits
-    .map((_, idx) => idx)
-    .sort((x, y) => {
-      const cx = ctx.model.commits[x]!;
-      const cy = ctx.model.commits[y]!;
-      return cy.time - cx.time || cy.commitTime - cx.commitTime || x - y;
-    });
-  for (let i = 0; i < ctx.model.commits.length; i++) {
-    const cIds = new Set<number>();
-    for (const f of ctx.model.commits[i]!.files) {
-      const fid = ctx.model.id(f);
-      if (fid !== undefined) cIds.add(fid);
-    }
-    commitFileSets.push(cIds);
-  }
-  for (const idx of sortedCommitIndices) {
-    for (const fid of commitFileSets[idx]!) {
-      commitsByFile[fid]!.push(idx);
-    }
-  }
-
-  const findCounterexamples = (fileId: number, otherId: number): { total: number; items: MapCounterexample[] } => {
-    const items: MapCounterexample[] = [];
-    let total = 0;
-    for (const idx of commitsByFile[fileId] ?? []) {
-      if (commitFileSets[idx]!.has(otherId)) continue;
-      total++;
-      if (items.length < MAX_COUNTEREXAMPLES_PER_SIDE) {
-        const commit = ctx.model.commits[idx]!;
-        items.push({ hash: commit.hash, date: isoDate(commit.time), subject: commit.subject });
+    for (const idx of sortedCommitIndices) {
+      for (const fid of commitFileSets[idx]!) {
+        commitsByFile[fid]!.push(idx);
       }
     }
-    return { total, items };
-  };
 
-  const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
-  const edges: MapEdge[] = [];
-  const familyCandidates: RelationshipView[] = [];
-  const edgeIndexByPairKey = new Map<string, number>();
-  let unchecked = 0;
-  const classified = classifiedPairs(ctx);
-  const hasPrimary = classified.entries.some(({ relationship }) => relationship !== 'unknown' && options.kinds.includes(relationship));
-  const uncheckedCap = hasPrimary ? options.uncheckedCap : undefined;
-  for (const { companion, relationship } of classified.entries) {
-    counts[relationship]++;
-    if (!options.kinds.includes(relationship)) continue;
-    const fromPath = ctx.model.path(companion.from);
-    const toPath = ctx.model.path(companion.to);
-    let cachedView: RelationshipView | undefined;
-    if (parallelImplementation(fromPath, toPath) !== undefined) {
-      cachedView = toView(ctx, companion, relationship, fromPath, toPath);
-      familyCandidates.push(cachedView);
+    const findCounterexamples = (fileId: number, otherId: number): { total: number; items: MapCounterexample[] } => {
+      const items: MapCounterexample[] = [];
+      let total = 0;
+      for (const idx of commitsByFile[fileId] ?? []) {
+        if (commitFileSets[idx]!.has(otherId)) continue;
+        total++;
+        if (items.length < MAX_COUNTEREXAMPLES_PER_SIDE) {
+          const commit = ctx.model.commits[idx]!;
+          items.push({ hash: commit.hash, date: isoDate(commit.time), subject: commit.subject });
+        }
+      }
+      return { total, items };
+    };
+
+    const counts: Record<Relationship, number> = { ghost: 0, unknown: 0, indirect: 0, direct: 0, test: 0 };
+    const edges: MapEdge[] = [];
+    const familyCandidates: RelationshipView[] = [];
+    const edgeIndexByPairKey = new Map<string, number>();
+    let unchecked = 0;
+    const classified = classifiedPairs(ctx);
+    const hasPrimary = classified.entries.some(({ relationship }) => relationship !== 'unknown' && options.kinds.includes(relationship));
+    const uncheckedCap = hasPrimary ? options.uncheckedCap : undefined;
+    for (const { companion, relationship } of classified.entries) {
+      counts[relationship]++;
+      if (!options.kinds.includes(relationship)) continue;
+      const fromPath = ctx.model.path(companion.from);
+      const toPath = ctx.model.path(companion.to);
+      let cachedView: RelationshipView | undefined;
+      if (parallelImplementation(fromPath, toPath) !== undefined) {
+        cachedView = toView(ctx, companion, relationship, fromPath, toPath);
+        familyCandidates.push(cachedView);
+      }
+      if (relationship === 'unknown' && uncheckedCap !== undefined && unchecked >= uncheckedCap) continue;
+      if (edges.length >= options.edges) continue;
+      const view = cachedView ?? toView(ctx, companion, relationship, fromPath, toPath);
+      if (relationship === 'unknown') unchecked++;
+
+      const evidence: MapEdgeEvidence[] = companion.stat.evidence.map((commitIdx) => {
+        const commit = ctx.model.commits[commitIdx]!;
+        const srcChange = resolveCommitFileChange(commit, view.from);
+        const tgtChange = resolveCommitFileChange(commit, view.to);
+        return {
+          hash: commit.hash,
+          date: isoDate(commit.time),
+          subject: commit.subject,
+          ...(srcChange.path !== view.from ? { sourcePath: srcChange.path } : {}),
+          ...(tgtChange.path !== view.to ? { targetPath: tgtChange.path } : {}),
+          ...(srcChange.status !== 'M' ? { sourceStatus: srcChange.status } : {}),
+          ...(tgtChange.status !== 'M' ? { targetStatus: tgtChange.status } : {}),
+        };
+      });
+
+      const cxFrom = findCounterexamples(companion.from, companion.to);
+      const cxTo = findCounterexamples(companion.to, companion.from);
+
+      const edgeIndex = edges.length;
+      const [u, v] = view.from < view.to ? [view.from, view.to] : [view.to, view.from];
+      edgeIndexByPairKey.set(`${u}\u0000${v}`, edgeIndex);
+
+      edges.push({
+        source: nodeFor(view.from),
+        target: nodeFor(view.to),
+        relationship,
+        why: view.why,
+        hiddenBridge: view.hiddenBridge,
+        shared: view.shared,
+        fromChanges: view.fromChanges,
+        toChanges: view.toChanges,
+        confidence: view.confidence,
+        reverseConfidence: view.reverseConfidence,
+        interval: view.interval,
+        reverseInterval: view.reverseInterval,
+        score: companion.score,
+        overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
+        weighted: view.weighted,
+        lastTogether: view.lastTogether,
+        crossesDirectories: view.crossesDirectories,
+        evidence,
+        counterexamples: {
+          fromOnlyTotal: cxFrom.total,
+          toOnlyTotal: cxTo.total,
+          fromOnly: cxFrom.items,
+          toOnly: cxTo.items,
+        },
+        explainCommand: formatExplainCommand(view.from, view.to, ctx.settings, ctx.flagSettings),
+      });
     }
-    if (relationship === 'unknown' && uncheckedCap !== undefined && unchecked >= uncheckedCap) continue;
-    if (edges.length >= options.edges) continue;
-    const view = cachedView ?? toView(ctx, companion, relationship, fromPath, toPath);
-    if (relationship === 'unknown') unchecked++;
 
-    const evidence: MapEdgeEvidence[] = companion.stat.evidence.map((commitIdx) => {
-      const commit = ctx.model.commits[commitIdx]!;
-      const srcChange = resolveCommitFileChange(commit, view.from);
-      const tgtChange = resolveCommitFileChange(commit, view.to);
+    const commitMemberIndicesByFamily = new Map<string, number[][]>();
+    const rawFamilies = buildFindingFamilies(ctx, familyCandidates, {
+      allowedKinds: options.kinds,
+      commitMemberIndicesByFamily,
+    });
+    const families: MapFamily[] = rawFamilies.map((fam) => {
+      const nodeIndices = fam.members.map((m) => nodeIndex.get(m.path) ?? -1);
+      const edgeIndices: number[] = [];
+      const undrawnPairs: MapUndrawnPair[] = [];
+      for (const rel of fam.relationships) {
+        const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
+        const eIdx = edgeIndexByPairKey.get(`${u}\u0000${v}`);
+        if (eIdx !== undefined) {
+          edgeIndices.push(eIdx);
+        } else {
+          undrawnPairs.push({
+            from: rel.from,
+            to: rel.to,
+            relationship: rel.relationship,
+            why: rel.why,
+            shared: rel.shared,
+            fromChanges: rel.fromChanges,
+            toChanges: rel.toChanges,
+            confidence: rel.confidence,
+            reverseConfidence: rel.reverseConfidence,
+            interval: rel.interval,
+            reverseInterval: rel.reverseInterval,
+            score: rel.score,
+            weighted: rel.weighted,
+            lastTogether: rel.lastTogether,
+            evidence: rel.evidence.slice(0, 3).map((ev) => ({ hash: ev.hash, date: ev.date, subject: ev.subject })),
+            explainCommand: formatExplainCommand(rel.from, rel.to, ctx.settings, ctx.flagSettings),
+          });
+        }
+      }
+      const overviewPriority = Math.max(0, ...edgeIndices.map((idx) => edges[idx]?.overviewPriority ?? 0));
+      const commitMemberIndices = commitMemberIndicesByFamily.get(fam.id);
+      const { relationships: _relationships, ...famBase } = fam;
       return {
-        hash: commit.hash,
-        date: isoDate(commit.time),
-        subject: commit.subject,
-        ...(srcChange.path !== view.from ? { sourcePath: srcChange.path } : {}),
-        ...(tgtChange.path !== view.to ? { targetPath: tgtChange.path } : {}),
-        ...(srcChange.status !== 'M' ? { sourceStatus: srcChange.status } : {}),
-        ...(tgtChange.status !== 'M' ? { targetStatus: tgtChange.status } : {}),
+        ...famBase,
+        nodeIndices,
+        edgeIndices,
+        ...(undrawnPairs.length > 0 ? { undrawnPairs } : {}),
+        ...(commitMemberIndices ? { commitMemberIndices } : {}),
+        overviewPriority,
       };
     });
 
-    const cxFrom = findCounterexamples(companion.from, companion.to);
-    const cxTo = findCounterexamples(companion.to, companion.from);
-
-    const edgeIndex = edges.length;
-    const [u, v] = view.from < view.to ? [view.from, view.to] : [view.to, view.from];
-    edgeIndexByPairKey.set(`${u}\u0000${v}`, edgeIndex);
-
-    edges.push({
-      source: nodeFor(view.from),
-      target: nodeFor(view.to),
-      relationship,
-      why: view.why,
-      hiddenBridge: view.hiddenBridge,
-      shared: view.shared,
-      fromChanges: view.fromChanges,
-      toChanges: view.toChanges,
-      confidence: view.confidence,
-      reverseConfidence: view.reverseConfidence,
-      interval: view.interval,
-      reverseInterval: view.reverseInterval,
-      score: companion.score,
-      overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
-      weighted: view.weighted,
-      lastTogether: view.lastTogether,
-      crossesDirectories: view.crossesDirectories,
-      evidence,
-      counterexamples: {
-        fromOnlyTotal: cxFrom.total,
-        toOnlyTotal: cxTo.total,
-        fromOnly: cxFrom.items,
-        toOnly: cxTo.items,
-      },
-      explainCommand: formatExplainCommand(view.from, view.to, ctx.settings, ctx.flagSettings),
-    });
-  }
-
-  const commitMemberIndicesByFamily = new Map<string, number[][]>();
-  const rawFamilies = buildFindingFamilies(ctx, familyCandidates, {
-    allowedKinds: options.kinds,
-    commitMemberIndicesByFamily,
-  });
-  const families: MapFamily[] = rawFamilies.map((fam) => {
-    const nodeIndices = fam.members.map((m) => nodeIndex.get(m.path) ?? -1);
-    const edgeIndices: number[] = [];
-    const undrawnPairs: MapUndrawnPair[] = [];
-    for (const rel of fam.relationships) {
-      const [u, v] = rel.from < rel.to ? [rel.from, rel.to] : [rel.to, rel.from];
-      const eIdx = edgeIndexByPairKey.get(`${u}\u0000${v}`);
-      if (eIdx !== undefined) {
-        edgeIndices.push(eIdx);
-      } else {
-        undrawnPairs.push({
-          from: rel.from,
-          to: rel.to,
-          relationship: rel.relationship,
-          why: rel.why,
-          shared: rel.shared,
-          fromChanges: rel.fromChanges,
-          toChanges: rel.toChanges,
-          confidence: rel.confidence,
-          reverseConfidence: rel.reverseConfidence,
-          interval: rel.interval,
-          reverseInterval: rel.reverseInterval,
-          score: rel.score,
-          weighted: rel.weighted,
-          lastTogether: rel.lastTogether,
-          evidence: rel.evidence.slice(0, 3).map((ev) => ({ hash: ev.hash, date: ev.date, subject: ev.subject })),
-          explainCommand: formatExplainCommand(rel.from, rel.to, ctx.settings, ctx.flagSettings),
-        });
-      }
-    }
-    const overviewPriority = Math.max(0, ...edgeIndices.map((idx) => edges[idx]?.overviewPriority ?? 0));
-    const commitMemberIndices = commitMemberIndicesByFamily.get(fam.id);
-    const { relationships: _relationships, ...famBase } = fam;
-    return {
-      ...famBase,
-      nodeIndices,
-      edgeIndices,
-      ...(undrawnPairs.length > 0 ? { undrawnPairs } : {}),
-      ...(commitMemberIndices ? { commitMemberIndices } : {}),
-      overviewPriority,
-    };
-  });
-
-  const repoName = basename(ctx.root);
-  // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
-  const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
-  return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges, families };
+    const repoName = basename(ctx.root);
+    // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
+    const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
+    return { meta, repoName, generatedAt, counts, classificationTruncated: classified.truncated, patchesIncluded: false, nodes, edges, families };
   } finally {
     ctx.close?.();
   }

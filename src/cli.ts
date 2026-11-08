@@ -158,6 +158,9 @@ program
       cmd: Command,
     ) => {
       const global = cmd.optsWithGlobals<GlobalOptions>();
+      if (global.head !== undefined && !opts.base) {
+        throw new UsageError('diff --head requires --base <ref>.');
+      }
       if (global.json && opts.format === 'markdown') {
         throw new UsageError(
           '--json and --format markdown cannot be used together on stdout; use --format markdown --json-out <file> instead.',
@@ -263,7 +266,7 @@ program
     if (shouldOpen) openInBrowser(file);
     if (global.json) {
       printJson({
-        ...(data.meta.head ? { meta: data.meta } : {}),
+        meta: data.meta,
         file,
         nodes: data.nodes.length,
         edges: data.edges.length,
@@ -286,16 +289,18 @@ program.action(async () => {
   }
   const global = program.opts<GlobalOptions>();
   const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-  const changes = ctx.head ? [] : await workingTreeChanges(ctx.root);
   let changedWithoutHistory = 0;
-  if (changes.length > 0) {
-    const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
-    if (result.changed.some((file) => file.hasHistory)) {
-      if (global.json) printJson({ mode: 'diff', ...result });
-      else printDiff(result);
-      return;
+  if (!ctx.head) {
+    const changes = await workingTreeChanges(ctx.root);
+    if (changes.length > 0) {
+      const result = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS] }, changes);
+      if (result.changed.some((file) => file.hasHistory)) {
+        if (global.json) printJson({ mode: 'diff', ...result });
+        else printDiff(result);
+        return;
+      }
+      changedWithoutHistory = result.changed.length;
     }
-    changedWithoutHistory = result.changed.length;
   }
 
   const options = { limit: 15, kinds: ['ghost', 'unknown'] as Relationship[], uncheckedCap: 5 };

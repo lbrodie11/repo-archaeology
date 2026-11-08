@@ -288,7 +288,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | --- | --- | --- | --- |
 | `schemaVersion` | `1` | Yes | JSON contract major version. |
 | `tool` | `{ name, version }` | Yes | Tool name and semver version. |
-| `meta` | `Meta` | Optional | Included when `--head <ref>` is passed (contains `meta.head`). |
+| `meta` | `Meta` | Yes | Repository metadata (`root` is sanitized to the repository folder name; includes `meta.head` when `--head <ref>` is passed). |
 | `file` | `string` | Yes | Absolute path to the written HTML file. |
 | `nodes` | `integer` | Yes | Number of file nodes drawn in the map. |
 | `edges` | `integer` | Yes | Number of relationship edges drawn in the map. |

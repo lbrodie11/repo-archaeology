@@ -1,4 +1,4 @@
-import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, type Context } from '../context.js';
+import { isolateBaselineContext, MIN_FULL_HISTORY_COMMITS, resolveBaseline, SHALLOW_WARNING, UsageError, type Context } from '../context.js';
 import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } from '../git/changes.js';
 import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
@@ -119,6 +119,9 @@ const MERGE_FALLBACK_WARNING =
 export async function collectChanges(ctx: Context, base?: string, warnings?: string[]): Promise<ChangedFile[]> {
   const lists: ChangedFile[][] = [];
   const headSha = ctx.head?.sha;
+  if (headSha && !base) {
+    throw new UsageError('diff --head requires --base <ref>.');
+  }
   if (base) {
     const mergeBaseSha = ctx.base === base && ctx.mergeBaseSha !== undefined
       ? ctx.mergeBaseSha
@@ -526,6 +529,9 @@ export function suggestMissing(
 }
 
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
+  if (ctx.head && !options.base && changes === undefined) {
+    throw new UsageError('diff --head requires --base <ref>.');
+  }
   ctx.open?.();
   try {
     const isolatedCtx = await isolateBaselineContext(ctx, options.base);
