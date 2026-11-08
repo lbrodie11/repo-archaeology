@@ -18,7 +18,51 @@ import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const TAG_RE = /^v(\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?)$/;
+const SEMVER_CORE_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Compares two X.Y.Z(-prerelease) version strings according to SemVer precedence.
+ * Returns -1 if a < b, 0 if a === b, and 1 if a > b.
+ */
+export function compareSemver(a, b) {
+  const ma = SEMVER_CORE_RE.exec(String(a ?? '').trim());
+  const mb = SEMVER_CORE_RE.exec(String(b ?? '').trim());
+  if (!ma || !mb) {
+    throw new Error(`Invalid semver comparison inputs: "${a}" vs "${b}"`);
+  }
+  for (let i = 1; i <= 3; i++) {
+    const na = Number(ma[i]);
+    const nb = Number(mb[i]);
+    if (na !== nb) return na < nb ? -1 : 1;
+  }
+  const preA = ma[4];
+  const preB = mb[4];
+  if (!preA && !preB) return 0;
+  // A normal version has higher precedence than a pre-release version (1.0.0 > 1.0.0-alpha)
+  if (!preA && preB) return 1;
+  if (preA && !preB) return -1;
+  const partsA = preA.split('.');
+  const partsB = preB.split('.');
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    const idA = partsA[i];
+    const idB = partsB[i];
+    if (idA === undefined) return -1;
+    if (idB === undefined) return 1;
+    if (idA === idB) continue;
+    const isNumA = /^\d+$/.test(idA);
+    const isNumB = /^\d+$/.test(idB);
+    if (isNumA && isNumB) {
+      return Number(idA) < Number(idB) ? -1 : 1;
+    }
+    if (isNumA !== isNumB) {
+      return isNumA ? -1 : 1;
+    }
+    return idA < idB ? -1 : 1;
+  }
+  return 0;
+}
 
 export function parseReleaseTag(rawTag) {
   const trimmed = String(rawTag ?? '').trim();
@@ -251,6 +295,21 @@ export function queryRegistryDist(packageName, version) {
   return parsed;
 }
 
+export function queryRegistryLatestVersion(packageName) {
+  const res = runNpmRaw(['view', packageName, 'dist-tags.latest', '--json']);
+  if (res.status !== 0) {
+    const combined = `${res.stderr ?? ''}\n${res.stdout ?? ''}`;
+    if (/E404|404 Not Found|is not in this registry/i.test(combined)) {
+      return null;
+    }
+    throw new Error(`npm view ${packageName} dist-tags.latest --json failed (exit ${res.status}):\n${combined.trim()}`);
+  }
+  const trimmed = (res.stdout ?? '').trim();
+  if (!trimmed) return null;
+  const parsed = JSON.parse(trimmed);
+  return typeof parsed === 'string' && parsed.trim() !== '' ? parsed.trim() : null;
+}
+
 export function publishOrSkip({
   tarballPath,
   packageName,
@@ -259,29 +318,53 @@ export function publishOrSkip({
   provenance = true,
   dryRun = false,
   queryDistFn = queryRegistryDist,
+  queryLatestFn = queryRegistryLatestVersion,
   runPublishFn = runNpmRaw,
 }) {
   const resolvedTarball = resolve(tarballPath);
   if (!existsSync(resolvedTarball)) {
     throw new Error(`Release tarball not found at ${resolvedTarball}`);
   }
+  const parsedTag = parseReleaseTag(version.startsWith('v') ? version : `v${version}`);
+  const effectiveDistTag = distTag ?? parsedTag.npmDistTag;
+  if ( parsedTag.isPrerelease && (!effectiveDistTag || effectiveDistTag === 'latest')) {
+    throw new Error(
+      `Prerelease version ${packageName}@${parsedTag.version} must use a non-latest dist-tag (such as 'next').`,
+    );
+  }
+
   const localDigests = computeTarballDigests(resolvedTarball);
-  const registryDist = queryDistFn(packageName, version);
+  const registryDist = queryDistFn(packageName, parsedTag.version);
   const check = evaluatePublishedArtifact({
     packageName,
-    version,
+    version: parsedTag.version,
     localDigests,
     registryDist,
   });
 
   if (check.status === 'already-published-matching') {
     console.log(
-      `Skipping npm publish: ${packageName}@${version} is already published on npm with matching integrity (${check.integrity}).`,
+      `Skipping npm publish: ${packageName}@${parsedTag.version} is already published on npm with matching integrity (${check.integrity}).`,
     );
     return check;
   }
 
-  const publishArgs = ['publish', resolvedTarball, '--access', 'public', '--tag', distTag];
+  // Guard against downgrading `latest` when publishing an older stable maintenance version:
+  // 1. Check registry `dist-tags.latest` explicitly so we fail early with a clear message.
+  // 2. Omit `--tag latest` from `npm publish` arguments so npm 11's built-in downgrade protection remains active.
+  if (!parsedTag.isPrerelease && (!effectiveDistTag || effectiveDistTag === 'latest')) {
+    const currentLatest = queryLatestFn(packageName);
+    if (currentLatest && compareSemver(parsedTag.version, currentLatest) < 0) {
+      throw new Error(
+        `Refusing to publish stable version ${packageName}@${parsedTag.version} as 'latest' because a newer version (${currentLatest}) is already tagged 'latest' on npm.`,
+      );
+    }
+  }
+
+  const publishArgs = ['publish', resolvedTarball, '--access', 'public'];
+  if (effectiveDistTag && effectiveDistTag !== 'latest') {
+    publishArgs.push('--tag', effectiveDistTag);
+  }
   if (provenance) {
     publishArgs.push('--provenance');
   }

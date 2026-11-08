@@ -7,6 +7,7 @@ import { after, before, describe, it } from 'node:test';
 import { getToolVersion, JSON_SCHEMA_VERSION, validateJsonOutPath, writeJsonContractFile } from '../src/report/contract.js';
 import {
   loadSchema as loadSchemaFromDir,
+  sanitizeGitEnv,
   validateSchemaNode,
   type JsonSchemaNode,
 } from '../scripts/schema-validator.mjs';
@@ -21,7 +22,7 @@ function runCli(args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}) {
   const result = spawnSync(process.execPath, ['--import', TSX, CLI, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, NO_COLOR: '1', ...extraEnv },
+    env: sanitizeGitEnv(process.env, { NO_COLOR: '1', ...extraEnv }),
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  compareSemver,
   computeTarballDigests,
   evaluatePublishedArtifact,
   extractChangelogSection,
@@ -251,9 +252,61 @@ describe('Release preparation, prerelease tags, partial-release recovery, and gi
       });
       assert.equal(retryAttempt.status, 'already-published-matching');
       assert.equal(publishCalls.length, 1, 'retry must not invoke npm publish a second time when digests match');
+
+      // Case 6: Stable release omits `--tag` (preserving npm 11 built-in downgrade protection)
+      const stableCalls: string[][] = [];
+      const stableAttempt = publishOrSkip({
+        tarballPath,
+        packageName: 'repo-archaeology',
+        version: '0.5.0',
+        distTag: 'latest',
+        queryDistFn: () => null,
+        queryLatestFn: () => '0.4.0',
+        runPublishFn: (args) => {
+          stableCalls.push(args);
+          return { status: 0, stdout: '+ repo-archaeology@0.5.0', stderr: '' };
+        },
+      });
+      assert.equal(stableAttempt.status, 'published');
+      assert.equal(stableCalls.length, 1);
+      assert.deepEqual(
+        stableCalls[0],
+        ['publish', tarballPath, '--access', 'public', '--provenance'],
+        'stable release must omit --tag so npm 11 implicit latest downgrade protection stays active',
+      );
+
+      // Case 7: Older stable release (0.4.1 when latest is 0.5.0) is rejected and cannot downgrade latest
+      const downgradeCalls: string[][] = [];
+      assert.throws(
+        () =>
+          publishOrSkip({
+            tarballPath,
+            packageName: 'repo-archaeology',
+            version: '0.4.1',
+            distTag: 'latest',
+            queryDistFn: () => null,
+            queryLatestFn: () => '0.5.0',
+            runPublishFn: (args) => {
+              downgradeCalls.push(args);
+              return { status: 0, stdout: '', stderr: '' };
+            },
+          }),
+        /Refusing to publish stable version repo-archaeology@0\.4\.1 as 'latest' because a newer version \(0\.5\.0\) is already tagged 'latest' on npm/,
+      );
+      assert.equal(downgradeCalls.length, 0, 'older stable release must never invoke npm publish as latest');
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+
+  it('compares semver versions accurately including prerelease precedence', () => {
+    assert.equal(compareSemver('0.4.1', '0.5.0'), -1);
+    assert.equal(compareSemver('0.5.0', '0.4.1'), 1);
+    assert.equal(compareSemver('0.5.0', '0.5.0'), 0);
+    assert.equal(compareSemver('0.5.0-rc.1', '0.5.0'), -1);
+    assert.equal(compareSemver('0.5.0', '0.5.0-rc.1'), 1);
+    assert.equal(compareSemver('0.5.0-rc.1', '0.5.0-rc.2'), -1);
+    assert.equal(compareSemver('0.5.0-rc.10', '0.5.0-rc.2'), 1);
   });
 
   it('validates packed tarball file allowlist and rejects unexpected src/ or test/ files', () => {
@@ -356,6 +409,35 @@ describe('Release preparation, prerelease tags, partial-release recovery, and gi
 
     assert.match(releaseYml, /^name:\s*Release\s*$/m);
     assert.match(smokeYml, /workflows:\s*\['Release'\]/);
+    assert.doesNotMatch(
+      smokeYml,
+      /!contains\(github\.event\.workflow_run\.head_branch,\s*'-'\)/,
+      'action-smoke.yml must not skip prerelease tags containing a hyphen',
+    );
+
+    // Execute the tag-resolution logic for both stable and prerelease workflow_run events
+    const gitBashWin = 'C:\\Program Files\\Git\\bin\\bash.exe';
+    const bashBin = process.platform === 'win32' && existsSync(gitBashWin) ? gitBashWin : 'bash';
+    const tagResolveScript = [
+      'RAW_TAG="${DISPATCH_TAG:-$WORKFLOW_RUN_TAG}"',
+      'if [[ ! "$RAW_TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then',
+      '  exit 1',
+      'fi',
+      'VERSION="${RAW_TAG#v}"',
+      'printf "%s|%s" "$RAW_TAG" "$VERSION"',
+    ].join('\n');
+
+    for (const [eventTag, expectedVersion] of [
+      ['v0.3.0', '0.3.0'],
+      ['v0.4.0-rc.1', '0.4.0-rc.1'],
+    ] as const) {
+      const res = spawnSync(bashBin, ['-e', '-c', tagResolveScript], {
+        encoding: 'utf8',
+        env: sanitizeGitEnv(process.env, { WORKFLOW_RUN_TAG: eventTag }),
+      });
+      assert.equal(res.status, 0, res.stderr);
+      assert.equal(res.stdout, `${eventTag}|${expectedVersion}`);
+    }
 
     const usesLines = releaseYml
       .split('\n')

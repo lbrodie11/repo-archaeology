@@ -39,6 +39,8 @@ export type PublishOrSkipResult =
   | { status: 'published'; integrity: string; shasum: string }
   | { status: 'already-published-matching'; integrity: string; shasum: string };
 
+export function compareSemver(a: string, b: string): -1 | 0 | 1;
+
 export function parseReleaseTag(rawTag: string): ParsedReleaseTag;
 
 export function extractChangelogSection(changelogText: string, version: string): ChangelogSection;
@@ -58,13 +60,14 @@ export function publishOrSkip(options: {
   tarballPath: string;
   packageName: string;
   version: string;
-  distTag: string;
+  distTag?: string;
   provenance?: boolean;
   dryRun?: boolean;
   queryDistFn?: (
     packageName: string,
     version: string,
   ) => { integrity?: unknown; shasum?: unknown } | null;
+  queryLatestFn?: (packageName: string) => string | null;
   runPublishFn?: (args: string[]) => { status: number | null; stdout?: string; stderr?: string };
 }): PublishOrSkipResult;
 

@@ -60,9 +60,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build package
-        run: npm run build
-
       - name: Validate tag version and extract CHANGELOG section
         id: prep
         shell: bash
