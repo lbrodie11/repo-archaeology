@@ -18,7 +18,7 @@ export class GitError extends Error {
  * entries, commit message encoding). Replace refs are ignored too: `git replace`
  * can graft a different history onto the repository.
  */
-const CONFIG_OVERRIDES = [
+export const CONFIG_OVERRIDES = [
   '--no-replace-objects',
   '-c', 'core.quotepath=off',
   '-c', 'color.ui=never',

@@ -1,5 +1,9 @@
 import { posix } from 'node:path';
+import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
+import { CONFIG_OVERRIDES, GitError } from '../git/run.js';
 import { typescript } from './typescript.js';
+
+export const MAX_SOURCE_BYTES = 1_000_000;
 
 /** Read access to the repository, using repo-relative POSIX paths. */
 export interface RepoFiles {
@@ -7,6 +11,396 @@ export interface RepoFiles {
   read(path: string): string | undefined;
   /** Every file that exists (used to discover the repo's own packages). */
   list(): Iterable<string>;
+  /** Starts any underlying background process (e.g. `git cat-file --batch`) if not already open. */
+  open?(): void;
+  /** Closes any underlying background process (e.g. `git cat-file --batch`). */
+  close?(): void;
+}
+
+export interface GitTreeFiles extends RepoFiles {
+  open(): void;
+  close(): void;
+  readonly pid: number | undefined;
+  [Symbol.dispose](): void;
+}
+
+const activeCatFilePids = new Set<number>();
+let catFileSpawnCount = 0;
+let lastCatFilePid: number | undefined;
+const catFileSpawnListeners = new Set<(pid: number) => void>();
+
+/** Test hook: returns PIDs of currently active `git cat-file --batch` child processes. */
+export function getActiveCatFilePids(): number[] {
+  return [...activeCatFilePids];
+}
+
+/** Test hook: returns the total number of `git cat-file --batch` processes spawned since the last reset. */
+export function getCatFileSpawnCount(): number {
+  return catFileSpawnCount;
+}
+
+/** Test hook: returns the most recently spawned `git cat-file --batch` PID, if any. */
+export function getLastCatFilePid(): number | undefined {
+  return lastCatFilePid;
+}
+
+/** Test hook: resets the `git cat-file --batch` spawn counter and last-seen PID. */
+export function resetCatFileStats(): void {
+  catFileSpawnCount = 0;
+  lastCatFilePid = undefined;
+}
+
+/** Test hook: registers a listener called whenever a `git cat-file --batch` child process is spawned. */
+export function onCatFileSpawn(listener: (pid: number) => void): () => void {
+  catFileSpawnListeners.add(listener);
+  return () => {
+    catFileSpawnListeners.delete(listener);
+  };
+}
+
+const CAT_FILE_WORKER_CODE = `
+const { spawn } = require('node:child_process');
+const { workerData } = require('node:worker_threads');
+
+const { root, configOverrides, port, initLock } = workerData;
+
+const child = spawn('git', [...configOverrides, 'cat-file', '--batch'], {
+  cwd: root,
+  env: {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_PAGER: 'cat',
+    GIT_NO_REPLACE_OBJECTS: '1',
+  },
+  stdio: ['pipe', 'pipe', 'pipe'],
+  windowsHide: true,
+});
+
+let childExited = false;
+const chunks = [];
+let totalBuffered = 0;
+let pendingStep = null;
+
+function notifyWaiter(lock, value = 1) {
+  Atomics.store(lock, 0, value);
+  Atomics.notify(lock, 0, 1);
+}
+
+function consumeBytes(n) {
+  const out = Buffer.allocUnsafe(n);
+  let offset = 0;
+  while (offset < n && chunks.length > 0) {
+    const first = chunks[0];
+    const take = Math.min(first.length, n - offset);
+    first.copy(out, offset, 0, take);
+    offset += take;
+    if (take === first.length) {
+      chunks.shift();
+    } else {
+      chunks[0] = first.subarray(take);
+    }
+  }
+  totalBuffered -= offset;
+  return out;
+}
+
+function discardFromBuffer(maxToDiscard) {
+  let discarded = 0;
+  while (discarded < maxToDiscard && chunks.length > 0) {
+    const first = chunks[0];
+    const take = Math.min(first.length, maxToDiscard - discarded);
+    discarded += take;
+    if (take === first.length) {
+      chunks.shift();
+    } else {
+      chunks[0] = first.subarray(take);
+    }
+  }
+  totalBuffered -= discarded;
+  return discarded;
+}
+
+function findNewlineOffset() {
+  let scanned = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const buf = chunks[i];
+    const idx = buf.indexOf(0x0a);
+    if (idx !== -1) return scanned + idx;
+    scanned += buf.length;
+  }
+  return -1;
+}
+
+child.stdout.on('data', (chunk) => {
+  chunks.push(chunk);
+  totalBuffered += chunk.length;
+  if (pendingStep) pendingStep();
+});
+
+child.stderr.on('data', () => {});
+
+child.on('error', () => {
+  childExited = true;
+  if (pendingStep) pendingStep();
+});
+
+child.on('close', () => {
+  childExited = true;
+  if (pendingStep) pendingStep();
+});
+
+port.on('message', (msg) => {
+  if (msg.type === 'close') {
+    const finishClose = () => {
+      port.postMessage({ type: 'closed' });
+      notifyWaiter(msg.lock, 1);
+      port.close();
+      process.exit(0);
+    };
+    if (childExited) {
+      finishClose();
+      return;
+    }
+    child.once('close', finishClose);
+    try {
+      child.stdin.end();
+    } catch {}
+    setTimeout(() => {
+      try { child.kill('SIGTERM'); } catch {}
+    }, 30).unref();
+    setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch {}
+    }, 150).unref();
+    return;
+  }
+
+  if (msg.type === 'read') {
+    const { spec, maxBytes, lock } = msg;
+    if (childExited || !child.stdin.writable) {
+      port.postMessage({ content: undefined, dead: true });
+      notifyWaiter(lock, 1);
+      return;
+    }
+
+    let phase = 'header';
+    let bodySize = 0;
+    let remainingToRead = 0;
+    let discard = false;
+
+    const finishRead = (content, dead = false) => {
+      pendingStep = null;
+      port.postMessage({ content, dead });
+      notifyWaiter(lock, 1);
+    };
+
+    pendingStep = () => {
+      if (phase === 'header') {
+        const nl = findNewlineOffset();
+        if (nl === -1) {
+          if (childExited) finishRead(undefined, true);
+          return;
+        }
+        const headerLine = consumeBytes(nl + 1).subarray(0, nl).toString('utf8');
+        const match = /^[0-9a-f]{40,64} (\\S+) (\\d+)$/.exec(headerLine);
+        if (!match) {
+          finishRead(undefined, false);
+          return;
+        }
+        const objType = match[1];
+        bodySize = Number(match[2]);
+        remainingToRead = bodySize + 1;
+        discard = objType !== 'blob' || bodySize > maxBytes;
+        phase = 'body';
+      }
+
+      if (phase === 'body') {
+        if (discard) {
+          remainingToRead -= discardFromBuffer(remainingToRead);
+          if (remainingToRead <= 0) {
+            finishRead(undefined, false);
+            return;
+          }
+          if (childExited) finishRead(undefined, true);
+          return;
+        }
+        if (totalBuffered >= remainingToRead) {
+          const payload = consumeBytes(remainingToRead);
+          const content = payload.subarray(0, bodySize).toString('utf8');
+          finishRead(content, false);
+          return;
+        }
+        if (childExited) finishRead(undefined, true);
+      }
+    };
+
+    try {
+      child.stdin.write(spec + '\\n');
+    } catch {
+      finishRead(undefined, true);
+    }
+  }
+});
+
+port.postMessage({ type: 'init', pid: child.pid ?? null });
+notifyWaiter(initLock, 1);
+`;
+
+export interface GitTreeFilesOptions {
+  maxBytes?: number;
+  /** Optional hook called inside `read(path)` after fetching blob content (for testing error handling). */
+  onRead?: (path: string, content: string | undefined) => void;
+}
+
+/**
+ * Repository access backed by a commit tree (`<headSha>`) using a single long-lived
+ * `git cat-file --batch` process per analysis.
+ */
+export function gitTreeFiles(
+  root: string,
+  headSha: string,
+  existing: ReadonlySet<string>,
+  options?: GitTreeFilesOptions,
+): GitTreeFiles {
+  if (headSha.startsWith('-') || /[\r\n\0]/.test(headSha)) {
+    throw new GitError(`Invalid revision: ${headSha}`);
+  }
+  const maxBytes = options?.maxBytes ?? MAX_SOURCE_BYTES;
+  const cache = new Map<string, string | undefined>();
+
+  let worker: Worker | undefined;
+  let port: MessageChannel['port1'] | undefined;
+  let lock: Int32Array | undefined;
+  let currentPid: number | undefined;
+
+  const close = (): void => {
+    const activeWorker = worker;
+    const activePort = port;
+    const activeLock = lock;
+    const pid = currentPid;
+    worker = undefined;
+    port = undefined;
+    lock = undefined;
+    currentPid = undefined;
+
+    if (pid !== undefined) {
+      activeCatFilePids.delete(pid);
+    }
+    if (!activeWorker || !activePort || !activeLock) return;
+    try {
+      Atomics.store(activeLock, 0, 0);
+      activePort.postMessage({ type: 'close', lock: activeLock });
+      Atomics.wait(activeLock, 0, 0, 2000);
+      while (receiveMessageOnPort(activePort) !== undefined) {
+        // drain
+      }
+    } catch {
+      // ignore if worker already exited
+    } finally {
+      try {
+        activePort.close();
+      } catch {}
+      void activeWorker.terminate();
+    }
+  };
+
+  const onProcessExit = (): void => {
+    close();
+  };
+
+  const open = (): void => {
+    if (worker) return;
+    const channel = new MessageChannel();
+    const sab = new SharedArrayBuffer(4);
+    const syncLock = new Int32Array(sab);
+    Atomics.store(syncLock, 0, 0);
+
+    const w = new Worker(CAT_FILE_WORKER_CODE, {
+      eval: true,
+      workerData: {
+        root,
+        configOverrides: CONFIG_OVERRIDES,
+        port: channel.port2,
+        initLock: syncLock,
+      },
+      transferList: [channel.port2],
+    });
+    w.unref();
+    channel.port1.unref();
+
+    worker = w;
+    port = channel.port1;
+    lock = syncLock;
+
+    Atomics.wait(syncLock, 0, 0, 5000);
+    const initMsg = receiveMessageOnPort(channel.port1)?.message as { type?: string; pid?: number | null } | undefined;
+    if (initMsg?.pid) {
+      currentPid = initMsg.pid;
+      lastCatFilePid = initMsg.pid;
+      catFileSpawnCount++;
+      activeCatFilePids.add(initMsg.pid);
+      for (const listener of catFileSpawnListeners) {
+        listener(initMsg.pid);
+      }
+    }
+    process.once('exit', onProcessExit);
+  };
+
+  const read = (path: string): string | undefined => {
+    if (!existing.has(path) || path.includes('\n') || path.includes('\r') || path.includes('\0')) {
+      return undefined;
+    }
+    if (cache.has(path)) {
+      const cached = cache.get(path);
+      options?.onRead?.(path, cached);
+      return cached;
+    }
+    open();
+    if (!port || !lock) return undefined;
+    try {
+      Atomics.store(lock, 0, 0);
+      port.postMessage({
+        type: 'read',
+        spec: `${headSha}:${path}`,
+        maxBytes,
+        lock,
+      });
+      const waitRes = Atomics.wait(lock, 0, 0, 10_000);
+      if (waitRes === 'timed-out') {
+        close();
+        return undefined;
+      }
+      const msg = receiveMessageOnPort(port)?.message as { content?: string; dead?: boolean } | undefined;
+      if (msg?.dead) {
+        close();
+      }
+      const content = msg?.content;
+      cache.set(path, content);
+      options?.onRead?.(path, content);
+      return content;
+    } catch (err) {
+      close();
+      throw err;
+    }
+  };
+
+  return {
+    exists: (path) => existing.has(path),
+    list: () => existing,
+    read,
+    open,
+    close: () => {
+      process.removeListener('exit', onProcessExit);
+      close();
+    },
+    get pid() {
+      return currentPid;
+    },
+    [Symbol.dispose]() {
+      process.removeListener('exit', onProcessExit);
+      close();
+    },
+  };
 }
 
 export type Resolution =

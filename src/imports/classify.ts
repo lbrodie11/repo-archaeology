@@ -1,8 +1,32 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep, win32 } from 'node:path';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
-import { ImportResolver, type RepoFiles } from './resolve.js';
+import {
+  getActiveCatFilePids,
+  getCatFileSpawnCount,
+  getLastCatFilePid,
+  gitTreeFiles,
+   ImportResolver,
+  MAX_SOURCE_BYTES,
+  onCatFileSpawn,
+  resetCatFileStats,
+  type GitTreeFiles,
+  type GitTreeFilesOptions,
+  type RepoFiles,
+} from './resolve.js';
 import { extractDependencies } from './typescript.js';
+
+export {
+  getActiveCatFilePids,
+  getCatFileSpawnCount,
+  getLastCatFilePid,
+  gitTreeFiles,
+  MAX_SOURCE_BYTES,
+  onCatFileSpawn,
+  resetCatFileStats,
+  type GitTreeFiles,
+  type GitTreeFilesOptions,
+};
 
 /**
  * How two co-changing files are related in the current code:
@@ -27,7 +51,6 @@ export interface HiddenBridge {
 }
 
 const ANALYZABLE = /\.(?:[cm]?[jt]sx?)$/i;
-const MAX_SOURCE_BYTES = 1_000_000;
 const BARREL_DEPTH = 3;
 
 interface FileImports {

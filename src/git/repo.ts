@@ -70,7 +70,7 @@ export async function listCurrentFiles(root: string): Promise<Set<string>> {
 /** Files present in a commit tree (`git ls-tree -r --name-only -z`). */
 export async function listTreeFiles(root: string, rev = 'HEAD'): Promise<Set<string>> {
   if (rev.startsWith('-')) throw new GitError(`Invalid revision: ${rev}`);
-  const out = await runGit(root, ['ls-tree', '-r', '--name-only', '-z', rev]);
+  const out = await runGit(root, ['ls-tree', '-r', '--name-only', '-z', '--end-of-options', rev]);
   return new Set(splitNul(out));
 }
 
