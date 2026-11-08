@@ -431,6 +431,246 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     assert.equal(siblingErrs.length, 1);
     assert.match(siblingErrs[0]!, /does not match pattern \^99\\\./);
   });
+
+  it('validates RA-08 origin, originShare, meta.origins, --origin-weights, --compare-origin-weights, and proves default results are byte-identical with a fixture snapshot', () => {
+    const r = new FixtureRepo();
+    try {
+      // 3 human commits touching src/api.ts and src/schema.ts (days 0..2: 2024-01-01..2024-01-03)
+      for (let i = 1; i <= 3; i++) {
+        r.commit({
+          author: 'Alice Human',
+          message: `feat: update api and schema ${i}`,
+          write: {
+            'src/api.ts': `export const v = ${i};\n`,
+            'src/schema.ts': `export const s = ${i};\n`,
+          },
+        });
+      }
+      // 1 agent commit (via Co-authored-by trailer) touching src/api.ts and src/schema.ts (day 3: 2024-01-04)
+      r.commit({
+        author: 'Alice Human',
+        message: 'feat: agent-assisted update\n\nCo-authored-by: Claude <noreply@anthropic.com>',
+        write: {
+          'src/api.ts': 'export const v = 4;\n',
+          'src/schema.ts': 'export const s = 4;\n',
+        },
+      });
+      // 3 bot commits touching src/api.ts and src/bot-partner.ts (days 4..6: 2024-01-05..2024-01-07)
+      for (let i = 1; i <= 3; i++) {
+        r.commit({
+          author: 'dependabot[bot]',
+          message: `chore(deps): bump dep ${i}`,
+          write: {
+            'src/api.ts': `export const v = ${10 + i};\n`,
+            'src/bot-partner.ts': `export const b = ${i};\n`,
+          },
+        });
+      }
+      // 25 more commits touching src/otherA.ts and src/otherB.ts so backtest has >= 30 commits
+      for (let i = 1; i <= 25; i++) {
+        r.commit({
+          author: i % 5 === 0 ? 'copilot-swe-agent[bot]' : 'Alice Human',
+          message: `feat: module update ${i}`,
+          write: {
+            'src/otherA.ts': `export const oa = ${i};\n`,
+            'src/otherB.ts': `export const ob = ${i};\n`,
+          },
+        });
+      }
+
+      // Modify src/api.ts in the working tree for `diff`
+      writeFileSync(join(r.dir, 'src/api.ts'), 'export const v = 999;\n', 'utf8');
+
+      // 1. Default `diff --json` vs explicit default weights and schema validation
+      const diffDefaultRes = runCli(['diff', '--json'], r.dir);
+      assert.equal(diffDefaultRes.code, 0, diffDefaultRes.stderr);
+      const diffDefaultJson = JSON.parse(diffDefaultRes.stdout);
+      assertMatchesSchema(diffDefaultJson, 'diff.schema.json');
+
+      assert.deepEqual(diffDefaultJson.meta.origins, { human: 23, agent: 6, bot: 3 });
+      assert.ok(Array.isArray(diffDefaultJson.suggestions) && diffDefaultJson.suggestions.length === 2);
+      for (const s of diffDefaultJson.suggestions) {
+        assert.ok(s.originShare && typeof s.originShare === 'object');
+        assert.equal(
+          Math.round((s.originShare.human + s.originShare.agent + s.originShare.bot) * 1000),
+          1000,
+        );
+        for (const ev of s.evidence) {
+          assert.ok(['human', 'agent', 'bot'].includes(ev.origin));
+        }
+      }
+
+      const apiSchemaSugg = diffDefaultJson.suggestions.find((s: { to: string }) => s.to === 'src/schema.ts');
+      const apiBotSugg = diffDefaultJson.suggestions.find((s: { to: string }) => s.to === 'src/bot-partner.ts');
+      assert.deepEqual(apiSchemaSugg.originShare, { human: 0.75, agent: 0.25, bot: 0 });
+      assert.deepEqual(apiBotSugg.originShare, { human: 0, agent: 0, bot: 1 });
+
+      // Negative schema checks: removing `origin` from evidence or `originShare` from suggestion fails validation
+      const missingOrigin = structuredClone(diffDefaultJson);
+      delete missingOrigin.suggestions[0].evidence[0].origin;
+      const missingOriginErrs: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, missingOrigin, loadSchema('diff.schema.json'), 'diff.schema.json', '$', missingOriginErrs);
+      assert.ok(missingOriginErrs.some((e) => e.includes('origin')), `expected schema error for missing origin, got: ${missingOriginErrs.join('; ')}`);
+
+      const missingOriginShare = structuredClone(diffDefaultJson);
+      delete missingOriginShare.suggestions[0].originShare;
+      const missingShareErrs: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, missingOriginShare, loadSchema('diff.schema.json'), 'diff.schema.json', '$', missingShareErrs);
+      assert.ok(missingShareErrs.some((e) => e.includes('originShare')), `expected schema error for missing originShare, got: ${missingShareErrs.join('; ')}`);
+
+      // 2. Fixture snapshot: prove default results when no weights are set are byte-identical
+      const normalizeDynamicSnapshot = (payload: Record<string, unknown>) => {
+        const clone = structuredClone(payload) as {
+          meta: {
+            root: string;
+            origins: { human: number; agent: number; bot: number };
+            settings: Record<string, unknown>;
+          };
+          evaluation?: { headSha?: string; baselineSha?: string; effectiveOptions: Record<string, unknown> };
+          suggestions: Array<{
+            from: string;
+            to: string;
+            relationship: string;
+            shared: number;
+            fromChanges: number;
+            toChanges: number;
+            confidence: number;
+            reverseConfidence: number;
+            score: number;
+            weighted: boolean;
+            lastTogether: string;
+            crossesDirectories: boolean;
+            originShare: { human: number; agent: number; bot: number };
+            evidence: Array<{ date: string; author: string; subject: string; origin: string }>;
+          }>;
+        };
+        return {
+          origins: clone.meta.origins,
+          settings: clone.meta.settings,
+          effectiveOptions: clone.evaluation?.effectiveOptions,
+          suggestions: clone.suggestions.map((s) => ({
+            from: s.from,
+            to: s.to,
+            relationship: s.relationship,
+            shared: s.shared,
+            fromChanges: s.fromChanges,
+            toChanges: s.toChanges,
+            confidence: s.confidence,
+            reverseConfidence: s.reverseConfidence,
+            score: s.score,
+            weighted: s.weighted,
+            lastTogether: s.lastTogether,
+            crossesDirectories: s.crossesDirectories,
+            originShare: s.originShare,
+            evidence: s.evidence.map((e) => ({
+              date: e.date,
+              author: e.author,
+              subject: e.subject,
+              origin: e.origin,
+            })),
+          })),
+        };
+      };
+
+      const expectedSnapshot = JSON.stringify(
+        {
+          origins: { human: 23, agent: 6, bot: 3 },
+          settings: {
+            maxCommits: 5000,
+            maxFilesPerCommit: 25,
+            minShared: 3,
+            minConfidence: 0.4,
+            ignore: [],
+            useDefaultIgnores: true,
+          },
+          effectiveOptions: {
+            minShared: 3,
+            minConfidence: 0.4,
+            maxCommits: 5000,
+            maxFilesPerCommit: 25,
+          },
+          suggestions: [
+            {
+              from: 'src/api.ts',
+              to: 'src/schema.ts',
+              relationship: 'ghost',
+              shared: 4,
+              fromChanges: 7,
+              toChanges: 4,
+              confidence: 0.571,
+              reverseConfidence: 1,
+              score: 0.25,
+              weighted: false,
+              lastTogether: '2024-01-04',
+              crossesDirectories: false,
+              originShare: { human: 0.75, agent: 0.25, bot: 0 },
+              evidence: [
+                { date: '2024-01-04', author: 'Alice Human', subject: 'feat: agent-assisted update', origin: 'agent' },
+                { date: '2024-01-03', author: 'Alice Human', subject: 'feat: update api and schema 3', origin: 'human' },
+                { date: '2024-01-02', author: 'Alice Human', subject: 'feat: update api and schema 2', origin: 'human' },
+              ],
+            },
+            {
+              from: 'src/api.ts',
+              to: 'src/bot-partner.ts',
+              relationship: 'ghost',
+              shared: 3,
+              fromChanges: 7,
+              toChanges: 3,
+              confidence: 0.429,
+              reverseConfidence: 1,
+              score: 0.158,
+              weighted: false,
+              lastTogether: '2024-01-07',
+              crossesDirectories: false,
+              originShare: { human: 0, agent: 0, bot: 1 },
+              evidence: [
+                { date: '2024-01-07', author: 'dependabot[bot]', subject: 'chore(deps): bump dep 3', origin: 'bot' },
+                { date: '2024-01-06', author: 'dependabot[bot]', subject: 'chore(deps): bump dep 2', origin: 'bot' },
+                { date: '2024-01-05', author: 'dependabot[bot]', subject: 'chore(deps): bump dep 1', origin: 'bot' },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      );
+      assert.equal(JSON.stringify(normalizeDynamicSnapshot(diffDefaultJson), null, 2), expectedSnapshot);
+
+      // Terminal output with no weights vs explicit human=1,agent=1,bot=1 is byte-identical
+      const diffTextDefault = runCli(['diff'], r.dir);
+      const diffTextExplicitOne = runCli(['diff', '--origin-weights', 'human=1,agent=1,bot=1'], r.dir);
+      assert.equal(diffTextDefault.code, 0);
+      assert.equal(diffTextDefault.stdout, diffTextExplicitOne.stdout);
+
+      // 3. Opt-in weighting via CLI `--origin-weights bot=0,agent=0.5` drops bot-only companion and adjusts confidence
+      const diffWeightedRes = runCli(['diff', '--origin-weights', 'bot=0,agent=0.5', '--json'], r.dir);
+      assert.equal(diffWeightedRes.code, 0, diffWeightedRes.stderr);
+      const diffWeightedJson = JSON.parse(diffWeightedRes.stdout);
+      assertMatchesSchema(diffWeightedJson, 'diff.schema.json');
+      assert.deepEqual(
+        diffWeightedJson.suggestions.map((s: { to: string }) => s.to),
+        ['src/schema.ts'],
+      );
+      // Raw shared (4) and raw fromChanges (7) stay raw even when weighted
+      assert.equal(diffWeightedJson.suggestions[0].shared, 4);
+      assert.equal(diffWeightedJson.suggestions[0].fromChanges, 7);
+      assert.equal(diffWeightedJson.suggestions[0].weighted, true);
+      // Weighted confidence: (3*1 + 1*0.5) / (3*1 + 1*0.5 + 3*0) = 3.5 / 3.5 = 1
+      assert.equal(diffWeightedJson.suggestions[0].confidence, 1);
+
+      // 4. `backtest --compare-origin-weights bot=0,agent=0.5 --json` validates against schema
+      const btCompareRes = runCli(['backtest', '--compare-origin-weights', 'bot=0,agent=0.5', '--json'], r.dir);
+      assert.equal(btCompareRes.code, 0, btCompareRes.stderr);
+      const btCompareJson = JSON.parse(btCompareRes.stdout);
+      assertMatchesSchema(btCompareJson, 'backtest.schema.json');
+      assert.ok(Array.isArray(btCompareJson.comparisons) && btCompareJson.comparisons.length === 1);
+      assert.equal(btCompareJson.comparisons[0].spec, 'bot=0,agent=0.5');
+      assert.deepEqual(btCompareJson.comparisons[0].weights, { human: 1, agent: 0.5, bot: 0 });
+    } finally {
+      r.cleanup();
+    }
+  });
 });
 
 function resolveSchemaNodeForTest(ref: string): JsonSchemaNode {
