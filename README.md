@@ -1,4 +1,4 @@
-# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/icon-dark.svg"><img src="docs/brand/icon.svg" width="32" height="32" align="top" alt="Repo Archaeology mark"></picture> Repo Archaeology
+# <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/brand/icon-dark.svg"><img src="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/brand/icon.svg" width="32" height="32" align="top" alt="Repo Archaeology mark"></picture> Repo Archaeology
 
 [![CI](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml/badge.svg)](https://github.com/lbrodie11/repo-archaeology/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/repo-archaeology.svg)](https://www.npmjs.com/package/repo-archaeology)

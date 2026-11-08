@@ -16,7 +16,7 @@ const BRAND_DIR = join(ROOT_DIR, 'docs', 'brand');
 
 interface PlaywrightPage {
   setContent(html: string, opts?: { waitUntil?: string }): Promise<void>;
-  evaluate<R>(fn: () => R): Promise<R>;
+  evaluate<R>(fn: () => R | Promise<R>): Promise<R>;
   screenshot(opts: { path: string; omitBackground?: boolean }): Promise<Buffer>;
   close(): Promise<void>;
 }
@@ -96,6 +96,21 @@ export const ICON_16_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
   <rect x="10" y="3" width="2" height="4" fill="#ffd60a"/>
   <rect x="10" y="9" width="2" height="4" fill="#ffd60a"/>
   <rect x="2" y="7" width="12" height="2" fill="#ffffff"/>
+</svg>
+`;
+
+/**
+ * Hand-tuned 32x32 pixel-grid favicon variant for `icon-32.png`.
+ * Uses whole-pixel horizontal strata (y=4..10, y=13..19, y=22..28 across x=4..28) separated by
+ * 3px #121212 channels and a whole-pixel #ffd60a ghost wire (x=19..24, y=6..26) occluded by the
+ * middle stratum so 32x32 raster exports have zero diagonal staircase blur.
+ */
+export const ICON_32_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect width="32" height="32" fill="#121212"/>
+  <rect x="4" y="4" width="24" height="6" fill="#ffffff"/>
+  <rect x="4" y="22" width="24" height="6" fill="#ffffff"/>
+  <rect x="19" y="6" width="5" height="20" fill="#ffd60a"/>
+  <rect x="4" y="13" width="24" height="6" fill="#ffffff"/>
 </svg>
 `;
 
@@ -310,7 +325,7 @@ export function buildSocialCardHtml(): string {
   }
   .colophon-bar .metric {
     font-family: "Zen Kaku Gothic New", "Helvetica Neue", Arial, sans-serif;
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 900;
     color: #121212;
   }
@@ -328,7 +343,7 @@ export function buildSocialCardHtml(): string {
       </div>
       <div>
         <div class="headline">Discover <mark>hidden relationships</mark><br>in your Git history.</div>
-        <div class="sub">Finds files that repeatedly change together without importing each other — ranked by Wilson 95% confidence intervals with supporting commit receipts.</div>
+        <div class="sub">Finds files that repeatedly change together without importing each other — ranked by Wilson lower bound with 95% CIs and commit receipts.</div>
       </div>
       <div class="pills">
         <span class="pill accent">LOCAL-FIRST · OFFLINE</span>
@@ -338,7 +353,7 @@ export function buildSocialCardHtml(): string {
     </div>
     <div class="right">
       <div class="section-bar">
-        <span>VERIFIED HONO CORPUS</span>
+        <span>HONOJS/HONO · 2,757 COMMITS ANALYZED</span>
         <span class="tag">GHOST WIRES</span>
       </div>
       <div class="cut alert">
@@ -352,8 +367,8 @@ export function buildSocialCardHtml(): string {
         <div class="cut-meta">reverse: 90% · no import link detected in the current code</div>
       </div>
       <div class="colophon-bar">
-        <span class="label">WALK-FORWARD BACKTEST · 2,757 COMMITS ANALYZED</span>
-        <span class="metric">64% hit@3 (37% precision) vs 13% popularity baseline</span>
+        <span class="label">WALK-FORWARD BACKTEST · CHRONOLOGICAL HOLDOUT</span>
+        <span class="metric">64% hit@3 (37% precision) vs 13% popularity (same changes)</span>
       </div>
     </div>
   </div>
@@ -371,7 +386,7 @@ async function main(): Promise<void> {
   try {
     const iconSpecs: Array<{ file: string; size: number; svg: string }> = [
       { file: 'icon-16.png', size: 16, svg: ICON_16_SVG },
-      { file: 'icon-32.png', size: 32, svg: ICON_SVG },
+      { file: 'icon-32.png', size: 32, svg: ICON_32_SVG },
       { file: 'icon-128.png', size: 128, svg: ICON_SVG },
       { file: 'icon-180.png', size: 180, svg: ICON_PADDED_SVG },
       { file: 'icon-512.png', size: 512, svg: ICON_PADDED_SVG },
@@ -400,7 +415,24 @@ async function main(): Promise<void> {
       deviceScaleFactor: 1,
     });
     await socialPage.setContent(buildSocialCardHtml(), { waitUntil: 'networkidle' });
-    await socialPage.evaluate(() => document.fonts.ready);
+    const missingFonts = await socialPage.evaluate(async () => {
+      await document.fonts.ready;
+      const requiredFamilies = ['Dela Gothic One', 'M PLUS 1 Code', 'Zen Kaku Gothic New'];
+      // Google Fonts serves CJK families across ~120 unicode-range subsets; unused kanji subsets
+      // remain `status === "unloaded"` (making `document.fonts.check()` return false unless all
+      // overlapping subsets are loaded), whereas active subsets transition to `status === "loaded"`.
+      const loadedFamilies = new Set(
+        Array.from(document.fonts)
+          .filter((f) => f.status === 'loaded')
+          .map((f) => f.family.replace(/^['"]|['"]$/g, '')),
+      );
+      return requiredFamilies.filter(
+        (family) => !document.fonts.check(`16px "${family}"`) && !loadedFamilies.has(family),
+      );
+    });
+    if (missingFonts.length > 0) {
+      throw new Error(`Required web fonts failed to load for social-preview.png: ${missingFonts.join(', ')}`);
+    }
     await socialPage.screenshot({
       path: join(BRAND_DIR, 'social-preview.png'),
     });
