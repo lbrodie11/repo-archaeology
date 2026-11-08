@@ -91,7 +91,8 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `files` | `integer` | Yes | Distinct tracked file identities in the co-change model. |
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
-| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`). |
+| `origins` | `{ human, agent, bot }` | Yes | Counts of analyzed commits classified as `human`, `agent`, or `bot`. |
+| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
 #### 5.1.1 Directional Confidence, Wilson Intervals (`interval`, `reverseInterval`), and `score`
@@ -143,6 +144,11 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
     "files": 42,
     "oldestCommit": "2025-01-10",
     "newestCommit": "2026-10-15",
+    "origins": {
+      "human": 110,
+      "agent": 5,
+      "bot": 3
+    },
     "settings": {
       "maxCommits": 5000,
       "maxFilesPerCommit": 25,
@@ -206,12 +212,18 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
       "weighted": false,
       "lastTogether": "2026-05-16",
       "crossesDirectories": true,
+      "originShare": {
+        "human": 0.917,
+        "agent": 0.083,
+        "bot": 0
+      },
       "evidence": [
         {
           "hash": "26f8c33000000000000000000000000000000000",
           "date": "2026-05-16",
           "author": "Alice",
-          "subject": "fix(serveStatic): make options parameter optional in all adapters"
+          "subject": "fix(serveStatic): make options parameter optional in all adapters",
+          "origin": "human"
         }
       ],
       "alsoLinkedFrom": []
@@ -268,14 +280,15 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `why` | `string` | Yes | Human-readable classification explanation. |
 | `hiddenBridge` | `HiddenBridge` | Optional | Shared AST signal when `relationship === "ghost"`. |
 | `meetsThresholds` | `boolean` | Yes | Whether the pair meets active `--min-shared` and `--min-confidence` in at least one direction. |
-| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts. |
+| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts (stay raw even when `--half-life` or `--origin-weights` is set; `interval` from RA-05 stays raw as well). |
 | `confidence`, `reverseConfidence`, `score` | `number` | Yes | Directional confidences and Wilson score. |
 | `interval`, `reverseInterval` | `WilsonInterval` | Optional (always emitted) | Two-sided 95% Wilson score intervals (`{ low, high }`) for unweighted directional and reverse confidence. |
-| `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting is active. |
+| `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting or `--origin-weights` origin weighting is active. |
 | `lastTogether` | `string` | Optional | ISO date of most recent shared commit (omitted when `shared === 0`). |
 | `crossesDirectories` | `boolean` | Yes | `true` when `dirname(from) !== dirname(to)`. |
-| `sharedCommits` | `SharedCommitEvidence[]` | Yes | Recent shared commits with bounded diff hunks (`fileA`, `fileB`). |
-| `counterexamples` | `object` | Yes | `fromWithoutToTotal`, `toWithoutFromTotal`, `fromWithoutTo`, `toWithoutFrom`. |
+| `originShare` | `{ human, agent, bot }` | Yes | Share of all shared commits by origin (`human`, `agent`, `bot`), rounded to 3 decimals and summing to 1 (or all `0` when `shared === 0`). |
+| `sharedCommits` | `SharedCommitEvidence[]` | Yes | Recent shared commits with `origin` (`"human" \| "agent" \| "bot"`) and bounded diff hunks (`fileA`, `fileB`). |
+| `counterexamples` | `object` | Yes | `fromWithoutToTotal`, `toWithoutFromTotal`, `fromWithoutTo`, `toWithoutFrom` (each commit includes `origin`). |
 | `bounds` | `ExplainBoundsSummary` | Yes | Active line/hunk/byte/timeout budgets and truncation flags. |
 | `cliCommand` | `string` | Yes | Reproducible CLI command string. |
 | `disclaimer` | `string` | Yes | Methodological caveat. |
@@ -312,7 +325,8 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `strategies` | `StrategyScore[]` | Yes | Precision, hit rate, coverage, false-alarm rate, and recall per strategy. |
 | `notes` | `string[]` | Yes | Methodological notes. |
 | `ghostDiagnostics` | `GhostDiagnostics` | Optional | Present when `--ghosts` was passed. |
-| `followUpBenchmark` | `FollowUpBenchmarkResult` | Optional | Present when `--follow-ups` was passed. |
+| `followUpBenchmark` | `FollowUpBenchmarkResult` | Optional | Present when `--follow-ups` was passed (each case's `initialCommit` and `followUpCommit` includes `origin`). |
+| `comparisons` | `OriginWeightComparison[]` | Optional | Present when `--compare-origin-weights <spec>` was passed; reports `default`, `weighted`, and `deltas` (`precision`, `hitRate`, `lift`, `coverage`, `falseAlarmRate`, `recall`, `fired`) on the same split. |
 
 ---
 
