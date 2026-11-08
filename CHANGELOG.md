@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-08
+
 ### Added
 - **FRAME/12 Rich Terminal Output (`RA-13`, [`src/style/frame12.ts`](src/style/frame12.ts), [`src/report/terminal-rich.ts`](src/report/terminal-rich.ts), [`src/report/terminal-safety.ts`](src/report/terminal-safety.ts), [`src/cli.ts`](src/cli.ts), [`src/config.ts`](src/config.ts)):**
   - Added opt-in `--style <classic|rich>`, `REPO_ARCHAEOLOGY_STYLE=classic|rich`, and `.repo-archaeology.json` `"style": "classic" | "rich"` (precedence: `--style` > `REPO_ARCHAEOLOGY_STYLE` > `.repo-archaeology.json` > `'classic'`) across `scan`, `diff`, `file`, `explain`, and bare `repo-archaeology` while preserving `--style classic` as the byte-identical default, keeping JSON (`--json`, `--json-out`) and Markdown (`diff --format markdown`) outputs unchanged, and ignoring or warning-with-fallback on invalid `REPO_ARCHAEOLOGY_STYLE` / config `"style"` values so machine outputs never fail.

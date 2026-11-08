@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.3.0/schema/backtest.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.4.0/schema/backtest.schema.json",
   "title": "Repo Archaeology Backtest Result (v1)",
   "description": "JSON output contract for `repo-archaeology backtest --json` (including `--ghosts` and `--follow-ups`).",
   "type": "object",

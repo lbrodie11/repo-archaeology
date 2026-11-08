@@ -16,7 +16,7 @@ Analysis runs entirely locally against your `.git` repository. Once installed or
 
 ![Repo Archaeology map showing ghost wires in the Hono repository](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/repo-archaeology-map.png)
 
-*The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with default thresholds.*
+*The interactive map on [honojs/hono](https://github.com/honojs/hono), generated locally with default thresholds (`npx repo-archaeology map`; pass `--style rich` for the FRAME/12 contact-sheet dig view).*
 
 **Not just shared commit counts:** Repo Archaeology measures how often each file changes, ranks relationships by statistical evidence, and filters out common sources of noisy Git history.
 
@@ -93,9 +93,10 @@ Generate a self-contained, offline interactive map in one command:
 ```bash
 $ npx repo-archaeology map
 # Writes an offline HTML report to .git/repo-archaeology/map.html and opens it in your browser.
+# Pass --style rich for the ranked FRAME/12 contact-sheet ("dig sheet") layout.
 ```
 
-Files are colored by folder and sized by churn. Pink dashed lines mark **ghost wires**—files that co-evolve without direct or indirect imports. Click any file or wire to inspect the exact shared commits behind the link.
+In the default `classic` view, files are colored by folder and sized by churn, and pink dashed lines mark **ghost wires**—files that co-evolve without direct or indirect imports. In `--style rich`, each connected component of co-changing files is placed in its own numbered cut frame (`C-01`, `C-02`…) ordered by priority with light/dark ink-and-paper themes. Click any file, wire, or card to inspect the exact shared commits behind the link.
 
 ### 2. Catch companion files when editing or reviewing a PR (`diff`)
 
@@ -182,8 +183,9 @@ When three or more sibling parallel implementations form a connected co-change g
 | `diff [--base main]` | I changed these files. What usually changes with them that I haven't touched? |
 | `explain <fileA> <fileB>` | What actually changed in the commits these two files share, and when did one change without the other? |
 | `file <path>` | What does history know about this file: churn, owners, companions? |
-| `map` | Show me the whole picture as an interactive map in the browser. |
+| `map` | Show me the whole picture as an interactive map in the browser (`--style classic` or `--style rich`). |
 | `backtest` | How often would these suggestions have been right on recent history? |
+| `imports [--files <path>...]` | What does the internal JS/TS import graph look like, and which files import these targets? |
 | `verdict add\|list\|prune` | Silence expected mechanical relationships or annotate confirmed hidden dependencies in `.repo-archaeology.verdicts.json`. |
 
 Every command accepts `--json` (`schemaVersion: 1`; see [docs/json.md](docs/json.md) and [`schema/`](schema) for the formal JSON Schema contract). Run `repo-archaeology --help` for all options.
@@ -235,7 +237,7 @@ jobs:
 
       - name: Check for overlooked companion files
         id: archaeology
-        uses: lbrodie11/repo-archaeology@v0.3.0
+        uses: lbrodie11/repo-archaeology@v0.4.0
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
@@ -250,9 +252,9 @@ jobs:
   - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
   - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
   - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
-  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.3.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.3.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
+  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.4.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.4.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
   - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is resolved to its canonical absolute path and honoured, while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated into separate empty config files. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
-  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.3.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.4.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
 
 ### `explain`
 
@@ -377,7 +379,7 @@ Global options work with every command:
 | `--half-life <days>` | | Weight recent commits more |
 | `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
 | `--origin-weights <spec>` | `human=1,agent=1,bot=1` | Weight commits by origin, e.g. `bot=0,agent=0.5` (values in `[0, 1]`) |
-| `--style <mode>` | `classic` | Terminal visual style: `classic` (default) or `rich` (FRAME/12 editorial hierarchy; also settable via `REPO_ARCHAEOLOGY_STYLE` for personal preference, or `"style"` in `.repo-archaeology.json` as a team-wide default) |
+| `--style <mode>` | `classic` | Visual style for terminal output and `map`: `classic` (default) or `rich` (FRAME/12 editorial terminal hierarchy and contact-sheet dig map; also settable via `REPO_ARCHAEOLOGY_STYLE` for personal preference, or `"style"` in `.repo-archaeology.json` as a team-wide default) |
 | `--ascii` | | Use ASCII-only box rules, arrows, and separators in `--style rich` output |
 | `--no-links` | | Disable OSC 8 clickable commit-receipt hyperlinks in `--style rich` output |
 | `--full-evidence` | | Inline all supporting commit receipts without an `Additional receipts` split in `--style rich` output |
@@ -571,7 +573,7 @@ Known limits:
 
 ## Project status
 
-The v0.3 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), the programmatic `openRepository()` library API and `importGraph` ([docs/api.md](docs/api.md) and [`schema/import-graph.schema.json`](schema/import-graph.schema.json)), `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.4 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), historical revision analysis without checkout (`--head <ref>`), two-sided 95% Wilson confidence intervals (`interval` / `reverseInterval`), commit origin classification and weighting (`human` / `agent` / `bot`, `--origin-weights`, `backtest --compare-origin-weights`), the persistent raw-commit history cache, `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), the programmatic `openRepository()` library API and `imports` / `importGraph` ([docs/api.md](docs/api.md) and [`schema/import-graph.schema.json`](schema/import-graph.schema.json)), relationship verdicts (`.repo-archaeology.verdicts.json`), historical contributor and `CODEOWNERS` context (`--owners`), the precomputed `map` layout engine and opt-in FRAME/12 `--style rich` terminal and contact-sheet dig view, `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 

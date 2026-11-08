@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.3.0`)
+## Shipped Foundations (`v0.2.x` – `v0.4.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
@@ -25,6 +25,10 @@ Last updated: November 2026
 - **Follow-Up Fix Benchmark (`v0.2.0`):** Evaluate multi-commit temporal omissions via `backtest --follow-ups`.
 - **Frozen v1 JSON Contract & Schemas (`v0.3.0`):** Versioned `--json` envelope (`schemaVersion: 1`, `tool: { name, version }`), formal Draft 2020-12 JSON Schemas in [`schema/`](schema), and documentation in [`docs/json.md`](docs/json.md).
 - **Quiet GitHub Action & Markdown PR Summaries (`v0.3.0`):** Deterministic Markdown rendering (`diff --format markdown --json-out <file>`) and an official composite GitHub Action (`action.yml`) that posts advisory pull request summaries to `$GITHUB_STEP_SUMMARY` with pinned head/base SHA verification.
+- **Programmatic Library API & Import Graph (`v0.4.0`):** First-class ESM library (`openRepository()` in [`docs/api.md`](docs/api.md)), `repo-archaeology imports [--files ...]`, and workspace/monorepo/`exports`/`imports`/`tsconfig` import resolution with coverage diagnostics (`meta.imports`).
+- **Historical Revision Analysis (`--head <ref>`) & Persistent History Cache (`v0.4.0`):** Analyze any commit or tag without checking it out, backed by an incremental, settings-independent raw-commit cache in `<git-common-dir>/repo-archaeology/cache/`.
+- **Statistical & Origin-Aware Evidence (`v0.4.0`):** Two-sided 95% Wilson confidence intervals (`interval` / `reverseInterval`), `human` / `agent` / `bot` commit origin classification and weighting (`--origin-weights`, `backtest --compare-origin-weights`), relationship verdicts (`.repo-archaeology.verdicts.json`), and historical contributor / `CODEOWNERS` context (`--owners`).
+- **Precomputed Map Engine & Opt-In FRAME/12 `--style rich` (`v0.4.0`):** Deterministic precomputed layout (`#ra-layout`) with zero-idle-CPU rendering, plus opt-in `--style rich` FRAME/12 editorial terminal output and ranked contact-sheet ("dig sheet") browser maps.
 
 ---
 
