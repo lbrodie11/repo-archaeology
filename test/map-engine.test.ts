@@ -563,15 +563,21 @@ describe('RA-15 map engine: browser runtime behavior (Playwright)', () => {
             const rect = canvas.getBoundingClientRect();
             const touchAction = getComputedStyle(canvas).touchAction;
             const hint = document.querySelector('.hint')?.textContent ?? '';
+            const cx = Math.round(rect.left + rect.width / 2);
+            const visibleBottom = Math.min(rect.bottom, window.innerHeight - 20);
+            const startY = Math.round((rect.top + visibleBottom) / 2);
+            const hitId = document.elementFromPoint(cx, startY)?.id ?? '';
             return {
               touchAction,
               hint,
-              cx: Math.round(rect.left + rect.width / 2),
-              startY: Math.round(rect.top + rect.height * 0.75),
+              cx,
+              startY,
+              hitId,
             };
           });
           assert.equal(mobileChecks.touchAction, 'pan-y');
           assert.equal(mobileChecks.hint, 'Two fingers to pan and zoom');
+          assert.equal(mobileChecks.hitId, 'map', 'Expected touch start point to hit #map inside the viewport');
 
           // Drive a real compositor touch scroll gesture over the canvas via CDP Input.synthesizeScrollGesture
           const cdp = await context.newCDPSession(page);
@@ -579,7 +585,7 @@ describe('RA-15 map engine: browser runtime behavior (Playwright)', () => {
             x: mobileChecks.cx,
             y: mobileChecks.startY,
             xDistance: 0,
-            yDistance: -180,
+            yDistance: -150,
             gestureSourceType: 'touch',
             speed: 800,
           });
