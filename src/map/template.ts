@@ -938,7 +938,9 @@ const CLIENT = String.raw`
         family: fam,
         members: compMembers,
         nodes: compNodes,
+        nodeSet: new Set(compNodes),
         edges: compEdges,
+        edgeSet: new Set(compEdges),
         undrawnPairs: compUndrawn,
         qualifyingPairs: qualifyingPairs,
         possiblePairs: possiblePairs,
@@ -971,36 +973,41 @@ const CLIENT = String.raw`
     return views[0];
   }
 
-  function focusEdge(e) {
+  function focusEdge(e, activeFam) {
     if (selectedEdge) return e === selectedEdge;
     if (hoverEdge) return e === hoverEdge;
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    if (activeFam) return activeFam.edges.indexOf(e) >= 0;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
     return true;
   }
-  function focusNode(n) {
+  function focusNode(n, activeFam) {
     if (selectedEdge) return n === selectedEdge.s || n === selectedEdge.t;
     if (hoverEdge) return n === hoverEdge.s || n === hoverEdge.t;
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    if (activeFam) return activeFam.nodes.indexOf(n) >= 0;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.nodeSet ? fam.nodeSet.has(n) : fam.nodes.indexOf(n) >= 0;
     if (selectedNode) return n === selectedNode || n.edges.some(function (e) { return isVisible(e) && (e.s === selectedNode || e.t === selectedNode); });
     if (matches) return matches.indexOf(n) >= 0;
     return true;
   }
-  function isGhostFocused(e) {
+  function isGhostFocused(e, activeFam) {
     if (e.d.relationship !== 'ghost' || !visible.ghost) return false;
     if (selectedEdge) return e === selectedEdge;
     if (hoverEdge) return e === hoverEdge;
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    if (activeFam) return activeFam.edges.indexOf(e) >= 0;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
     if (hoverNode) return e.s === hoverNode || e.t === hoverNode;
     return false;
   }
   function hasFocusedGhostWire() {
     if (!visible.ghost) return false;
-    return edges.some(isGhostFocused);
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    var ghostEdges = edgesByKind.ghost || [];
+    for (var i = 0; i < ghostEdges.length; i++) {
+      if (isGhostFocused(ghostEdges[i], activeFam)) return true;
+    }
+    return false;
   }
 
   // ---- drawing -------------------------------------------------------------
@@ -1047,18 +1054,18 @@ const CLIENT = String.raw`
     drawQueued = false;
     var ts = performance.now();
     var didSimStep = false;
+    var isDraggingNode = Boolean(drag && drag.node && drag.moved);
     if (alpha > 0.02) {
-      if (deferSimOneFrame) {
+      if (deferSimOneFrame && !isDraggingNode) {
         deferSimOneFrame = false;
-        if (reduceMotion) {
-          requestDraw();
-          return;
-        }
+        requestDraw();
+        return;
       } else {
+        deferSimOneFrame = false;
         var sliceStart = ts;
         var steps = 0;
-        var maxSteps = reduceMotion ? 400 : (!hasPrecomputed ? 6 : 1);
-        var budgetMs = reduceMotion ? 8 : 8;
+        var maxSteps = (reduceMotion && !isDraggingNode) ? 400 : 6;
+        var budgetMs = 8;
         while (alpha > 0.02 && steps < maxSteps && (steps === 0 || performance.now() - sliceStart < budgetMs)) {
           tick();
           steps++;
@@ -1068,7 +1075,7 @@ const CLIENT = String.raw`
           fitPendingAfterSettle = false;
           if (!userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
         }
-        if (reduceMotion && didSimStep) {
+        if (reduceMotion && didSimStep && !(drag && drag.node && drag.moved)) {
           requestDraw();
           return;
         }
@@ -1115,18 +1122,19 @@ const CLIENT = String.raw`
     var k = cam.scale;
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (size.w / 2 - cam.x * k), dpr * (size.h / 2 - cam.y * k));
 
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
     ['test', 'direct', 'indirect', 'unknown', 'ghost'].forEach(function (kind) {
       if (!visible[kind]) return;
       var kindEdges = edgesByKind[kind] || [];
       for (var ei = 0; ei < kindEdges.length; ei++) {
         var e = kindEdges[ei];
-        var focused = focusEdge(e);
+        var focused = focusEdge(e, activeFam);
         var baseWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
         ctx.beginPath();
         ctx.moveTo(e.s.x, e.s.y);
         ctx.lineTo(e.t.x, e.t.y);
         if (kind === 'ghost') {
-          var ghostFocused = isGhostFocused(e);
+          var ghostFocused = isGhostFocused(e, activeFam);
           if (ghostFocused) {
             ctx.setLineDash([]);
             ctx.lineDashOffset = 0;
@@ -1160,9 +1168,8 @@ const CLIENT = String.raw`
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;
 
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
     activeNodesList.forEach(function (n) {
-      var focused = focusNode(n);
+      var focused = focusNode(n, activeFam);
       ctx.globalAlpha = focused ? 1 : 0.14;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
@@ -1171,7 +1178,7 @@ const CLIENT = String.raw`
       ctx.lineWidth = Math.max(1 / k, 1.2);
       var isTargetEndpoint = (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
                              (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t)) ||
-                             (activeFam && activeFam.nodes.indexOf(n) >= 0);
+                             (activeFam && (activeFam.nodeSet ? activeFam.nodeSet.has(n) : activeFam.nodes.indexOf(n) >= 0));
       ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
       if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
       ctx.stroke();
@@ -1186,7 +1193,7 @@ const CLIENT = String.raw`
     nodes.forEach(function (n) {
       var overview = !selectedNode && !selectedEdge && !selectedFamily && !hoverEdge && !hoverFamily && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n)) ||
+        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n, activeFam)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
       var label = overviewLabelNodes[n.i] || getNodeLabel(n);
@@ -1251,7 +1258,7 @@ const CLIENT = String.raw`
     if (ev.pointerType === 'touch') {
       updateTouchHint();
       activeTouches.set(ev.pointerId, {
-        x: px, y: py, clientX: ev.clientX, clientY: ev.clientY, startX: px, startY: py, lastScrollY: window.scrollY
+        x: px, y: py, clientX: ev.clientX, clientY: ev.clientY, startX: px, startY: py
       });
       if (activeTouches.size === 2) {
         drag = null;
@@ -1285,7 +1292,6 @@ const CLIENT = String.raw`
     var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     if (ev.pointerType === 'touch' && activeTouches.has(ev.pointerId)) {
       var prevTouch = activeTouches.get(ev.pointerId);
-      var dyClient = prevTouch.clientY - ev.clientY;
       prevTouch.x = px; prevTouch.y = py;
       prevTouch.clientX = ev.clientX; prevTouch.clientY = ev.clientY;
       if (activeTouches.size === 2 && pinchState) {
@@ -1309,10 +1315,6 @@ const CLIENT = String.raw`
       if (drag && drag.stackedSingleTouch) {
         if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 6) {
           drag.moved = true;
-          if (!ev.isTrusted && window.scrollY === prevTouch.lastScrollY && dyClient !== 0) {
-            window.scrollBy(0, dyClient);
-          }
-          prevTouch.lastScrollY = window.scrollY;
         }
         drag.lastX = px; drag.lastY = py;
         return;
