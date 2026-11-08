@@ -502,12 +502,15 @@ program
   .addOption(kindsOption('relationship kinds to include', ['ghost', 'unknown', 'indirect', 'direct']))
   .option('--include-patches', 'embed bounded git diff hunks for top relationships (opt-in; review before sharing externally)')
   .option('--show-silenced', 'also include relationships silenced by expected verdicts')
+  .option('--style <mode>', 'visual style mode: classic or rich', (value) => resolveStyleMode({ flag: value }))
   .option('--no-open', 'write the file without opening a browser')
-  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; showSilenced?: boolean; open: boolean }, cmd: Command) => {
+  .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; showSilenced?: boolean; style?: StyleMode; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     const options = {
       ...opts,
+      style: opts.style ?? global.style,
+      onWarning: global.json ? undefined : (msg: string) => console.error(c.yellow(`! ${terminalText(msg)}`)),
       uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? Math.max(1, Math.floor(opts.edges * 0.1)) : undefined,
     };
     const { file, data } = await writeMap(ctx, options);
