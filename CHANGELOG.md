@@ -4,6 +4,15 @@ All notable changes to **Repo Archaeology** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - YYYY-MM-DD
+
+### Added
+- **Release Tarball & Schema Smoke Test ([`scripts/smoke-pack.mjs`](scripts/smoke-pack.mjs)):** Packs the release tarball into a temporary directory, installs it into an isolated prefix, runs `repo-archaeology diff --base <first-branch-point> --json` and `repo-archaeology backtest --json` against a 40-commit synthetic Git repository with a known co-change pair, and validates both outputs against `schema/diff.schema.json` and `schema/backtest.schema.json` in CI (`.github/workflows/ci.yml`).
+- **Automated Tag-Driven Release Workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):** Runs on `v*.*.*` tags with SHA-pinned GitHub Actions, executes `npm ci`, typecheck, tests, build, and `scripts/smoke-pack.mjs`, publishes to npm with OIDC provenance (`npm publish --provenance --access public`), and creates a GitHub Release from the matching `CHANGELOG.md` section.
+
+### Consumers
+- **Gutter Consumer Contract Guard ([`test/consumer-gutter.test.ts`](test/consumer-gutter.test.ts)):** Freezes the exact `schemaVersion: 1` `diff --json` and `backtest --json` field paths, types, relationship kinds, `silence.primaryReason` codes, and strategy names consumed by Gutter (`lbrodie11/gutter`).
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
@@ -19,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Added root-level composite `action.yml` and runner (`src/action/runner.ts`) for non-blocking pull request summaries written to `$GITHUB_STEP_SUMMARY`.
   - Verifies checked-out `HEAD` matches the expected PR `head` commit SHA (detecting GitHub Actions' default synthetic `refs/pull/:id/merge` commit with actionable guidance), detects shallow clones (`git rev-parse --is-shallow-repository`) and `< 2`-commit repositories and degrades gracefully with `analysis-status: insufficient-history` and exit code `0`, warns when uncommitted working-tree changes are included in the analysis (`uncommitted-files-count` output and `::warning::` annotation), isolates external `npx` execution outside `$GITHUB_WORKSPACE` while preserving external `NPM_CONFIG_USERCONFIG` / `NPM_CONFIG_GLOBALCONFIG` settings (such as `actions/setup-node` `registry-url`), validates `working-directory` containment within `$GITHUB_WORKSPACE`, and exposes `suggestion-count`, `uncommitted-files-count`, `json-path`, and `analysis-status` outputs.
   - Added dogfooding pull request workflow (`.github/workflows/repo-archaeology.yml`) and post-release consumer smoke workflow (`.github/workflows/action-smoke.yml`).
+
+### Consumers
+- **Gutter (`lbrodie11/gutter`):** The `schemaVersion: 1` JSON fields read by Gutter (`diff --json` and `backtest --json`) are frozen and guarded against accidental removal or retyping in [`test/consumer-gutter.test.ts`](test/consumer-gutter.test.ts). Any change to those fields requires a coordinated Gutter release.
 
 ## [0.2.1] - 2026-11-01
 

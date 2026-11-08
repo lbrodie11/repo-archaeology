@@ -36,6 +36,9 @@ Repo Archaeology follows a strict schema versioning policy for `--json` and `--j
    - Consumers should ignore unrecognized object properties when parsing in code. All published `v1` JSON Schemas in `schema/` permit additional properties so additive `0.3.x` fields remain valid against the `v1` schemas.
 2. **Breaking Changes Increment `schemaVersion`:**
    - Removing a documented property, renaming a property, changing a property's data type, or altering the meaning of an existing discriminator requires incrementing `schemaVersion` (e.g. to `2`).
+3. **Downstream Consumer Guards:**
+   - [`test/json-contract.test.ts`](../test/json-contract.test.ts) and [`scripts/smoke-pack.mjs`](../scripts/smoke-pack.mjs) validate CLI and packed tarball outputs against the Draft 2020-12 schemas in [`schema/`](../schema).
+   - [`test/consumer-gutter.test.ts`](../test/consumer-gutter.test.ts) freezes the exact `diff --json` and `backtest --json` field paths, types, relationship kinds, `silence.primaryReason` codes, and strategy names consumed by Gutter (`lbrodie11/gutter`). Changing any frozen field requires a coordinated Gutter release.
 
 ---
 
