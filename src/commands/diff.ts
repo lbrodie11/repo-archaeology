@@ -6,6 +6,7 @@ import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } fr
 import type { OriginWeights } from '../model/origin.js';
 import { isSameVerdictEntry, VerdictMatcher } from '../model/verdicts.js';
 import {
+  attachAllEvidence,
   buildMeta,
   describeStrength,
   DISCLAIMER,
@@ -579,10 +580,16 @@ export function suggestMissing(
   const allEntries = [...best.values()].sort((x, y) => compareCompanions(x.companion, y.companion));
   const totalSuggestions = allEntries.length;
   const topEntries = allEntries.slice(0, options.limit);
-  const suggestions: Suggestion[] = topEntries.map((entry) => ({
-    ...toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath),
-    alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
-  }));
+  const suggestions: Suggestion[] = topEntries.map((entry) => {
+    const view = toView(verdictCtx, entry.companion, entry.relationship, entry.fromPath);
+    return attachAllEvidence(
+      {
+        ...view,
+        alsoLinkedFrom: [...entry.linkedFrom].filter((p) => p !== entry.fromPath),
+      },
+      view.allEvidence,
+    );
+  });
   const allSuggestedPaths = allEntries.map((entry) => model.path(entry.companion.to));
   const families = buildDiffFamilies(verdictCtx, changed, allSuggestedPaths, options.kinds);
   const silence = suggestions.length === 0 ? explainSilence(verdictCtx, changed, touched, options) : undefined;

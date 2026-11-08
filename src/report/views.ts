@@ -67,6 +67,22 @@ export interface RelationshipView {
   /** Repo-committed relationship verdict annotation, when matched by `.repo-archaeology.verdicts.json`. */
   verdict?: RelationshipVerdictView;
   evidence: EvidenceView[];
+  /** Non-enumerable full evidence list (up to `FULL_EVIDENCE_LIMIT`) used by `--style rich` / `--full-evidence`. */
+  allEvidence?: EvidenceView[];
+}
+
+export function attachAllEvidence<T extends RelationshipView>(
+  target: T,
+  allEvidence?: EvidenceView[],
+): T {
+  if (allEvidence && allEvidence.length > target.evidence.length) {
+    Object.defineProperty(target, 'allEvidence', {
+      value: allEvidence,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return target;
 }
 
 export interface HeadInfo {
@@ -157,7 +173,17 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
   const shared = companion.stat.count;
   const fromChanges = model.changeCount[companion.from] ?? 0;
   const toChanges = model.changeCount[companion.to] ?? 0;
-  return {
+  const mapCommitIndex = (i: number): EvidenceView => {
+    const commit = model.commits[i]!;
+    return {
+      hash: commit.hash,
+      date: isoDate(commit.time),
+      author: commit.author,
+      subject: commit.subject,
+      origin: commit.origin ?? 'human',
+    };
+  };
+  const view: RelationshipView = {
     from,
     to,
     relationship,
@@ -177,17 +203,15 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
     crossesDirectories: posix.dirname(from) !== posix.dirname(to),
     originShare: computeOriginShare(companion.stat.originCounts),
     ...(verdict !== undefined ? { verdict } : {}),
-    evidence: companion.stat.evidence.map((i) => {
-      const commit = model.commits[i]!;
-      return {
-        hash: commit.hash,
-        date: isoDate(commit.time),
-        author: commit.author,
-        subject: commit.subject,
-        origin: commit.origin ?? 'human',
-      };
-    }),
+    evidence: companion.stat.evidence.map(mapCommitIndex),
   };
+  const allIndices = companion.stat.allEvidence;
+  return attachAllEvidence(
+    view,
+    allIndices && allIndices.length > companion.stat.evidence.length
+      ? allIndices.map(mapCommitIndex)
+      : undefined,
+  );
 }
 
 export function formatVerdictAnnotation(verdict: RelationshipVerdictView): string {

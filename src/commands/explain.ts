@@ -166,6 +166,7 @@ function shellQuoteArg(arg: string): string {
 
 export interface FormatExplainCommandOptions {
   base?: string;
+  head?: string;
 }
 
 /** Formats a safe, copyable CLI command for inspecting two repository-relative paths. */
@@ -177,6 +178,9 @@ export function formatExplainCommand(
   options?: FormatExplainCommandOptions,
 ): string {
   const flagParts: string[] = [];
+  if (options?.head !== undefined && options.head.trim() !== '') {
+    flagParts.push(`--head ${shellQuoteArg(options.head.trim())}`);
+  }
   if (options?.base !== undefined && options.base.trim() !== '') {
     flagParts.push(`--base ${shellQuoteArg(options.base.trim())}`);
   }

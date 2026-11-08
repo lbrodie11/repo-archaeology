@@ -5,6 +5,8 @@
  * Vendored as static constants so `@frame12/tokens` is never a runtime dependency.
  */
 
+import { ConfigError } from '../errors.js';
+
 export const STYLE_MODES = ['classic', 'rich'] as const;
 export type StyleMode = (typeof STYLE_MODES)[number];
 
@@ -16,30 +18,47 @@ export interface ResolveStyleOptions {
   flag?: string | undefined;
   env?: string | undefined;
   config?: StyleMode | string | undefined;
+  onWarning?: (message: string) => void;
 }
 
 /**
  * Resolve style mode with precedence:
  * `--style` CLI flag > `REPO_ARCHAEOLOGY_STYLE` env var > `.repo-archaeology.json` `"style"` > `'classic'`.
+ *
+ * Only an explicit invalid `--style` flag throws `ConfigError`. Invalid `REPO_ARCHAEOLOGY_STYLE`
+ * or config `"style"` values emit a warning via `onWarning` (when provided) and fall back to `'classic'`.
  */
 export function resolveStyleMode(options: ResolveStyleOptions = {}): StyleMode {
-  const candidates: Array<{ source: string; value: string | undefined }> = [
-    { source: '--style', value: options.flag },
-    { source: 'REPO_ARCHAEOLOGY_STYLE', value: options.env },
-    { source: 'config "style"', value: options.config },
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate.value === undefined || candidate.value === '') continue;
-    const normalized = candidate.value.trim().toLowerCase();
+  if (options.flag !== undefined && options.flag !== '') {
+    const normalized = options.flag.trim().toLowerCase();
     if (isStyleMode(normalized)) {
       return normalized;
     }
-    const err = new Error(
-      `Invalid style mode from ${candidate.source}: "${candidate.value}". Expected one of: ${STYLE_MODES.join(', ')}.`,
+    throw new ConfigError(
+      `Invalid style mode from --style: "${options.flag}". Expected one of: ${STYLE_MODES.join(', ')}.`,
     );
-    err.name = 'ConfigError';
-    throw err;
+  }
+
+  if (options.env !== undefined && options.env.trim() !== '') {
+    const normalized = options.env.trim().toLowerCase();
+    if (isStyleMode(normalized)) {
+      return normalized;
+    }
+    options.onWarning?.(
+      `Invalid style mode from REPO_ARCHAEOLOGY_STYLE: "${options.env}". Falling back to "classic" (expected one of: ${STYLE_MODES.join(', ')}).`,
+    );
+    return 'classic';
+  }
+
+  if (options.config !== undefined && options.config !== '') {
+    const normalized = String(options.config).trim().toLowerCase();
+    if (isStyleMode(normalized)) {
+      return normalized;
+    }
+    options.onWarning?.(
+      `Invalid style mode from config "style": "${String(options.config)}". Falling back to "classic" (expected one of: ${STYLE_MODES.join(', ')}).`,
+    );
+    return 'classic';
   }
 
   return 'classic';

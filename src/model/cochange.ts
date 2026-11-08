@@ -8,8 +8,11 @@ import {
   type OriginWeights,
 } from './origin.js';
 
-/** How many example commits to keep per relationship. */
+/** How many example commits to keep per relationship in standard views and JSON. */
 export const EVIDENCE_LIMIT = 3;
+
+/** Maximum shared commits retained in `allEvidence` for `--style rich` / `--full-evidence`. */
+export const FULL_EVIDENCE_LIMIT = 50;
 
 export interface PairStat {
   a: number;
@@ -24,8 +27,10 @@ export interface PairStat {
   originCounts: OriginCounts;
   /** Author time of the most recent shared commit. */
   lastTime: number;
-  /** Indices into `model.commits`, newest first. */
+  /** Indices into `model.commits`, newest first (capped at `EVIDENCE_LIMIT = 3`). */
   evidence: number[];
+  /** Indices into `model.commits`, newest first (capped at `FULL_EVIDENCE_LIMIT`). */
+  allEvidence?: number[];
 }
 
 export type WeightingMode = 'none' | 'recency' | 'origin' | 'recency+origin';
@@ -276,6 +281,7 @@ export class CoChangeModel {
             originCounts: { human: 0, agent: 0, bot: 0 },
             lastTime: 0,
             evidence: [],
+            allEvidence: [],
           };
           this.adjacency[a]!.set(b, stat);
           this.adjacency[b]!.set(a, stat);
@@ -297,10 +303,29 @@ export class CoChangeModel {
     const tie = (i: number) => this.commits[i]!.commitTime;
     const ev = stat.evidence;
     const last = ev[ev.length - 1];
-    if (ev.length >= EVIDENCE_LIMIT && last !== undefined && (time(index) < time(last) || (time(index) === time(last) && tie(index) <= tie(last)))) return;
-    ev.push(index);
-    ev.sort((x, y) => time(y) - time(x) || tie(y) - tie(x) || x - y);
-    if (ev.length > EVIDENCE_LIMIT) ev.length = EVIDENCE_LIMIT;
+    if (
+      ev.length < EVIDENCE_LIMIT ||
+      last === undefined ||
+      time(index) > time(last) ||
+      (time(index) === time(last) && tie(index) > tie(last))
+    ) {
+      ev.push(index);
+      ev.sort((x, y) => time(y) - time(x) || tie(y) - tie(x) || x - y);
+      if (ev.length > EVIDENCE_LIMIT) ev.length = EVIDENCE_LIMIT;
+    }
+
+    const allEv = (stat.allEvidence ??= []);
+    const lastAll = allEv[allEv.length - 1];
+    if (
+      allEv.length >= FULL_EVIDENCE_LIMIT &&
+      lastAll !== undefined &&
+      (time(index) < time(lastAll) || (time(index) === time(lastAll) && tie(index) <= tie(lastAll)))
+    ) {
+      return;
+    }
+    allEv.push(index);
+    allEv.sort((x, y) => time(y) - time(x) || tie(y) - tie(x) || x - y);
+    if (allEv.length > FULL_EVIDENCE_LIMIT) allEv.length = FULL_EVIDENCE_LIMIT;
   }
 }
 

@@ -22,6 +22,7 @@ import {
   startRichProgressSpinner,
   stripAnsiAndOsc8,
 } from '../src/report/terminal-rich.js';
+import { ConfigError } from '../src/errors.js';
 import { resolveStyleMode } from '../src/style/frame12.js';
 import { terminalText } from '../src/util/term.js';
 import { FixtureRepo } from './helpers.js';
@@ -212,7 +213,24 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
       assert.equal(resolveStyleMode({ config: 'rich' }), 'rich');
       assert.equal(resolveStyleMode({ env: 'classic', config: 'rich' }), 'classic');
       assert.equal(resolveStyleMode({ flag: 'rich', env: 'classic', config: 'classic' }), 'rich');
-      assert.throws(() => resolveStyleMode({ env: 'neon' }), /Invalid style mode from REPO_ARCHAEOLOGY_STYLE/);
+      assert.throws(
+        () => resolveStyleMode({ flag: 'neon' }),
+        (err: unknown) => err instanceof ConfigError && /Invalid style mode from --style/.test(err.message),
+      );
+
+      // Invalid env or config warns and falls back to 'classic' instead of throwing
+      const warnings: string[] = [];
+      assert.equal(
+        resolveStyleMode({ env: 'neon', onWarning: (msg) => warnings.push(msg) }),
+        'classic',
+      );
+      assert.equal(
+        resolveStyleMode({ config: 'neon', onWarning: (msg) => warnings.push(msg) }),
+        'classic',
+      );
+      assert.equal(warnings.length, 2);
+      assert.match(warnings[0]!, /Invalid style mode from REPO_ARCHAEOLOGY_STYLE/);
+      assert.match(warnings[1]!, /Invalid style mode from config "style"/);
     });
   });
 
@@ -427,51 +445,38 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
           );
         }
 
-        // When a RelationshipView carries > 3 receipts, rich output preserves the remaining
-        // receipts in "Additional receipts (+N more; pass --full-evidence to inline):" and
-        // inlines all of them when fullEvidence is true.
-        const diffJson = JSON.parse(runCli(['diff', '--json'], repo.dir).stdout) as DiffResult;
-        const fiveReceiptDiff: DiffResult = {
-          ...diffJson,
-          suggestions: diffJson.suggestions.map((s, idx) =>
-            idx === 0
-              ? {
-                  ...s,
-                  evidence: [
-                    ...s.evidence,
-                    {
-                      hash: '1111111111111111111111111111111111111111',
-                      shortHash: '1111111',
-                      date: '2026-03-01',
-                      author: 'Alice',
-                      subject: 'feat(serve-static): sync adapter behavior 3',
-                    },
-                    {
-                      hash: '2222222222222222222222222222222222222222',
-                      shortHash: '2222222',
-                      date: '2026-02-28',
-                      author: 'Alice',
-                      subject: 'feat(serve-static): sync adapter behavior 2',
-                    },
-                  ],
-                }
-              : s,
-          ),
-        };
-        const fiveReceiptDefault = stripAnsiAndOsc8(formatRichDiff(fiveReceiptDiff));
+        // Live CLI diff --style rich preserves all 7 shared commits via "Additional receipts (+4 more…)"
+        // and inlines all 7 when --full-evidence is passed.
         assert.match(
-          fiveReceiptDefault,
-          /Additional receipts \(\+2 more; pass --full-evidence to inline\):/,
+          richDiffPlain,
+          /Additional receipts \(\+4 more; pass --full-evidence to inline\):/,
         );
-        for (let i = 2; i <= 6; i++) {
-          assert.match(fiveReceiptDefault, new RegExp(`sync adapter behavior ${i}`));
+        for (let i = 1; i <= 6; i++) {
+          assert.match(richDiffPlain, new RegExp(`sync adapter behavior ${i}`));
         }
-        const fiveReceiptFull = stripAnsiAndOsc8(
-          formatRichDiff(fiveReceiptDiff, { fullEvidence: true }),
+        assert.match(richDiffPlain, /initial setup/);
+
+        const richDiffFullPlain = stripAnsiAndOsc8(
+          runCli(['diff', '--style', 'rich', '--full-evidence'], repo.dir).stdout,
         );
-        assert.doesNotMatch(fiveReceiptFull, /Additional receipts/);
-        for (let i = 2; i <= 6; i++) {
-          assert.match(fiveReceiptFull, new RegExp(`sync adapter behavior ${i}`));
+        assert.doesNotMatch(richDiffFullPlain, /Additional receipts/);
+        for (let i = 1; i <= 6; i++) {
+          assert.match(richDiffFullPlain, new RegExp(`sync adapter behavior ${i}`));
+        }
+        assert.match(richDiffFullPlain, /initial setup/);
+
+        // Live CLI scan --style rich and scan --style rich --full-evidence also preserve all 7 receipts
+        const richScanPlain = stripAnsiAndOsc8(runCli(['scan', '--style', 'rich'], repo.dir).stdout);
+        assert.match(
+          richScanPlain,
+          /Additional receipts \(\+4 more; pass --full-evidence to inline\):/,
+        );
+        const richScanFullPlain = stripAnsiAndOsc8(
+          runCli(['scan', '--style', 'rich', '--full-evidence'], repo.dir).stdout,
+        );
+        assert.doesNotMatch(richScanFullPlain, /Additional receipts/);
+        for (let i = 1; i <= 6; i++) {
+          assert.match(richScanFullPlain, new RegExp(`sync adapter behavior ${i}`));
         }
 
         // Weighted confidence (--half-life) keeps (raw 95% CI ...) next to raw count and labels recency-weighted
@@ -484,14 +489,26 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
         );
         assert.doesNotMatch(weightedRichDiff, /recency-weighted\)\s*\((?:raw )?95% CI/);
 
-        //Rich file command
+        // Rich file command (default + --full-evidence)
         const richFilePlain = stripAnsiAndOsc8(
           runCli(['file', 'src/adapter/bun/serve-static.ts', '--style', 'rich'], repo.dir).stdout,
         );
         assert.match(richFilePlain, /FRAME\/12 · Repo Archaeology · file src\/adapter\/bun\/serve-static\.ts/);
         assert.match(richFilePlain, /Who knows it/);
         assert.match(richFilePlain, /Files that move with it/);
+        assert.match(
+          richFilePlain,
+          /Additional receipts \(\+4 more; pass --full-evidence to inline\):/,
+        );
         assert.equal((richFilePlain.match(/#1 IN RANKING/g) ?? []).length, 1);
+
+        const richFileFullPlain = stripAnsiAndOsc8(
+          runCli(
+            ['file', 'src/adapter/bun/serve-static.ts', '--style', 'rich', '--full-evidence'],
+            repo.dir,
+          ).stdout,
+        );
+        assert.doesNotMatch(richFileFullPlain, /Additional receipts/);
 
         // Rich explain command (with patch hunks and counterexamples)
         const richExplainPlain = stripAnsiAndOsc8(
@@ -533,13 +550,247 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
       assert.equal(runCli(['imports', '--style', 'rich'], repo.dir).code, 0);
       assert.equal(runCli(['verdict', 'list', '--style', 'rich'], repo.dir).code, 0);
 
-      // Invalid style in config or env fails with exit code 2
-      const badEnvRes = runCli(['scan'], repo.dir, { REPO_ARCHAEOLOGY_STYLE: 'invalid-style' });
-      assert.equal(badEnvRes.code, 2);
-      assert.match(badEnvRes.stderr, /Invalid style mode from REPO_ARCHAEOLOGY_STYLE/);
+      // Invalid REPO_ARCHAEOLOGY_STYLE is ignored in --json and --format markdown modes,
+      // and warns + falls back to classic in terminal mode.
+      const badEnvJsonRes = runCli(['scan', '--json'], repo.dir, {
+        REPO_ARCHAEOLOGY_STYLE: 'invalid-style',
+      });
+      assert.equal(badEnvJsonRes.code, 0);
+      assert.equal(badEnvJsonRes.stderr, '');
+      assert.doesNotThrow(() => JSON.parse(badEnvJsonRes.stdout));
+
+      const badEnvMdRes = runCli(['diff', '--format', 'markdown'], repo.dir, {
+        REPO_ARCHAEOLOGY_STYLE: 'invalid-style',
+      });
+      assert.equal(badEnvMdRes.code, 0);
+      assert.equal(badEnvMdRes.stderr, '');
+
+      const badEnvTermRes = runCli(['scan'], repo.dir, {
+        REPO_ARCHAEOLOGY_STYLE: 'invalid-style',
+      });
+      assert.equal(badEnvTermRes.code, 0);
+      assert.match(badEnvTermRes.stderr, /Invalid style mode from REPO_ARCHAEOLOGY_STYLE/);
+      assert.ok(!badEnvTermRes.stdout.includes('FRAME/12'));
+
+      // Invalid .repo-archaeology.json "style" is ignored in --json and warns + falls back in terminal mode
+      repo.write('.repo-archaeology.json', JSON.stringify({ style: 'invalid-style' }));
+      try {
+        const badConfigJsonRes = runCli(['scan', '--json'], repo.dir);
+        assert.equal(badConfigJsonRes.code, 0);
+        assert.equal(badConfigJsonRes.stderr, '');
+
+        const badConfigTermRes = runCli(['scan'], repo.dir);
+        assert.equal(badConfigTermRes.code, 0);
+        assert.match(badConfigTermRes.stderr, /Invalid style mode from config "style"/);
+        assert.ok(!badConfigTermRes.stdout.includes('FRAME/12'));
+      } finally {
+        repo.git('clean', '-fdq', '--', '.repo-archaeology.json');
+      }
+
+      // Explicit invalid --style flag fails with exit code 2
+      const badFlagRes = runCli(['scan', '--style', 'invalid-style'], repo.dir);
+      assert.equal(badFlagRes.code, 2);
+      assert.match(badFlagRes.stderr, /Invalid style mode from --style/);
     });
 
-    it('adapts to 20, 40, 80, and 120 column widths while preserving full untruncated paths and ASCII mode', () => {
+    it('shell-quotes Inspect command arguments and preserves --head, --base, and analysis options', () => {
+      const scanJson = JSON.parse(runCli(['scan', '--json'], repo.dir).stdout) as ScanResult;
+      const baseRel = scanJson.relationships[0]!;
+      const dangerousPaths = [
+        '$(printf INJECTED).ts',
+        'src/a"b\'c.ts',
+        'src/a\u001b[31m\u202eb.ts',
+        '-leading-dash.ts',
+      ];
+
+      for (const dangerousFrom of dangerousPaths) {
+        const craftedScan: ScanResult = {
+          ...scanJson,
+          relationships: [{ ...baseRel, from: dangerousFrom, to: 'src/safe.ts' }],
+        };
+        const outScan = stripAnsiAndOsc8(formatRichScan(craftedScan, { limit: 15, kinds: ['ghost'] }));
+        const inspectScan = outScan.split('\n').find((line) => line.includes('Inspect:')) ?? '';
+        assert.ok(!inspectScan.includes('"$(printf INJECTED).ts"'), `unquoted substitution in ${inspectScan}`);
+        if (dangerousFrom.startsWith('-')) {
+          assert.match(inspectScan, /explain -- '-leading-dash\.ts' src\/safe\.ts/);
+        }
+
+        const craftedDiff: DiffResult = {
+          meta: scanJson.meta,
+          changed: [{ path: dangerousFrom, sources: ['unstaged'], deleted: false, hasHistory: true }],
+          suggestions: [
+            {
+              ...baseRel,
+              from: dangerousFrom,
+              to: 'src/safe.ts',
+              alsoLinkedFrom: [],
+            },
+          ],
+          families: [],
+        };
+        const outDiff = stripAnsiAndOsc8(formatRichDiff(craftedDiff));
+        const inspectDiff = outDiff.split('\n').find((line) => line.includes('Inspect:')) ?? '';
+        assert.ok(!inspectDiff.includes('"$(printf INJECTED).ts"'));
+        if (dangerousFrom.startsWith('-')) {
+          assert.match(inspectDiff, /explain -- '-leading-dash\.ts' src\/safe\.ts/);
+        }
+
+        const craftedFile: FileResult = {
+          meta: scanJson.meta,
+          path: dangerousFrom,
+          changes: 8,
+          churnPercentile: 0.9,
+          medianChanges: 4,
+          lastChanged: '2026-03-01',
+          authors: [{ author: 'Alice', commits: 8, share: 1 }],
+          companions: [{ ...baseRel, from: dangerousFrom, to: 'src/safe.ts', wouldAlert: true }],
+        };
+        const outFile = stripAnsiAndOsc8(formatRichFile(craftedFile));
+        const inspectFile = outFile.split('\n').find((line) => line.includes('Inspect:')) ?? '';
+        assert.ok(!inspectFile.includes('"$(printf INJECTED).ts"'));
+        if (dangerousFrom.startsWith('-')) {
+          assert.match(inspectFile, /explain -- '-leading-dash\.ts' src\/safe\.ts/);
+        }
+      }
+
+      // Preserve --head and active history/weighting options in Inspect commands so inspecting
+      // a finding at an earlier ref reproduces its reported shared commit count.
+      repo.git('tag', 'baseline', 'HEAD~4');
+      try {
+        const baselineScanPlain = stripAnsiAndOsc8(
+          runCli(
+            ['scan', '--head', 'baseline', '--half-life', '30', '--max-commits', '100', '--style', 'rich'],
+            repo.dir,
+          ).stdout,
+        );
+        assert.match(baselineScanPlain, /4 of 4 commits/);
+        assert.match(
+          baselineScanPlain,
+          /Inspect: npx repo-archaeology explain --head baseline --max-commits 100 --half-life 30 src\/adapter\/bun\/serve-static\.ts src\/adapter\/cloudflare\/serve-static\.ts/,
+        );
+
+        const baselineExplainJson = JSON.parse(
+          runCli(
+            [
+              'explain',
+              '--head',
+              'baseline',
+              '--max-commits',
+              '100',
+              '--half-life',
+              '30',
+              'src/adapter/bun/serve-static.ts',
+              'src/adapter/cloudflare/serve-static.ts',
+              '--json',
+            ],
+            repo.dir,
+          ).stdout,
+        ) as ExplainResult;
+        assert.equal(baselineExplainJson.shared, 4);
+
+        const headExplainJson = JSON.parse(
+          runCli(
+            [
+              'explain',
+              'src/adapter/bun/serve-static.ts',
+              'src/adapter/cloudflare/serve-static.ts',
+              '--json',
+            ],
+            repo.dir,
+          ).stdout,
+        ) as ExplainResult;
+        assert.equal(headExplainJson.shared, 7);
+
+        // diff --base HEAD~1 --head HEAD preserves both --base and --head in Inspect:
+        const branchDiffPlain = stripAnsiAndOsc8(
+          runCli(['diff', '--base', 'HEAD~1', '--head', 'HEAD', '--style', 'rich'], repo.dir).stdout,
+        );
+        assert.match(
+          branchDiffPlain,
+          /Inspect: npx repo-archaeology explain --head HEAD --base [0-9a-f]{40} src\/adapter\/bun\/serve-static\.ts/,
+        );
+      } finally {
+        repo.git('tag', '-d', 'baseline');
+      }
+    });
+
+    it('restores explain bounds and timeout notices and expands tabs in diff hunks', () => {
+      const baseExplain = JSON.parse(
+        runCli(
+          ['explain', 'src/adapter/bun/serve-static.ts', 'src/adapter/deno/serve-static.ts', '--json'],
+          repo.dir,
+        ).stdout,
+      ) as ExplainResult;
+
+      // Exhausted patch-retrieval budget with 0 collected sharedCommits discloses timeout
+      const timedOutEmptyExplain: ExplainResult = {
+        ...baseExplain,
+        shared: 3,
+        sharedCommits: [],
+        bounds: {
+          ...baseExplain.bounds,
+          commitsTruncated: true,
+          contextClamped: true,
+          outputTruncated: true,
+          timedOut: true,
+        },
+      };
+      const timedOutPlain = stripAnsiAndOsc8(formatRichExplain(timedOutEmptyExplain));
+      assert.match(
+        timedOutPlain,
+        /No shared commit patches rendered \(patch retrieval reached time budget\)\./,
+      );
+      assert.match(
+        timedOutPlain,
+        /Bounds applied: showing up to 3 shared commits; context lines clamped to 2; patch output capped at 200 lines; patch retrieval reached time budget\./,
+      );
+
+      // Live CLI explain --context 99 --style rich surfaces contextClamped bound
+      const clampedCliPlain = stripAnsiAndOsc8(
+        runCli(
+          [
+            'explain',
+            'src/adapter/bun/serve-static.ts',
+            'src/adapter/deno/serve-static.ts',
+            '--context',
+            '99',
+            '--style',
+            'rich',
+          ],
+          repo.dir,
+        ).stdout,
+      );
+      assert.match(
+        clampedCliPlain,
+        /Bounds applied: showing up to 3 shared commits; context lines clamped to 10\./,
+      );
+
+      // Tab-indented diff hunk lines expand tabs so '+'/'-' prefixes align with 4-space code
+      const firstSharedCommit = baseExplain.sharedCommits[0]!;
+      const tabbedExplain: ExplainResult = {
+        ...baseExplain,
+        sharedCommits: [
+          {
+            ...firstSharedCommit,
+            fileA: {
+              ...firstSharedCommit.fileA,
+              hunks: [
+                {
+                  ...firstSharedCommit.fileA.hunks[0]!,
+                  lines: ['-\treturn 7;', '+\treturn 8;'],
+                },
+              ],
+            },
+          },
+        ],
+      };
+      const tabbedPlain = stripAnsiAndOsc8(formatRichExplain(tabbedExplain));
+      assert.ok(!tabbedPlain.includes('\t'), 'expected tabs expanded in rich explain hunks');
+      assert.match(tabbedPlain, /- {4}return 7;/);
+      assert.match(tabbedPlain, /\+ {4}return 8;/);
+    });
+
+    it('adapts to 20, 40, 80, and 120 column widths while preserving full untruncated paths and complete ASCII mode across all 4 formatters', () => {
       const scanJson = JSON.parse(runCli(['scan', '--json'], repo.dir).stdout) as ScanResult;
       const scanOpts: ScanOptions = { limit: 15, kinds: ['ghost', 'unknown'] };
 
@@ -567,19 +818,80 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
         assert.match(out, /\u001b\]8;;https:\/\/github\.com\/lbrodie11\/repo-archaeology\/commit\/[0-9a-f]{40}\u001b\\/);
       }
 
-      // ASCII mode replaces Unicode box/arrow/dot characters without disabling color or links
-      const asciiOut = formatRichScan(scanJson, scanOpts, {
+      // ASCII mode replaces ALL generated non-ASCII punctuation across scan, diff, file, and explain
+      // without disabling color or links, while preserving Unicode in repository-supplied text.
+      const asciiScanOut = formatRichScan(scanJson, scanOpts, {
         columns: 80,
         ascii: true,
         isTTY: true,
         env: { COLORTERM: 'truecolor' },
         remoteUrl: 'https://github.com/lbrodie11/repo-archaeology.git',
       });
-      const asciiPlain = stripAnsiAndOsc8(asciiOut);
-      assert.ok(!asciiPlain.includes('━') && !asciiPlain.includes('─') && !asciiPlain.includes('→'));
-      assert.match(asciiPlain, /===/);
-      assert.match(asciiPlain, /->/);
-      assert.match(asciiOut, /\u001b\[1;48;2;255;214;10/);
+      const asciiScanPlain = stripAnsiAndOsc8(asciiScanOut);
+      assert.match(asciiScanPlain, /^[\x00-\x7f]*$/);
+      assert.match(asciiScanPlain, /F-01 \| #1 IN RANKING/);
+      assert.match(asciiScanPlain, /95% CI 64-100%/);
+      assert.match(asciiScanOut, /\u001b\[1;48;2;255;214;10/);
+
+      repo.write('src/adapter/bun/serve-static.ts', 'export const bunServe = 500;\n');
+      try {
+        const diffJson = JSON.parse(
+          runCli(['diff', '--half-life', '7', '--json'], repo.dir).stdout,
+        ) as DiffResult;
+        const asciiDiffPlain = stripAnsiAndOsc8(formatRichDiff(diffJson, { ascii: true, columns: 80 }));
+        assert.match(asciiDiffPlain, /^[\x00-\x7f]*$/);
+        assert.match(asciiDiffPlain, /raw 95% CI 52-98%/);
+        assert.match(asciiDiffPlain, /-- changed src\/adapter\/bun\/serve-static\.ts; check /);
+
+        // Silence detail with filtered_by_thresholds uses >= in --ascii mode
+        const silentThresholdJson = JSON.parse(
+          runCli(['diff', '--min-shared', '99', '--json'], repo.dir).stdout,
+        ) as DiffResult;
+        const asciiSilentPlain = stripAnsiAndOsc8(formatRichDiff(silentThresholdJson, { ascii: true }));
+        assert.match(asciiSilentPlain, /^[\x00-\x7f]*$/);
+        assert.match(asciiSilentPlain, /requires >=99 shared and >=40% confidence/);
+      } finally {
+        repo.git('checkout', '-q', '--', 'src/adapter/bun/serve-static.ts');
+      }
+
+      const fileJson = JSON.parse(
+        runCli(['file', 'src/adapter/bun/serve-static.ts', '--json'], repo.dir).stdout,
+      ) as FileResult;
+      const asciiFilePlain = stripAnsiAndOsc8(formatRichFile(fileJson, { ascii: true, columns: 80 }));
+      assert.match(asciiFilePlain, /^[\x00-\x7f]*$/);
+
+      const explainJson = JSON.parse(
+        runCli(
+          [
+            'explain',
+            'src/adapter/bun/serve-static.ts',
+            'src/adapter/deno/serve-static.ts',
+            '--counterexamples',
+            '--json',
+          ],
+          repo.dir,
+        ).stdout,
+      ) as ExplainResult;
+      const asciiExplainPlain = stripAnsiAndOsc8(
+        formatRichExplain(explainJson, { ascii: true, columns: 80 }),
+      );
+      assert.match(asciiExplainPlain, /^[\x00-\x7f]*$/);
+      assert.match(asciiExplainPlain, /\[F-01 \| PAIR EVIDENCE\]/);
+
+      // Repository-supplied Unicode in filenames/subjects is preserved even when ascii: true
+      const unicodeScan: ScanResult = {
+        ...scanJson,
+        relationships: [
+          {
+            ...scanJson.relationships[0]!,
+            from: 'src/café.ts',
+          },
+        ],
+      };
+      const unicodeAsciiPlain = stripAnsiAndOsc8(
+        formatRichScan(unicodeScan, scanOpts, { ascii: true, columns: 80 }),
+      );
+      assert.match(unicodeAsciiPlain, /src\/café\.ts/);
     });
 
     it('benchmarks rich formatting of 500 findings independently from CLI startup', () => {

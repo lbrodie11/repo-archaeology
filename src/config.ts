@@ -1,9 +1,17 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ConfigError } from './errors.js';
 import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
-import { isStyleMode, STYLE_MODES, type StyleMode } from './style/frame12.js';
+import { isStyleMode, type StyleMode } from './style/frame12.js';
 
-export { riskySkipPattern, type StyleMode };
+export { ConfigError, riskySkipPattern, type StyleMode };
+
+const INVALID_STYLE_SYMBOL = Symbol.for('repo-archaeology.invalidStyle');
+
+export function getInvalidConfigStyle(settings: Partial<Settings> | undefined): string | undefined {
+  if (!settings) return undefined;
+  return (settings as Record<symbol, string | undefined>)[INVALID_STYLE_SYMBOL];
+}
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -54,10 +62,6 @@ export const DEFAULT_IGNORES: readonly string[] = Object.freeze([
   // snapshots and release bookkeeping
   '__snapshots__/', '*.snap', 'CHANGELOG*', 'HISTORY.md',
 ]);
-
-export class ConfigError extends Error {
-  override name = 'ConfigError';
-}
 
 /**
  * The config file comes from the repository, which may not be yours (the README demo
@@ -159,10 +163,15 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
     out.origin = validateOriginConfig(raw.origin, source);
   }
   if (raw.style !== undefined) {
-    if (!isStyleMode(raw.style)) {
-      throw new ConfigError(`${source}: "style" must be one of: ${STYLE_MODES.join(', ')}.`);
+    if (isStyleMode(raw.style)) {
+      out.style = raw.style;
+    } else {
+      Object.defineProperty(out, INVALID_STYLE_SYMBOL, {
+        value: typeof raw.style === 'string' ? raw.style : JSON.stringify(raw.style),
+        enumerable: false,
+        configurable: true,
+      });
     }
-    out.style = raw.style;
   }
   return out;
 }
@@ -244,6 +253,14 @@ function validateOriginConfig(raw: unknown, source: string): OriginConfig {
 /** Defaults, then the config file, then command-line flags. Ignore lists are concatenated. */
 export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<Settings>): Settings {
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stripUndefined(fromFile), ...stripUndefined(fromFlags) };
+  const invalidFileStyle = getInvalidConfigStyle(fromFile);
+  if (invalidFileStyle !== undefined && merged.style === undefined) {
+    Object.defineProperty(merged, INVALID_STYLE_SYMBOL, {
+      value: invalidFileStyle,
+      enumerable: false,
+      configurable: true,
+    });
+  }
   merged.ignore = [...(fromFile.ignore ?? []), ...(fromFlags.ignore ?? [])];
   if (fromFile.origin !== undefined || fromFlags.origin !== undefined) {
     const fileOrigin = fromFile.origin ?? {};

@@ -22,10 +22,10 @@ import {
   mergeBases,
   parseLsTree,
   refExists,
-  remoteOriginUrl,
   resolveCommit,
   type TreeFileSet,
 } from './git/repo.js';
+import { UsageError } from './errors.js';
 import { createAbortError, GitError, runGit, type GitSpawnObserver } from './git/run.js';
 import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
 import type { RepoFiles } from './imports/resolve.js';
@@ -43,9 +43,7 @@ import {
 import { PathMatcher } from './util/glob.js';
 import { progress } from './util/term.js';
 
-export class UsageError extends Error {
-  override name = 'UsageError';
-}
+export { UsageError };
 
 export interface ProgressEvent {
   phase: string;
@@ -72,6 +70,8 @@ export interface ContextOptions {
   treeFilesOptions?: GitTreeFilesOptions;
   /** Optional observer invoked when `git log` is spawned during history loading (for testing). */
   onSpawn?: GitSpawnObserver;
+  /** Optional callback invoked as soon as effective `Settings` are resolved, before history loading starts. */
+  onSettingsResolved?: (settings: Settings) => void;
 }
 
 export interface Context {
@@ -288,12 +288,11 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       resolveCommit(root, 'HEAD'),
     ]);
     if (signal?.aborted) throw createAbortError(signal);
-    const [shallow, mergeBaseSha, currentFiles, wtChanges, remoteUrl] = await Promise.all([
+    const [shallow, mergeBaseSha, currentFiles, wtChanges] = await Promise.all([
       isShallow(root),
       options?.base !== undefined ? resolveBaseline(root, options.base, headSha) : Promise.resolve(undefined),
       listTreeFiles(root, headSha),
       headSha === checkedOutHeadSha ? workingTreeChanges(root) : Promise.resolve([]),
-      remoteOriginUrl(root),
     ]);
     if (signal?.aborted) throw createAbortError(signal);
     let fileConfig: Partial<Settings> = {};
@@ -315,6 +314,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     const activeVerdicts = mergeBaseSha !== undefined ? baseVerdictsRes.loaded : headVerdictsRes.loaded;
     const settings = resolveSettings(fileConfig, flags);
     compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
+    options?.onSettingsResolved?.(settings);
 
     if (emitStderrProgress) progress('Reading git history…');
     const extraWarnings: string[] = [];
@@ -349,7 +349,6 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       base: options?.base,
       mergeBaseSha,
       headSha,
-      remoteUrl,
       head: { ref: headRef, sha: headSha },
       verdicts: new VerdictMatcher(activeVerdicts, trained.history),
       headVerdicts: headVerdictsRes.loaded,
@@ -362,14 +361,14 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   const fileConfig = useConfigFile ? loadConfigFile(root) : {};
   const settings = resolveSettings(fileConfig, flags);
   compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
+  options?.onSettingsResolved?.(settings);
   const headVerdicts = loadVerdictsFile(root);
 
   const headSha = await resolveCommit(root, 'HEAD');
   if (signal?.aborted) throw createAbortError(signal);
-  const [shallow, mergeBaseSha, remoteUrl] = await Promise.all([
+  const [shallow, mergeBaseSha] = await Promise.all([
     isShallow(root),
     options?.base !== undefined ? resolveBaseline(root, options.base, 'HEAD') : Promise.resolve(undefined),
-    remoteOriginUrl(root),
   ]);
   if (signal?.aborted) throw createAbortError(signal);
 
@@ -412,7 +411,6 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     base: options?.base,
     mergeBaseSha,
     headSha,
-    remoteUrl,
     verdicts: new VerdictMatcher(activeVerdicts, trained.history),
     headVerdicts,
   };
