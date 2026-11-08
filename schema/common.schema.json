@@ -207,6 +207,26 @@
         }
       }
     },
+    "WilsonInterval": {
+      "type": "object",
+      "description": "Two-sided 95% Wilson score interval for directional confidence, computed from unweighted raw commit counts.",
+      "required": [
+        "low",
+        "high"
+      ],
+      "properties": {
+        "low": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "high": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
     "RelationshipView": {
       "type": "object",
       "required": [
@@ -262,6 +282,12 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "interval": {
+          "$ref": "#/$defs/WilsonInterval"
+        },
+        "reverseInterval": {
+          "$ref": "#/$defs/WilsonInterval"
         },
         "score": {
           "type": "number",
@@ -661,6 +687,12 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "interval": {
+          "$ref": "#/$defs/WilsonInterval"
+        },
+        "reverseInterval": {
+          "$ref": "#/$defs/WilsonInterval"
         },
         "score": {
           "type": "number",

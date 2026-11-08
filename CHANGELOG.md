@@ -7,9 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Two-Sided 95% Wilson Confidence Intervals (`interval`, `reverseInterval`):** Added `wilsonInterval(successes, trials, z)` in [`src/util/stats.ts`](src/util/stats.ts) and exposed `interval: { low, high }` and `reverseInterval: { low, high }` (computed from unweighted raw commit counts and rounded outward to 4 decimals) on every relationship view, suggestion, family member pair, file companion, and `explain` result across JSON (`diff`, `scan`, `file`, `explain`), Markdown (`diff --format markdown`), terminal output, and interactive map tooltips/panels (`schema/common.schema.json`, `schema/file.schema.json`, `schema/explain.schema.json`, `docs/json.md`).
 - **Gutter Consumer Contract Guard ([`test/consumer-gutter.test.ts`](test/consumer-gutter.test.ts)):** Freezes the exact `schemaVersion: 1` `diff --json` and `backtest --json` field paths, types, relationship kinds, `silence.primaryReason` codes, and strategy names consumed by Gutter (`lbrodie11/gutter`), with individual negative mutation tests that fail naming Gutter when any frozen field is removed or retyped.
 - **Release Tarball & Schema Smoke Test ([`scripts/smoke-pack.mjs`](scripts/smoke-pack.mjs), [`scripts/schema-validator.mjs`](scripts/schema-validator.mjs)):** Packs the release tarball into a temporary directory, verifies the packed file allowlist, installs into an isolated prefix, runs the installed `repo-archaeology` binary (`diff --base <first-branch-point> --json` and `backtest --json`) against a 40-commit synthetic Git repository with sanitized `GIT_*` environment variables, and validates both outputs against `schema/diff.schema.json` and `schema/backtest.schema.json` in CI (`.github/workflows/ci.yml`).
 - **Automated Tag-Driven Release Pipeline ([`.github/workflows/release.yml`](.github/workflows/release.yml), [`scripts/release-helper.mjs`](scripts/release-helper.mjs)):** Consolidates release publishing into a single `v*.*.*` tag workflow split into least-privilege `verify`, `publish` (`id-token: write`), and `github-release` (`contents: write`) jobs, with SHA-pinned GitHub Actions, prerelease `--tag next` / `--prerelease` support, digest-verified retry recovery, and automatic triggering of `.github/workflows/action-smoke.yml`.
+
+### Changed
+- **`wilsonLowerBound` Default `z` Constant ([`src/util/stats.ts`](src/util/stats.ts)):** Changed `wilsonLowerBound`'s default `z` from `1.96` to `Z_95` (`1.959963984540054`), which shifts `score` by up to `1e-5`.
 
 ## [0.3.0] - 2026-11-01
 

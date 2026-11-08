@@ -11,9 +11,14 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import vm from 'node:vm';
+import { buildMapData } from '../src/commands/map.js';
+import type { Context } from '../src/context.js';
 import { RelationshipClassifier } from '../src/imports/classify.js';
 import { ImportResolver, type RepoFiles } from '../src/imports/resolve.js';
 import { renderMapHtml } from '../src/map/template.js';
+import { CoChangeModel } from '../src/model/cochange.js';
+import type { HistoryCommit } from '../src/model/history.js';
 import { FixtureRepo } from './helpers.js';
 
 const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
@@ -203,6 +208,8 @@ describe('review 4: map HTML features & accessibility', () => {
           toChanges: 8,
           confidence: 0.8,
           reverseConfidence: 1,
+          interval: { low: 0.4901, high: 0.9434 },
+          reverseInterval: { low: 0.6755, high: 1 },
           score: 0.9,
           overviewPriority: 2,
           weighted: true,
@@ -228,5 +235,183 @@ describe('review 4: map HTML features & accessibility', () => {
 
     // 5. Markdown sanitization for @ and #
     assert.match(html, /sanitizeMarkdown/);
+  });
+
+  it('labels recency-weighted confidence and keeps raw 95% CI in the generated browser tooltip', () => {
+    const day = 86400;
+    const commits: HistoryCommit[] = [];
+    // 10 older shared commits + 10 older solo commits on a.ts, plus 1 recent shared commit -> 11 of 21 raw commits
+    for (let i = 0; i < 10; i++) {
+      commits.push({
+        hash: `old-shared-${i}`,
+        author: 'Alice',
+        time: (100 + i) * day,
+        commitTime: (100 + i) * day,
+        subject: `old shared ${i}`,
+        files: ['src/a.ts', 'src/b.ts'],
+      });
+      commits.push({
+        hash: `old-solo-${i}`,
+        author: 'Alice',
+        time: (200 + i) * day,
+        commitTime: (200 + i) * day,
+        subject: `old solo ${i}`,
+        files: ['src/a.ts'],
+      });
+    }
+    commits.push({
+      hash: 'recent-shared',
+      author: 'Alice',
+      time: 2000 * day,
+      commitTime: 2000 * day,
+      subject: 'recent shared commit',
+      files: ['src/a.ts', 'src/b.ts'],
+    });
+
+    const files = { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 1;\n' };
+    const model = new CoChangeModel(commits, { halfLifeDays: 1 });
+    const ctx = {
+      root: '/workspace/test-repo',
+      history: {
+        commits,
+        stats: {
+          commitsRead: commits.length,
+          sweepsSkipped: 0,
+          subjectSkipped: 0,
+          renamesFollowed: 0,
+          oldestTime: 100 * day,
+          newestTime: 2000 * day,
+        },
+      },
+      model,
+      currentFiles: new Set(Object.keys(files)),
+      classifier: new RelationshipClassifier(memoryRepo(files)),
+      settings: {
+        maxCommits: 5000,
+        maxFilesPerCommit: 25,
+        minShared: 3,
+        minConfidence: 0.4,
+        halfLifeDays: 1,
+        ignore: [],
+        useDefaultIgnores: true,
+      },
+      flagSettings: { halfLifeDays: 1 },
+      thresholds: { minShared: 3, minConfidence: 0.4 },
+      warnings: [],
+    } as unknown as Context;
+
+    const mapData = buildMapData(ctx, {
+      edges: 20,
+      kinds: ['ghost', 'unknown', 'indirect', 'direct', 'test'],
+    });
+    assert.equal(mapData.edges.length, 1);
+    const edge = mapData.edges[0]!;
+    assert.equal(edge.shared, 11);
+    assert.equal(edge.fromChanges, 21);
+    assert.equal(edge.confidence, 1);
+    assert.equal(edge.weighted, true);
+    assert.deepEqual(edge.interval, { low: 0.3236, high: 0.7166 });
+
+    const html = renderMapHtml(mapData);
+    const dataMatch = html.match(/<script type="application\/json" id="ra-data">([\s\S]*?)<\/script>/);
+    const scriptMatch = html.match(/<\/script>\s*<script>([\s\S]*?)<\/script>\s*<\/body>/);
+    assert.ok(dataMatch && scriptMatch);
+
+    class MiniEl {
+      tagName: string;
+      className = '';
+      hidden = false;
+      offsetWidth = 120;
+      style: Record<string, string> = {};
+      dataset: Record<string, string> = {};
+      children: MiniEl[] = [];
+      listeners: Record<string, Array<(ev?: unknown) => void>> = {};
+      private _text = '';
+      classList = { add: () => {}, remove: () => {}, toggle: () => {} };
+      constructor(tag: string) {
+        this.tagName = tag.toUpperCase();
+      }
+      get textContent(): string {
+        return [this._text, ...this.children.map((c) => c.textContent)].filter(Boolean).join('\n');
+      }
+      set textContent(v: string) {
+        this._text = String(v);
+        this.children = [];
+      }
+      appendChild(c: MiniEl): MiniEl {
+        this.children.push(c);
+        return c;
+      }
+      addEventListener(type: string, fn: (ev?: unknown) => void): void {
+        (this.listeners[type] ??= []).push(fn);
+      }
+      setAttribute(): void {}
+      getBoundingClientRect() {
+        return { left: 0, top: 0, width: 800, height: 600 };
+      }
+      getContext() {
+        return new Proxy({}, { get: () => () => ({ width: 10 }), set: () => true });
+      }
+    }
+
+    const els: Record<string, MiniEl> = {
+      'ra-data': new MiniEl('script'),
+      map: new MiniEl('canvas'),
+      tooltip: new MiniEl('div'),
+      panel: new MiniEl('div'),
+      search: new MiniEl('input'),
+      'reset-view': new MiniEl('button'),
+      'toggle-anim': new MiniEl('button'),
+      summary: new MiniEl('div'),
+      toggles: new MiniEl('div'),
+    };
+    els['ra-data']!.textContent = dataMatch[1]!;
+
+    vm.runInNewContext(scriptMatch[1]!, {
+      window: {
+        devicePixelRatio: 1,
+        isSecureContext: true,
+        matchMedia: () => ({ matches: true }),
+        addEventListener: () => {},
+      },
+      document: {
+        hidden: false,
+        activeElement: null,
+        body: new MiniEl('body'),
+        getElementById: (id: string) => els[id] ?? null,
+        createElement: (tag: string) => new MiniEl(tag),
+        addEventListener: () => {},
+        execCommand: () => true,
+      },
+      navigator: { clipboard: { writeText: () => Promise.resolve() } },
+      performance: { now: () => 1000 },
+      requestAnimationFrame: () => 1,
+      setTimeout,
+      clearTimeout,
+      Math,
+      Date,
+      JSON,
+      Object,
+      Array,
+      String,
+      Number,
+      Boolean,
+      Map,
+      Set,
+      RegExp,
+       Infinity,
+      NaN,
+      parseInt,
+      parseFloat,
+      isFinite,
+    });
+
+    // Hover at the canvas center (400, 300), which maps to the midpoint of the single edge between node 0 and node 1
+    els.map!.listeners.pointermove?.[0]?.({ clientX: 400, clientY: 300 });
+    assert.equal(els.tooltip!.hidden, false, 'Expected edge hover to show tooltip');
+    assert.equal(
+      els.tooltip!.textContent,
+      'Ghost wire: a.ts and b.ts\n11 of 21 commits (raw 95% CI 32–72%) (100% recency-weighted)',
+    );
   });
 });

@@ -137,6 +137,12 @@
           "minimum": 0,
           "maximum": 1
         },
+        "interval": {
+          "$ref": "common.schema.json#/$defs/WilsonInterval"
+        },
+        "reverseInterval": {
+          "$ref": "common.schema.json#/$defs/WilsonInterval"
+        },
         "score": {
           "type": "number",
           "minimum": 0,

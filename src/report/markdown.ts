@@ -1,7 +1,7 @@
 import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
 import type { Settings } from '../config.js';
-import { NAMES } from './views.js';
+import { formatIntervalCi, NAMES } from './views.js';
 import { pct, plural, shortHash } from '../util/term.js';
 
 /**
@@ -124,16 +124,17 @@ function formatDirectionalEvidence(s: Suggestion): string {
   const fromCode = formatMarkdownCode(s.from);
   const conf = pct(s.confidence);
   const revConf = pct(s.reverseConfidence);
+  const ci = formatIntervalCi(s.interval, s.weighted);
   const lastTogether = s.lastTogether ? ` · last together ${escapeMarkdownInline(s.lastTogether, 20)}` : '';
   if (s.weighted) {
     return (
-      `Changed with ${fromCode} in **${s.shared} of ${s.fromChanges} commits** ` +
+      `Changed with ${fromCode} in **${s.shared} of ${s.fromChanges} commits** ${ci} ` +
       `(**${conf}** recency-weighted · reverse **${revConf}** recency-weighted across ${s.shared}/${s.toChanges} raw commits)` +
       lastTogether
     );
   }
   return (
-    `Changed with ${fromCode} in **${s.shared} of ${s.fromChanges} commits (${conf})** ` +
+    `Changed with ${fromCode} in **${s.shared} of ${s.fromChanges} commits (${conf})** ${ci} ` +
     `· reverse **${revConf}** (${s.shared}/${s.toChanges})` +
     lastTogether
   );

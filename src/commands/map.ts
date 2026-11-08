@@ -9,6 +9,7 @@ import { renderMapHtml } from '../map/template.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
 import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
+import type { WilsonInterval } from '../util/stats.js';
 import { c, isoDate, plural, terminalText } from '../util/term.js';
 import { formatExplainCommand, MAX_COUNTEREXAMPLES_PER_SIDE } from './explain.js';
 import { classifiedPairs } from './scan.js';
@@ -69,6 +70,8 @@ export interface MapEdge {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
   score: number;
   overviewPriority: number;
   weighted: boolean;
@@ -94,6 +97,8 @@ export interface MapUndrawnPair {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
   score: number;
   weighted: boolean;
   lastTogether: string;
@@ -246,6 +251,8 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       toChanges: view.toChanges,
       confidence: view.confidence,
       reverseConfidence: view.reverseConfidence,
+      interval: view.interval,
+      reverseInterval: view.reverseInterval,
       score: companion.score,
       overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
       weighted: view.weighted,
@@ -287,6 +294,8 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
           toChanges: rel.toChanges,
           confidence: rel.confidence,
           reverseConfidence: rel.reverseConfidence,
+          interval: rel.interval,
+          reverseInterval: rel.reverseInterval,
           score: rel.score,
           weighted: rel.weighted,
           lastTogether: rel.lastTogether,

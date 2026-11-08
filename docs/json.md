@@ -93,6 +93,18 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
+#### 5.1.1 Directional Confidence, Wilson Intervals (`interval`, `reverseInterval`), and `score`
+
+Every relationship object in `diff` (`suggestions[]`, `families[].relationships[]`), `scan` (`relationships[]`, `families[].relationships[]`), `file` (`companions[]`), and `explain` exposes directional co-change statistics along with two-sided 95% Wilson score confidence intervals (`common.schema.json#/$defs/WilsonInterval`). Both `interval` and `reverseInterval` are marked optional in the `v1` JSON Schema (to preserve backward compatibility with `v0.3.0` payloads), but are **always emitted** from this release onward:
+
+- **`interval`: `{ "low": number, "high": number }`** — Two-sided 95% Wilson score interval ($z = 1.959963984540054$) for the forward directional confidence $P(\text{to changes} \mid \text{from changes})$, computed from **unweighted raw commit counts** (`shared` successes out of `fromChanges` trials) and rounded outward to 4 decimal places (`floor` for `low`, `ceil` for `high`).
+- **`reverseInterval`: `{ "low": number, "high": number }`** — Two-sided 95% Wilson score interval for the reverse directional confidence $P(\text{from changes} \mid \text{to changes})$, computed from **unweighted raw commit counts** (`shared` successes out of `toChanges` trials) and rounded outward to 4 decimal places (`floor` for `low`, `ceil` for `high`).
+- **Unweighted `interval` vs. Recency-Weighted `score`:** `interval` and `reverseInterval` are **always unweighted** so they match the raw `shared`, `fromChanges`, and `toChanges` commit counts printed alongside them. When `--half-life <days>` is set (`weighted: true`), `confidence`, `reverseConfidence`, and the ranking `score` (the Wilson lower bound) use recency-weighted counts and may differ from `interval.low`; in Markdown, terminal, and map output, the interval is placed next to the raw commit count and labeled `(raw 95% CI …)`.
+- **Worked Example (`14` of `19` commits):** Suppose `from` changed in `fromChanges = 19` commits and `to` changed alongside it in `shared = 14` of those commits (with no `--half-life` weighting):
+  - Raw directional rate: $\hat{p} = 14 / 19 \approx 0.7368$ (`confidence: 0.737`).
+  - Two-sided 95% Wilson score interval (`wilsonInterval(14, 19)` $\approx \{ \text{low}: 0.51208, \text{high}: 0.88194 \}$): outward-rounded to `interval: { "low": 0.512, "high": 0.882 }`, rendered in Markdown and terminal output as `(95% CI 51–89%)`.
+  - Ranking score: `score: 0.512` (the Wilson lower bound rounded to 3 decimal places).
+
 ---
 
 ### 5.2 `diff --json` & `diff --json-out <file>` ([`schema/diff.schema.json`](../schema/diff.schema.json))
@@ -181,6 +193,14 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
       "toChanges": 18,
       "confidence": 0.6,
       "reverseConfidence": 0.667,
+      "interval": {
+        "low": 0.3865,
+        "high": 0.7812
+      },
+      "reverseInterval": {
+        "low": 0.4374,
+        "high": 0.8373
+      },
       "score": 0.387,
       "weighted": false,
       "lastTogether": "2026-05-16",
@@ -249,6 +269,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `meetsThresholds` | `boolean` | Yes | Whether the pair meets active `--min-shared` and `--min-confidence` in at least one direction. |
 | `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts. |
 | `confidence`, `reverseConfidence`, `score` | `number` | Yes | Directional confidences and Wilson score. |
+| `interval`, `reverseInterval` | `WilsonInterval` | Optional (always emitted) | Two-sided 95% Wilson score intervals (`{ low, high }`) for unweighted directional and reverse confidence. |
 | `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting is active. |
 | `lastTogether` | `string` | Optional | ISO date of most recent shared commit (omitted when `shared === 0`). |
 | `crossesDirectories` | `boolean` | Yes | `true` when `dirname(from) !== dirname(to)`. |
