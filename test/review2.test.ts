@@ -119,7 +119,6 @@ describe('review 2, accuracy', () => {
 
   it('follows conditional exports in the order the package lists them, ignoring types', () => {
     const resolver = new ImportResolver(memoryRepo({
-      'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
       'packages/lib/package.json': JSON.stringify({ name: 'lib', exports: { '.': { types: './src/types.d.ts', node: './src/node.ts', default: './src/browser.ts' } } }),
       'packages/lib/src/node.ts': '',
       'packages/lib/src/browser.ts': '',

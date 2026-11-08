@@ -383,16 +383,19 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
 
 export function printImports(result: ImportGraphResult): void {
   printHeader('imports', result.meta);
+  const heuristicCount = result.meta.imports?.heuristicEdges ?? 0;
+  const heuristicNote = heuristicCount > 0 ? ` (${heuristicCount} heuristic)` : '';
   console.log(
-    `${plural(result.files.length, 'file')} · ${plural(result.edges.length, 'internal import edge')} · ${plural(result.unresolved.length, 'unresolved specifier')}`,
+    `${plural(result.files.length, 'file')} · ${plural(result.edges.length, 'internal import edge')}${heuristicNote} · ${plural(result.unresolved.length, 'unresolved specifier')}`,
   );
   if (result.edges.length === 0 && result.unresolved.length === 0) {
     return;
   }
   console.log();
   for (const edge of result.edges) {
+    const tag = edge.heuristic ? `${edge.kind}, heuristic` : edge.kind;
     console.log(
-      `  ${c.bold(terminalText(edge.from))} ${c.dim('→')} ${c.bold(terminalText(edge.to))}  ${c.dim(`(${edge.kind}: ${terminalText(edge.specifier)})`)}`,
+      `  ${c.bold(terminalText(edge.from))} ${c.dim('→')} ${c.bold(terminalText(edge.to))}  ${c.dim(`(${tag}: ${terminalText(edge.specifier)})`)}`,
     );
   }
   if (result.unresolved.length > 0) {

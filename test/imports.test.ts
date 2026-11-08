@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { isTestFile, isTestPair, RelationshipClassifier, testCovers, workingTreeFiles } from '../src/imports/classify.js';
-import { ImportResolver, resolveFile, type RepoFiles } from '../src/imports/resolve.js';
+import {
+  ImportResolver,
+  matchPattern,
+  parsePnpmWorkspaceYaml,
+  patternKeyCompare,
+  resolveFile,
+  type RepoFiles,
+} from '../src/imports/resolve.js';
 import { extractSourceReferences } from '../src/imports/references.js';
 import { extractDependencies, extractSpecifiers } from '../src/imports/typescript.js';
 
@@ -1028,6 +1035,316 @@ describe('RA-09A: monorepo workspace discovery, exports, #imports, and source re
       assert.equal(readCounts.get(`packages/pkg-${i}/package.json`), 1);
     }
     assert.ok(elapsedMs < 1000, `Expected 1,000 monorepo resolutions in <1000ms, took ${elapsedMs.toFixed(1)}ms`);
+  });
+
+  it('parses pnpm-workspace.yaml quoted entries with comments, ---/... document markers, and multi-line flow sequences', () => {
+    // 1. Quoted entries followed by trailing comments
+    const quotedWithComments = parsePnpmWorkspaceYaml(
+      [
+        'packages:',
+        '  - "packages/*" # libs',
+        "  - 'apps/*' # applications",
+        '  - "!packages/legacy" # excluded',
+      ].join('\n'),
+    );
+    assert.equal(quotedWithComments.malformed, false);
+    assert.deepEqual(quotedWithComments.packages, ['packages/*', 'apps/*', '!packages/legacy']);
+
+    // 2. Leading `---` and trailing `...` document markers + indent-0 sequence items
+    const withDocMarkers = parsePnpmWorkspaceYaml(
+      [
+        '--- # document start',
+        'packages:',
+        '- "packages/*" # core',
+        "- 'apps/*'",
+        '...',
+      ].join('\n'),
+    );
+    assert.equal(withDocMarkers.malformed, false);
+    assert.deepEqual(withDocMarkers.packages, ['packages/*', 'apps/*']);
+
+    // 3. Multi-line flow sequences `packages: [\n  "packages/*",\n  "apps/*"\n]`
+    const multiLineFlow = parsePnpmWorkspaceYaml(
+      [
+        '---',
+        'packages: [',
+        '  "packages/*", # shared packages',
+        "  'apps/*',",
+        ']',
+      ].join('\n'),
+    );
+    assert.equal(multiLineFlow.malformed, false);
+    assert.deepEqual(multiLineFlow.packages, ['packages/*', 'apps/*']);
+  });
+
+  it('never silently turns an in-repo package into external (no manifest, Rush repo, unparseable manifest, or excluded package)', () => {
+    // 1. No workspace manifest + nested packages (apps/web declares @acme/ui in dependencies)
+    const noManifestRepo = memoryRepo({
+      'package.json': JSON.stringify({ name: 'root', private: true }),
+      'packages/ui/package.json': JSON.stringify({
+        name: '@acme/ui',
+        exports: { '.': './src/index.ts' },
+      }),
+      'packages/ui/src/index.ts': 'export const Button = () => "btn";\n',
+      'apps/web/package.json': JSON.stringify({
+        name: '@acme/web',
+        dependencies: { '@acme/ui': '1.0.0' },
+      }),
+      'apps/web/src/index.ts': 'import { Button } from "@acme/ui";\nexport { Button };\n',
+    });
+    const noManifestResolver = new ImportResolver(noManifestRepo);
+    assert.deepEqual(noManifestResolver.resolveDetailed('apps/web/src/index.ts', '@acme/ui'), {
+      kind: 'file',
+      path: 'packages/ui/src/index.ts',
+      via: 'exports',
+      heuristic: true,
+    });
+    const noManifestClassifier = new RelationshipClassifier(noManifestRepo);
+    assert.equal(noManifestClassifier.classify('apps/web/src/index.ts', 'packages/ui/src/index.ts'), 'direct');
+
+    // 2. Rush-style repo (rush.json, libs/ui/package.json name @acme/ui, apps/web depends on @acme/ui)
+    const rushRepo = memoryRepo({
+      'rush.json': JSON.stringify({
+        rushVersion: '5.100.0',
+        projects: [
+          { packageName: '@acme/ui', projectFolder: 'libs/ui' },
+          { packageName: '@acme/web', projectFolder: 'apps/web' },
+        ],
+      }),
+      'libs/ui/package.json': JSON.stringify({
+        name: '@acme/ui',
+        exports: { '.': './src/index.ts' },
+      }),
+      'libs/ui/src/index.ts': 'export const Button = () => "rush-btn";\n',
+      'apps/web/package.json': JSON.stringify({
+        name: '@acme/web',
+        dependencies: { '@acme/ui': 'workspace:*' },
+      }),
+      'apps/web/src/index.ts': 'import { Button } from "@acme/ui";\nexport { Button };\n',
+    });
+    const rushResolver = new ImportResolver(rushRepo);
+    assert.deepEqual(rushResolver.resolveDetailed('apps/web/src/index.ts', '@acme/ui'), {
+      kind: 'file',
+      path: 'libs/ui/src/index.ts',
+      via: 'exports',
+      heuristic: true,
+    });
+    const rushClassifier = new RelationshipClassifier(rushRepo);
+    assert.equal(rushClassifier.classify('apps/web/src/index.ts', 'libs/ui/src/index.ts'), 'direct');
+
+    // 3. Unparseable workspace manifest: must report unsupported-config (never external!) even when declared in dependencies
+    const unparseableRepo = memoryRepo({
+      'pnpm-workspace.yaml': 'packages: [\n  "packages/*",\n', // unclosed bracket -> malformed
+      'packages/ui/package.json': JSON.stringify({
+        name: '@acme/ui',
+        exports: { '.': './src/index.ts' },
+      }),
+      'packages/ui/src/index.ts': 'export const Button = () => "btn";\n',
+      'apps/web/package.json': JSON.stringify({
+        name: '@acme/web',
+        dependencies: { '@acme/ui': 'workspace:*' },
+      }),
+      'apps/web/src/index.ts': 'import { Button } from "@acme/ui";\nexport { Button };\n',
+    });
+    const unparseableResolver = new ImportResolver(unparseableRepo);
+    assert.deepEqual(unparseableResolver.resolveDetailed('apps/web/src/index.ts', '@acme/ui'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unsupported-config',
+    });
+    const unparseableClassifier = new RelationshipClassifier(unparseableRepo);
+    assert.equal(unparseableClassifier.classify('apps/web/src/index.ts', 'packages/ui/src/index.ts'), 'unknown');
+
+    // 4. Valid workspace manifest where a nested package is outside workspaces, even if listed in dependencies
+    const excludedPkgRepo = memoryRepo({
+      'package.json': JSON.stringify({ workspaces: ['apps/*'] }),
+      'examples/demo/package.json': JSON.stringify({
+        name: '@acme/demo',
+        exports: { '.': './src/index.ts' },
+      }),
+      'examples/demo/src/index.ts': 'export const demo = 1;\n',
+      'apps/web/package.json': JSON.stringify({
+        name: '@acme/web',
+        dependencies: { '@acme/demo': 'workspace:*' },
+      }),
+      'apps/web/src/index.ts': 'import { demo } from "@acme/demo";\nexport { demo };\n',
+    });
+    const excludedPkgResolver = new ImportResolver(excludedPkgRepo);
+    assert.deepEqual(excludedPkgResolver.resolveDetailed('apps/web/src/index.ts', '@acme/demo'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+    const excludedPkgClassifier = new RelationshipClassifier(excludedPkgRepo);
+    assert.equal(excludedPkgClassifier.classify('apps/web/src/index.ts', 'examples/demo/src/index.ts'), 'unknown');
+  });
+
+  it('anchors slashless workspace globs at the repository root and enforces Node PATTERN_KEY_COMPARE steps 7-8 + non-empty *', () => {
+    // 1. Slashless workspace glob `tools` matches root `tools/package.json` but NOT `a/b/tools/package.json`
+    const anchoredRepo = memoryRepo({
+      'package.json': JSON.stringify({ workspaces: ['tools', 'apps/*'] }),
+      'tools/package.json': JSON.stringify({
+        name: '@acme/root-tools',
+        exports: { '.': './src/index.ts' },
+      }),
+      'tools/src/index.ts': 'export const rootTool = 1;\n',
+      'a/b/tools/package.json': JSON.stringify({
+        name: '@acme/nested-tools',
+        exports: { '.': './src/index.ts' },
+      }),
+      'a/b/tools/src/index.ts': 'export const nestedTool = 1;\n',
+      'apps/web/package.json': JSON.stringify({
+        name: '@acme/web',
+        dependencies: { '@acme/nested-tools': '1.0.0' },
+      }),
+    });
+    const anchoredResolver = new ImportResolver(anchoredRepo);
+    assert.deepEqual(anchoredResolver.resolveDetailed('apps/web/index.ts', '@acme/root-tools'), {
+      kind: 'file',
+      path: 'tools/src/index.ts',
+      via: 'exports',
+    });
+    assert.deepEqual(anchoredResolver.resolveDetailed('apps/web/index.ts', '@acme/nested-tools'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'unknown-package',
+    });
+
+    // 2. Node PATTERN_KEY_COMPARE steps 7-8: when baseLength ties, key with '*' sorts before key without '*'
+    assert.equal(patternKeyCompare('./fo*', './foo'), -1);
+    assert.equal(patternKeyCompare('./foo', './fo*'), 1);
+    assert.equal(patternKeyCompare('./foo', './foo'), 0);
+
+    // 3. Node matchPattern: '*' requires a non-empty substitution (matchKey.length >= expansionKey.length)
+    assert.equal(matchPattern('./features/*.js', './features/.js'), undefined);
+    assert.equal(matchPattern('./features/*.js', './features/a.js'), 'a');
+
+    const starRepo = new ImportResolver(
+      memoryRepo({
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/pkg/package.json': JSON.stringify({
+          name: '@acme/pkg',
+          exports: {
+            './features/*.js': './src/features/*.ts',
+          },
+        }),
+        'packages/pkg/src/features/.ts': 'export const dot = 1;\n',
+        'packages/pkg/src/features/a.ts': 'export const a = 1;\n',
+      }),
+    );
+    assert.deepEqual(starRepo.resolveDetailed('src/main.ts', '@acme/pkg/features/.js'), {
+      kind: 'unresolved',
+      reason: 'unmatched',
+      reasonCode: 'not-exported',
+    });
+    assert.deepEqual(starRepo.resolveDetailed('src/main.ts', '@acme/pkg/features/a.js'), {
+      kind: 'file',
+      path: 'packages/pkg/src/features/a.ts',
+      via: 'exports',
+    });
+  });
+
+  it('end-to-end no-regression vs main: finds @acme/ui edges across all pnpm-workspace.yaml and Rush/nested layouts', async () => {
+    const { FixtureRepo } = await import('./helpers.js');
+    const { openRepository } = await import('../src/api/index.js');
+
+    const layouts: {
+      name: string;
+      files: Record<string, string>;
+      expectedTo: string;
+      expectedHeuristic?: boolean;
+    }[] = [
+      {
+        name: 'pnpm-workspace.yaml basic list',
+        files: {
+          'pnpm-workspace.yaml': 'packages:\n  - packages/*\n  - apps/*\n',
+          'packages/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'packages/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'packages/ui/src/index.ts',
+      },
+      {
+        name: 'pnpm-workspace.yaml quoted entry with trailing comment',
+        files: {
+          'pnpm-workspace.yaml': 'packages:\n  - "packages/*" # libs\n  - \'apps/*\' # apps\n',
+          'packages/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'packages/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'packages/ui/src/index.ts',
+      },
+      {
+        name: 'pnpm-workspace.yaml with leading --- document marker',
+        files: {
+          'pnpm-workspace.yaml': '---\npackages:\n  - packages/*\n  - apps/*\n',
+          'packages/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'packages/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'packages/ui/src/index.ts',
+      },
+      {
+        name: 'pnpm-workspace.yaml multi-line bracketed flow sequence',
+        files: {
+          'pnpm-workspace.yaml': 'packages: [\n  "packages/*",\n  "apps/*"\n]\n',
+          'packages/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'packages/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'packages/ui/src/index.ts',
+      },
+      {
+        name: 'Rush-style repo with rush.json and nested libs/ui',
+        files: {
+          'rush.json': JSON.stringify({ projects: [{ packageName: '@acme/ui', projectFolder: 'libs/ui' }] }),
+          'libs/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'libs/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'libs/ui/src/index.ts',
+        expectedHeuristic: true,
+      },
+      {
+        name: 'nested packages with no workspace manifest',
+        files: {
+          'packages/ui/package.json': JSON.stringify({ name: '@acme/ui', exports: './src/index.ts' }),
+          'packages/ui/src/index.ts': 'export const ui = 1;\n',
+        },
+        expectedTo: 'packages/ui/src/index.ts',
+        expectedHeuristic: true,
+      },
+    ];
+
+    for (const layout of layouts) {
+      const fixture = new FixtureRepo();
+      try {
+        fixture.write('package.json', JSON.stringify({ name: 'monorepo', private: true }));
+        fixture.write(
+          'apps/web/package.json',
+          JSON.stringify({
+            name: '@acme/web',
+            dependencies: { '@acme/ui': 'workspace:*' },
+          }),
+        );
+        fixture.write('apps/web/src/index.ts', 'import { ui } from "@acme/ui";\nexport { ui };\n');
+        for (const [relPath, content] of Object.entries(layout.files)) {
+          fixture.write(relPath, content);
+        }
+        fixture.git('add', '.');
+        fixture.commit({ message: `init ${layout.name}`, author: 'Alice' });
+
+        const session = await openRepository({ cwd: fixture.dir });
+        try {
+          const graph = await session.importGraph();
+          assert.equal(graph.edges.length, 1, `Expected 1 edge for layout: ${layout.name}`);
+          assert.equal(graph.edges[0]?.from, 'apps/web/src/index.ts', layout.name);
+          assert.equal(graph.edges[0]?.to, layout.expectedTo, layout.name);
+          assert.equal(graph.edges[0]?.specifier, '@acme/ui', layout.name);
+          assert.equal(Boolean(graph.edges[0]?.heuristic), Boolean(layout.expectedHeuristic), layout.name);
+          assert.equal(graph.unresolved.length, 0, `Expected 0 unresolved for layout: ${layout.name}`);
+        } finally {
+          await session.close();
+        }
+      } finally {
+        fixture.cleanup();
+      }
+    }
   });
 });
 

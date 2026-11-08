@@ -143,7 +143,6 @@ describe('review 4: tsconfig paths inheritance and overrides', () => {
 describe('review 4: conditional package exports by import mode', () => {
   it('selects import condition for ESM and require condition for CJS when both are defined', () => {
     const files = memoryRepo({
-      'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
       'packages/lib/package.json': JSON.stringify({
         name: '@my/lib',
         exports: {
