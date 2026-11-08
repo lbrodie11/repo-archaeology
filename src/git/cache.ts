@@ -53,9 +53,9 @@ export const MAX_INDEX_BYTES = 1024 * 1024;
 export const MAX_INDEX_SEGMENTS = 1000;
 export const MAX_SEGMENT_RECORDS = 500_000;
 export const MAX_SEGMENT_BYTES = 512 * 1024 * 1024;
-const HEADER_CHECKSUM_BYTES = 64 * 1024;
 const PREFIX_READ_THRESHOLD_BYTES = 512 * 1024;
 const PREFIX_READ_CHUNK_BYTES = 256 * 1024;
+const MAX_SEGMENT_CHUNKS = Math.ceil(MAX_SEGMENT_BYTES / PREFIX_READ_CHUNK_BYTES) + 1;
 
 export const CACHE_INDEX_FILE = 'index.json';
 export const CACHE_LOCK_FILE = 'lock';
@@ -92,8 +92,11 @@ export interface CacheSegment {
   sha256: string;
   /** Byte length of the segment file (for O(1) truncation checks during partial prefix reads). */
   bytes?: number;
-  /** SHA-256 of the first 64 KB of the segment file (verified during partial prefix reads). */
-  headSha256?: string;
+  /**
+   * Per-chunk SHA-256 digests (`computeChunkSha256(sha256, chunk)`) for every 256 KiB block
+   * of the segment file, so partial prefix reads cryptographically verify every consumed byte.
+   */
+  chunkSha256?: string[];
 }
 
 export interface CacheIndex {
@@ -275,7 +278,10 @@ function parseIndex(text: string): CacheIndex | string {
       !SHA256.test(s.sha256) ||
       (s.bytes !== undefined &&
         (typeof s.bytes !== 'number' || !Number.isInteger(s.bytes) || s.bytes < 0 || s.bytes > MAX_SEGMENT_BYTES)) ||
-      (s.headSha256 !== undefined && (typeof s.headSha256 !== 'string' || !SHA256.test(s.headSha256)))
+      (s.chunkSha256 !== undefined &&
+        (!Array.isArray(s.chunkSha256) ||
+          s.chunkSha256.length > MAX_SEGMENT_CHUNKS ||
+          !s.chunkSha256.every((c: unknown) => typeof c === 'string' && SHA256.test(c))))
     ) {
       return 'index.json is malformed';
     }
@@ -285,7 +291,7 @@ function parseIndex(text: string): CacheIndex | string {
       count: s.count,
       sha256: s.sha256,
       ...(s.bytes !== undefined ? { bytes: s.bytes } : {}),
-      ...(s.headSha256 !== undefined ? { headSha256: s.headSha256 } : {}),
+      ...(s.chunkSha256 !== undefined ? { chunkSha256: s.chunkSha256 as string[] } : {}),
     });
   }
   return {
@@ -302,11 +308,18 @@ function sha256(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
-function computeHeadSha256(fullSha256: string, data: Buffer): string {
-  return createHash('sha256')
-    .update(fullSha256)
-    .update(data.subarray(0, Math.min(data.length, HEADER_CHECKSUM_BYTES)))
-    .digest('hex');
+function computeChunkSha256(fullSha256: string, chunk: Buffer): string {
+  return createHash('sha256').update(fullSha256).update(chunk).digest('hex');
+}
+
+function computeAllChunkSha256(fullSha256: string, data: Buffer): string[] {
+  const digests: string[] = [];
+  for (let offset = 0; offset < data.length; offset += PREFIX_READ_CHUNK_BYTES) {
+    digests.push(
+      computeChunkSha256(fullSha256, data.subarray(offset, Math.min(offset + PREFIX_READ_CHUNK_BYTES, data.length))),
+    );
+  }
+  return digests;
 }
 
 function splitLines(text: string): string[] {
@@ -564,9 +577,15 @@ function scanCachedCommitsOnce(
       return { kind: 'invalid', reason: `checksum mismatch in ${seg.file}` };
     }
 
+    const chunkDigests = seg.chunkSha256;
+    const expectedChunkCount = segStat.size === 0 ? 0 : Math.ceil(segStat.size / PREFIX_READ_CHUNK_BYTES);
+    if (chunkDigests !== undefined && chunkDigests.length !== expectedChunkCount) {
+      return { kind: 'invalid', reason: `checksum mismatch in ${seg.file}` };
+    }
+
     const canPrefixRead =
       seg.bytes !== undefined &&
-      seg.headSha256 !== undefined &&
+      chunkDigests !== undefined &&
       segStat.size >= PREFIX_READ_THRESHOLD_BYTES &&
       neededCount - hits < seg.count;
 
@@ -579,43 +598,83 @@ function scanCachedCommitsOnce(
         return { kind: 'invalid', reason: `${seg.file} could not be read` };
       }
       try {
-        let fileOffset = 0;
-        let chunkSize = PREFIX_READ_CHUNK_BYTES;
+        let carry: Buffer | null = null;
         let linesSeenTotal = 0;
-        while (fileOffset < segStat.size && hits < neededCount) {
-          const toRead = Math.min(chunkSize, segStat.size - fileOffset);
-          const chunk = Buffer.allocUnsafe(toRead);
+        for (
+          let chunkIdx = 0, blockOffset = 0;
+          blockOffset < segStat.size && hits < neededCount;
+          chunkIdx++, blockOffset += PREFIX_READ_CHUNK_BYTES
+        ) {
+          const toRead = Math.min(PREFIX_READ_CHUNK_BYTES, segStat.size - blockOffset);
+          const rawBlock = Buffer.allocUnsafe(toRead);
           let bytesRead = 0;
           while (bytesRead < toRead) {
-            const n = readSync(fd, chunk, bytesRead, toRead - bytesRead, fileOffset + bytesRead);
+            const n = readSync(fd, rawBlock, bytesRead, toRead - bytesRead, blockOffset + bytesRead);
             if (n === 0) break;
             bytesRead += n;
           }
           if (bytesRead !== toRead) return { kind: 'invalid', reason: `checksum mismatch in ${seg.file}` };
-          if (fileOffset === 0) {
-            if (computeHeadSha256(seg.sha256, chunk) !== seg.headSha256) {
-              return { kind: 'invalid', reason: `checksum mismatch in ${seg.file}` };
-            }
+          if (computeChunkSha256(seg.sha256, rawBlock) !== chunkDigests[chunkIdx]) {
+            return { kind: 'invalid', reason: `checksum mismatch in ${seg.file}` };
           }
-          const isEof = fileOffset + bytesRead === segStat.size;
-          const lastNl = isEof ? bytesRead - 1 : chunk.lastIndexOf(0x0a);
+
+          const workBuf: Buffer = carry !== null ? Buffer.concat([carry, rawBlock]) : rawBlock;
+          const isEof = blockOffset + bytesRead === segStat.size;
+          if (isEof) {
+            if (workBuf.length === 0 || workBuf[workBuf.length - 1] !== 0x0a) {
+              return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
+            }
+            carry = null;
+            const bufIdx = buffers.length;
+            buffers.push(workBuf);
+            const scanned = scanBufferLines(
+              workBuf,
+              workBuf.length,
+              bufIdx,
+              indexByHash,
+              segOf,
+              startOf,
+              endOf,
+              hits,
+              neededCount,
+              true,
+            );
+            if (scanned.malformed) return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
+            hits = scanned.hits;
+            linesSeenTotal += scanned.linesSeen;
+            if (hits < neededCount && linesSeenTotal !== seg.count) {
+              return { kind: 'invalid', reason: `${seg.file} has the wrong number of records` };
+            }
+            break;
+          }
+
+          const lastNl = workBuf.lastIndexOf(0x0a);
           if (lastNl === -1) {
-            chunkSize *= 2;
-            if (chunkSize > MAX_SEGMENT_BYTES) return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
+            carry = workBuf;
+            if (carry.length > MAX_SEGMENT_BYTES) {
+              return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
+            }
             continue;
           }
-          if (chunk[lastNl] !== 0x0a) return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
           const validEnd = lastNl + 1;
+          carry = validEnd < workBuf.length ? workBuf.subarray(validEnd) : null;
           const bufIdx = buffers.length;
-          buffers.push(chunk);
-          const scanned = scanBufferLines(chunk, validEnd, bufIdx, indexByHash, segOf, startOf, endOf, hits, neededCount, true);
+          buffers.push(workBuf);
+          const scanned = scanBufferLines(
+            workBuf,
+            validEnd,
+            bufIdx,
+            indexByHash,
+            segOf,
+            startOf,
+            endOf,
+            hits,
+            neededCount,
+            true,
+          );
           if (scanned.malformed) return { kind: 'invalid', reason: `${seg.file} contains a malformed record` };
           hits = scanned.hits;
           linesSeenTotal += scanned.linesSeen;
-          fileOffset += validEnd;
-        }
-        if (fileOffset === segStat.size && hits < neededCount && linesSeenTotal !== seg.count) {
-          return { kind: 'invalid', reason: `${seg.file} has the wrong number of records` };
         }
       } finally {
         closeSync(fd);
@@ -899,7 +958,7 @@ function writeSegment(dir: string, index: CacheIndex, lines: readonly string[]):
     count: lines.length,
     sha256: fullSha256,
     bytes: data.length,
-    headSha256: computeHeadSha256(fullSha256, data),
+    chunkSha256: computeAllChunkSha256(fullSha256, data),
   });
 }
 

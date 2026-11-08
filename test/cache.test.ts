@@ -15,6 +15,7 @@ import {
   CACHE_VERSION,
   gitVersion,
   loadCache,
+  scanCachedCommits,
   serializeRecord,
   writeCache,
   type CacheIndex,
@@ -561,6 +562,65 @@ describe('RA-04 history cache: integrity, versioning, shallow clones, concurrenc
     // git status --porcelain must remain completely clean
     assert.equal(repo.git('status', '--porcelain').trim(), '');
   });
+
+  it('detects same-length byte corruption beyond 64 KiB during partial prefix reads on a >512 KiB segment', async () => {
+    const repo = new FixtureRepo();
+    repos.push(repo);
+    repo.commit({ message: 'init', write: { 'src/a.ts': 'a0\n', 'src/b.ts': 'b0\n' } });
+    for (let i = 1; i <= 10; i++) {
+      repo.touch(['src/a.ts', 'src/b.ts'], `feat: cochange ${i} ${'x'.repeat(8000)}`);
+    }
+
+    const uncached = runJson(['--no-cache', '--max-commits', '10', 'scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    const uncachedRels = uncached.relationships as Array<{ from: string; to: string; shared: number }>;
+    assert.equal(uncachedRels[0]!.shared, 10);
+
+    // Populate a >512 KiB segment (the 10 real commits plus synthetic older records so the segment exceeds 550 KiB)
+    runJson(['scan'], repo.dir);
+    const dir = cacheDirOf(repo);
+    const ver = await gitVersion(repo.dir);
+    const initialLoad = loadCache(dir, ver);
+    assert.equal(initialLoad.kind, 'ok');
+    if (initialLoad.kind !== 'ok') return;
+
+    const realRecords = [...initialLoad.lines.entries()].map(([h, line]) => JSON.parse(line) as RawCommit);
+    const fillerRecords: RawCommit[] = Array.from({ length: 60 }, (_, idx) => ({
+      hash: (idx + 1).toString(16).padStart(40, '0'),
+      authorName: 'Filler',
+      authorEmail: 'filler@example.com',
+      authorTime: 1_600_000_000 + idx,
+      commitTime: 1_600_000_000 + idx,
+      subject: `filler ${idx} ${'y'.repeat(8000)}`,
+      trailers: [],
+      changes: [{ status: 'M', path: 'src/a.ts' }],
+    }));
+    await writeCache(dir, {
+      mode: 'rebuild',
+      records: [...realRecords, ...fillerRecords],
+      gitVersion: ver,
+      raVersion: '0.3.0',
+      reachable: async () => new Set([...realRecords, ...fillerRecords].map((r) => r.hash)),
+    });
+
+    const segFile = join(dir, readIndex(dir).segments[0]!.file);
+    const buf = readFileSync(segFile);
+    assert.ok(buf.length > 550 * 1024, `expected segment > 550 KiB, got ${buf.length} bytes`);
+
+    // Flip one filename byte ("src/b.ts" -> "src/c.ts") beyond 64 KiB (around offset ~72 KiB), leaving file size and index.json unchanged
+    const targetNeedle = Buffer.from('"path":"src/b.ts"', 'utf8');
+    const corruptPos = buf.indexOf(targetNeedle, 70 * 1024);
+    assert.ok(corruptPos > 65536, `expected match beyond 64 KiB, got ${corruptPos}`);
+    buf[corruptPos + '"path":"src/'.length] = 'c'.charCodeAt(0);
+    writeFileSync(segFile, buf);
+
+    const cachedAfterCorrupt = runJson(['--max-commits', '10', 'scan', '--kinds', 'ghost,unknown,indirect,direct,test'], repo.dir);
+    const rebuildWarn = cachedAfterCorrupt.meta.warnings.find((w) =>
+      w.includes('was discarded and rebuilt (checksum mismatch in'),
+    );
+    assert.ok(rebuildWarn, `expected checksum mismatch rebuild warning, got ${JSON.stringify(cachedAfterCorrupt.meta.warnings)}`);
+    assert.equal(cachedAfterCorrupt.meta.cache?.hits, 0, 'corrupted partial segment must not be served');
+    assert.deepEqual(cachedAfterCorrupt.relationships, uncached.relationships, 'rebuilt scan must report all 10 shared commits');
+  });
 });
 
 describe('RA-04 history cache: segment store unit behavior', () => {
@@ -631,6 +691,43 @@ describe('RA-04 history cache: segment store unit behavior', () => {
     const written = await write(dir, [record(2)]);
     assert.equal(written.written, true);
     assert.equal(existsSync(lock), false);
+  });
+
+  it('verifies every 256 KiB chunk consumed during partial prefix scans (beyond 64 KiB and beyond 256 KiB)', async () => {
+    const dir = tempCache();
+    // Create 80 records (~8.2 KB each -> ~650 KB total, spanning 3 chunks of 256 KiB)
+    const bigRecords: RawCommit[] = Array.from({ length: 80 }, (_, idx) => ({
+      ...record(idx + 1),
+      subject: `commit ${idx + 1} ${'z'.repeat(8000)}`,
+    }));
+    await write(dir, bigRecords);
+    const segFile = join(dir, readIndex(dir).segments[0]!.file);
+    const original = readFileSync(segFile);
+    assert.ok(original.length > 600 * 1024);
+
+    // 1. Corrupt 1 byte at offset 72,511 (in chunk 0, beyond 64 KiB) while requesting only the first 10 records
+    const corruptedChunk0 = Buffer.from(original);
+    corruptedChunk0[72_511] = corruptedChunk0[72_511]! === 0x7a ? 0x79 : 0x7a;
+    writeFileSync(segFile, corruptedChunk0);
+    const scan0 = scanCachedCommits(
+      dir,
+      'git version test',
+      bigRecords.slice(0, 10).map((r) => r.hash),
+      new Set(),
+    );
+    assert.deepEqual(scan0, { kind: 'invalid', reason: 'checksum mismatch in commits-1.jsonl' });
+
+    // 2. Corrupt 1 byte at offset 300,000 (in chunk 1, beyond 256 KiB) while requesting records that span into chunk 1
+    const corruptedChunk1 = Buffer.from(original);
+    corruptedChunk1[300_000] = corruptedChunk1[300_000]! === 0x7a ? 0x79 : 0x7a;
+    writeFileSync(segFile, corruptedChunk1);
+    const scan1 = scanCachedCommits(
+      dir,
+      'git version test',
+      bigRecords.slice(0, 45).map((r) => r.hash),
+      new Set(),
+    );
+    assert.deepEqual(scan1, { kind: 'invalid', reason: 'checksum mismatch in commits-1.jsonl' });
   });
 });
 
