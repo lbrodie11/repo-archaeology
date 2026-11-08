@@ -57,7 +57,7 @@ Imagine `auth.ts` and `permissions.ts` changed together in 9 commits. That numbe
 | `auth.ts` changed 12 times, and `permissions.ts` changed alongside it 9 times | **75%** |
 | `permissions.ts` changed 30 times, and `auth.ts` changed alongside it 9 times | **30%** |
 
-Both directions matter. Repo Archaeology calculates these percentages separately and uses a statistical confidence adjustment (Wilson score lower bound) when ranking findings. That means a relationship based on 3 shared changes out of 3 doesn't automatically outrank one backed by 40 out of 50.
+Both directions matter. Repo Archaeology calculates these percentages separately, shows the two-sided 95% Wilson confidence interval alongside each count, and uses the Wilson score lower bound when ranking findings. That means a relationship based on 3 shared changes out of 3 doesn't automatically outrank one backed by 40 out of 50.
 
 By default, findings require at least **3 shared commits** and **40% directional confidence**.
 
@@ -117,18 +117,18 @@ Finding families (1)
 Possibly missed (3)
 
   src/adapter/deno/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 12 of 20 commits (60%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 12 of 20 commits (60%) (95% CI 39–78%) · last together 5 months ago
     possible parallel implementations: serve-static.ts appears in sibling folders
     26f8c33 2026-05-16  fix(serveStatic): make options parameter optional in all adapters (#4934)
     1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291)
     246a06a 2024-09-24  feat(serve-static): support absolute root (#3420)
 
   src/adapter/cloudflare-workers/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 11 of 20 commits (55%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 11 of 20 commits (55%) (95% CI 34–74%) · last together 5 months ago
     possible parallel implementations: serve-static.ts appears in sibling folders
 
   runtime-tests/bun/index.test.tsx  test link
-    changed with src/adapter/bun/serve-static.ts in 10 of 20 commits (50%) · last together 14 months ago
+    changed with src/adapter/bun/serve-static.ts in 10 of 20 commits (50%) (95% CI 30–70%) · last together 14 months ago
     a test that changes with this code
 ```
 
@@ -163,11 +163,11 @@ Finding families (3)
 Individual relationships (15)
 
  1. src/preset/tiny.ts → src/preset/quick.ts  ghost wire
-    when src/preset/tiny.ts changed, src/preset/quick.ts changed too in 9 of 9 commits (100%) · last together 2.4 years ago
+    when src/preset/tiny.ts changed, src/preset/quick.ts changed too in 9 of 9 commits (100%) (95% CI 70–100%) · last together 2.4 years ago
     reverse: 90% · no import link detected in the current code
 
  2. src/helper/streaming/stream.ts → src/helper/streaming/sse.ts  ghost wire
-    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) · last together 1.7 years ago
+    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) (95% CI 53–98%) · last together 1.7 years ago
     reverse: 38% · no import link detected in the current code
 ```
 
