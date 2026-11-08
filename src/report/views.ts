@@ -2,6 +2,13 @@ import { posix } from 'node:path';
 import type { Context } from '../context.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import type { Companion } from '../model/cochange.js';
+import {
+  computeOriginShare,
+  type CommitOrigin,
+  type OriginConfig,
+  type OriginCounts,
+  type OriginShare,
+} from '../model/origin.js';
 import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
@@ -10,6 +17,7 @@ export interface EvidenceView {
   date: string;
   author: string;
   subject: string;
+  origin?: CommitOrigin;
 }
 
 /** One historical relationship, ready to print or serialize. */
@@ -34,10 +42,12 @@ export interface RelationshipView {
   reverseInterval: WilsonInterval;
   /** Evidence-adjusted ranking score (Wilson lower bound of confidence). */
   score: number;
-  /** True when confidence is recency-weighted (--half-life), so it is not simply shared / fromChanges. */
+  /** True when confidence is recency-weighted (--half-life) or origin-weighted (--origin-weights), so it is not simply shared / fromChanges. */
   weighted: boolean;
   lastTogether: string;
   crossesDirectories: boolean;
+  /** Share of all shared commits by commit origin (human, agent, bot), summing to 1. */
+  originShare?: OriginShare;
   evidence: EvidenceView[];
 }
 
@@ -58,6 +68,8 @@ export interface Meta {
   files: number;
   oldestCommit?: string;
   newestCommit?: string;
+  /** Counts of analyzed commits by origin. */
+  origins?: OriginCounts;
   settings: {
     maxCommits: number;
     since?: string;
@@ -68,6 +80,7 @@ export interface Meta {
     skipCommits?: string;
     ignore: string[];
     useDefaultIgnores: boolean;
+    origin?: OriginConfig;
   };
   warnings: string[];
 }
@@ -75,6 +88,11 @@ export interface Meta {
 export function buildMeta(ctx: Context): Meta {
   const { stats } = ctx.history;
   const s = ctx.settings;
+  const origins: OriginCounts = { human: 0, agent: 0, bot: 0 };
+  for (const commit of ctx.history.commits) {
+    const o: CommitOrigin = commit.origin ?? 'human';
+    origins[o]++;
+  }
   return {
     tool: 'repo-archaeology',
     root: ctx.root,
@@ -87,6 +105,7 @@ export function buildMeta(ctx: Context): Meta {
     files: ctx.model.fileCount,
     oldestCommit: stats.oldestTime ? isoDate(stats.oldestTime) : undefined,
     newestCommit: stats.newestTime ? isoDate(stats.newestTime) : undefined,
+    origins,
     settings: {
       maxCommits: s.maxCommits,
       since: s.since,
@@ -97,6 +116,7 @@ export function buildMeta(ctx: Context): Meta {
       skipCommits: s.skipCommits,
       ignore: [...s.ignore],
       useDefaultIgnores: s.useDefaultIgnores,
+      ...(s.origin !== undefined ? { origin: s.origin } : {}),
     },
     warnings: ctx.warnings,
   };
@@ -127,9 +147,16 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
     weighted: model.weighted,
     lastTogether: isoDate(companion.stat.lastTime),
     crossesDirectories: posix.dirname(from) !== posix.dirname(to),
+    originShare: computeOriginShare(companion.stat.originCounts),
     evidence: companion.stat.evidence.map((i) => {
       const commit = model.commits[i]!;
-      return { hash: commit.hash, date: isoDate(commit.time), author: commit.author, subject: commit.subject };
+      return {
+        hash: commit.hash,
+        date: isoDate(commit.time),
+        author: commit.author,
+        subject: commit.subject,
+        origin: commit.origin ?? 'human',
+      };
     }),
   };
 }

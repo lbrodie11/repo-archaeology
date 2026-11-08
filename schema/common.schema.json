@@ -67,6 +67,113 @@
         }
       }
     },
+    "CommitOrigin": {
+      "type": "string",
+      "enum": [
+        "human",
+        "agent",
+        "bot"
+      ]
+    },
+    "OriginCounts": {
+      "type": "object",
+      "required": [
+        "human",
+        "agent",
+        "bot"
+      ],
+      "properties": {
+        "human": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "agent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bot": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "OriginShare": {
+      "type": "object",
+      "required": [
+        "human",
+        "agent",
+        "bot"
+      ],
+      "properties": {
+        "human": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "agent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bot": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "OriginWeights": {
+      "type": "object",
+      "properties": {
+        "human": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "agent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bot": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "OriginConfig": {
+      "type": "object",
+      "properties": {
+        "agentAuthorPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "botPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "agentTrailerPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "replaceDefaults": {
+          "type": "boolean"
+        },
+        "weights": {
+          "$ref": "#/$defs/OriginWeights"
+        }
+      }
+    },
     "Settings": {
       "type": "object",
       "required": [
@@ -113,6 +220,9 @@
         },
         "useDefaultIgnores": {
           "type": "boolean"
+        },
+        "origin": {
+          "$ref": "#/$defs/OriginConfig"
         }
       }
     },
@@ -144,6 +254,7 @@
         "subjectSkipped",
         "renamesFollowed",
         "files",
+        "origins",
         "settings",
         "warnings"
       ],
@@ -191,6 +302,9 @@
           "type": "string",
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
         },
+        "origins": {
+          "$ref": "#/$defs/OriginCounts"
+        },
         "settings": {
           "$ref": "#/$defs/Settings"
         },
@@ -208,7 +322,8 @@
         "hash",
         "date",
         "author",
-        "subject"
+        "subject",
+        "origin"
       ],
       "properties": {
         "hash": {
@@ -224,6 +339,9 @@
         },
         "subject": {
           "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/CommitOrigin"
         }
       }
     },
@@ -263,6 +381,7 @@
         "weighted",
         "lastTogether",
         "crossesDirectories",
+        "originShare",
         "evidence"
       ],
       "properties": {
@@ -323,6 +442,9 @@
         "crossesDirectories": {
           "type": "boolean"
         },
+        "originShare": {
+          "$ref": "#/$defs/OriginShare"
+        },
         "evidence": {
           "type": "array",
           "items": {
@@ -338,6 +460,7 @@
         "date",
         "author",
         "subject",
+        "origin",
         "membersTouched",
         "totalMembers",
         "touchesAllMembers",
@@ -357,6 +480,9 @@
         },
         "subject": {
           "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/CommitOrigin"
         },
         "membersTouched": {
           "type": "integer",
@@ -646,6 +772,9 @@
             },
             "skipCommits": {
               "type": "string"
+            },
+            "originWeights": {
+              "$ref": "#/$defs/OriginWeights"
             }
           }
         }
@@ -667,6 +796,7 @@
         "weighted",
         "lastTogether",
         "crossesDirectories",
+        "originShare",
         "evidence",
         "alsoLinkedFrom"
       ],
@@ -727,6 +857,9 @@
         },
         "crossesDirectories": {
           "type": "boolean"
+        },
+        "originShare": {
+          "$ref": "#/$defs/OriginShare"
         },
         "evidence": {
           "type": "array",

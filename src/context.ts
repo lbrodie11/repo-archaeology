@@ -139,6 +139,7 @@ async function trainBaseline(
     maxFilesPerCommit: settings.maxFilesPerCommit,
     ignore: ignores,
     skipCommits: skipFilter,
+    origin: settings.origin,
     rev,
   });
   const warnings: string[] = [];
@@ -151,7 +152,10 @@ async function trainBaseline(
   } else if (history.commits.length < MIN_FULL_HISTORY_COMMITS) {
     warnings.push(`Only ${history.commits.length} usable commits: results will be thin until the project has more history.`);
   }
-  const model = new CoChangeModel(history.commits, { halfLifeDays: settings.halfLifeDays });
+  const model = new CoChangeModel(history.commits, {
+    halfLifeDays: settings.halfLifeDays,
+    originWeights: settings.origin?.weights,
+  });
   return { history, model, warnings, ignores };
 }
 

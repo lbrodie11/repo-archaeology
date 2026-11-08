@@ -21,6 +21,7 @@
     "score",
     "weighted",
     "crossesDirectories",
+    "originShare",
     "sharedCommits",
     "counterexamples",
     "bounds",
@@ -98,6 +99,9 @@
     },
     "crossesDirectories": {
       "type": "boolean"
+    },
+    "originShare": {
+      "$ref": "common.schema.json#/$defs/OriginShare"
     },
     "sharedCommits": {
       "type": "array",
@@ -305,6 +309,7 @@
         "date",
         "author",
         "subject",
+        "origin",
         "fileA",
         "fileB"
       ],
@@ -323,6 +328,9 @@
         "subject": {
           "type": "string"
         },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/CommitOrigin"
+        },
         "fileA": {
           "$ref": "#/$defs/FilePatchEvidence"
         },
@@ -338,6 +346,7 @@
         "date",
         "author",
         "subject",
+        "origin",
         "historicalPath",
         "status"
       ],
@@ -355,6 +364,9 @@
         },
         "subject": {
           "type": "string"
+        },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/CommitOrigin"
         },
         "historicalPath": {
           "type": "string"

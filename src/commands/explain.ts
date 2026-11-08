@@ -18,6 +18,13 @@ import {
 } from '../git/patch.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { resolveCommitFileChange, type HistoryCommit } from '../model/history.js';
+import {
+  computeOriginShare,
+  formatOriginWeightsSpec,
+  hasNonDefaultOriginWeights,
+  type CommitOrigin,
+  type OriginShare,
+} from '../model/origin.js';
 import { buildMeta, formatIntervalCi, printHeader, relationshipLabel, roundInterval, type Meta } from '../report/views.js';
 import { wilsonInterval, wilsonLowerBound, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
@@ -49,6 +56,7 @@ export interface SharedCommitEvidence {
   date: string;
   author: string;
   subject: string;
+  origin: CommitOrigin;
   fileA: FilePatchEvidence;
   fileB: FilePatchEvidence;
 }
@@ -58,6 +66,7 @@ export interface CounterexampleCommitEvidence {
   date: string;
   author: string;
   subject: string;
+  origin: CommitOrigin;
   historicalPath: string;
   oldPath?: string;
   status: string;
@@ -97,6 +106,7 @@ export interface ExplainResult {
   weighted: boolean;
   lastTogether?: string;
   crossesDirectories: boolean;
+  originShare: OriginShare;
   sharedCommits: SharedCommitEvidence[];
   counterexamples: {
     fromWithoutToTotal: number;
@@ -169,6 +179,9 @@ export function formatExplainCommand(
     }
     if (settings.halfLifeDays !== undefined) {
       flagParts.push(`--half-life ${settings.halfLifeDays}`);
+    }
+    if (hasNonDefaultOriginWeights(settings.origin?.weights)) {
+      flagParts.push(`--origin-weights ${shellQuoteArg(formatOriginWeightsSpec(settings.origin!.weights!))}`);
     }
     if (settings.skipCommits !== undefined) {
       flagParts.push(`--skip-commits ${shellQuoteArg(settings.skipCommits)}`);
@@ -352,7 +365,7 @@ export async function explain(
     const reverseConfidence = stat ? model.confidence(stat, idB) : 0;
     const score = wilsonLowerBound(confidence, model.effectiveChanges(idA));
     const meetsThresholds =
-      shared >= ctx.thresholds.minShared &&
+      model.effectiveShared(stat) + 1e-9 >= ctx.thresholds.minShared &&
       (confidence >= ctx.thresholds.minConfidence || reverseConfidence >= ctx.thresholds.minConfidence);
 
     const relationship = ctx.classifier.classify(currentFrom, currentTo);
@@ -433,6 +446,7 @@ export async function explain(
         date: isoDate(commit.time),
         author: commit.author,
         subject: commit.subject,
+        origin: commit.origin ?? 'human',
         fileA: boundedA.patch,
         fileB: boundedB.patch,
       });
@@ -452,6 +466,7 @@ export async function explain(
           date: isoDate(commit.time),
           author: commit.author,
           subject: commit.subject,
+          origin: commit.origin ?? 'human',
           historicalPath: change.path,
           ...(change.oldPath !== undefined ? { oldPath: change.oldPath } : {}),
           status: change.status,
@@ -501,6 +516,7 @@ export async function explain(
       weighted: model.weighted,
       ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
       crossesDirectories: posix.dirname(currentFrom) !== posix.dirname(currentTo),
+      originShare: computeOriginShare(stat?.originCounts ?? { human: 0, agent: 0, bot: 0 }),
       sharedCommits,
       counterexamples: {
         fromWithoutToTotal: sortedAOnly.length,

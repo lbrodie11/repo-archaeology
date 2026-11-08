@@ -116,7 +116,7 @@ export function evaluateParallelPair(
   const idB = model.id(histB);
   if (idA === undefined || idB === undefined || idA === idB) return undefined;
   const stat = model.pair(idA, idB);
-  if (!stat || stat.count < thresholds.minShared) return undefined;
+  if (!stat || model.effectiveShared(stat) + 1e-9 < thresholds.minShared) return undefined;
   const confAB = model.confidence(stat, idA);
   const confBA = model.confidence(stat, idB);
   const passAB = confAB >= thresholds.minConfidence;
@@ -512,6 +512,7 @@ export function buildFindingFamilies(
         date: isoDate(commit.time),
         author: commit.author,
         subject: commit.subject,
+        origin: commit.origin ?? 'human',
         membersTouched: memberPaths.length,
         totalMembers,
         touchesAllMembers: memberPaths.length === totalMembers,

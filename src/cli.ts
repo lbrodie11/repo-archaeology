@@ -11,6 +11,7 @@ import { loadContext, UsageError } from './context.js';
 import { workingTreeChanges } from './git/changes.js';
 import { GitError } from './git/run.js';
 import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
+import { parseOriginWeightsSpec, type OriginWeights } from './model/origin.js';
 import { formatJsonContract, getToolVersion, validateJsonOutPath, writeJsonContractFile } from './report/contract.js';
 import { renderDiffMarkdown } from './report/markdown.js';
 import { c, terminalText } from './util/term.js';
@@ -67,6 +68,23 @@ function collect(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
+function originWeightsValue(value: string): OriginWeights {
+  try {
+    return parseOriginWeightsSpec(value, '--origin-weights');
+  } catch (err) {
+    throw new InvalidArgumentError((err as Error).message);
+  }
+}
+
+function collectCompareOriginWeights(value: string, previous: string[] = []): string[] {
+  try {
+    parseOriginWeightsSpec(value, '--compare-origin-weights');
+  } catch (err) {
+    throw new InvalidArgumentError((err as Error).message);
+  }
+  return [...previous, value];
+}
+
 interface GlobalOptions {
   cwd?: string;
   head?: string;
@@ -77,6 +95,7 @@ interface GlobalOptions {
   minConfidence?: number;
   halfLife?: number;
   skipCommits?: string;
+  originWeights?: OriginWeights;
   ignore?: string[];
   defaultIgnores: boolean;
   json?: boolean;
@@ -91,6 +110,7 @@ function settingsFrom(opts: GlobalOptions): Partial<Settings> {
     minConfidence: opts.minConfidence,
     halfLifeDays: opts.halfLife,
     skipCommits: opts.skipCommits,
+    origin: opts.originWeights !== undefined ? { weights: opts.originWeights } : undefined,
     ignore: opts.ignore,
     useDefaultIgnores: opts.defaultIgnores === false ? false : undefined,
   };
@@ -113,6 +133,7 @@ program
   .option('--min-shared <n>', 'minimum shared commits for a relationship (default 3)', positiveInt)
   .option('--min-confidence <p>', 'minimum confidence, 0-1 or a percentage (default 0.4)', fraction)
   .option('--half-life <days>', 'weight recent commits more: a commit this many days old counts half', positiveNumber)
+  .option('--origin-weights <spec>', 'weight commits by origin, e.g. "bot=0,agent=0.5" (values 0..1)', originWeightsValue)
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
@@ -232,13 +253,14 @@ program
   .option('--ghosts', 'diagnose the ghost subset using current imports (contains future information)')
   .option('--follow-ups', 'also evaluate candidate temporal follow-up commits in the held-out window')
   .option('--follow-up-window <hours>', 'maximum hours between an initial commit and a candidate follow-up (default 48)', positiveNumber)
-  .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean; followUps?: boolean; followUpWindow?: number }, cmd: Command) => {
+  .option('--compare-origin-weights <spec>', 'compare default weights against <spec> (e.g. "bot=0,agent=0.5") on the same split', collectCompareOriginWeights)
+  .action(async (opts: { testFraction: number; k: number; before?: number; ghosts?: boolean; followUps?: boolean; followUpWindow?: number; compareOriginWeights?: string[] }, cmd: Command) => {
     if (opts.followUpWindow !== undefined && !opts.followUps) {
       throw new UsageError('--follow-up-window requires --follow-ups.');
     }
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow });
+    const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow, compareOriginWeights: opts.compareOriginWeights });
     if (global.json) printJson(result);
     else printBacktest(result);
   });
