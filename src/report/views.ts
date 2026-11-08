@@ -29,9 +29,9 @@ export interface RelationshipView {
   /** P(from changes | to changes). */
   reverseConfidence: number;
   /** 95% Wilson score interval for directional confidence (`shared / fromChanges`), always unweighted. */
-  interval?: WilsonInterval;
+  interval: WilsonInterval;
   /** 95% Wilson score interval for reverse directional confidence (`shared / toChanges`), always unweighted. */
-  reverseInterval?: WilsonInterval;
+  reverseInterval: WilsonInterval;
   /** Evidence-adjusted ranking score (Wilson lower bound of confidence). */
   score: number;
   /** True when confidence is recency-weighted (--half-life), so it is not simply shared / fromChanges. */
@@ -133,13 +133,13 @@ function round(x: number): number {
 
 export function roundInterval(interval: WilsonInterval): WilsonInterval {
   return {
-    low: Math.round(interval.low * 10000) / 10000,
-    high: Math.round(interval.high * 10000) / 10000,
+    low: Math.floor(interval.low * 10000) / 10000,
+    high: Math.ceil(interval.high * 10000) / 10000,
   };
 }
 
-export function formatIntervalCi(interval: WilsonInterval): string {
-  return `(95% CI ${Math.round(interval.low * 100)}–${Math.round(interval.high * 100)}%)`;
+export function formatIntervalCi(interval: WilsonInterval, raw = false): string {
+  return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100)}–${Math.ceil(interval.high * 100)}%)`;
 }
 
 const LABELS: Record<Relationship, (s: string) => string> = {
@@ -182,10 +182,11 @@ export function printEvidence(view: RelationshipView, indent = '    '): void {
 }
 
 export function describeStrength(view: RelationshipView): string {
-  // With a half-life the percentage is weighted, so it is not shared/total: say so.
-  const rate = view.weighted ? `${pct(view.confidence)} recency-weighted` : pct(view.confidence);
-  const interval = view.interval ?? wilsonInterval(view.shared, view.fromChanges);
-  return `${view.shared} of ${view.fromChanges} commits (${rate}) ${formatIntervalCi(interval)} · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
+  // With a half-life the percentage is weighted, so it is not shared/total: say so, and keep the raw CI next to the raw count.
+  const countsAndRate = view.weighted
+    ? `${view.shared} of ${view.fromChanges} commits ${formatIntervalCi(view.interval, true)} (${pct(view.confidence)} recency-weighted)`
+    : `${view.shared} of ${view.fromChanges} commits (${pct(view.confidence)}) ${formatIntervalCi(view.interval)}`;
+  return `${countsAndRate} · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
 }
 
 export const DISCLAIMER = 'Historical signal, not proof: check whether the change really needs these files.';

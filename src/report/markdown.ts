@@ -2,7 +2,6 @@ import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
 import type { Settings } from '../config.js';
 import { formatIntervalCi, NAMES } from './views.js';
-import { wilsonInterval } from '../util/stats.js';
 import { pct, plural, shortHash } from '../util/term.js';
 
 /**
@@ -125,7 +124,7 @@ function formatDirectionalEvidence(s: Suggestion): string {
   const fromCode = formatMarkdownCode(s.from);
   const conf = pct(s.confidence);
   const revConf = pct(s.reverseConfidence);
-  const ci = formatIntervalCi(s.interval ?? wilsonInterval(s.shared, s.fromChanges));
+  const ci = formatIntervalCi(s.interval, s.weighted);
   const lastTogether = s.lastTogether ? ` · last together ${escapeMarkdownInline(s.lastTogether, 20)}` : '';
   if (s.weighted) {
     return (

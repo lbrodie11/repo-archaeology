@@ -251,8 +251,8 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
           s.reverseInterval.low <= s.reverseConfidence && s.reverseConfidence <= s.reverseInterval.high,
           `expected ${s.reverseInterval.low} <= ${s.reverseConfidence} <= ${s.reverseInterval.high}`,
         );
-        assert.equal(Math.round(s.interval.low * 10000) / 10000, s.interval.low);
-        assert.equal(Math.round(s.interval.high * 10000) / 10000, s.interval.high);
+        assert.equal(Math.floor(s.interval.low * 10000) / 10000, s.interval.low);
+        assert.equal(Math.ceil(s.interval.high * 10000) / 10000, s.interval.high);
       }
       for (const fam of defaultDiffJson.families) {
         for (const rel of fam.relationships) {
@@ -268,7 +268,12 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
         repo.write('src/api.ts', "import { db } from './db';\nexport const api = db + 999;\n");
         const flatRes = runCli(['diff', '--json'], repo.dir);
         const weightedRes = runCli(['diff', '--half-life', '1', '--json'], repo.dir);
-        return { flat: JSON.parse(flatRes.stdout), weighted: JSON.parse(weightedRes.stdout) };
+        const weightedExplainRes = runCli(['explain', 'src/api.ts', 'src/db.ts', '--half-life', '1'], repo.dir);
+        return {
+          flat: JSON.parse(flatRes.stdout),
+          weighted: JSON.parse(weightedRes.stdout),
+          weightedExplainStdout: weightedExplainRes.stdout,
+        };
       })();
       assertMatchesSchema(editApiRes.weighted, 'diff.schema.json');
       const flatDb = editApiRes.flat.suggestions.find((s: { to: string }) => s.to === 'src/db.ts');
@@ -282,6 +287,11 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       );
       assert.equal(weightedDb.weighted, true);
       assert.notEqual(weightedDb.score, flatDb.score, 'score should reflect recency weighting when --half-life is set');
+      assert.match(
+        editApiRes.weightedExplainStdout,
+        /\d+ of \d+ commits \(raw 95% CI \d+[–-]\d+%\) \(\d+% recency-weighted\)/,
+      );
+      assert.doesNotMatch(editApiRes.weightedExplainStdout, /recency-weighted\)\s*\((?:raw )?95% CI/);
     } finally {
       repo.git('checkout', '-q', '--', '.');
     }

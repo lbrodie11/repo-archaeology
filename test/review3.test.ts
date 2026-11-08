@@ -302,6 +302,8 @@ describe('review 3, interactive map template and sidebar polish', () => {
           toChanges: 3,
           confidence: 0.75,
           reverseConfidence: 1,
+          interval: { low: 0.3006, high: 0.9545 },
+          reverseInterval: { low: 0.4384, high: 1 },
           score: 0.8,
           overviewPriority: 2,
           weighted: false,

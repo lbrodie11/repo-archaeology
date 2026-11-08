@@ -70,8 +70,8 @@ export interface MapEdge {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
-  interval?: WilsonInterval;
-  reverseInterval?: WilsonInterval;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
   score: number;
   overviewPriority: number;
   weighted: boolean;
@@ -97,8 +97,8 @@ export interface MapUndrawnPair {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
-  interval?: WilsonInterval;
-  reverseInterval?: WilsonInterval;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
   score: number;
   weighted: boolean;
   lastTogether: string;

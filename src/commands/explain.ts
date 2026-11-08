@@ -91,8 +91,8 @@ export interface ExplainResult {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
-  interval?: WilsonInterval;
-  reverseInterval?: WilsonInterval;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
   score: number;
   weighted: boolean;
   lastTogether?: string;
@@ -590,22 +590,20 @@ export function printExplain(result: ExplainResult): void {
     result.meta,
   );
 
-  const rateA = result.weighted ? `${pct(result.confidence)} recency-weighted` : pct(result.confidence);
-  const rateB = result.weighted ? `${pct(result.reverseConfidence)} recency-weighted` : pct(result.reverseConfidence);
-  const intervalA = result.interval ?? wilsonInterval(result.shared, result.fromChanges);
-  const intervalB = result.reverseInterval ?? wilsonInterval(result.shared, result.toChanges);
+  const dirA = result.weighted
+    ? `${result.shared} of ${result.fromChanges} commits ${formatIntervalCi(result.interval, true)} (${pct(result.confidence)} recency-weighted)`
+    : `${result.shared} of ${result.fromChanges} commits (${pct(result.confidence)}) ${formatIntervalCi(result.interval)}`;
+  const dirB = result.weighted
+    ? `${result.shared} of ${result.toChanges} commits ${formatIntervalCi(result.reverseInterval, true)} (${pct(result.reverseConfidence)} recency-weighted)`
+    : `${result.shared} of ${result.toChanges} commits (${pct(result.reverseConfidence)}) ${formatIntervalCi(result.reverseInterval)}`;
   const lastStr = result.lastTogether
     ? ` · last together ${timeAgo(Date.parse(result.lastTogether) / 1000)} (${result.lastTogether})`
     : '';
 
   console.log(`${c.bold('Relationship')}  ${relationshipLabel(result.relationship)}${lastStr}`);
   console.log(`${c.bold('Why')}           ${terminalText(result.why)}`);
-  console.log(
-    `${c.bold('Direction')}     ${terminalText(result.from)} → ${terminalText(result.to)}: ${result.shared} of ${result.fromChanges} commits (${rateA}) ${formatIntervalCi(intervalA)}`,
-  );
-  console.log(
-    `              ${terminalText(result.to)} → ${terminalText(result.from)}: ${result.shared} of ${result.toChanges} commits (${rateB}) ${formatIntervalCi(intervalB)}`,
-  );
+  console.log(`${c.bold('Direction')}     ${terminalText(result.from)} → ${terminalText(result.to)}: ${dirA}`);
+  console.log(`              ${terminalText(result.to)} → ${terminalText(result.from)}: ${dirB}`);
   if (!result.meetsThresholds) {
     console.log(
       c.yellow(

@@ -69,6 +69,30 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function checkWilsonInterval(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(
+      `Gutter contract error at '${path}': expected object, got ${JSON.stringify(value)}`,
+    );
+    return;
+  }
+  if (!isFiniteNumber(value.low) || value.low < 0 || value.low > 1) {
+    errors.push(
+      `Gutter contract error at '${path}.low': expected number in [0, 1], got ${JSON.stringify(value.low)}`,
+    );
+  }
+  if (!isFiniteNumber(value.high) || value.high < 0 || value.high > 1) {
+    errors.push(
+      `Gutter contract error at '${path}.high': expected number in [0, 1], got ${JSON.stringify(value.high)}`,
+    );
+  }
+  if (isFiniteNumber(value.low) && isFiniteNumber(value.high) && value.low > value.high) {
+    errors.push(
+      `Gutter contract error at '${path}': expected low <= high, got ${value.low} > ${value.high}`,
+    );
+  }
+}
+
 function checkCommonEnvelopeAndMeta(payload: Record<string, unknown>, errors: string[]): void {
   if (payload.schemaVersion !== 1) {
     errors.push(
@@ -159,6 +183,9 @@ function validateGutterDiffContract(payload: unknown): string[] {
           );
         }
       }
+
+      checkWilsonInterval(item.interval, `${prefix}.interval`, errors);
+      checkWilsonInterval(item.reverseInterval, `${prefix}.reverseInterval`, errors);
 
       if ('lastTogether' in item && item.lastTogether !== undefined) {
         if (typeof item.lastTogether !== 'string' || item.lastTogether.length === 0) {
@@ -592,6 +619,20 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
         expectedPath: 'suggestions[0].score',
         mutate: (doc) => {
           delete doc.suggestions[0].score;
+        },
+      },
+      {
+        label: 'invalid suggestions[0].interval (low > high)',
+        expectedPath: 'suggestions[0].interval',
+        mutate: (doc) => {
+          doc.suggestions[0].interval = { low: 0.9, high: 0.1 };
+        },
+      },
+      {
+        label: 'removed suggestions[0].reverseInterval',
+        expectedPath: 'suggestions[0].reverseInterval',
+        mutate: (doc) => {
+          delete doc.suggestions[0].reverseInterval;
         },
       },
       {

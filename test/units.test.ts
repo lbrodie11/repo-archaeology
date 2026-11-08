@@ -6,9 +6,10 @@ import { LogParser, type RawCommit } from '../src/git/log.js';
 import { embedJson, renderMapHtml } from '../src/map/template.js';
 import { CoChangeModel } from '../src/model/cochange.js';
 import type { HistoryCommit } from '../src/model/history.js';
+import { describeStrength, formatIntervalCi, roundInterval } from '../src/report/views.js';
 import { globToRegExp, PathMatcher } from '../src/util/glob.js';
-import { wilsonInterval, wilsonLowerBound } from '../src/util/stats.js';
-import { terminalText } from '../src/util/term.js';
+import { wilsonInterval, wilsonLowerBound, Z_95 } from '../src/util/stats.js';
+import { pct, terminalText } from '../src/util/term.js';
 
 describe('terminal output', () => {
   it('escapes control and bidirectional characters without changing ordinary unicode', () => {
@@ -54,8 +55,8 @@ describe('wilson lower bound', () => {
 
   it('computes two-sided wilsonInterval for known values and edge cases', () => {
     const ci14of19 = wilsonInterval(14, 19);
-    assert.ok(Math.abs(ci14of19.low - 0.5123) <= 1e-3, `expected low ≈ 0.5123, got ${ci14of19.low}`);
-    assert.ok(Math.abs(ci14of19.high - 0.8822) <= 1e-3, `expected high ≈ 0.8822, got ${ci14of19.high}`);
+    assert.ok(Math.abs(ci14of19.low - 0.51208) <= 1e-4, `expected low ≈ 0.51208, got ${ci14of19.low}`);
+    assert.ok(Math.abs(ci14of19.high - 0.88194) <= 1e-4, `expected high ≈ 0.88194, got ${ci14of19.high}`);
 
     assert.deepEqual(wilsonInterval(0, 0), { low: 0, high: 1 });
     assert.deepEqual(wilsonInterval(3, -5), { low: 0, high: 1 });
@@ -76,26 +77,71 @@ describe('wilson lower bound', () => {
       return seed / 0x100000000;
     };
 
-    const exactZ = 1.959963984540054;
     for (let i = 0; i < 200; i++) {
       const n = 1 + Math.floor(nextRand() * 500);
       const k = Math.floor(nextRand() * (n + 1));
-      const ivExact = wilsonInterval(k, n, exactZ);
-      const lbExact = wilsonLowerBound(k / n, n, exactZ);
-      assert.ok(
-        Math.abs(ivExact.low - lbExact) < 1e-12,
-        `mismatch for (${k}, ${n}) at exact z: interval.low=${ivExact.low} vs lowerBound=${lbExact}`,
-      );
-
       const ivDefault = wilsonInterval(k, n);
       const lbDefault = wilsonLowerBound(k / n, n);
       assert.ok(
-        Math.abs(ivDefault.low - lbDefault) < 1e-4,
-        `mismatch for (${k}, ${n}) at default z: interval.low=${ivDefault.low} vs lowerBound=${lbDefault}`,
+        Math.abs(ivDefault.low - lbDefault) < 1e-12,
+        `mismatch for (${k}, ${n}) at default Z_95=${Z_95}: interval.low=${ivDefault.low} vs lowerBound=${lbDefault}`,
       );
       assert.ok(ivDefault.low >= 0 && ivDefault.low <= k / n + 1e-12);
       assert.ok(ivDefault.high >= k / n - 1e-12 && ivDefault.high <= 1);
     }
+  });
+
+  it('rounds intervals outward so the rounded interval contains the unrounded interval for all 0 <= k <= n <= 200', () => {
+    for (let n = 0; n <= 200; n++) {
+      for (let k = 0; k <= n; k++) {
+        const raw = wilsonInterval(k, n);
+        const rounded = roundInterval(raw);
+        assert.ok(
+          rounded.low <= raw.low && rounded.high >= raw.high,
+          `rounded [${rounded.low}, ${rounded.high}] failed to contain unrounded [${raw.low}, ${raw.high}] for (${k}, ${n})`,
+        );
+        const ciStr = formatIntervalCi(rounded);
+        const match = /^\(95% CI (\d+)–(\d+)%\)$/.exec(ciStr);
+        assert.ok(match, `unexpected CI format: ${ciStr}`);
+        const lowPct = Number(match[1]);
+        const highPct = Number(match[2]);
+        assert.ok(lowPct / 100 <= raw.low && highPct / 100 >= raw.high);
+        if (n > 0) {
+          const displayedPct = Number(pct(k / n).slice(0, -1));
+          assert.ok(
+            lowPct <= displayedPct && displayedPct <= highPct,
+            `displayed ${displayedPct}% fell outside [${lowPct}%, ${highPct}%] for (${k}, ${n})`,
+          );
+        }
+      }
+    }
+  });
+
+  it('places (raw 95% CI …) next to raw counts when weighted=true in describeStrength', () => {
+    const baseView = {
+      from: 'src/a.ts',
+      to: 'src/b.ts',
+      relationship: 'ghost' as const,
+      why: 'no import link',
+      shared: 11,
+      fromChanges: 21,
+      toChanges: 15,
+      confidence: 1,
+      reverseConfidence: 0.733,
+      interval: roundInterval(wilsonInterval(11, 21)),
+      reverseInterval: roundInterval(wilsonInterval(11, 15)),
+      score: 0.5,
+      weighted: true,
+      lastTogether: '2026-05-16',
+      crossesDirectories: false,
+      evidence: [],
+    };
+    const weightedLine = describeStrength(baseView);
+    assert.match(weightedLine, /^11 of 21 commits \(raw 95% CI 32–72%\) \(100% recency-weighted\) · last together /);
+    assert.doesNotMatch(weightedLine, /recency-weighted\)\s*\((?:raw )?95% CI/);
+
+    const unweightedLine = describeStrength({ ...baseView, confidence: 11 / 21, weighted: false });
+    assert.match(unweightedLine, /^11 of 21 commits \(52%\) \(95% CI 32–72%\) · last together /);
   });
 });
 

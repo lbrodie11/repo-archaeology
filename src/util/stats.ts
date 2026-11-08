@@ -3,12 +3,15 @@ export interface WilsonInterval {
   high: number;
 }
 
+/** Standard normal 97.5th percentile ($z_{0.975}$) for a two-sided 95% confidence interval. */
+export const Z_95 = 1.959963984540054;
+
 /**
  * Lower bound of the Wilson score interval for a proportion.
  * Used to rank relationships so that "3 of 3" does not outrank "40 of 50":
  * a high rate backed by little evidence gets a lower score.
  */
-export function wilsonLowerBound(p: number, n: number, z = 1.96): number {
+export function wilsonLowerBound(p: number, n: number, z = Z_95): number {
   if (n <= 0) return 0;
   const phat = Math.min(1, Math.max(0, p));
   const z2 = z * z;
@@ -24,8 +27,8 @@ export function wilsonLowerBound(p: number, n: number, z = 1.96): number {
 export function wilsonInterval(
   successes: number,
   trials: number,
-  z = 1.959963984540054,
-): { low: number; high: number } {
+  z = Z_95,
+): WilsonInterval {
   if (trials <= 0) return { low: 0, high: 1 };
   const phat = Math.min(1, Math.max(0, successes / trials));
   const z2 = z * z;

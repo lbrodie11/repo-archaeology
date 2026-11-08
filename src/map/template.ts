@@ -295,19 +295,8 @@ const CLIENT = String.raw`
     return e;
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
-  function wilsonCi(k, n) {
-    if (n <= 0) return { low: 0, high: 1 };
-    var phat = Math.min(1, Math.max(0, k / n));
-    var z = 1.959963984540054, z2 = z * z, denom = 1 + z2 / n;
-    var centre = phat + z2 / (2 * n);
-    var margin = z * Math.sqrt((phat * (1 - phat)) / n + z2 / (4 * n * n));
-    var low = k <= 0 ? 0 : Math.min(1, Math.max(0, (centre - margin) / denom));
-    var high = k >= n ? 1 : Math.min(1, Math.max(0, (centre + margin) / denom));
-    return { low: low, high: high };
-  }
-  function formatCi(iv, k, n) {
-    var range = iv || wilsonCi(k, n);
-    return '(95% CI ' + Math.round(range.low * 100) + '\u2013' + Math.round(range.high * 100) + '%)';
+  function formatCi(iv, raw) {
+    return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100) + '\u2013' + Math.ceil(iv.high * 100) + '%)';
   }
   function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
   function distinguishingPaths(a, b) {
@@ -984,7 +973,7 @@ const CLIENT = String.raw`
       } else {
         var labels = distinguishingPaths(e.s.path, e.t.path);
         tooltip.appendChild(el('div', '', KINDS[e.d.relationship].label.replace(/s$/, '') + ': ' + labels[0] + ' and ' + labels[1]));
-        tooltip.appendChild(el('div', '', e.d.shared + ' of ' + e.d.fromChanges + ' commits (' + pct(e.d.confidence) + ') ' + formatCi(e.d.interval, e.d.shared, e.d.fromChanges)));
+        tooltip.appendChild(el('div', '', directionEvidence(e, true)));
       }
       tooltip.hidden = false;
       var left = Math.min(px + 14, size.w - tooltip.offsetWidth - 8);
@@ -1225,9 +1214,8 @@ const CLIENT = String.raw`
     var total = fromSource ? e.d.fromChanges : e.d.toChanges;
     var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
     var iv = fromSource ? e.d.interval : e.d.reverseInterval;
-    var ci = formatCi(iv, e.d.shared, total);
-    if (e.d.weighted) return pct(confidence) + ' recency-weighted co-change (' + e.d.shared + ' shared / ' + total + ' total commits) ' + ci;
-    return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ') ' + ci;
+    if (e.d.weighted) return e.d.shared + ' of ' + total + ' commits ' + formatCi(iv, true) + ' (' + pct(confidence) + ' recency-weighted)';
+    return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ') ' + formatCi(iv, false);
   }
   function findingLabel(e) {
     if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Related implementations';
@@ -1760,13 +1748,13 @@ const CLIENT = String.raw`
     var grid = el('div', 'cochange-grid');
     var card1 = el('div', 'cochange-card');
     card1.appendChild(el('div', 'cochange-pct', pct(e.d.confidence)));
-    var desc1 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits) ' + formatCi(e.d.interval, e.d.shared, e.d.fromChanges);
+    var desc1 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits) ' + formatCi(e.d.interval, e.d.weighted);
     card1.appendChild(el('div', 'cochange-label', desc1));
     grid.appendChild(card1);
 
     var card2 = el('div', 'cochange-card');
     card2.appendChild(el('div', 'cochange-pct', pct(e.d.reverseConfidence)));
-    var desc2 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits) ' + formatCi(e.d.reverseInterval, e.d.shared, e.d.toChanges);
+    var desc2 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits) ' + formatCi(e.d.reverseInterval, e.d.weighted);
     card2.appendChild(el('div', 'cochange-label', desc2));
     grid.appendChild(card2);
     panel.appendChild(grid);

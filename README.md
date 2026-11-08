@@ -117,18 +117,18 @@ Finding families (1)
 Possibly missed (3)
 
   src/adapter/deno/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 12 of 20 commits (60%) (95% CI 39–78%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 12 of 20 commits (60%) (95% CI 38–79%) · last together 5 months ago
     possible parallel implementations: serve-static.ts appears in sibling folders
     26f8c33 2026-05-16  fix(serveStatic): make options parameter optional in all adapters (#4934)
     1196f14 2025-08-07  feat(serve-static): use `join` to correct path resolution (#4291)
     246a06a 2024-09-24  feat(serve-static): support absolute root (#3420)
 
   src/adapter/cloudflare-workers/serve-static.ts  ghost wire
-    changed with src/adapter/bun/serve-static.ts in 11 of 20 commits (55%) (95% CI 34–74%) · last together 5 months ago
+    changed with src/adapter/bun/serve-static.ts in 11 of 20 commits (55%) (95% CI 34–75%) · last together 5 months ago
     possible parallel implementations: serve-static.ts appears in sibling folders
 
   runtime-tests/bun/index.test.tsx  test link
-    changed with src/adapter/bun/serve-static.ts in 10 of 20 commits (50%) (95% CI 30–70%) · last together 14 months ago
+    changed with src/adapter/bun/serve-static.ts in 10 of 20 commits (50%) (95% CI 29–71%) · last together 14 months ago
     a test that changes with this code
 ```
 
@@ -167,7 +167,7 @@ Individual relationships (15)
     reverse: 90% · no import link detected in the current code
 
  2. src/helper/streaming/stream.ts → src/helper/streaming/sse.ts  ghost wire
-    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) (95% CI 53–98%) · last together 1.7 years ago
+    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) (95% CI 52–98%) · last together 1.7 years ago
     reverse: 38% · no import link detected in the current code
 ```
 
