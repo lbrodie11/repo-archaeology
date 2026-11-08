@@ -7,7 +7,7 @@ import { embedJson, renderMapHtml } from '../src/map/template.js';
 import { CoChangeModel } from '../src/model/cochange.js';
 import type { HistoryCommit } from '../src/model/history.js';
 import { globToRegExp, PathMatcher } from '../src/util/glob.js';
-import { wilsonLowerBound } from '../src/util/stats.js';
+import { wilsonInterval, wilsonLowerBound } from '../src/util/stats.js';
 import { terminalText } from '../src/util/term.js';
 
 describe('terminal output', () => {
@@ -50,6 +50,52 @@ describe('wilson lower bound', () => {
     assert.ok(wilsonLowerBound(0.8, 50) > wilsonLowerBound(0.8, 5));
     assert.ok(wilsonLowerBound(1, 3) < wilsonLowerBound(0.8, 50));
     assert.equal(wilsonLowerBound(0.5, 0), 0);
+  });
+
+  it('computes two-sided wilsonInterval for known values and edge cases', () => {
+    const ci14of19 = wilsonInterval(14, 19);
+    assert.ok(Math.abs(ci14of19.low - 0.5123) <= 1e-3, `expected low ≈ 0.5123, got ${ci14of19.low}`);
+    assert.ok(Math.abs(ci14of19.high - 0.8822) <= 1e-3, `expected high ≈ 0.8822, got ${ci14of19.high}`);
+
+    assert.deepEqual(wilsonInterval(0, 0), { low: 0, high: 1 });
+    assert.deepEqual(wilsonInterval(3, -5), { low: 0, high: 1 });
+
+    const ci5of5 = wilsonInterval(5, 5);
+    assert.equal(ci5of5.high, 1);
+    assert.ok(ci5of5.low > 0.5 && ci5of5.low < 1);
+
+    const ci0of10 = wilsonInterval(0, 10);
+    assert.equal(ci0of10.low, 0);
+    assert.ok(ci0of10.high > 0 && ci0of10.high < 0.5);
+  });
+
+  it('keeps wilsonInterval(k, n).low consistent with wilsonLowerBound(k/n, n) over 200 random (k, n) pairs', () => {
+    let seed = 0x12345678;
+    const nextRand = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+
+    const exactZ = 1.959963984540054;
+    for (let i = 0; i < 200; i++) {
+      const n = 1 + Math.floor(nextRand() * 500);
+      const k = Math.floor(nextRand() * (n + 1));
+      const ivExact = wilsonInterval(k, n, exactZ);
+      const lbExact = wilsonLowerBound(k / n, n, exactZ);
+      assert.ok(
+        Math.abs(ivExact.low - lbExact) < 1e-12,
+        `mismatch for (${k}, ${n}) at exact z: interval.low=${ivExact.low} vs lowerBound=${lbExact}`,
+      );
+
+      const ivDefault = wilsonInterval(k, n);
+      const lbDefault = wilsonLowerBound(k / n, n);
+      assert.ok(
+        Math.abs(ivDefault.low - lbDefault) < 1e-4,
+        `mismatch for (${k}, ${n}) at default z: interval.low=${ivDefault.low} vs lowerBound=${lbDefault}`,
+      );
+      assert.ok(ivDefault.low >= 0 && ivDefault.low <= k / n + 1e-12);
+      assert.ok(ivDefault.high >= k / n - 1e-12 && ivDefault.high <= 1);
+    }
   });
 });
 
