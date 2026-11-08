@@ -9,6 +9,11 @@ export interface RawChange {
   oldPath?: string;
 }
 
+export interface RawTrailer {
+  key: string;
+  value: string;
+}
+
 export interface RawCommit {
   hash: string;
   authorName: string;
@@ -18,6 +23,8 @@ export interface RawCommit {
   /** Committer timestamp (unix seconds): when it landed on this branch. */
   commitTime: number;
   subject: string;
+  /** Lower-cased commit trailers (at most 20 per commit). */
+  trailers: RawTrailer[];
   changes: RawChange[];
 }
 
@@ -31,7 +38,12 @@ export interface LogOptions {
 
 const RS = '\u001e';
 const US = '\u001f';
-const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${US}%s`;
+const GS = '\u001d';
+export const MAX_TRAILERS_PER_COMMIT = 20;
+/** Bumped whenever RawCommit's serialized shape changes (e.g. RA-08 trailers), invalidating RA-04 log caches. */
+export const RAW_COMMIT_CACHE_VERSION = 2;
+export const LOG_CACHE_VERSION = RAW_COMMIT_CACHE_VERSION;
+const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
 
 /**
  * Builds the `git log` arguments. Merge commits are skipped (their diffs repeat
@@ -97,8 +109,30 @@ export class LogParser {
   }
 }
 
+export function parseTrailers(rawTrailers: readonly string[]): RawTrailer[] {
+  const trailers: RawTrailer[] = [];
+  for (const raw of rawTrailers) {
+    if (trailers.length >= MAX_TRAILERS_PER_COMMIT) break;
+    const unfolded = raw.replace(/\r?\n[ \t]+/g, ' ').trim();
+    if (!unfolded) continue;
+    for (const line of unfolded.split(/\r?\n/)) {
+      if (trailers.length >= MAX_TRAILERS_PER_COMMIT) break;
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const colon = trimmed.indexOf(':');
+      if (colon <= 0) continue;
+      const key = trimmed.slice(0, colon).trim().toLowerCase();
+      if (!key) continue;
+      const value = trimmed.slice(colon + 1).trim();
+      trailers.push({ key, value });
+    }
+  }
+  return trailers;
+}
+
 function parseHeader(header: string): RawCommit {
-  const [hash = '', authorName = '', authorEmail = '', at = '0', ct = '0', ...subject] = header.split(US);
+  const [hash = '', authorName = '', authorEmail = '', at = '0', ctAndTrailers = '0', ...subject] = header.split(US);
+  const [ct = '0', ...rawTrailerParts] = ctAndTrailers.split(GS);
   return {
     hash,
     authorName,
@@ -106,6 +140,7 @@ function parseHeader(header: string): RawCommit {
     authorTime: Number(at) || 0,
     commitTime: Number(ct) || Number(at) || 0,
     subject: subject.join(US),
+    trailers: parseTrailers(rawTrailerParts),
     changes: [],
   };
 }
