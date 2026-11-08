@@ -264,7 +264,7 @@ Historical patches show what changed in the same commit, not proof of why the fi
 
 ### `map`
 
-Writes a single self-contained HTML file (no network requests, works offline) and opens it. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines. Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command. When three or more sibling parallel implementations move together, the overview groups **finding families** into unified cards with member coverage, supporting commit counts (`2+ files` vs `all N`), active filter updates, and per-pair inspection (including undrawn pairs when capped or filtered).
+Writes a single self-contained HTML file (no network requests, works offline) with a precomputed, deterministic layout so it opens immediately to a settled graph with zero idle work. Files are dots sized by churn and coloured by folder; ghost wires are pink dashed lines (static when unfocused, and marching at 12 fps when hovered or selected). Click a file or wire to see directional co-change rates, shared commits, counterexample commits where one file changed without the other, and a copyable `npx repo-archaeology explain <fileA> <fileB>` command. When three or more sibling parallel implementations move together, the overview groups **finding families** into unified cards with member coverage, supporting commit counts (`2+ files` vs `all N`), active filter updates, and per-pair inspection (including undrawn pairs when capped or filtered).
 
 By default the map is written to `.git/repo-archaeology/map.html`, which is never committed. Use `--out` to put it elsewhere. **Privacy when sharing:** source-code patches are omitted by default, but the HTML still contains repository file paths, author names, and commit subjects—treat it like repository metadata when sharing. Pass `--include-patches` (`repo-archaeology map --include-patches`) to embed bounded diff hunks for top relationships directly into the HTML file; because `--include-patches` embeds source-code lines, only share those reports with audiences who have access to the source code.
 
@@ -528,6 +528,7 @@ npm install
 npm test
 npm run typecheck
 npm run build
+npm run bench:map
 node scripts/smoke-pack.mjs
 npm run dev -- scan -C ../some-repo
 ```

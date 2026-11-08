@@ -1,4 +1,5 @@
 import type { MapData } from '../commands/map.js';
+import { computeLayout, type LayoutResult } from './layout.js';
 
 /**
  * Serializes data for embedding inside a <script> element. Escaping `<` keeps a
@@ -23,8 +24,11 @@ function escapeHtml(s: string): string {
  * Visual idea: a cyanotype survey sheet of the dig site, with ghost wires marked
  * in fluorescent pink flagging tape.
  */
-export function renderMapHtml(data: MapData): string {
+export function renderMapHtml(data: MapData, layout: LayoutResult | null = computeLayout(data)): string {
   const title = `Ghost wires in ${data.repoName}`;
+  const layoutScript = layout !== null
+    ? `\n<script type="application/json" id="ra-layout">${embedJson(layout)}</script>`
+    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -59,7 +63,7 @@ export function renderMapHtml(data: MapData): string {
   </main>
   <aside id="panel" class="panel" aria-live="polite"></aside>
 </div>
-<script type="application/json" id="ra-data">${embedJson(data)}</script>
+<script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}
 <script>${CLIENT}</script>
 </body>
 </html>
@@ -104,7 +108,7 @@ h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; fon
 .search input::placeholder { color: var(--chalk-faded); }
 .banner-warning { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 12px; background: rgba(227, 182, 91, 0.12); border: 1px solid rgba(227, 182, 91, 0.35); border-radius: 6px; font-size: 13px; color: var(--ochre); }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
-.toggle { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--chalk); transition: all 0.15s ease; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; min-width: 24px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--chalk); transition: all 0.15s ease; }
 .toggle:hover { border-color: var(--chalk); }
 .toggle[aria-pressed="false"] { border-style: dashed; border-color: rgba(159, 180, 204, 0.25); background: rgba(14, 37, 64, 0.4); color: var(--chalk-faded); }
 .toggle[aria-pressed="false"] .count { color: var(--chalk-dim); }
@@ -122,7 +126,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: 
 canvas.dragging { cursor: grabbing; }
 canvas.pointing { cursor: pointer; }
 .stage-overlay { position: absolute; top: 14px; left: 14px; display: flex; gap: 8px; z-index: 10; }
-.map-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(14, 37, 64, 0.88); backdrop-filter: blur(6px); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+.map-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; min-width: 24px; padding: 6px 12px; background: rgba(14, 37, 64, 0.88); backdrop-filter: blur(6px); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
 .map-btn:hover { background: rgba(19, 48, 79, 0.98); border-color: var(--chalk); transform: translateY(-1px); }
 .hint { position: absolute; left: 16px; bottom: 12px; margin: 0; font-size: 12.5px; color: var(--chalk-faded); pointer-events: none; }
 .tooltip { position: absolute; pointer-events: none; max-width: 440px; padding: 7px 11px; border-radius: 6px; background: var(--ground-deep); border: 1px solid var(--border-active); font-size: 13.5px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); z-index: 20; }
@@ -163,7 +167,7 @@ canvas.pointing { cursor: pointer; }
 .family-variants { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
 .family-variant-pill { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(23, 59, 97, 0.7); border: 1px solid var(--border-subtle); font: 11.5px/1.4 var(--code); color: var(--chalk); }
 
-.file-link { padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; color: var(--chalk); }
+.file-link { display: inline-flex; align-items: center; min-height: 24px; min-width: 24px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; color: var(--chalk); }
 .file-link:hover { text-decoration-color: var(--tape); color: #fff; }
 
 .nav-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
@@ -206,7 +210,7 @@ canvas.pointing { cursor: pointer; }
 .evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); font-weight: 500; padding: 4px 0; }
 .evidence { margin: 8px 0 0; font-size: 13px; color: var(--chalk-faded); }
 .evidence li { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 6px 0; border-top: 1px solid rgba(159, 180, 204, 0.1); }
-.evidence .hash { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); height: fit-content; }
+.evidence .hash { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; min-width: 24px; padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); height: fit-content; }
 .evidence .hash:hover { border-color: var(--tape); color: var(--tape); }
 .evidence-item-body { min-width: 0; }
 .evidence-rename { font-family: var(--code); font-size: 11.5px; color: var(--chalk-dim); margin-top: 2px; overflow-wrap: anywhere; }
@@ -247,6 +251,7 @@ canvas.pointing { cursor: pointer; }
 
 @media (max-width: 960px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh auto; height: auto; }
+  canvas { touch-action: pan-y; }
   .panel { border-left: 0; border-top: 1px solid var(--border-subtle); }
   .search input { width: 100%; }
   .controls, .search { width: 100%; }
@@ -279,7 +284,8 @@ const CLIENT = String.raw`
     direct: hasKindInData('direct'),
     test: hasKindInData('test')
   };
-  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var motionMedia = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var reduceMotion = Boolean(motionMedia && motionMedia.matches);
 
   var canvas = document.getElementById('map');
   var ctx = canvas.getContext('2d');
@@ -287,6 +293,13 @@ const CLIENT = String.raw`
   var panel = document.getElementById('panel');
   var search = document.getElementById('search');
   var resetBtn = document.getElementById('reset-view');
+  var hintEl = typeof document.querySelector === 'function' ? document.querySelector('.hint') : null;
+  function updateTouchHint() {
+    if (hintEl) hintEl.textContent = 'Two fingers to pan and zoom';
+  }
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+    updateTouchHint();
+  }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -329,6 +342,19 @@ const CLIENT = String.raw`
     var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function pairJitter(i, j) {
+    var lo = i < j ? i : j;
+    var hi = i < j ? j : i;
+    var h1 = (Math.imul(lo + 1, 0x9e3779b1) ^ Math.imul(hi + 1, 0x85ebca6b)) | 0;
+    h1 = Math.imul(h1 ^ (h1 >>> 15), 1 | h1);
+    h1 = (h1 + Math.imul(h1 ^ (h1 >>> 7), 61 | h1)) ^ h1;
+    var jx = ((h1 ^ (h1 >>> 14)) >>> 0) / 4294967296 - 0.5;
+    var h2 = (h1 + 0x6d2b79f5) | 0;
+    h2 = Math.imul(h2 ^ (h2 >>> 15), 1 | h2);
+    h2 = (h2 + Math.imul(h2 ^ (h2 >>> 7), 61 | h2)) ^ h2;
+    var jy = ((h2 ^ (h2 >>> 14)) >>> 0) / 4294967296 - 0.5;
+    return i < j ? { dx: jx, dy: jy } : { dx: -jx, dy: -jy };
   }
   function hashHue(str) {
     var h = 0;
@@ -417,6 +443,26 @@ const CLIENT = String.raw`
     n.x = d.x + (random() - 0.5) * 80;
     n.y = d.y + (random() - 0.5) * 80;
   });
+  var layoutEl = document.getElementById('ra-layout');
+  var precomputed = null;
+  if (layoutEl && layoutEl.textContent) {
+    try { precomputed = JSON.parse(layoutEl.textContent); } catch (_) { precomputed = null; }
+  }
+  var hasPrecomputed = Boolean(
+    precomputed &&
+    Array.isArray(precomputed.x) &&
+    Array.isArray(precomputed.y) &&
+    precomputed.x.length === nodes.length &&
+    precomputed.y.length === nodes.length &&
+    precomputed.x.every(function (v) { return typeof v === 'number' && Number.isFinite(v); }) &&
+    precomputed.y.every(function (v) { return typeof v === 'number' && Number.isFinite(v); })
+  );
+  if (hasPrecomputed) {
+    for (var li = 0; li < nodes.length; li++) {
+      nodes[li].x = precomputed.x[li];
+      nodes[li].y = precomputed.y[li];
+    }
+  }
 
   // ---- header --------------------------------------------------------------
   var m = data.meta;
@@ -429,6 +475,46 @@ const CLIENT = String.raw`
       ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
   }
   updateSummary();
+
+  var alpha = hasPrecomputed ? 0 : 1;
+  var tickCount = 0;
+  var fitPendingAfterSettle = !hasPrecomputed;
+  var deferSimOneFrame = false;
+  var activeNodesList = [];
+  var visibleEdgesList = [];
+  var edgesByKind = { test: [], direct: [], indirect: [], unknown: [], ghost: [] };
+  edges.forEach(function (e) {
+    if (edgesByKind[e.d.relationship]) edgesByKind[e.d.relationship].push(e);
+  });
+  var xOrder = new Int32Array(nodes.length);
+  var cellX = new Int32Array(nodes.length);
+  var cellY = new Int32Array(nodes.length);
+  var nodeCell = new Int32Array(nodes.length);
+  var sortedNode = new Int32Array(nodes.length);
+  var gridCounts = new Int32Array(1024);
+  var gridStarts = new Int32Array(1024);
+  var gridWrite = new Int32Array(1024);
+  var nonEmptyCells = new Int32Array(1024);
+  var xOrderNeedsInit = true;
+  function syncActiveNodes() {
+    activeNodesList = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var act = false;
+      for (var k = 0; k < n.edges.length; k++) {
+        if (visible[n.edges[k].d.relationship]) { act = true; break; }
+      }
+      n.active = act;
+      if (act) activeNodesList.push(n);
+      else { n.vx = 0; n.vy = 0; }
+    }
+    visibleEdgesList = [];
+    for (var ei = 0; ei < edges.length; ei++) {
+      if (visible[edges[ei].d.relationship]) visibleEdgesList.push(edges[ei]);
+    }
+    xOrderNeedsInit = true;
+  }
+  syncActiveNodes();
 
   var toggles = document.getElementById('toggles');
   ORDER.forEach(function (kind) {
@@ -444,12 +530,18 @@ const CLIENT = String.raw`
     b.addEventListener('click', function () {
       visible[kind] = !visible[kind];
       b.setAttribute('aria-pressed', String(visible[kind]));
+      syncActiveNodes();
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
       if (selectedFamily && !resolveActiveFamilyView(selectedFamily)) selectedFamily = null;
       if (returnToFamily && !resolveActiveFamilyView(returnToFamily)) returnToFamily = null;
       alpha = Math.max(alpha, 0.6);
-      if (reduceMotion) { while (alpha > 0.02) tick(); }
-      if (!selectedNode && !selectedEdge && !selectedFamily && !userMoved) { flight = null; fit(); }
+      tickCount = 0;
+      deferSimOneFrame = true;
+      fitPendingAfterSettle = !selectedNode && !selectedEdge && !selectedFamily && !userMoved;
+      if (fitPendingAfterSettle) {
+        flight = null;
+        if (!reduceMotion) fit();
+      }
       updateSummary();
       renderPanel();
       requestDraw();
@@ -458,26 +550,131 @@ const CLIENT = String.raw`
   });
 
   // ---- layout simulation ---------------------------------------------------
-  var alpha = 1;
   function tick() {
     var i, j, a, b, dx, dy, d2, f;
-    var activeNodes = nodes.filter(isActive);
-    nodes.forEach(function (n) { if (!isActive(n)) { n.vx = 0; n.vy = 0; } });
-    for (i = 0; i < activeNodes.length; i++) {
-      a = activeNodes[i];
-      for (j = i + 1; j < activeNodes.length; j++) {
-        b = activeNodes[j];
-        dx = b.x - a.x; dy = b.y - a.y;
-        d2 = dx * dx + dy * dy;
-        if (d2 > 90000) continue;
-        if (d2 < 1) { dx = random() - 0.5; dy = random() - 0.5; d2 = 1; }
-        f = (1400 * alpha) / d2;
-        a.vx -= dx * f; a.vy -= dy * f;
-        b.vx += dx * f; b.vy += dy * f;
+    var activeNodes = activeNodesList;
+    var mLen = activeNodes.length;
+    if (mLen > 1) {
+      if (xOrderNeedsInit) {
+        for (i = 0; i < mLen; i++) xOrder[i] = i;
+        xOrder.subarray(0, mLen).sort(function (ia, ib) { return activeNodes[ia].x - activeNodes[ib].x; });
+        xOrderNeedsInit = false;
+      } else {
+        for (i = 1; i < mLen; i++) {
+          var idx = xOrder[i];
+          var xVal = activeNodes[idx].x;
+          j = i - 1;
+          while (j >= 0 && activeNodes[xOrder[j]].x > xVal) {
+            xOrder[j + 1] = xOrder[j];
+            j--;
+          }
+          xOrder[j + 1] = idx;
+        }
+      }
+      var minCellX = 2147483647, maxCellX = -2147483648;
+      var minCellY = 2147483647, maxCellY = -2147483648;
+      for (i = 0; i < mLen; i++) {
+        a = activeNodes[i];
+        var cx0 = Math.floor(a.x / 300) | 0;
+        var cy0 = Math.floor(a.y / 300) | 0;
+        cellX[i] = cx0;
+        cellY[i] = cy0;
+        if (cx0 < minCellX) minCellX = cx0;
+        if (cx0 > maxCellX) maxCellX = cx0;
+        if (cy0 < minCellY) minCellY = cy0;
+        if (cy0 > maxCellY) maxCellY = cy0;
+      }
+      var cols = maxCellX - minCellX + 3;
+      var rows = maxCellY - minCellY + 3;
+      var totalCells = cols * rows;
+      var repAlpha = 1400 * alpha;
+      if (totalCells <= 65536) {
+        if (gridCounts.length < totalCells + 1) {
+          gridCounts = new Int32Array(totalCells + 1);
+          gridStarts = new Int32Array(totalCells + 1);
+          gridWrite = new Int32Array(totalCells + 1);
+          nonEmptyCells = new Int32Array(totalCells + 1);
+        } else {
+          gridCounts.fill(0, 0, totalCells + 1);
+        }
+        for (i = 0; i < mLen; i++) {
+          var cIdx = (cellY[i] - minCellY + 1) * cols + (cellX[i] - minCellX + 1);
+          nodeCell[i] = cIdx;
+          gridCounts[cIdx]++;
+        }
+        var sum = 0, nonEmptyCount = 0;
+        for (var c = 0; c < totalCells; c++) {
+          gridStarts[c] = sum;
+          gridWrite[c] = sum;
+          var cnt = gridCounts[c];
+          if (cnt > 0) nonEmptyCells[nonEmptyCount++] = c;
+          sum += cnt;
+        }
+        gridStarts[totalCells] = sum;
+        for (var k = 0; k < mLen; k++) {
+          var nIdx = xOrder[k];
+          var cell = nodeCell[nIdx];
+          sortedNode[gridWrite[cell]++] = nIdx;
+        }
+        for (var nc = 0; nc < nonEmptyCount; nc++) {
+          var cCell = nonEmptyCells[nc];
+          var startA = gridStarts[cCell];
+          var endA = gridStarts[cCell + 1];
+          var endARight = gridStarts[cCell + 2];
+          var startBottom = gridStarts[cCell + cols - 1];
+          var endBottom = gridStarts[cCell + cols + 2];
+          var jStartBottom = startBottom;
+          for (i = startA; i < endA; i++) {
+            a = activeNodes[sortedNode[i]];
+            var maxX = a.x + 300;
+            for (j = i + 1; j < endARight; j++) {
+              b = activeNodes[sortedNode[j]];
+              if (b.x > maxX) break;
+              dx = b.x - a.x; dy = b.y - a.y;
+              d2 = dx * dx + dy * dy;
+              if (d2 > 90000) continue;
+              if (d2 < 1) { var jit = pairJitter(a.i, b.i); dx = jit.dx; dy = jit.dy; d2 = 1; }
+              f = repAlpha / d2;
+              a.vx -= dx * f; a.vy -= dy * f;
+              b.vx += dx * f; b.vy += dy * f;
+            }
+            if (jStartBottom < endBottom) {
+              var minX = a.x - 300;
+              while (jStartBottom < endBottom && activeNodes[sortedNode[jStartBottom]].x < minX) jStartBottom++;
+              for (j = jStartBottom; j < endBottom; j++) {
+                b = activeNodes[sortedNode[j]];
+                if (b.x > maxX) break;
+                dx = b.x - a.x; dy = b.y - a.y;
+                d2 = dx * dx + dy * dy;
+                if (d2 > 90000) continue;
+                if (d2 < 1) { var jit2 = pairJitter(a.i, b.i); dx = jit2.dx; dy = jit2.dy; d2 = 1; }
+                f = repAlpha / d2;
+                a.vx -= dx * f; a.vy -= dy * f;
+                b.vx += dx * f; b.vy += dy * f;
+              }
+            }
+          }
+        }
+      } else {
+        for (i = 0; i < mLen; i++) {
+          a = activeNodes[xOrder[i]];
+          var maxSweepX = a.x + 300;
+          for (j = i + 1; j < mLen; j++) {
+            b = activeNodes[xOrder[j]];
+            if (b.x > maxSweepX) break;
+            dx = b.x - a.x; dy = b.y - a.y;
+            d2 = dx * dx + dy * dy;
+            if (d2 > 90000) continue;
+            if (d2 < 1) { var jit3 = pairJitter(a.i, b.i); dx = jit3.dx; dy = jit3.dy; d2 = 1; }
+            f = repAlpha / d2;
+            a.vx -= dx * f; a.vy -= dy * f;
+            b.vx += dx * f; b.vy += dy * f;
+          }
+        }
       }
     }
-    edges.forEach(function (e) {
-      if (!isVisible(e)) return;
+    for (i = 0; i < visibleEdgesList.length; i++) {
+      var e = visibleEdgesList[i];
       dx = e.t.x - e.s.x; dy = e.t.y - e.s.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 1;
       var strength = Math.max(e.d.confidence, e.d.reverseConfidence);
@@ -485,7 +682,7 @@ const CLIENT = String.raw`
       f = ((d - rest) / d) * 0.05 * alpha * (0.4 + strength);
       e.s.vx += dx * f; e.s.vy += dy * f;
       e.t.vx -= dx * f; e.t.vy -= dy * f;
-    });
+    }
     dirList.forEach(function (d) { d.cx = 0; d.cy = 0; d.count = 0; });
     activeNodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
     activeNodes.forEach(function (n) {
@@ -497,17 +694,23 @@ const CLIENT = String.raw`
       n.x += n.vx; n.y += n.vy;
     });
     alpha *= 0.985;
+    tickCount++;
+    if (tickCount >= 400) alpha = 0;
   }
 
   // ---- camera --------------------------------------------------------------
   var cam = { x: 0, y: 0, scale: 1 };
   var size = { w: 0, h: 0, dpr: 1 };
-  function resize() {
+  function resizeNow() {
     var rect = canvas.getBoundingClientRect();
-    size.dpr = window.devicePixelRatio || 1;
-    size.w = rect.width; size.h = rect.height;
-    canvas.width = Math.round(rect.width * size.dpr);
-    canvas.height = Math.round(rect.height * size.dpr);
+    var rw = rect.width > 0 ? rect.width : (canvas.clientWidth || 800);
+    var rh = rect.height > 0 ? rect.height : (canvas.clientHeight || 600);
+    var maxScale = Math.sqrt(16000000 / Math.max(1, rw * rh));
+    var dpr = Math.min(window.devicePixelRatio || 1, 2, maxScale);
+    size.dpr = dpr;
+    size.w = rw; size.h = rh;
+    canvas.width = Math.round(rw * dpr);
+    canvas.height = Math.round(rh * dpr);
     requestDraw();
   }
   function bounds(list) {
@@ -516,10 +719,12 @@ const CLIENT = String.raw`
       minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
       minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
     });
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(size.w / (maxX - minX + 160), size.h / (maxY - minY + 160)))) };
+    var w = Math.max(1, size.w);
+    var h = Math.max(1, size.h);
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(w / Math.max(1, maxX - minX + 160), h / Math.max(1, maxY - minY + 160)))) };
   }
   function fit() {
-    var list = nodes.filter(isActive);
+    var list = activeNodesList;
     if (list.length === 0) return;
     var b = bounds(list);
     cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
@@ -556,7 +761,7 @@ const CLIENT = String.raw`
   var animPaused = false;
 
   function isVisible(e) { return visible[e.d.relationship]; }
-  function isActive(n) { return n.edges.some(isVisible); }
+  function isActive(n) { return Boolean(n.active); }
 
   function getActiveFamilyViews(fam) {
     if (!fam) return [];
@@ -733,7 +938,9 @@ const CLIENT = String.raw`
         family: fam,
         members: compMembers,
         nodes: compNodes,
+        nodeSet: new Set(compNodes),
         edges: compEdges,
+        edgeSet: new Set(compEdges),
         undrawnPairs: compUndrawn,
         qualifyingPairs: qualifyingPairs,
         possiblePairs: possiblePairs,
@@ -766,42 +973,133 @@ const CLIENT = String.raw`
     return views[0];
   }
 
-  function focusEdge(e) {
+  function focusEdge(e, activeFam) {
     if (selectedEdge) return e === selectedEdge;
     if (hoverEdge) return e === hoverEdge;
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    if (activeFam) return activeFam.edges.indexOf(e) >= 0;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
     if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
     return true;
   }
-  function focusNode(n) {
+  function focusNode(n, activeFam) {
     if (selectedEdge) return n === selectedEdge.s || n === selectedEdge.t;
     if (hoverEdge) return n === hoverEdge.s || n === hoverEdge.t;
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    if (activeFam) return activeFam.nodes.indexOf(n) >= 0;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.nodeSet ? fam.nodeSet.has(n) : fam.nodes.indexOf(n) >= 0;
     if (selectedNode) return n === selectedNode || n.edges.some(function (e) { return isVisible(e) && (e.s === selectedNode || e.t === selectedNode); });
     if (matches) return matches.indexOf(n) >= 0;
     return true;
   }
+  function isGhostFocused(e, activeFam) {
+    if (e.d.relationship !== 'ghost' || !visible.ghost) return false;
+    if (selectedEdge) return e === selectedEdge;
+    if (hoverEdge) return e === hoverEdge;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
+    if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
+    if (hoverNode) return e.s === hoverNode || e.t === hoverNode;
+    return false;
+  }
+  function hasFocusedGhostWire() {
+    if (!visible.ghost) return false;
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    var ghostEdges = edgesByKind.ghost || [];
+    for (var i = 0; i < ghostEdges.length; i++) {
+      if (isGhostFocused(ghostEdges[i], activeFam)) return true;
+    }
+    return false;
+  }
 
   // ---- drawing -------------------------------------------------------------
-  var dashPhase = 0, drawQueued = false;
+  var dashPhase = 0, drawQueued = false, dirty = true, lastMarch = 0, marchTimer = null;
+  var labelWidthCache = new Map();
+  var lastZoomBucket = '';
+  function measureLabelWidth(label, zoomBucket) {
+    if (zoomBucket !== lastZoomBucket) {
+      labelWidthCache.clear();
+      lastZoomBucket = zoomBucket;
+    }
+    var w = labelWidthCache.get(label);
+    if (w === undefined) {
+      w = ctx.measureText(label).width;
+      labelWidthCache.set(label, w);
+    }
+    return w;
+  }
+  function cancelMarchTimer() {
+    if (marchTimer !== null) {
+      clearTimeout(marchTimer);
+      marchTimer = null;
+    }
+  }
+  function scheduleMarch(now) {
+    if (marchTimer !== null || drawQueued) return;
+    var elapsed = now - lastMarch;
+    var delay = Math.max(4, Math.ceil(83.34 - elapsed));
+    marchTimer = setTimeout(function () {
+      marchTimer = null;
+      if (drawQueued) return;
+      drawQueued = true;
+      requestAnimationFrame(frame);
+    }, delay);
+  }
   function requestDraw() {
+    dirty = true;
     if (drawQueued) return;
+    cancelMarchTimer();
     drawQueued = true;
     requestAnimationFrame(frame);
   }
-  function frame(now) {
+  function frame() {
     drawQueued = false;
+    var ts = performance.now();
+    var didSimStep = false;
+    var isDraggingNode = Boolean(drag && drag.node && drag.moved);
     if (alpha > 0.02) {
-      tick(); tick();
-      if (alpha <= 0.02 && !userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
+      if (deferSimOneFrame && !isDraggingNode) {
+        deferSimOneFrame = false;
+        requestDraw();
+        return;
+      } else {
+        deferSimOneFrame = false;
+        var sliceStart = ts;
+        var steps = 0;
+        var maxSteps = (reduceMotion && !isDraggingNode) ? 400 : 6;
+        var budgetMs = 8;
+        while (alpha > 0.02 && steps < maxSteps && (steps === 0 || performance.now() - sliceStart < budgetMs)) {
+          tick();
+          steps++;
+        }
+        didSimStep = steps > 0;
+        if (alpha <= 0.02 && fitPendingAfterSettle) {
+          fitPendingAfterSettle = false;
+          if (!userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
+        }
+        if (reduceMotion && didSimStep && !(drag && drag.node && drag.moved)) {
+          requestDraw();
+          return;
+        }
+      }
     }
-    var flying = stepFlight(now || performance.now());
-    var marching = !animPaused && !reduceMotion && !document.hidden && visible.ghost && edges.some(function (e) { return e.d.relationship === 'ghost'; });
-    if (marching) dashPhase = (dashPhase + 0.35) % 1100;
-    draw();
-    if (alpha > 0.02 || marching || flying) requestDraw();
+    var flying = stepFlight(ts);
+    var marching = !animPaused && !reduceMotion && !document.hidden && hasFocusedGhostWire();
+    if (!marching) cancelMarchTimer();
+    var marched = false;
+    if (marching && ts - lastMarch >= 83.33) {
+      dashPhase = (dashPhase + 1.75) % 1100;
+      lastMarch = ts;
+      marched = true;
+    }
+    if (dirty || didSimStep || flying || marched) {
+      dirty = false;
+      draw();
+    }
+    if (alpha > 0.02 || flying) {
+      cancelMarchTimer();
+      requestDraw();
+    } else if (marching) {
+      scheduleMarch(performance.now());
+    }
   }
 
   function draw() {
@@ -824,40 +1122,54 @@ const CLIENT = String.raw`
     var k = cam.scale;
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (size.w / 2 - cam.x * k), dpr * (size.h / 2 - cam.y * k));
 
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
     ['test', 'direct', 'indirect', 'unknown', 'ghost'].forEach(function (kind) {
       if (!visible[kind]) return;
-      edges.forEach(function (e) {
-        if (e.d.relationship !== kind) return;
-        var focused = focusEdge(e);
-        ctx.globalAlpha = focused ? 1 : 0.06;
-        ctx.strokeStyle = KINDS[kind].color;
-        ctx.lineWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
-        ctx.setLineDash([]);
-        ctx.shadowBlur = 0;
-        if (kind === 'ghost') {
-          ctx.setLineDash([7 / k, 6 / k]);
-          ctx.lineDashOffset = -dashPhase / k;
-          if (focused && (selectedEdge || selectedNode || selectedFamily || hoverEdge || hoverFamily)) { ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 10 * dpr; }
-        } else if (kind === 'unknown') {
-          ctx.setLineDash([2 / k, 5 / k]);
-        } else if (kind === 'indirect') {
-          ctx.setLineDash([10 / k, 4 / k]);
-        } else if (kind === 'test') {
-          ctx.globalAlpha *= 0.7;
-        }
+      var kindEdges = edgesByKind[kind] || [];
+      for (var ei = 0; ei < kindEdges.length; ei++) {
+        var e = kindEdges[ei];
+        var focused = focusEdge(e, activeFam);
+        var baseWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
         ctx.beginPath();
         ctx.moveTo(e.s.x, e.s.y);
         ctx.lineTo(e.t.x, e.t.y);
+        if (kind === 'ghost') {
+          var ghostFocused = isGhostFocused(e, activeFam);
+          if (ghostFocused) {
+            ctx.setLineDash([]);
+            ctx.lineDashOffset = 0;
+            ctx.strokeStyle = '#ff4f9a';
+            ctx.globalAlpha = 0.25;
+            ctx.lineWidth = baseWidth + 5 / k;
+            ctx.stroke();
+          }
+          ctx.globalAlpha = focused ? 1 : 0.06;
+          ctx.strokeStyle = KINDS[kind].color;
+          ctx.lineWidth = baseWidth;
+          ctx.setLineDash([7 / k, 6 / k]);
+          ctx.lineDashOffset = ghostFocused ? -dashPhase / k : 0;
+        } else {
+          ctx.globalAlpha = focused ? 1 : 0.06;
+          ctx.strokeStyle = KINDS[kind].color;
+          ctx.lineWidth = baseWidth;
+          ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
+          if (kind === 'unknown') {
+            ctx.setLineDash([2 / k, 5 / k]);
+          } else if (kind === 'indirect') {
+            ctx.setLineDash([10 / k, 4 / k]);
+          } else if (kind === 'test') {
+            ctx.globalAlpha *= 0.7;
+          }
+        }
         ctx.stroke();
-      });
+      }
     });
     ctx.setLineDash([]);
-    ctx.shadowBlur = 0;
+    ctx.lineDashOffset = 0;
 
-    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
-    nodes.forEach(function (n) {
-      if (!isActive(n)) return;
-      var focused = focusNode(n);
+    activeNodesList.forEach(function (n) {
+      var focused = focusNode(n, activeFam);
       ctx.globalAlpha = focused ? 1 : 0.14;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
@@ -866,7 +1178,7 @@ const CLIENT = String.raw`
       ctx.lineWidth = Math.max(1 / k, 1.2);
       var isTargetEndpoint = (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
                              (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t)) ||
-                             (activeFam && activeFam.nodes.indexOf(n) >= 0);
+                             (activeFam && (activeFam.nodeSet ? activeFam.nodeSet.has(n) : activeFam.nodes.indexOf(n) >= 0));
       ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
       if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
       ctx.stroke();
@@ -876,16 +1188,18 @@ const CLIENT = String.raw`
     ctx.font = (12.5 / k) + 'px ui-monospace, Menlo, Consolas, monospace';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
+    var zoomBucket = k.toFixed(3);
     var labelBoxes = [];
     nodes.forEach(function (n) {
       var overview = !selectedNode && !selectedEdge && !selectedFamily && !hoverEdge && !hoverFamily && !matches;
       var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
-        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n)) ||
+        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n, activeFam)) ||
         (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
       if (!wanted || !isActive(n)) return;
       var label = overviewLabelNodes[n.i] || getNodeLabel(n);
       var x = n.x + n.r + 5 / k;
-      var labelBox = { left: x - 2 / k, right: x + ctx.measureText(label).width + 2 / k, top: n.y - 8 / k, bottom: n.y + 8 / k };
+      var labelW = measureLabelWidth(label, zoomBucket);
+      var labelBox = { left: x - 2 / k, right: x + labelW + 2 / k, top: n.y - 8 / k, bottom: n.y + 8 / k };
       if (overview && labelBoxes.some(function (box) {
         return labelBox.left < box.right && labelBox.right > box.left && labelBox.top < box.bottom && labelBox.bottom > box.top;
       })) return;
@@ -932,23 +1246,87 @@ const CLIENT = String.raw`
 
   // ---- pointer interaction -------------------------------------------------
   var drag = null;
+  var activeTouches = new Map();
+  var pinchState = null;
+  var pinchMoved = false;
+  function isStackedTouch(ev) {
+    return ev.pointerType === 'touch' && window.innerWidth <= 960;
+  }
   canvas.addEventListener('pointerdown', function (ev) {
     var rect = canvas.getBoundingClientRect();
     var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    if (ev.pointerType === 'touch') {
+      updateTouchHint();
+      activeTouches.set(ev.pointerId, {
+        x: px, y: py, clientX: ev.clientX, clientY: ev.clientY, startX: px, startY: py
+      });
+      if (activeTouches.size === 2) {
+        drag = null;
+        pinchMoved = true;
+        canvas.classList.remove('dragging');
+        activeTouches.forEach(function (_, pid) {
+          try { canvas.setPointerCapture(pid); } catch (_) {}
+        });
+        var pts = Array.from(activeTouches.values());
+        pinchState = {
+          midX: (pts[0].x + pts[1].x) / 2,
+          midY: (pts[0].y + pts[1].y) / 2,
+          dist: Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
+        };
+        return;
+      }
+      if (activeTouches.size > 2) return;
+      if (isStackedTouch(ev)) {
+        var tn = nodeAt(toWorld(px, py));
+        drag = { node: tn, startX: px, startY: py, lastX: px, lastY: py, moved: false, stackedSingleTouch: true };
+        return;
+      }
+    }
     var n = nodeAt(toWorld(px, py));
-    drag = { node: n, startX: px, startY: py, lastX: px, lastY: py, moved: false };
-    canvas.setPointerCapture(ev.pointerId);
+    drag = { node: n, startX: px, startY: py, lastX: px, lastY: py, moved: false, stackedSingleTouch: false };
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
     canvas.classList.add('dragging');
   });
   canvas.addEventListener('pointermove', function (ev) {
     var rect = canvas.getBoundingClientRect();
     var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    if (ev.pointerType === 'touch' && activeTouches.has(ev.pointerId)) {
+      var prevTouch = activeTouches.get(ev.pointerId);
+      prevTouch.x = px; prevTouch.y = py;
+      prevTouch.clientX = ev.clientX; prevTouch.clientY = ev.clientY;
+      if (activeTouches.size === 2 && pinchState) {
+        var pts = Array.from(activeTouches.values());
+        var newMidX = (pts[0].x + pts[1].x) / 2;
+        var newMidY = (pts[0].y + pts[1].y) / 2;
+        var newDist = Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+        userMoved = true; flight = null;
+        var before = toWorld(newMidX, newMidY);
+        cam.scale = Math.max(0.15, Math.min(6, cam.scale * (newDist / pinchState.dist)));
+        var after = toWorld(newMidX, newMidY);
+        cam.x += before.x - after.x - (newMidX - pinchState.midX) / cam.scale;
+        cam.y += before.y - after.y - (newMidY - pinchState.midY) / cam.scale;
+        pinchState.midX = newMidX;
+        pinchState.midY = newMidY;
+        pinchState.dist = newDist;
+        tooltip.hidden = true;
+        requestDraw();
+        return;
+      }
+      if (drag && drag.stackedSingleTouch) {
+        if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 6) {
+          drag.moved = true;
+        }
+        drag.lastX = px; drag.lastY = py;
+        return;
+      }
+    }
     if (drag) {
       if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 4) drag.moved = true;
       if (drag.node && drag.moved) {
         var w = toWorld(px, py);
         drag.node.x = w.x; drag.node.y = w.y; drag.node.pinned = true;
         alpha = Math.max(alpha, 0.25);
+        tickCount = 0;
       } else if (drag.moved) {
         userMoved = true; flight = null;
         cam.x -= (px - drag.lastX) / cam.scale;
@@ -984,6 +1362,15 @@ const CLIENT = String.raw`
     }
   });
   function endDrag(ev) {
+    if (ev.pointerType === 'touch') {
+      activeTouches.delete(ev.pointerId);
+      if (activeTouches.size < 2) pinchState = null;
+      if (pinchMoved) {
+        if (activeTouches.size === 0) pinchMoved = false;
+        drag = null;
+        return;
+      }
+    }
     if (!drag) return;
     canvas.classList.remove('dragging');
     if (!drag.moved) {
@@ -999,8 +1386,23 @@ const CLIENT = String.raw`
     drag = null;
   }
   canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', function () { drag = null; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('pointercancel', function (ev) {
+    if (ev.pointerType === 'touch') {
+      activeTouches.delete(ev.pointerId);
+      if (activeTouches.size < 2) pinchState = null;
+      if (activeTouches.size === 0) pinchMoved = false;
+    }
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
   canvas.addEventListener('pointerleave', function () { if (!drag) { tooltip.hidden = true; if (hoverNode) { hoverNode = null; requestDraw(); } } });
+  window.addEventListener('blur', function () {
+    activeTouches.clear();
+    pinchState = null;
+    pinchMoved = false;
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
   canvas.addEventListener('wheel', function (ev) {
     ev.preventDefault();
     userMoved = true; flight = null;
@@ -1018,6 +1420,10 @@ const CLIENT = String.raw`
       if ((selectedEdge || selectedNode) && returnToFamily && resolveActiveFamilyView(returnToFamily)) {
         selectFamily(returnToFamily, true);
       } else {
+        if (search.value || matches) {
+          search.value = '';
+          matches = null;
+        }
         clearSelection();
         search.blur();
       }
@@ -2002,11 +2408,49 @@ const CLIENT = String.raw`
   }
 
   // ---- start ---------------------------------------------------------------
-  if (reduceMotion) { while (alpha > 0.02) tick(); }
-  else { for (var w = 0; w < 120; w++) tick(); }
-  window.addEventListener('resize', resize);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) requestDraw(); });
-  resize();
+  if (motionMedia) {
+    var onMotionChange = function (ev) {
+      reduceMotion = Boolean(ev.matches);
+      if (reduceMotion) {
+        cancelMarchTimer();
+        if (flight) {
+          cam.x = flight.to.x; cam.y = flight.to.y; cam.scale = flight.to.scale;
+          flight = null;
+        }
+      }
+      requestDraw();
+    };
+    if (typeof motionMedia.addEventListener === 'function') {
+      motionMedia.addEventListener('change', onMotionChange);
+    } else if (typeof motionMedia.addListener === 'function') {
+      motionMedia.addListener(onMotionChange);
+    }
+  }
+  var resizeTimer = null;
+  function scheduleResize() {
+    if (resizeTimer !== null) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      resizeTimer = null;
+      var rect = canvas.getBoundingClientRect();
+      if (Math.round(rect.width) === Math.round(size.w) && Math.round(rect.height) === Math.round(size.h)) return;
+      resizeNow();
+    }, 50);
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    var roInitialized = false;
+    var ro = new ResizeObserver(function () {
+      if (!roInitialized) { roInitialized = true; return; }
+      scheduleResize();
+    });
+    ro.observe(canvas);
+  } else {
+    window.addEventListener('resize', scheduleResize);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) cancelMarchTimer();
+    else requestDraw();
+  });
+  resizeNow();
   fit();
   renderPanel();
   requestDraw();

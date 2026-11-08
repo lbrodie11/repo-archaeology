@@ -400,7 +400,7 @@ describe('map html', () => {
       edges: [],
     });
     assert.ok(!html.includes('<img'));
-    assert.equal(html.match(/<\/script>/g)?.length, 2);
+    assert.equal(html.match(/<\/script>/g)?.length, 3);
   });
 });
 
