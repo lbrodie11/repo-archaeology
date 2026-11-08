@@ -3,7 +3,7 @@ description: 'Find historically coupled companion files a pull request may have 
 author: 'Laqwan Brodie'
 
 branding:
-  icon: 'git-commit'
+  icon: 'layers'
   color: 'purple'
 
 inputs:
