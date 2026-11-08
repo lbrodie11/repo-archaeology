@@ -737,6 +737,8 @@ export function parseCachedRecord(line: string, expectedHash: string): RawCommit
     r.hash !== expectedHash ||
     typeof r.authorName !== 'string' ||
     typeof r.authorEmail !== 'string' ||
+    (r.mailmapName !== undefined && typeof r.mailmapName !== 'string') ||
+    (r.mailmapEmail !== undefined && typeof r.mailmapEmail !== 'string') ||
     typeof r.authorTime !== 'number' ||
     !Number.isFinite(r.authorTime) ||
     typeof r.commitTime !== 'number' ||

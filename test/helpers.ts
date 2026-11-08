@@ -13,6 +13,7 @@ export interface FixtureCommit {
   /** Days after the first commit (controls author and committer dates). */
   day?: number;
   author?: string;
+  email?: string;
 }
 
 const BASE_TIME = Date.UTC(2024, 0, 1) / 1000;
@@ -55,7 +56,8 @@ export class FixtureRepo {
     this.day = Math.max(this.day, day + 1);
     const date = `${BASE_TIME + day * 86400} +0000`;
     const author = spec.author ?? 'Test';
-    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', spec.message, `--author=${author} <${author.toLowerCase().replace(/\W+/g, '.')}@example.com>`], {
+    const email = spec.email ?? `${author.toLowerCase().replace(/\W+/g, '.')}@example.com`;
+    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', spec.message, `--author=${author} <${email}>`], {
       cwd: this.dir,
       env: sanitizeGitEnv(process.env, { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }),
     });

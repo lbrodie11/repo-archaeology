@@ -82,7 +82,7 @@ export interface Repository {
   readonly root: string;
   readonly headSha: string;
   readonly mergeBaseSha?: string;
-  diff(opts?: { limit?: number; kinds?: Relationship[]; base?: string; applyBranchVerdicts?: boolean }): Promise<DiffJson>;
+  diff(opts?: { limit?: number; kinds?: Relationship[]; base?: string; applyBranchVerdicts?: boolean; owners?: boolean }): Promise<DiffJson>;
   scan(opts?: { limit?: number; kinds?: Relationship[]; uncheckedCap?: number; showSilenced?: boolean }): Promise<ScanJson>;
   file(path: string, opts?: { limit?: number; showSilenced?: boolean }): Promise<FileJson>;
   explain(a: string, b: string, opts?: { commits?: number; counterexamples?: boolean; context?: number }): Promise<ExplainJson>;

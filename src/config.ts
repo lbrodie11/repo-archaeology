@@ -2,8 +2,14 @@ import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { hasSymlinkInRepoPath, type CacheSettings } from './git/cache.js';
 import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
+import {
+  MAX_OWNERS_COMMITS,
+  MAX_OWNERS_LOOKBACK_DAYS,
+  MAX_OWNERS_PER_SUGGESTION,
+  type OwnersConfig,
+} from './model/owners.js';
 
-export { riskySkipPattern };
+export { riskySkipPattern, type OwnersConfig };
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -32,6 +38,8 @@ export interface Settings {
   origin?: OriginConfig;
   /** Persistent history cache (`dir` relative to the repository root; `enabled: false` turns it off). */
   cache?: CacheSettings;
+  /** Optional contributor context and CODEOWNERS enrichment settings for `diff`. */
+  owners?: OwnersConfig;
 }
 
 export const DEFAULT_SETTINGS: Settings = Object.freeze({
@@ -115,7 +123,17 @@ export function loadConfigFile(root: string): Partial<Settings> {
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
   const out: Partial<Settings> = {};
-  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin', 'cache']));
+  const known = new Set(
+    Object.keys(DEFAULT_SETTINGS).concat([
+      'since',
+      'halfLifeDays',
+      'skipCommits',
+      'skipCommitPrefixes',
+      'origin',
+      'cache',
+      'owners',
+    ]),
+  );
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new ConfigError(`${source}: unknown setting "${key}".`);
   }
@@ -171,6 +189,9 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
   if (raw.cache !== undefined) {
     out.cache = validateCacheSettings(raw.cache, source);
   }
+  if (raw.owners !== undefined) {
+    out.owners = validateOwnersConfig(raw.owners, source);
+  }
   return out;
 }
 
@@ -193,6 +214,38 @@ function validateCacheSettings(raw: unknown, source: string): CacheSettings {
     if (typeof obj.enabled !== 'boolean') throw new ConfigError(`${source}: "cache.enabled" must be true or false.`);
     out.enabled = obj.enabled;
   }
+  return out;
+}
+
+function validateOwnersConfig(raw: unknown, source: string): OwnersConfig {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ConfigError(`${source}: "owners" must be a JSON object.`);
+  }
+  const obj = raw as Record<string, unknown>;
+  const knownKeys = new Set(['enabled', 'max', 'lookbackDays', 'maxCommits']);
+  for (const key of Object.keys(obj)) {
+    if (!knownKeys.has(key)) {
+      throw new ConfigError(`${source}: unknown setting "owners.${key}".`);
+    }
+  }
+  const out: OwnersConfig = {};
+  if (obj.enabled !== undefined) {
+    if (typeof obj.enabled !== 'boolean') {
+      throw new ConfigError(`${source}: "owners.enabled" must be true or false.`);
+    }
+    out.enabled = obj.enabled;
+  }
+  const boundedInt = (field: 'max' | 'lookbackDays' | 'maxCommits', min: number, max: number) => {
+    const val = obj[field];
+    if (val === undefined) return;
+    if (typeof val !== 'number' || !Number.isInteger(val) || val < min || val > max) {
+      throw new ConfigError(`${source}: "owners.${field}" must be an integer between ${min} and ${max}.`);
+    }
+    out[field] = val;
+  };
+  boundedInt('max', 1, MAX_OWNERS_PER_SUGGESTION);
+  boundedInt('lookbackDays', 1, MAX_OWNERS_LOOKBACK_DAYS);
+  boundedInt('maxCommits', 1, MAX_OWNERS_COMMITS);
   return out;
 }
 
@@ -288,6 +341,12 @@ export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<
       ...stripUndefined(fileOrigin),
       ...stripUndefined(flagOrigin),
       ...(mergedWeights !== undefined ? { weights: mergedWeights } : {}),
+    };
+  }
+  if (fromFile.owners !== undefined || fromFlags.owners !== undefined) {
+    merged.owners = {
+      ...stripUndefined(fromFile.owners ?? {}),
+      ...stripUndefined(fromFlags.owners ?? {}),
     };
   }
   return merged;

@@ -18,6 +18,10 @@ export interface RawCommit {
   hash: string;
   authorName: string;
   authorEmail: string;
+  /** Mailmap-canonicalized author name (`%aN`), when present in `git log`. */
+  mailmapName?: string;
+  /** Mailmap-canonicalized author email (`%aE`), when present in `git log`. */
+  mailmapEmail?: string;
   /** Author timestamp (unix seconds): when the change was written. */
   authorTime: number;
   /** Committer timestamp (unix seconds): when it landed on this branch. */
@@ -41,6 +45,7 @@ export interface LogOptions {
 const RS = '\u001e';
 const US = '\u001f';
 const GS = '\u001d';
+const FS = '\u001c';
 export const MAX_TRAILERS_PER_COMMIT = 20;
 /**
  * `%(trailers:only,unfold,separator=%x1d)` requires Git >= 2.22.0 (released June 2019).
@@ -51,8 +56,8 @@ export const MAX_TRAILERS_PER_COMMIT = 20;
  * `DIFF_ARGS`, `MAX_TRAILERS_PER_COMMIT`, and `CONFIG_OVERRIDES` so flag/format edits
  * invalidate automatically, and any change to `LogParser` or the shape of `RawCommit` /
  * `RawChange` / `RawTrailer` MUST also bump `CACHE_VERSION` in `src/git/cache.ts`.
- * Note for RA-12 (mailmap): `FORMAT` uses raw `%an` / `%ae`; prefer post-cache mailmap
- * canonicalization in `HistoryBuilder`, or bump `CACHE_VERSION` if `FORMAT` changes.
+ * `FORMAT` uses raw `%an` / `%ae`; `.mailmap` canonicalization is applied post-cache
+ * in `HistoryBuilder` so cached commit records remain immutable and working-tree-independent.
  */
 export const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
 
@@ -168,12 +173,16 @@ export function parseTrailers(rawTrailers: readonly string[]): RawTrailer[] {
 }
 
 function parseHeader(header: string): RawCommit {
-  const [hash = '', authorName = '', authorEmail = '', at = '0', ctAndTrailers = '0', ...subject] = header.split(US);
+  const [hash = '', rawNameField = '', rawEmailField = '', at = '0', ctAndTrailers = '0', ...subject] = header.split(US);
+  const [authorName = '', mailmapName] = rawNameField.split(FS);
+  const [authorEmail = '', mailmapEmail] = rawEmailField.split(FS);
   const [ct = '0', ...rawTrailerParts] = ctAndTrailers.split(GS);
   return {
     hash,
     authorName,
     authorEmail,
+    ...(mailmapName !== undefined ? { mailmapName } : {}),
+    ...(mailmapEmail !== undefined ? { mailmapEmail } : {}),
     authorTime: Number(at) || 0,
     commitTime: Number(ct) || Number(at) || 0,
     subject: subject.join(US),
