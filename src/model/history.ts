@@ -1,5 +1,7 @@
-import { readLog, type LogOptions, type RawCommit } from '../git/log.js';
+import { CacheRecordError, gitVersion, listReachable, loadCache, parseCachedRecord, writeCache } from '../git/cache.js';
+import { listLogHashes, readCommitsByHash, readLog, type LogOptions, type RawCommit } from '../git/log.js';
 import { hasParentCommit } from '../git/repo.js';
+import { GitError } from '../git/run.js';
 import { PathMatcher } from '../util/glob.js';
 import { createOriginClassifier, type CommitOrigin, type OriginClassifier, type OriginConfig } from './origin.js';
 
@@ -67,6 +69,33 @@ export interface History {
   stats: HistoryStats;
   /** Historical rename paths mapped to their latest live canonical path. */
   renames?: Record<string, string>;
+  /** History cache usage for this load (absent when the caller did not configure caching). */
+  cache?: HistoryCacheInfo;
+}
+
+export interface HistoryCacheInfo {
+  enabled: boolean;
+  /** Needed commits served from the cache. */
+  hits: number;
+  /** Needed commits parsed from `git log` in this run. */
+  misses: number;
+  /** Display path (repo-relative or `$REPO_ARCHAEOLOGY_CACHE_DIR`); never absolute. */
+  dir?: string;
+  /** Cache problems worth surfacing in `meta.warnings` (rebuilds, read-only shallow clones). */
+  warnings: string[];
+}
+
+export interface HistoryCacheOptions {
+  /** Absolute cache directory. */
+  dir: string;
+  /** Display path for `meta.cache.dir` and warnings. */
+  display?: string;
+  /** False in shallow clones: valid cached records are read, but nothing is written. */
+  writable: boolean;
+  /** Shallow-boundary commits (listed in `$GIT_DIR/shallow`) are always parsed fresh. */
+  shallowBoundary?: ReadonlySet<string>;
+  /** Tool version recorded in `index.json`. */
+  raVersion: string;
 }
 
 export interface HistoryOptions extends LogOptions {
@@ -78,6 +107,11 @@ export interface HistoryOptions extends LogOptions {
   origin?: OriginConfig;
   /** Optional callback invoked as commits are streamed from git log. */
   onProgress?: (commitsRead: number) => void;
+  /**
+   * Persistent raw-commit cache. `false` disables it explicitly (reported as
+   * `cache.enabled: false`); `undefined` disables it without reporting.
+   */
+  cache?: HistoryCacheOptions | false;
 }
 
 type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin'>;
@@ -295,6 +329,16 @@ export function processCommits(raw: Iterable<RawCommit>, options: BuilderOptions
 }
 
 export async function loadHistory(root: string, options: HistoryOptions): Promise<History> {
+  if (options.cache) return loadHistoryCached(root, options, options.cache);
+  const history = await loadHistoryFromLog(root, options);
+  if (options.cache === false) {
+    history.cache = { enabled: false, hits: 0, misses: history.stats.commitsRead, warnings: [] };
+  }
+  return history;
+}
+
+/** Uncached path: one streaming `git log` call (unchanged behavior, used by `--no-cache`). */
+async function loadHistoryFromLog(root: string, options: HistoryOptions, onRaw?: (commit: RawCommit) => void): Promise<History> {
   const builder = new HistoryBuilder(options);
   const limit = options.maxCommits && options.maxCommits > 0 ? Math.floor(options.maxCommits) : undefined;
   let seen = 0;
@@ -309,6 +353,7 @@ export async function loadHistory(root: string, options: HistoryOptions): Promis
         return;
       }
       oldestHash = commit.hash;
+      onRaw?.(commit);
       builder.add(commit);
       if (options.onProgress && (seen === 1 || seen % 100 === 0)) {
         options.onProgress(seen);
@@ -324,3 +369,110 @@ export async function loadHistory(root: string, options: HistoryOptions): Promis
   }
   return builder.finish();
 }
+
+/**
+ * Cached path. Raw commits are settings-independent, so filtering (ignores, `maxFiles`,
+ * `skipCommits`) still happens in `HistoryBuilder`, after the cache.
+ *
+ * Cold (no usable cache): one streaming `git log` walk, exactly like `--no-cache`; the raw
+ * records it yields are saved as the first segment.
+ *
+ * Warm:
+ *   1. `git rev-list` lists the needed hashes, in exactly the order `git log` would print them.
+ *   2. Hashes missing from the cache are parsed with one `git log --no-walk --stdin` call.
+ *   3. Records are fed to the builder in rev-list order, then the misses are appended as a segment.
+ * The cache is a content-addressed lookup, so commits that disappeared (force-push) are simply
+ * never requested again.
+ */
+async function loadHistoryCached(root: string, options: HistoryOptions, cache: HistoryCacheOptions): Promise<History> {
+  const gitOptions = { signal: options.signal, onSpawn: options.onSpawn };
+  const version = await gitVersion(root, gitOptions);
+  const warnings: string[] = [];
+  const where = cache.display ? ` at ${cache.display}` : '';
+  const rebuildWarning = (reason: string) =>
+    cache.writable
+      ? `History cache${where} was discarded and rebuilt (${reason}).`
+      : `History cache${where} was ignored (${reason}).`;
+  const save = async (mode: 'append' | 'rebuild', records: readonly RawCommit[], keepHashes?: readonly string[]) => {
+    if (options.signal?.aborted) return;
+    if (!cache.writable) {
+      warnings.push(CACHE_SHALLOW_WARNING);
+      return;
+    }
+    const result = await writeCache(cache.dir, {
+      mode,
+      records,
+      gitVersion: version,
+      raVersion: cache.raVersion,
+      reachable: async () => {
+        const set = await listReachable(root, gitOptions);
+        if (keepHashes) for (const h of keepHashes) set.add(h);
+        return set;
+      },
+    });
+    if (result.problem) warnings.push(`History cache${where} could not be updated (${result.problem}); results are unaffected.`);
+  };
+  const finish = (history: History, hits: number, misses: number): History => {
+    history.cache = { enabled: true, hits, misses, ...(cache.display !== undefined ? { dir: cache.display } : {}), warnings };
+    return history;
+  };
+
+  const loaded = loadCache(cache.dir, version);
+  if (loaded.kind === 'invalid') warnings.push(rebuildWarning(loaded.reason));
+  if (loaded.kind !== 'ok' || loaded.lines.size === 0) {
+    const raw: RawCommit[] = [];
+    const history = await loadHistoryFromLog(root, options, (commit) => raw.push(commit));
+    await save(loaded.kind === 'invalid' ? 'rebuild' : 'append', raw, raw.map((c) => c.hash));
+    return finish(history, 0, raw.length);
+  }
+
+  const builder = new HistoryBuilder(options);
+  const limit = options.maxCommits && options.maxCommits > 0 ? Math.floor(options.maxCommits) : undefined;
+  const listed = await listLogHashes(root, limit !== undefined ? { ...options, maxCommits: limit + 1 } : options);
+  const seen = listed.length;
+  const hashes = limit !== undefined && listed.length > limit ? listed.slice(0, limit) : listed;
+
+  let rebuild = false;
+  const records = new Map<string, RawCommit>();
+  try {
+    for (const hash of hashes) {
+      if (cache.shallowBoundary?.has(hash)) continue;
+      const line = loaded.lines.get(hash);
+      if (line !== undefined) records.set(hash, parseCachedRecord(line, hash));
+    }
+  } catch (err) {
+    if (!(err instanceof CacheRecordError)) throw err;
+    records.clear();
+    rebuild = true;
+    warnings.push(rebuildWarning('a cached record is malformed'));
+  }
+
+  const missing = hashes.filter((hash) => !records.has(hash));
+  const parsed = new Map<string, RawCommit>();
+  await readCommitsByHash(root, missing, (commit) => parsed.set(commit.hash, commit), gitOptions);
+
+  let added = 0;
+  for (const hash of hashes) {
+    const commit = records.get(hash) ?? parsed.get(hash);
+    if (!commit) throw new GitError(`git log did not return commit ${hash.slice(0, 12)}.`);
+    builder.add(commit);
+    added++;
+    if (options.onProgress && (added === 1 || added % 100 === 0)) options.onProgress(added);
+  }
+  if (limit !== undefined && seen > limit) builder.markTruncated();
+  if (options.onProgress && seen > 0 && seen !== 1 && seen % 100 !== 0) {
+    options.onProgress(limit !== undefined ? Math.min(seen, limit) : seen);
+  }
+  if (options.since) {
+    const oldestHash = hashes[hashes.length - 1];
+    const truncatedBySince = seen === 0 || (oldestHash !== undefined && (await hasParentCommit(root, oldestHash)));
+    builder.markTruncatedBySince(truncatedBySince);
+  }
+
+  // Only commits git just parsed; in shallow clones `save` writes nothing.
+  await save(rebuild ? 'rebuild' : 'append', missing.map((hash) => parsed.get(hash)!), hashes);
+  return finish(builder.finish(), hashes.length - missing.length, missing.length);
+}
+
+export const CACHE_SHALLOW_WARNING =
+  'History cache is read-only in a shallow clone: newly parsed commits were not saved.';

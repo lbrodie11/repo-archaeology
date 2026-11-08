@@ -12,6 +12,7 @@ import {
   type Settings,
 } from './config.js';
 import { workingTreeChanges } from './git/changes.js';
+import { readShallowBoundary, resolveCacheLocation, type CacheSettings } from './git/cache.js';
 import {
   findRepoRoot,
   hasCommits,
@@ -29,7 +30,7 @@ import { createAbortError, GitError, runGit, type GitSpawnObserver } from './git
 import { gitTreeFiles, RelationshipClassifier, workingTreeFiles, type GitTreeFilesOptions } from './imports/classify.js';
 import type { RepoFiles } from './imports/resolve.js';
 import { CoChangeModel, type Thresholds } from './model/cochange.js';
-import { loadHistory, type History } from './model/history.js';
+import { loadHistory, type History, type HistoryCacheOptions } from './model/history.js';
 import {
   emptyLoadedVerdicts,
   loadVerdictsFile,
@@ -40,6 +41,7 @@ import {
   type LoadedVerdicts,
 } from './model/verdicts.js';
 import { PathMatcher } from './util/glob.js';
+import { getToolVersion } from './report/contract.js';
 import { progress } from './util/term.js';
 
 export class UsageError extends Error {
@@ -108,6 +110,30 @@ export interface Context {
   close?: () => void;
   /** Permanently closes any session-owned background process (used by `Repository.close()`). */
   closeSession?: () => void;
+  /** Resolved history cache configuration, reused when the baseline is retrained. */
+  historyCache?: HistoryCacheOptions | false;
+}
+
+/**
+ * Resolves the history cache for this run. Shallow clones read valid records but never write,
+ * and their shallow-boundary commits (which git reports as root commits) are always re-parsed.
+ */
+async function resolveHistoryCache(
+  root: string,
+  file: CacheSettings | undefined,
+  flags: CacheSettings | undefined,
+  shallow: boolean,
+  signal?: AbortSignal,
+): Promise<HistoryCacheOptions | false> {
+  const location = await resolveCacheLocation(root, { file, flags, env: process.env, signal });
+  if (!location.enabled || location.dir === undefined) return false;
+  return {
+    dir: location.dir,
+    ...(location.display !== undefined ? { display: location.display } : {}),
+    writable: !shallow,
+    ...(shallow ? { shallowBoundary: await readShallowBoundary(root, { signal }) } : {}),
+    raVersion: getToolVersion(),
+  };
 }
 
 export const MIN_FULL_HISTORY_COMMITS = 50;
@@ -167,7 +193,7 @@ async function trainBaseline(
   rev: string,
   shallow = false,
   extraWarnings: readonly string[] = [],
-  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'>,
+  options?: Pick<ContextOptions, 'onProgress' | 'signal' | 'onSpawn'> & { cache?: HistoryCacheOptions | false },
 ): Promise<{ history: History; model: CoChangeModel; warnings: string[]; ignores: string[] }> {
   if (options?.signal?.aborted) throw createAbortError(options.signal);
   const skipFilter = compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes);
@@ -183,6 +209,7 @@ async function trainBaseline(
     rev,
     signal: options?.signal,
     onSpawn: options?.onSpawn,
+    cache: options?.cache,
     onProgress: options?.onProgress
       ? (done) => options.onProgress?.({ phase: 'history', done, total: settings.maxCommits })
       : undefined,
@@ -190,7 +217,7 @@ async function trainBaseline(
   if (options?.signal?.aborted) throw createAbortError(options.signal);
   const warnings: string[] = [];
   if (shallow) warnings.push(SHALLOW_WARNING);
-  for (const w of extraWarnings) {
+  for (const w of [...extraWarnings, ...(history.cache?.warnings ?? [])]) {
     if (!warnings.includes(w)) warnings.push(w);
   }
   if (history.commits.length === 0) {
@@ -321,10 +348,12 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     }
     if (wtChanges.length > 0) extraWarnings.push(DIRTY_WORKTREE_HEAD_WARNING);
     for (const w of activeVerdicts.warnings) extraWarnings.push(w);
+    const historyCache = await resolveHistoryCache(root, fileConfig.cache, flags.cache, shallow, signal);
     const trained = await trainBaseline(root, settings, mergeBaseSha ?? headSha, shallow, extraWarnings, {
       onProgress: options?.onProgress,
       signal,
       onSpawn: options?.onSpawn,
+      cache: historyCache,
     });
     const bridgeIgnores = new PathMatcher(trained.ignores);
     const treeFiles = gitTreeFiles(root, headSha, currentFiles, options?.treeFilesOptions);
@@ -351,6 +380,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       open: () => treeFiles.open(),
       close: options?.keepOpen ? () => {} : () => treeFiles.close(),
       closeSession: () => treeFiles.close(),
+      historyCache,
     };
   }
 
@@ -377,11 +407,13 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   for (const w of activeVerdicts.warnings) verdictWarnings.push(w);
 
   if (emitStderrProgress) progress('Reading git history…');
+  const historyCache = await resolveHistoryCache(root, fileConfig.cache, flags.cache, shallow, signal);
   const [trained, currentFiles] = await Promise.all([
     trainBaseline(root, settings, mergeBaseSha ?? 'HEAD', shallow, verdictWarnings, {
       onProgress: options?.onProgress,
       signal,
       onSpawn: options?.onSpawn,
+      cache: historyCache,
     }),
     listCurrentFiles(root),
   ]);
@@ -408,6 +440,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     headSha,
     verdicts: new VerdictMatcher(activeVerdicts, trained.history),
     headVerdicts,
+    historyCache,
   };
 }
 
@@ -434,7 +467,7 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
     if (ctx.base === undefined) return ctx;
     const headSha = ctx.headSha ?? (await resolveCommit(ctx.root, targetHead));
     const extraWarnings = [...baseExtraWarnings, ...headVerdicts.warnings];
-    const trained = await trainBaseline(ctx.root, ctx.settings, targetHead, shallow, extraWarnings);
+    const trained = await trainBaseline(ctx.root, ctx.settings, targetHead, shallow, extraWarnings, { cache: ctx.historyCache });
     return {
       ...ctx,
       history: trained.history,
@@ -477,7 +510,7 @@ export async function isolateBaselineContext(ctx: Context, base?: string): Promi
       headVerdicts,
     };
   }
-  const trained = await trainBaseline(ctx.root, ctx.settings, mergeBaseSha, shallow, extraWarnings);
+  const trained = await trainBaseline(ctx.root, ctx.settings, mergeBaseSha, shallow, extraWarnings, { cache: ctx.historyCache });
   return {
     ...ctx,
     history: trained.history,

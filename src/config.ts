@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
+import { hasSymlinkInRepoPath, type CacheSettings } from './git/cache.js';
 import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
 
 export { riskySkipPattern };
@@ -29,6 +30,8 @@ export interface Settings {
   useDefaultIgnores: boolean;
   /** Optional commit origin classification overrides and per-origin weights. */
   origin?: OriginConfig;
+  /** Persistent history cache (`dir` relative to the repository root; `enabled: false` turns it off). */
+  cache?: CacheSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = Object.freeze({
@@ -86,6 +89,12 @@ export function parseConfigText(content: string, source = CONFIG_FILE): Partial<
     const problem = riskySkipPattern(settings.skipCommits);
     if (problem) throw new ConfigError(`${source}: "skipCommits" ${problem}. Pass it with --skip-commits if you trust it.`);
   }
+  // The file may come from an untrusted clone (or a historical tree with --head), so it may only
+  // place the cache inside the repository; REPO_ARCHAEOLOGY_CACHE_DIR covers other locations.
+  const cacheDir = settings.cache?.dir;
+  if (cacheDir !== undefined && (isAbsolute(cacheDir) || /^[\\/]|^[A-Za-z]:/.test(cacheDir) || cacheDir.split(/[\\/]/).includes('..'))) {
+    throw new ConfigError(`${source}: "cache.dir" must be a relative path inside the repository (use REPO_ARCHAEOLOGY_CACHE_DIR for other locations).`);
+  }
   return settings;
 }
 
@@ -97,12 +106,16 @@ export function loadConfigFile(root: string): Partial<Settings> {
   if (!stat) return {};
   if (!stat.isFile()) throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
   if (stat.size > MAX_CONFIG_BYTES) throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
-  return parseConfigText(readFileSync(file, 'utf8'), CONFIG_FILE);
+  const settings = parseConfigText(readFileSync(file, 'utf8'), CONFIG_FILE);
+  if (settings.cache?.dir !== undefined && hasSymlinkInRepoPath(root, settings.cache.dir)) {
+    throw new ConfigError(`${CONFIG_FILE}: "cache.dir" must not traverse a symbolic link inside the repository.`);
+  }
+  return settings;
 }
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
   const out: Partial<Settings> = {};
-  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin']));
+  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin', 'cache']));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new ConfigError(`${source}: unknown setting "${key}".`);
   }
@@ -154,6 +167,31 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
   }
   if (raw.origin !== undefined) {
     out.origin = validateOriginConfig(raw.origin, source);
+  }
+  if (raw.cache !== undefined) {
+    out.cache = validateCacheSettings(raw.cache, source);
+  }
+  return out;
+}
+
+function validateCacheSettings(raw: unknown, source: string): CacheSettings {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ConfigError(`${source}: "cache" must be a JSON object.`);
+  }
+  const obj = raw as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    if (key !== 'dir' && key !== 'enabled') throw new ConfigError(`${source}: unknown setting "cache.${key}".`);
+  }
+  const out: CacheSettings = {};
+  if (obj.dir !== undefined) {
+    if (typeof obj.dir !== 'string' || obj.dir.trim() === '' || obj.dir.includes('\0')) {
+      throw new ConfigError(`${source}: "cache.dir" must be a non-empty path string.`);
+    }
+    out.dir = obj.dir;
+  }
+  if (obj.enabled !== undefined) {
+    if (typeof obj.enabled !== 'boolean') throw new ConfigError(`${source}: "cache.enabled" must be true or false.`);
+    out.enabled = obj.enabled;
   }
   return out;
 }
@@ -236,6 +274,9 @@ function validateOriginConfig(raw: unknown, source: string): OriginConfig {
 export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<Settings>): Settings {
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stripUndefined(fromFile), ...stripUndefined(fromFlags) };
   merged.ignore = [...(fromFile.ignore ?? []), ...(fromFlags.ignore ?? [])];
+  if (fromFile.cache !== undefined || fromFlags.cache !== undefined) {
+    merged.cache = { ...stripUndefined(fromFile.cache ?? {}), ...stripUndefined(fromFlags.cache ?? {}) };
+  }
   if (fromFile.origin !== undefined || fromFlags.origin !== undefined) {
     const fileOrigin = fromFile.origin ?? {};
     const flagOrigin = fromFlags.origin ?? {};
