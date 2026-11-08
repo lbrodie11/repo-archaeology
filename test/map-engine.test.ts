@@ -193,7 +193,10 @@ describe('RA-15 map engine: browser runtime behavior (Playwright)', () => {
     { skip: !canRunBrowser ? 'Playwright Chromium is not installed' : false },
     async () => {
       const tmpDir = mkdtempSync(join(tmpdir(), 'ra-map-engine-test-'));
-      const browser = await chromium.launch({ headless: true });
+      const browser = await chromium.launch({
+        headless: true,
+        args: ['--touch-events=enabled'],
+      });
       try {
         const data50 = generateSyntheticMapData(50);
         const htmlWithLayout = renderMapHtml(data50);
@@ -579,17 +582,33 @@ describe('RA-15 map engine: browser runtime behavior (Playwright)', () => {
           assert.equal(mobileChecks.hint, 'Two fingers to pan and zoom');
           assert.equal(mobileChecks.hitId, 'map', 'Expected touch start point to hit #map inside the viewport');
 
-          // Drive a real compositor touch scroll gesture over the canvas via CDP Input.synthesizeScrollGesture
+          // Drive a real compositor touch scroll gesture over the canvas via CDP Input.dispatchTouchEvent
           const cdp = await context.newCDPSession(page);
-          await cdp.send('Input.synthesizeScrollGesture', {
-            x: mobileChecks.cx,
-            y: mobileChecks.startY,
-            xDistance: 0,
-            yDistance: -150,
-            gestureSourceType: 'touch',
-            speed: 800,
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x: mobileChecks.cx, y: mobileChecks.startY, radiusX: 5, radiusY: 5, force: 1, id: 1 }],
           });
-          await page.waitForTimeout(80);
+          for (let step = 1; step <= 6; step++) {
+            await cdp.send('Input.dispatchTouchEvent', {
+              type: 'touchMove',
+              touchPoints: [
+                {
+                  x: mobileChecks.cx,
+                  y: mobileChecks.startY - step * 25,
+                  radiusX: 5,
+                  radiusY: 5,
+                  force: 1,
+                  id: 1,
+                },
+              ],
+            });
+            await page.waitForTimeout(16);
+          }
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd',
+            touchPoints: [],
+          });
+          await page.waitForTimeout(100);
 
           const scrollY = await page.evaluate(() => window.scrollY);
           assert.ok(scrollY > 0, `Expected native one-finger touch swipe over mobile canvas to scroll page (scrollY=${scrollY})`);
