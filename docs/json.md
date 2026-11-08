@@ -348,8 +348,8 @@ When `repo-archaeology --json` is invoked with no subcommand, it inspects the wo
 | `schemaVersion` | `1` | Yes | JSON contract major version. |
 | `tool` | `{ name, version }` | Yes | Tool name and semver version. |
 | `meta` | `Meta` | Yes | Repository metadata. |
-| `files` | `string[]` | Yes | Sorted repository-relative paths included in the graph (`from` candidates). When `files` filter is passed, includes the requested files plus every file that imports them. |
-| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"` and `to` is an internal file present at head. |
+| `files` | `string[]` | Yes | Sorted repository-relative paths included in the graph (`from` candidates). When `files` filter is passed, includes the requested files plus every file that imports them (passing a path outside the repository or a path not present at head throws `UsageError`). |
+| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"` (including triple-slash `/// <reference path="..." />` directives as `"static"`, and resolving dynamic `import()` with the `"import"` package export condition even in `.cjs`/`.cts` files) and `to` is an internal file present at head. |
 | `unresolved` | `ImportGraphUnresolved[]` | Yes | Unresolved local/alias module specifiers (`{ from, specifier, reason }`, e.g. `reason: "unmatched"`). |
 | `languages` | `string[]` | Yes | Sorted list of detected source languages (`"javascript"`, `"typescript"`). |
 

@@ -24,7 +24,6 @@ export interface GitTreeFiles extends RepoFiles {
   open(): void;
   close(): void;
   readonly pid: number | undefined;
-  [Symbol.dispose](): void;
 }
 
 const CAT_FILE_WORKER_CODE = `
@@ -425,10 +424,6 @@ export function gitTreeFiles(
     },
     get pid() {
       return currentPid;
-    },
-    [Symbol.dispose]() {
-      explicitlyClosed = true;
-      closeInternal();
     },
   };
 }

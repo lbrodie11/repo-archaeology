@@ -197,17 +197,11 @@ program
         validateJsonOutPath(opts.jsonOut);
       }
       const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-      if (global.json && opts.jsonOut === undefined) {
-        const jsonResult = await createRepository(ctx).diff(opts);
-        printVersionedJson(jsonResult);
-        if (opts.exitCode && jsonResult.suggestions.length > 0) process.exitCode = 1;
-        return;
-      }
-      const result = await diff(ctx, opts);
+      const result = await createRepository(ctx).diff(opts);
       if (opts.jsonOut !== undefined) {
         writeJsonContractFile(opts.jsonOut, result);
       }
-      if (global.json) printJson(result);
+      if (global.json) printVersionedJson(result);
       else if (opts.format === 'markdown') {
         const repoUrl =
           process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY

@@ -34,12 +34,35 @@ export function getToolInfo(): ToolInfo {
   };
 }
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) {
+        out[k] = stripUndefined(v);
+      }
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export function withJsonContract<T extends object>(payload: T): VersionedJson<T> {
-  return {
+  if (
+    'schemaVersion' in payload &&
+    (payload as { schemaVersion?: unknown }).schemaVersion === JSON_SCHEMA_VERSION &&
+    'tool' in payload
+  ) {
+    return stripUndefined(payload as VersionedJson<T>);
+  }
+  return stripUndefined({
     schemaVersion: JSON_SCHEMA_VERSION,
     tool: getToolInfo(),
     ...payload,
-  };
+  });
 }
 
 export function formatJsonContract<T extends object>(payload: T): string {

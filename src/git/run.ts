@@ -64,6 +64,15 @@ interface SpawnResult {
   stderr: string;
 }
 
+export type GitSpawnObserver = (args: readonly string[], cwd: string) => void;
+
+let gitSpawnObserver: GitSpawnObserver | undefined;
+
+/** Registers an optional test observer notified before each `git` process spawn. */
+export function setGitSpawnObserver(observer?: GitSpawnObserver): void {
+  gitSpawnObserver = observer;
+}
+
 function spawnGit(
   cwd: string,
   args: string[],
@@ -74,6 +83,7 @@ function spawnGit(
   if (signal?.aborted) {
     return Promise.reject(createAbortError(signal));
   }
+  gitSpawnObserver?.(args, cwd);
   return new Promise((resolve, reject) => {
     const isPosix = process.platform !== 'win32';
     const child = spawn('git', [...CONFIG_OVERRIDES, ...args], {

@@ -9,7 +9,7 @@ import {
   type GitTreeFilesOptions,
   type RepoFiles,
 } from './resolve.js';
-import { extractDependencies } from './typescript.js';
+import { extractDetailedDependencies } from './typescript.js';
 
 export {
   gitTreeFiles,
@@ -199,11 +199,11 @@ export class RelationshipClassifier {
       return result;
     }
     result.analyzable = true;
-    const { specifiers, referencePaths, nonLiteralLoads } = extractDependencies(text, file);
+    const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, file);
     // A load whose target is computed at runtime could be the partner file.
     result.unresolved += nonLiteralLoads;
-    for (const specifier of specifiers) {
-      const resolved = this.resolver.resolve(file, specifier);
+    for (const { specifier, kind } of imports) {
+      const resolved = this.resolver.resolve(file, specifier, kind === 'require' ? 'require' : 'import');
       if (resolved.kind === 'file') {
         if (resolved.path !== file) result.imports.add(resolved.path);
       } else if (resolved.kind === 'unresolved') {

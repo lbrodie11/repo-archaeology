@@ -27,7 +27,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, '..');
 const SCHEMA_DIR = join(ROOT_DIR, 'schema');
 
-const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.(?:js|d\.ts(?:\.map)?)|schema\/.+\.schema\.json)$/;
+const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.(?:js|d\.ts)|schema\/.+\.schema\.json)$/;
 
 export function assertPackedFileList(files) {
   if (!Array.isArray(files) || files.length === 0) {
@@ -140,7 +140,7 @@ export function runSmokePack(options = {}) {
     }
     assertPackedFileList(packMeta.files);
     const packedPaths = packMeta.files.map((entry) => (typeof entry === 'string' ? entry : entry?.path)).filter(Boolean);
-    for (const apiFile of ['dist/api/index.js', 'dist/api/index.d.ts', 'dist/api/index.d.ts.map', 'schema/import-graph.schema.json']) {
+    for (const apiFile of ['dist/api/index.js', 'dist/api/index.d.ts', 'schema/import-graph.schema.json']) {
       if (!packedPaths.includes(apiFile)) {
         throw new Error(`Tarball is missing required library API file '${apiFile}'.`);
       }
@@ -323,7 +323,22 @@ export function runSmokePack(options = {}) {
       throw new Error(`Installed package missing dist/api/index.d.ts at ${installedPkgRoot}`);
     }
     const apiScript = [
+      "import assert from 'node:assert/strict';",
+      "import { createRequire } from 'node:module';",
+      "import { pathToFileURL } from 'node:url';",
       "import { openRepository } from 'repo-archaeology';",
+      "import diffSchema from 'repo-archaeology/schema/diff.schema.json' with { type: 'json' };",
+      "import importGraphSchema from 'repo-archaeology/schema/import-graph.schema.json' with { type: 'json' };",
+      `const require = createRequire(pathToFileURL(${JSON.stringify(join(installDir, 'package.json'))}).href);`,
+      "assert.equal(diffSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
+      "assert.equal(importGraphSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
+      "assert.ok(require.resolve('repo-archaeology/schema/diff.schema.json').endsWith('diff.schema.json'));",
+      "assert.ok(require.resolve('repo-archaeology').endsWith('index.js'));",
+      "const [nodeMaj, nodeMin] = process.versions.node.split('.').map(Number);",
+      "if (nodeMaj > 22 || (nodeMaj === 22 && nodeMin >= 12)) {",
+      "  const cjsMod = require('repo-archaeology');",
+      "  assert.equal(typeof cjsMod.openRepository, 'function');",
+      "}",
       `const repo = await openRepository({ cwd: ${JSON.stringify(repoDir)}, base: ${JSON.stringify(firstBranchPoint)} });`,
       'try {',
       '  const [d, bt, ig] = await Promise.all([repo.diff(), repo.backtest(), repo.importGraph()]);',

@@ -1,44 +1,15 @@
-import {
-  backtest,
-  type BacktestOptions,
-  type BacktestResult,
-  type GhostDiagnostics,
-  type OriginSliceMetrics,
-  type OriginWeightComparison,
-  type OriginWeightDeltaMetrics,
-  type OriginWeightRunMetrics,
-  type StrategyScore,
-} from '../commands/backtest.js';
-import {
-  diff,
-  type ChangedFileView,
-  type DiffEvaluation,
-  type DiffFamilyView,
-  type DiffOptions,
-  type DiffResult,
-  type SilenceDiagnostics,
-  type SilenceReason,
-  type Suggestion,
-} from '../commands/diff.js';
-import {
-  explain,
-  type CounterexampleCommitEvidence,
-  type ExplainBoundsSummary,
-  type ExplainOptions,
-  type ExplainResult,
-  type SharedCommitEvidence,
-} from '../commands/explain.js';
-import { fileReport, type FileCompanionView, type FileOptions, type FileResult } from '../commands/file.js';
-import type { FollowUpBenchmarkResult } from '../commands/followup-benchmark.js';
+import { backtest, type BacktestResult } from '../commands/backtest.js';
+import { diff, type DiffResult } from '../commands/diff.js';
+import { explain, type ExplainResult } from '../commands/explain.js';
+import { fileReport, type FileResult } from '../commands/file.js';
 import {
   importGraph,
   type ImportEdgeKind,
   type ImportGraphEdge,
-  type ImportGraphOptions,
   type ImportGraphResult,
   type ImportGraphUnresolved,
 } from '../commands/imports.js';
-import { scan, type ScanOptions, type ScanResult } from '../commands/scan.js';
+import { scan, type ScanResult } from '../commands/scan.js';
 import {
   ConfigError,
   DEFAULT_IGNORES,
@@ -48,8 +19,7 @@ import {
 } from '../config.js';
 import { loadContext, UsageError, type Context, type ProgressEvent } from '../context.js';
 import { GitError } from '../git/run.js';
-import { RELATIONSHIPS, type HiddenBridge, type Relationship } from '../imports/classify.js';
-import type { FindingFamilyView } from '../model/families.js';
+import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { parseOriginWeightsSpec, type CommitOrigin, type OriginConfig, type OriginWeights } from '../model/origin.js';
 import {
   JSON_SCHEMA_VERSION,
@@ -57,8 +27,7 @@ import {
   type ToolInfo,
   type VersionedJson,
 } from '../report/contract.js';
-import type { EvidenceView, HeadInfo, Meta, RelationshipView } from '../report/views.js';
-import type { WilsonInterval } from '../util/stats.js';
+import type { Meta } from '../report/views.js';
 
 export {
   ConfigError,
@@ -68,53 +37,17 @@ export {
   JSON_SCHEMA_VERSION,
   RELATIONSHIPS,
   UsageError,
-  type BacktestOptions,
-  type BacktestResult,
-  type ChangedFileView,
   type CommitOrigin,
-  type CounterexampleCommitEvidence,
-  type DiffEvaluation,
-  type DiffFamilyView,
-  type DiffOptions,
-  type DiffResult,
-  type EvidenceView,
-  type ExplainBoundsSummary,
-  type ExplainOptions,
-  type ExplainResult,
-  type FileCompanionView,
-  type FileOptions,
-  type FileResult,
-  type FindingFamilyView,
-  type FollowUpBenchmarkResult,
-  type GhostDiagnostics,
-  type HeadInfo,
-  type HiddenBridge,
   type ImportEdgeKind,
   type ImportGraphEdge,
-  type ImportGraphOptions,
-  type ImportGraphResult,
   type ImportGraphUnresolved,
-  type Meta,
   type OriginConfig,
-  type OriginSliceMetrics,
-  type OriginWeightComparison,
-  type OriginWeightDeltaMetrics,
-  type OriginWeightRunMetrics,
   type OriginWeights,
   type ProgressEvent,
   type Relationship,
-  type RelationshipView,
-  type ScanOptions,
-  type ScanResult,
   type Settings,
-  type SharedCommitEvidence,
-  type SilenceDiagnostics,
-  type SilenceReason,
-  type StrategyScore,
-  type Suggestion,
   type ToolInfo,
   type VersionedJson,
-  type WilsonInterval,
 };
 
 export type DiffJson = VersionedJson<DiffResult>;
@@ -249,68 +182,63 @@ function parseBeforeOption(before?: string | number): number | undefined {
   return Math.floor(ms / 1000);
 }
 
-function stripUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripUndefined(item)) as unknown as T;
-  }
-  if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (v !== undefined) {
-        out[k] = stripUndefined(v);
-      }
-    }
-    return out as T;
-  }
-  return value;
-}
-
 /**
  * Wraps an already-loaded `Context` into a `Repository` session whose methods return
  * the exact `schemaVersion: 1` JSON envelope shapes.
  */
 export function createRepository(ctx: Context): Repository {
   const headSha = ctx.headSha ?? '';
+  let closed = false;
+  const assertOpen = (): void => {
+    if (closed) {
+      throw new UsageError('Repository session is closed.');
+    }
+  };
   return {
     root: ctx.root,
     headSha,
     ...(ctx.mergeBaseSha !== undefined ? { mergeBaseSha: ctx.mergeBaseSha } : {}),
 
     async diff(opts) {
+      assertOpen();
       const result = await diff(ctx, {
         base: opts?.base ?? ctx.base,
         limit: opts?.limit ?? 10,
         kinds: opts?.kinds ?? [...RELATIONSHIPS],
       });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async scan(opts) {
+      assertOpen();
       const limit = opts?.limit ?? 15;
       const kinds = opts?.kinds ?? ['ghost', 'unknown'];
       const uncheckedCap =
         opts?.uncheckedCap !== undefined ? opts.uncheckedCap : opts?.kinds === undefined ? 5 : undefined;
       const result = scan(ctx, { limit, kinds, uncheckedCap });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async file(path, opts) {
+      assertOpen();
       const result = fileReport(ctx, path, {
         limit: opts?.limit ?? 10,
       });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async explain(a, b, opts) {
+      assertOpen();
       const result = await explain(ctx, a, b, {
         commits: opts?.commits ?? 3,
         counterexamples: opts?.counterexamples,
         contextLines: opts?.context ?? 2,
       });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async backtest(opts) {
+      assertOpen();
       if (opts?.followUpWindowHours !== undefined && !opts?.followUps) {
         throw new UsageError('--follow-up-window requires --follow-ups.');
       }
@@ -323,17 +251,19 @@ export function createRepository(ctx: Context): Repository {
         followUpWindowHours: opts?.followUpWindowHours,
         compareOriginWeights: opts?.compareOriginWeights,
       });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async importGraph(opts) {
+      assertOpen();
       const result = importGraph(ctx, {
         files: opts?.files,
       });
-      return stripUndefined(withJsonContract(result));
+      return withJsonContract(result);
     },
 
     async close() {
+      closed = true;
       ctx.closeSession?.();
       ctx.close?.();
     },

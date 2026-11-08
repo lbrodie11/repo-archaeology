@@ -1,6 +1,6 @@
 import { posix, win32 } from 'node:path';
 import { ignorePatterns } from '../config.js';
-import { toRepoPath, type Context } from '../context.js';
+import { toRepoPath, UsageError, type Context } from '../context.js';
 import { workingTreeFiles } from '../imports/classify.js';
 import { ImportResolver, type RepoFiles } from '../imports/resolve.js';
 import { extractDetailedDependencies, type ImportEdgeKind } from '../imports/typescript.js';
@@ -101,7 +101,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     const seenUnresolved = new Set<string>();
 
     for (const { specifier, kind } of imports) {
-      const resolved = resolver.resolve(from, specifier, kind === 'require' ? 'require' : undefined);
+      const resolved = resolver.resolve(from, specifier, kind === 'require' ? 'require' : 'import');
       if (resolved.kind === 'file') {
         if (resolved.path !== from && ctx.currentFiles.has(resolved.path)) {
           const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
@@ -199,10 +199,11 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
     const allowedFrom = new Set<string>();
     for (const rawInput of options.files) {
       const path = ctx.currentFiles.has(rawInput) ? rawInput : toRepoPath(ctx, rawInput);
-      if (ctx.currentFiles.has(path)) {
-        index.indexFile(path);
-        allowedFrom.add(path);
+      if (!ctx.currentFiles.has(path)) {
+        throw new UsageError(`No such file in ${ctx.head?.ref ?? 'the working tree'}: ${path}`);
       }
+      index.indexFile(path);
+      allowedFrom.add(path);
       const importers = index.importersByTarget.get(path);
       if (importers) {
         for (const importer of importers) {

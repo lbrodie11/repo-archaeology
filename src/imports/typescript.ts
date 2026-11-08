@@ -31,25 +31,31 @@ export function extractSpecifiers(sourceText: string): string[] {
   return extractDependencies(sourceText).specifiers;
 }
 
-export function extractDependencies(sourceText: string, fileName = 'file.tsx'): { specifiers: string[]; referencePaths: string[]; nonLiteralLoads: number } {
-  const ts = typescript();
-  const info = ts.preProcessFile(sourceText, true, true);
+export function extractDependencies(
+  sourceText: string,
+  fileName = 'file.tsx',
+): {
+  specifiers: string[];
+  referencePaths: string[];
+  nonLiteralLoads: number;
+} {
+  const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(sourceText, fileName);
   return {
-    specifiers: info.importedFiles.map((file) => file.fileName),
-    referencePaths: info.referencedFiles.map((file) => file.fileName),
-    nonLiteralLoads: countNonLiteralLoads(sourceText, fileName),
+    specifiers: imports.map((item) => item.specifier),
+    referencePaths,
+    nonLiteralLoads,
   };
 }
 
 /**
  * Parses a JS/TS source file's AST to extract module specifiers together with their
- * import syntax kind (`'static' | 'dynamic' | 'reexport' | 'require'`) and triple-slash
- * `<reference path="..." />` directives.
+ * import syntax kind (`'static' | 'dynamic' | 'reexport' | 'require'`), triple-slash
+ * `<reference path="..." />` directives, and non-literal dynamic load count.
  */
 export function extractDetailedDependencies(
   sourceText: string,
   fileName = 'file.tsx',
-): { imports: ExtractedImport[]; referencePaths: string[] } {
+): { imports: ExtractedImport[]; referencePaths: string[]; nonLiteralLoads: number } {
   const ts = typescript();
   const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, false);
   const imports: ExtractedImport[] = [];
@@ -91,6 +97,7 @@ export function extractDetailedDependencies(
   return {
     imports,
     referencePaths: source.referencedFiles.map((file) => file.fileName),
+    nonLiteralLoads: countNonLiteralLoads(sourceText, fileName),
   };
 }
 

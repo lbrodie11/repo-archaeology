@@ -6,8 +6,10 @@
   "exports": {
     ".": {
       "types": "./dist/api/index.d.ts",
-      "import": "./dist/api/index.js"
+      "import": "./dist/api/index.js",
+      "default": "./dist/api/index.js"
     },
+    "./schema/*": "./schema/*",
     "./package.json": "./package.json"
   },
   "bin": {

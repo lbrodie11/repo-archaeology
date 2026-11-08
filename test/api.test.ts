@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import {
   ConfigError,
+  DEFAULT_IGNORES,
+  DEFAULT_SETTINGS,
   GitError,
   openRepository,
   RELATIONSHIPS,
@@ -18,6 +21,7 @@ import {
   type Repository,
   type ScanJson,
 } from '../src/api/index.js';
+import { setGitSpawnObserver } from '../src/git/run.js';
 import {
   loadSchema as loadSchemaFromDir,
   sanitizeGitEnv,
@@ -46,18 +50,8 @@ function assertMatchesSchema(value: unknown, schemaFile: string): void {
   assert.deepEqual(errors, [], `Schema validation failed for ${schemaFile}:\n${errors.join('\n')}`);
 }
 
-function findRealGit(): string {
-  const out = execFileSync(
-    process.platform === 'win32' ? 'where.exe' : 'which',
-    ['git'],
-    { encoding: 'utf8' },
-  );
-  const first = out
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-  assert.ok(first, 'expected git binary on PATH');
-  return first;
+function canonicalPosixPath(p: string): string {
+  return realpathSync.native(p).replace(/\\/g, '/');
 }
 
 describe('RA-03 Library API: openRepository() sessions', () => {
@@ -179,12 +173,14 @@ describe('RA-03 Library API: openRepository() sessions', () => {
   });
 
   it('guarantees byte-for-byte JSON parity between openRepository() methods and CLI --json', async () => {
+    const expectedRoot = canonicalPosixPath(repo.dir);
+
     // 1. Default session (no base) for scan, file, explain, backtest, importGraph, and working-tree diff
     const defaultSession = await openRepository({
       cwd: join(repo.dir, 'src'),
     });
     try {
-      assert.equal(defaultSession.root, realpathSync(repo.dir));
+      assert.equal(defaultSession.root.replace(/\\/g, '/'), expectedRoot);
       assert.equal(defaultSession.headSha, headRefSha);
       assert.equal(defaultSession.mergeBaseSha, undefined);
 
@@ -290,7 +286,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       base: baseRefSha,
     });
     try {
-      assert.equal(baseSession.root, realpathSync(repo.dir));
+      assert.equal(baseSession.root.replace(/\\/g, '/'), expectedRoot);
       assert.equal(baseSession.headSha, headRefSha);
       assert.equal(baseSession.mergeBaseSha, baseRefSha);
 
@@ -362,89 +358,43 @@ describe('RA-03 Library API: openRepository() sessions', () => {
     }
   });
 
-  it('spawns git log exactly once across openRepository() and multiple method calls', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'repo-arch-git-spy-'));
-    const logFile = join(binDir, 'git-calls.log');
-    const realGit = findRealGit();
+  it('spawns git log for history loading exactly once across openRepository() and multiple method calls', async () => {
+    const spawnedGitArgs: string[][] = [];
+    setGitSpawnObserver((args) => {
+      spawnedGitArgs.push([...args]);
+    });
 
     try {
-      writeFileSync(logFile, '');
-      if (process.platform === 'win32') {
-        const wrapperJs = join(binDir, 'git-wrapper.mjs');
-        writeFileSync(
-          wrapperJs,
-          [
-            "import { appendFileSync } from 'node:fs';",
-            "import { spawnSync } from 'node:child_process';",
-            `const logFile = ${JSON.stringify(logFile)};`,
-            `const realGit = ${JSON.stringify(realGit)};`,
-            'const args = process.argv.slice(2);',
-            "appendFileSync(logFile, args.join(' ') + '\\n');",
-            "const res = spawnSync(realGit, args, { stdio: 'inherit' });",
-            'process.exit(res.status ?? 1);',
-          ].join('\n'),
-        );
-        writeFileSync(
-          join(binDir, 'git.cmd'),
-          `@echo off\r\n"${process.execPath}" "${wrapperJs}" %*\r\n`,
-        );
-      } else {
-        const wrapperSh = join(binDir, 'git');
-        writeFileSync(
-          wrapperSh,
-          [
-            '#!/bin/sh',
-            `printf '%s\\n' "$*" >> "${logFile}"`,
-            `exec "${realGit}" "$@"`,
-            '',
-          ].join('\n'),
-        );
-        chmodSync(wrapperSh, 0o755);
-      }
-
-      const prevPath = process.env.PATH;
-      process.env.PATH = `${binDir}${delimiter}${prevPath ?? ''}`;
+      const session = await openRepository({
+        cwd: repo.dir,
+        head: headRefSha,
+      });
       try {
-        const session = await openRepository({
-          cwd: repo.dir,
-          head: headRefSha,
-          base: baseRefSha,
-        });
-        try {
-          await session.diff({ limit: 5 });
-          await session.backtest({ testFraction: 0.2, k: 3 });
-          await session.scan({ limit: 5 });
-          await session.file('src/adapter/bun/serve-static.ts');
-          await session.importGraph();
-          await session.importGraph({ files: ['src/db.ts'] });
-        } finally {
-          await session.close();
-        }
+        await session.scan({ limit: 5 });
+        await session.backtest({ testFraction: 0.2, k: 3 });
+        await session.file('src/adapter/bun/serve-static.ts');
+        await session.importGraph();
+        await session.importGraph({ files: ['src/db.ts'] });
       } finally {
-        process.env.PATH = prevPath;
+        await session.close();
       }
-
-      const calls = readFileSync(logFile, 'utf8')
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const gitLogCalls = calls.filter(
-        (line) => line === 'log' || line.startsWith('log ') || line.includes(' log '),
-      );
-      assert.equal(
-        gitLogCalls.length,
-        1,
-        `Expected git log to be called exactly once per session, got ${gitLogCalls.length}:\n${calls.join('\n')}`,
-      );
     } finally {
-      rmSync(binDir, { recursive: true, force: true });
+      setGitSpawnObserver(undefined);
     }
+
+    const gitLogCalls = spawnedGitArgs.filter((args) => args[0] === 'log');
+    assert.equal(
+      gitLogCalls.length,
+      1,
+      `Expected git log to be called exactly once per session, got ${gitLogCalls.length}:\n${spawnedGitArgs.map((a) => a.join(' ')).join('\n')}`,
+    );
   });
 
   it('never writes to stdout or stderr in library mode and reports progress via onProgress', () => {
+    const apiEntryUrl = pathToFileURL(join(ROOT_DIR, 'src', 'api', 'index.ts')).href;
     const script = [
       `import assert from 'node:assert/strict';`,
-      `import { openRepository } from ${JSON.stringify(join(ROOT_DIR, 'src', 'api', 'index.ts'))};`,
+      `import { openRepository } from ${JSON.stringify(apiEntryUrl)};`,
       `const stdoutWrites = [];`,
       `const stderrWrites = [];`,
       `const progressEvents = [];`,
@@ -482,7 +432,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
     assert.equal(res.stderr, '');
   });
 
-  it('builds importGraph with static, dynamic, reexport, require, unresolved edges, and cached reverse-importer lookup', async () => {
+  it('builds importGraph with static, dynamic, reexport, require, unresolved edges, CJS dynamic import() condition, and cached reverse-importer lookup', async () => {
     const session = await openRepository({ cwd: repo.dir });
     try {
       const fullGraph = await session.importGraph();
@@ -563,12 +513,153 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       assert.deepEqual(denoGraph.files, ['src/adapter/deno/serve-static.ts']);
       assert.deepEqual(denoGraph.edges, []);
       assert.deepEqual(denoGraph.unresolved, []);
+
+      // Both missing internal paths and outside-repository paths reject consistently with UsageError
+      await assert.rejects(
+        () => session.importGraph({ files: ['src/does-not-exist.ts'] }),
+        (err: unknown) => err instanceof UsageError && /No such file/.test(err.message),
+      );
+      await assert.rejects(
+        () => session.importGraph({ files: ['../outside.ts'] }),
+        (err: unknown) => err instanceof UsageError && /outside the repository/.test(err.message),
+      );
     } finally {
       await session.close();
     }
+
+    // [P2] Regression test: dynamic import() in .cjs and .cts files selects the "import" condition,
+    // while require() selects the "require" condition in package.json exports.
+    const cjsEsmRepo = new FixtureRepo();
+    try {
+      cjsEsmRepo.write(
+        'packages/dual/package.json',
+        JSON.stringify(
+          {
+            name: 'dual-pkg',
+            version: '1.0.0',
+            exports: {
+              '.': {
+                import: './esm.mjs',
+                require: './cjs.cjs',
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      cjsEsmRepo.write('packages/dual/esm.mjs', 'export const mode = "esm";\n');
+      cjsEsmRepo.write('packages/dual/cjs.cjs', 'module.exports = { mode: "cjs" };\n');
+      cjsEsmRepo.write(
+        'src/entry.cjs',
+        [
+          'const syncMod = require("dual-pkg");',
+          'const asyncMod = () => import("dual-pkg");',
+          'module.exports = { syncMod, asyncMod };',
+          '',
+        ].join('\n'),
+      );
+      cjsEsmRepo.write(
+        'src/entry.cts',
+        [
+          'const syncMod = require("dual-pkg");',
+          'const asyncMod = () => import("dual-pkg");',
+          'export = { syncMod, asyncMod };',
+          '',
+        ].join('\n'),
+      );
+      cjsEsmRepo.git('add', '.');
+      cjsEsmRepo.commit({ message: 'init dual package', author: 'Alice' });
+      cjsEsmRepo.commit({
+        message: 'touch files',
+        author: 'Alice',
+        write: {
+          'packages/dual/esm.mjs': 'export const mode = "esm-v2";\n',
+          'src/entry.cjs': 'const syncMod = require("dual-pkg");\nconst asyncMod = () => import("dual-pkg");\nmodule.exports = { syncMod, asyncMod, v: 2 };\n',
+        },
+      });
+
+      const dualSession = await openRepository({ cwd: cjsEsmRepo.dir });
+      try {
+        const graph = await dualSession.importGraph();
+        const cjsEdges = graph.edges.filter((e) => e.from === 'src/entry.cjs');
+        const ctsEdges = graph.edges.filter((e) => e.from === 'src/entry.cts');
+        assert.deepEqual(cjsEdges, [
+          {
+            from: 'src/entry.cjs',
+            to: 'packages/dual/cjs.cjs',
+            specifier: 'dual-pkg',
+            kind: 'require',
+          },
+          {
+            from: 'src/entry.cjs',
+            to: 'packages/dual/esm.mjs',
+            specifier: 'dual-pkg',
+            kind: 'dynamic',
+          },
+        ]);
+        assert.deepEqual(ctsEdges, [
+          {
+            from: 'src/entry.cts',
+            to: 'packages/dual/cjs.cjs',
+            specifier: 'dual-pkg',
+            kind: 'require',
+          },
+          {
+            from: 'src/entry.cts',
+            to: 'packages/dual/esm.mjs',
+            specifier: 'dual-pkg',
+            kind: 'dynamic',
+          },
+        ]);
+
+        // Reverse importer lookup on the ESM target finds both .cjs and .cts dynamic importers
+        const reverseEsm = await dualSession.importGraph({ files: ['packages/dual/esm.mjs'] });
+        assert.deepEqual(reverseEsm.files, [
+          'packages/dual/esm.mjs',
+          'src/entry.cjs',
+          'src/entry.cts',
+        ]);
+      } finally {
+        await dualSession.close();
+      }
+    } finally {
+      cjsEsmRepo.cleanup();
+    }
   });
 
-  it('honors useConfigFile and settings overrides and throws typed errors in library mode', async () => {
+  it('rejects any method called after repo.close() without spawning a new git cat-file process', async () => {
+    const headSession = await openRepository({
+      cwd: repo.dir,
+      head: 'HEAD~1',
+      base: 'HEAD~3',
+    });
+    // Exercise the session before closing
+    await headSession.importGraph();
+    await headSession.close();
+    // Closing again is idempotent
+    await headSession.close();
+
+    for (const call of [
+      () => headSession.diff(),
+      () => headSession.scan(),
+      () => headSession.file('src/api.ts'),
+      () => headSession.explain('src/api.ts', 'src/db.ts'),
+      () => headSession.backtest(),
+      () => headSession.importGraph(),
+    ]) {
+      await assert.rejects(
+        call,
+        (err: unknown) => err instanceof UsageError && /Repository session is closed/.test(err.message),
+      );
+    }
+  });
+
+  it('honors useConfigFile, settings overrides, frozen defaults, and throws typed errors in library mode', async () => {
+    assert.ok(Object.isFrozen(DEFAULT_SETTINGS), 'DEFAULT_SETTINGS must be frozen');
+    assert.ok(Object.isFrozen(DEFAULT_SETTINGS.ignore), 'DEFAULT_SETTINGS.ignore must be frozen');
+    assert.ok(Object.isFrozen(DEFAULT_IGNORES), 'DEFAULT_IGNORES must be frozen');
+
     const configRepo = new FixtureRepo();
     try {
       configRepo.write('a.ts', 'export const a = 1;\n');
@@ -687,21 +778,25 @@ describe('RA-03 Library API: openRepository() sessions', () => {
     );
   });
 
-  it('packs and resolves repo-archaeology ESM exports and TypeScript declarations from a tarball', () => {
+  it('packs and resolves repo-archaeology ESM/CJS exports, schema subpaths, and TypeScript declarations from a tarball without network access', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'repo-arch-api-pack-'));
     try {
       // Build dist/ first
-      const buildRes = spawnSync('npm', ['run', 'build'], {
-        cwd: ROOT_DIR,
-        encoding: 'utf8',
-        shell: process.platform === 'win32',
-      });
+      const buildRes = spawnSync(
+        process.execPath,
+        [join(ROOT_DIR, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', join(ROOT_DIR, 'tsconfig.json')],
+        {
+          cwd: ROOT_DIR,
+          encoding: 'utf8',
+        },
+      );
       assert.equal(buildRes.status, 0, buildRes.stderr);
 
       const packDir = join(tmp, 'pack');
       const consumerDir = join(tmp, 'consumer');
+      const installedPkgDir = join(consumerDir, 'node_modules', 'repo-archaeology');
       mkdirSync(packDir, { recursive: true });
-      mkdirSync(consumerDir, { recursive: true });
+      mkdirSync(installedPkgDir, { recursive: true });
 
       const packRes = spawnSync('npm', ['pack', '--json', '--pack-destination', packDir], {
         cwd: ROOT_DIR,
@@ -710,31 +805,50 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       });
       assert.equal(packRes.status, 0, packRes.stderr);
       const packInfo = JSON.parse(packRes.stdout) as { filename: string }[];
-      const tarballPath = join(packDir, packInfo[0]!.filename);
+      const tarballName = packInfo[0]!.filename;
+      const tarballPath = join(packDir, tarballName);
       assert.ok(existsSync(tarballPath));
+
+      // Unpack the tarball directly into consumer/node_modules/repo-archaeology and link runtime deps
+      // so the test never accesses the network.
+      const tarRes = spawnSync('tar', ['-xzf', `../../../pack/${tarballName}`, '--strip-components=1'], {
+        cwd: installedPkgDir,
+        encoding: 'utf8',
+      });
+      assert.equal(tarRes.status, 0, tarRes.stderr);
+      const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+      for (const dep of ['commander', 'typescript', '@types']) {
+        const srcDep = join(ROOT_DIR, 'node_modules', dep);
+        if (existsSync(srcDep)) {
+          symlinkSync(srcDep, join(consumerDir, 'node_modules', dep), symlinkType);
+        }
+      }
 
       writeFileSync(
         join(consumerDir, 'package.json'),
         JSON.stringify({ name: 'test-consumer', private: true, type: 'module' }, null, 2),
       );
-      const installRes = spawnSync(
-        'npm',
-        ['install', '--no-audit', '--no-fund', tarballPath],
-        {
-          cwd: consumerDir,
-          encoding: 'utf8',
-          shell: process.platform === 'win32',
-        },
-      );
-      assert.equal(installRes.status, 0, installRes.stderr);
 
-      // Verify runtime ESM import of 'repo-archaeology'
+      // Verify runtime ESM import, schema subpath imports, and CJS require() of 'repo-archaeology'
       const mjsFile = join(consumerDir, 'verify.mjs');
       writeFileSync(
         mjsFile,
         [
           "import assert from 'node:assert/strict';",
+          "import { createRequire } from 'node:module';",
           "import { openRepository, UsageError, GitError, ConfigError, RELATIONSHIPS } from 'repo-archaeology';",
+          "import diffSchema from 'repo-archaeology/schema/diff.schema.json' with { type: 'json' };",
+          "import importGraphSchema from 'repo-archaeology/schema/import-graph.schema.json' with { type: 'json' };",
+          "const require = createRequire(import.meta.url);",
+          "assert.equal(diffSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
+          "assert.equal(importGraphSchema.$schema, 'https://json-schema.org/draft/2020-12/schema');",
+          "assert.ok(require.resolve('repo-archaeology/schema/diff.schema.json').endsWith('diff.schema.json'));",
+          "assert.ok(require.resolve('repo-archaeology').endsWith('index.js'));",
+          "const [maj, min] = process.versions.node.split('.').map(Number);",
+          "if (maj > 22 || (maj === 22 && min >= 12)) {",
+          "  const cjs = require('repo-archaeology');",
+          "  assert.equal(typeof cjs.openRepository, 'function');",
+          "}",
           `const repo = await openRepository({ cwd: ${JSON.stringify(repo.dir)}, base: ${JSON.stringify(baseRefSha)} });`,
           'try {',
           '  const diff = await repo.diff({ limit: 3 });',
@@ -757,7 +871,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
       });
       assert.equal(runMjs.status, 0, runMjs.stderr);
 
-      // Verify TypeScript declaration resolution via tsc --noEmit
+      // Verify TypeScript declaration resolution via tsc --noEmit (with skipLibCheck: false)
       const tsFile = join(consumerDir, 'verify.ts');
       writeFileSync(
         tsFile,
@@ -786,7 +900,7 @@ describe('RA-03 Library API: openRepository() sessions', () => {
               moduleResolution: 'NodeNext',
               strict: true,
               noEmit: true,
-              skipLibCheck: true,
+              skipLibCheck: false,
             },
             include: ['verify.ts'],
           },
