@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
-import { resolveSettings, validatePartial, ConfigError, compileSkipPattern } from '../src/config.js';
+import { resolveSettings, validatePartial, ConfigError, compileSkipPattern, riskySkipPattern } from '../src/config.js';
 import { mergeChanges, parseNameStatus, parsePorcelainStatus, reconcileBranchLineage } from '../src/git/changes.js';
 import { LogParser, MAX_TRAILERS_PER_COMMIT, readLog, type RawCommit } from '../src/git/log.js';
 import { embedJson, renderMapHtml } from '../src/map/template.js';
@@ -493,11 +494,27 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       }),
       'bot',
     );
-    // 2. renovate[bot] -> bot
+    // 2. renovate[bot] and self-hosted Renovate Bot / bot@renovateapp.com -> bot
     assert.equal(
       classifyCommitOrigin({
         authorName: 'renovate[bot]',
         authorEmail: '29139614+renovate[bot]@users.noreply.github.com',
+        trailers: [],
+      }),
+      'bot',
+    );
+    assert.equal(
+      classifyCommitOrigin({
+        authorName: 'Renovate Bot',
+        authorEmail: 'renovate@selfhosted.internal',
+        trailers: [],
+      }),
+      'bot',
+    );
+    assert.equal(
+      classifyCommitOrigin({
+        authorName: 'Dependency Updater',
+        authorEmail: 'bot@renovateapp.com',
         trailers: [],
       }),
       'bot',
@@ -683,6 +700,7 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       /longer than 200 characters/,
     );
     // Rejects catastrophic backtracking / backreference / excessive quantifier patterns across all 3 lists without executing them
+    assert.equal(riskyOriginPattern, riskySkipPattern, 'shares a single regex safety helper');
     assert.throws(
       () => validatePartial({ origin: { agentAuthorPatterns: ['^(a+)+$'] } }, 'cfg'),
       /repeats a group that contains a quantifier or alternation/,
@@ -691,13 +709,54 @@ describe('RA-08 commit origin: trailers, classification, originShare, weighting,
       () => validatePartial({ origin: { botPatterns: ['(a|aa)*'] } }, 'cfg'),
       /repeats a group that contains a quantifier or alternation/,
     );
+    // Rejects repeated groups containing optional `?` quantifiers across all 3 origin pattern lists
+    for (const evilOptional of ['^(a?a?)+$', '^(a?)+$', '^((?:a)?)+$']) {
+      for (const field of ['agentAuthorPatterns', 'botPatterns', 'agentTrailerPatterns'] as const) {
+        assert.throws(
+          () => validatePartial({ origin: { [field]: [evilOptional] } }, 'cfg'),
+          /repeats a group that contains a quantifier or alternation/,
+          `expected ${field} to reject ${evilOptional}`,
+        );
+        assert.throws(
+          () => createOriginClassifier({ [field]: [evilOptional] }),
+          /repeats a group that contains a quantifier or alternation/,
+          `expected createOriginClassifier(${field}) to reject ${evilOptional}`,
+        );
+      }
+    }
+    // Bounded subprocess regression check: rejecting ^(a?a?)+$ completes immediately without hanging on 'a'.repeat(32) + '!'
+    const sub = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        import.meta.resolve('tsx'),
+        '--input-type=module',
+        '-e',
+        `import { validatePartial } from './src/config.ts';
+         import { createOriginClassifier } from './src/model/origin.ts';
+         for (const f of ['agentAuthorPatterns', 'botPatterns', 'agentTrailerPatterns']) {
+           let threw = false;
+           try { validatePartial({ origin: { [f]: ['^(a?a?)+$'] } }, 'cfg'); } catch { threw = true; }
+           if (!threw) process.exit(1);
+           threw = false;
+           try { createOriginClassifier({ [f]: ['^(a?a?)+$'] }); } catch { threw = true; }
+           if (!threw) process.exit(2);
+         }`,
+      ],
+      { cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 2000 },
+    );
+    assert.equal(sub.status, 0, sub.stderr);
+
     assert.throws(
       () => validatePartial({ origin: { agentTrailerPatterns: ['(x)\\1'] } }, 'cfg'),
       /uses a backreference/,
     );
+    // Safe multi-quantifier patterns like ^a.*b.*c.*$ pass while excessive quantifier chains are rejected
+    assert.equal(riskySkipPattern('^a.*b.*c.*$'), undefined);
+    assert.doesNotThrow(() => validatePartial({ origin: { agentAuthorPatterns: ['^a.*b.*c.*$'] } }, 'cfg'));
     assert.throws(
-      () => validatePartial({ origin: { agentAuthorPatterns: ['a+b+c+'] } }, 'cfg'),
-      /more than 2 repetition quantifiers/,
+      () => validatePartial({ origin: { agentAuthorPatterns: ['a+b+c+d+e+f+g+'] } }, 'cfg'),
+      /too many repetition quantifiers/,
     );
     assert.throws(
       () => createOriginClassifier({ agentAuthorPatterns: ['^(a+)+$'] }),

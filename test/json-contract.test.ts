@@ -657,7 +657,7 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       assert.equal(diffTextDefault.code, 0);
       assert.equal(diffTextDefault.stdout, diffTextExplicitOne.stdout);
 
-      // 4. Opt-in weighting via CLI `--origin-weights bot=0,agent=0.5` drops bot-only companion, sets weighting="origin", and adjusts confidence
+      // 4. Opt-in weighting via CLI `--origin-weights bot=0,agent=0.5` drops bot-only companion, sets weighting="origin", adjusts confidence, and keeps interval/reverseInterval raw
       const diffWeightedRes = runCli(['diff', '--origin-weights', 'bot=0,agent=0.5', '--json'], r.dir);
       assert.equal(diffWeightedRes.code, 0, diffWeightedRes.stderr);
       const diffWeightedJson = JSON.parse(diffWeightedRes.stdout);
@@ -666,13 +666,22 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
         diffWeightedJson.suggestions.map((s: { to: string }) => s.to),
         ['src/schema.ts'],
       );
-      // Raw shared (4) and raw fromChanges (7) stay raw even when weighted
+      // Raw shared (4), raw fromChanges (7), and raw Wilson intervals stay identical to the unweighted run
       assert.equal(diffWeightedJson.suggestions[0].shared, 4);
       assert.equal(diffWeightedJson.suggestions[0].fromChanges, 7);
       assert.equal(diffWeightedJson.suggestions[0].weighted, true);
       assert.equal(diffWeightedJson.suggestions[0].weighting, 'origin');
+      assert.deepEqual(diffWeightedJson.suggestions[0].interval, apiSchemaSugg.interval);
+      assert.deepEqual(diffWeightedJson.suggestions[0].reverseInterval, apiSchemaSugg.reverseInterval);
       // Weighted confidence: (3*1 + 1*0.5) / (3*1 + 1*0.5 + 3*0) = 3.5 / 3.5 = 1
       assert.equal(diffWeightedJson.suggestions[0].confidence, 1);
+
+      // Also verify --origin-weights bot=0 alone keeps interval and reverseInterval identical to unweighted run
+      const diffBotZeroRes = runCli(['diff', '--origin-weights', 'bot=0', '--json'], r.dir);
+      assert.equal(diffBotZeroRes.code, 0, diffBotZeroRes.stderr);
+      const diffBotZeroJson = JSON.parse(diffBotZeroRes.stdout);
+      assert.deepEqual(diffBotZeroJson.suggestions[0].interval, apiSchemaSugg.interval);
+      assert.deepEqual(diffBotZeroJson.suggestions[0].reverseInterval, apiSchemaSugg.reverseInterval);
 
       // 5. `backtest --compare-origin-weights bot=0,agent=0.5 --json` validates against schema
       const btCompareRes = runCli(['backtest', '--compare-origin-weights', 'bot=0,agent=0.5', '--json'], r.dir);

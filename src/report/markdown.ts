@@ -1,12 +1,8 @@
 import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
 import type { Settings } from '../config.js';
-<<<<<<< HEAD
-import { formatIntervalCi, NAMES } from './views.js';
-=======
 import { formatOriginWeightsSpec, hasNonDefaultOriginWeights } from '../model/origin.js';
-import { NAMES, weightingLabel } from './views.js';
->>>>>>> 8e606bd (fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional)
+import { formatIntervalCi, NAMES, weightingLabel } from './views.js';
 import { pct, plural, shortHash } from '../util/term.js';
 
 /**

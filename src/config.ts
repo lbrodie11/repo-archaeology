@@ -1,6 +1,8 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_ORIGIN_PATTERN_LENGTH, riskyOriginPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
+import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
+
+export { riskySkipPattern };
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -61,7 +63,6 @@ export class ConfigError extends Error {
  */
 export const MAX_CONFIG_BYTES = 64 * 1024;
 export const MAX_FILES_PER_COMMIT_FROM_FILE = 1000;
-const MAX_SKIP_PATTERN_LENGTH = 200;
 
 /** Parses and validates raw JSON text from `.repo-archaeology.json`. */
 export function parseConfigText(content: string, source = CONFIG_FILE): Partial<Settings> {
@@ -97,41 +98,6 @@ export function loadConfigFile(root: string): Partial<Settings> {
   if (!stat.isFile()) throw new ConfigError(`${CONFIG_FILE} must be a regular file, not a symlink or device.`);
   if (stat.size > MAX_CONFIG_BYTES) throw new ConfigError(`${CONFIG_FILE} is larger than ${MAX_CONFIG_BYTES / 1024} KB.`);
   return parseConfigText(readFileSync(file, 'utf8'), CONFIG_FILE);
-}
-
-/**
- * Patterns that can backtrack catastrophically: a quantified group that itself contains
- * a quantifier or an alternation, like `(a+)+` or `(a|aa)*`, and backreferences.
- * Deliberately conservative: ordinary subject filters such as `^(chore|style)\b` pass.
- */
-export function riskySkipPattern(pattern: string): string | undefined {
-  if (pattern.length > MAX_SKIP_PATTERN_LENGTH) return `is longer than ${MAX_SKIP_PATTERN_LENGTH} characters`;
-  if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
-  let quantifierCount = 0;
-  // Find each group's contents and check whether the group is followed by a quantifier.
-  const stack: number[] = [];
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '\\') { i++; continue; }
-    if (ch === '[') {
-      // Skip character classes, where ( ) + * | { are literal.
-      for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
-      continue;
-    }
-    if (ch === '*' || ch === '+' || ch === '{') quantifierCount++;
-    if (ch === '(') stack.push(i);
-    else if (ch === ')' && stack.length > 0) {
-      const start = stack.pop()!;
-      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(pattern.slice(i + 1));
-      if (quantified && /(?:^|[^\\])(?:[*+|]|\{\d*,?\d*\})/.test(pattern.slice(start + 1, i).replace(/\[(?:\\.|[^\]])*\]/g, 'x'))) {
-        return 'repeats a group that contains a quantifier or alternation, which can hang on some commit messages';
-      }
-    }
-  }
-  if (quantifierCount > 2) {
-    return 'has more than 2 repetition quantifiers (*, +, {n,m})';
-  }
-  return undefined;
 }
 
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
@@ -223,7 +189,7 @@ function validateOriginConfig(raw: unknown, source: string): OriginConfig {
       } catch (err) {
         throw new ConfigError(`${source}: "origin.${field}" has invalid regular expression "${item}": ${(err as Error).message}`);
       }
-      const problem = riskyOriginPattern(item);
+      const problem = riskySkipPattern(item);
       if (problem) {
         throw new ConfigError(`${source}: "origin.${field}" pattern "${item}" ${problem}.`);
       }

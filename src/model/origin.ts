@@ -76,7 +76,7 @@ export const DEFAULT_BOT_PATTERNS: readonly string[] = [
   '\\[bot\\]$',
   '\\[bot\\]@users\\.noreply\\.github\\.com$',
   '^dependabot(?:\\[bot\\])?$',
-  '^renovate(?:\\[bot\\])?$',
+  '^(?:renovate(?:\\[bot\\]| bot)?|bot@renovateapp\\.com)$',
   '^github-actions(?:\\[bot\\])?$',
   '^snyk-bot(?:\\[bot\\])?$',
   '^greenkeeper(?:\\[bot\\])?$',
@@ -136,36 +136,55 @@ export type OriginClassifier = (commit: CommitIdentityInput) => CommitOrigin;
  * Rejects regular expressions that could backtrack catastrophically or exceed length bounds:
  * - longer than `MAX_ORIGIN_PATTERN_LENGTH` (200 chars)
  * - backreferences (`\1`..`\9`, `\k<...>`)
- * - a quantified group containing a quantifier or alternation (`(a+)+`, `(a|aa)*`)
- * - more than 2 repetition quantifiers (`*`, `+`, `{n,m}`)
+ * - a quantified group containing a quantifier (`*`, `+`, `?`, `{n,m}`) or alternation (`|`),
+ *   such as `(a+)+`, `(a?a?)+`, `((?:a)?)+`, or `(a|aa)*`
+ * - more than 6 repetition quantifiers (`*`, `+`, `?`, `{n,m}`)
  */
-export function riskyOriginPattern(pattern: string): string | undefined {
+export function riskySkipPattern(pattern: string): string | undefined {
   if (pattern.length > MAX_ORIGIN_PATTERN_LENGTH) return `is longer than ${MAX_ORIGIN_PATTERN_LENGTH} characters`;
   if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
+  // Mask escaped character pairs (`\.`), character classes (`[...]`), and non-capturing / named
+  // group headers (`(?:`, `(?i:`, `(?<name>`) to equal-length placeholders so every remaining
+  // `(`, `)`, `*`, `+`, `?`, `|`, `{` is an unescaped syntax token outside character classes.
+  const clean = pattern.replace(/\\./g, 'xx');
+  const masked = clean.replace(/\[[^\]]*\]/g, (m) => 'x'.repeat(m.length));
+  const normalized = masked.replace(
+    /\(\?(?:<[^>()!]+>|[a-zA-Z-]*:)/g,
+    (m) => '(' + 'x'.repeat(m.length - 1),
+  );
   let quantifierCount = 0;
   const stack: number[] = [];
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '\\') { i++; continue; }
-    if (ch === '[') {
-      for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
-      continue;
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
+    if (ch === '*' || ch === '+' || ch === '{') {
+      quantifierCount++;
+    } else if (
+      ch === '?' &&
+      normalized[i - 1] !== '(' &&
+      normalized[i - 1] !== '*' &&
+      normalized[i - 1] !== '+' &&
+      normalized[i - 1] !== '?' &&
+      normalized[i - 1] !== '}'
+    ) {
+      quantifierCount++;
     }
-    if (ch === '*' || ch === '+' || ch === '{') quantifierCount++;
-    if (ch === '(') stack.push(i);
-    else if (ch === ')' && stack.length > 0) {
+    if (ch === '(') {
+      stack.push(i);
+    } else if (ch === ')' && stack.length > 0) {
       const start = stack.pop()!;
-      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(pattern.slice(i + 1));
-      if (quantified && /(?:^|[^\\])(?:[*+|]|\{\d*,?\d*\})/.test(pattern.slice(start + 1, i).replace(/\[(?:\\.|[^\]])*\]/g, 'x'))) {
-        return 'repeats a group that contains a quantifier or alternation, which can hang analysis';
+      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(normalized.slice(i + 1));
+      if (quantified && /(?:[*+?|]|\{\d*,?\d*\})/.test(normalized.slice(start + 1, i))) {
+        return 'repeats a group that contains a quantifier or alternation, which can hang on some commit messages';
       }
     }
   }
-  if (quantifierCount > 2) {
-    return 'has more than 2 repetition quantifiers (*, +, {n,m})';
+  if (quantifierCount > 6) {
+    return 'has too many repetition quantifiers (*, +, ?, {n,m})';
   }
   return undefined;
 }
+
+export const riskyOriginPattern = riskySkipPattern;
 
 function compilePatternList(patterns: readonly string[]): RegExp[] {
   return patterns.map((p) => {
