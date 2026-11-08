@@ -2,6 +2,7 @@ import { posix } from 'node:path';
 import type { Context } from '../context.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import type { Companion } from '../model/cochange.js';
+import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 export interface EvidenceView {
@@ -27,6 +28,10 @@ export interface RelationshipView {
   confidence: number;
   /** P(from changes | to changes). */
   reverseConfidence: number;
+  /** 95% Wilson score interval for directional confidence (`shared / fromChanges`), always unweighted. */
+  interval?: WilsonInterval;
+  /** 95% Wilson score interval for reverse directional confidence (`shared / toChanges`), always unweighted. */
+  reverseInterval?: WilsonInterval;
   /** Evidence-adjusted ranking score (Wilson lower bound of confidence). */
   score: number;
   /** True when confidence is recency-weighted (--half-life), so it is not simply shared / fromChanges. */
@@ -95,17 +100,22 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
   const from = fromPath ?? model.path(companion.from);
   const to = toPath ?? model.path(companion.to);
   const hiddenBridge = relationship === 'ghost' ? ctx.classifier.hiddenBridge(from, to) : undefined;
+  const shared = companion.stat.count;
+  const fromChanges = model.changeCount[companion.from] ?? 0;
+  const toChanges = model.changeCount[companion.to] ?? 0;
   return {
     from,
     to,
     relationship,
     why: ctx.classifier.explain(from, to, relationship, hiddenBridge),
     hiddenBridge,
-    shared: companion.stat.count,
-    fromChanges: model.changeCount[companion.from] ?? 0,
-    toChanges: model.changeCount[companion.to] ?? 0,
+    shared,
+    fromChanges,
+    toChanges,
     confidence: round(companion.confidence),
     reverseConfidence: round(companion.reverseConfidence),
+    interval: roundInterval(wilsonInterval(shared, fromChanges)),
+    reverseInterval: roundInterval(wilsonInterval(shared, toChanges)),
     score: round(companion.score),
     weighted: model.weighted,
     lastTogether: isoDate(companion.stat.lastTime),
@@ -119,6 +129,17 @@ export function toView(ctx: Context, companion: Companion, relationship: Relatio
 
 function round(x: number): number {
   return Math.round(x * 1000) / 1000;
+}
+
+export function roundInterval(interval: WilsonInterval): WilsonInterval {
+  return {
+    low: Math.round(interval.low * 10000) / 10000,
+    high: Math.round(interval.high * 10000) / 10000,
+  };
+}
+
+export function formatIntervalCi(interval: WilsonInterval): string {
+  return `(95% CI ${Math.round(interval.low * 100)}–${Math.round(interval.high * 100)}%)`;
 }
 
 const LABELS: Record<Relationship, (s: string) => string> = {
@@ -163,7 +184,8 @@ export function printEvidence(view: RelationshipView, indent = '    '): void {
 export function describeStrength(view: RelationshipView): string {
   // With a half-life the percentage is weighted, so it is not shared/total: say so.
   const rate = view.weighted ? `${pct(view.confidence)} recency-weighted` : pct(view.confidence);
-  return `${view.shared} of ${view.fromChanges} commits (${rate}) · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
+  const interval = view.interval ?? wilsonInterval(view.shared, view.fromChanges);
+  return `${view.shared} of ${view.fromChanges} commits (${rate}) ${formatIntervalCi(interval)} · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
 }
 
 export const DISCLAIMER = 'Historical signal, not proof: check whether the change really needs these files.';

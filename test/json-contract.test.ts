@@ -126,6 +126,18 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     assert.deepEqual(scanJson.tool, { name: 'repo-archaeology', version: pkgVersion });
     assert.equal(scanJson.meta.tool, 'repo-archaeology');
     assert.ok(scanJson.families.length >= 1, 'expected 3-way serve-static family in scan --json');
+    for (const rel of scanJson.relationships) {
+      assert.ok(rel.interval, 'scan relationship must expose interval');
+      assert.ok(rel.reverseInterval, 'scan relationship must expose reverseInterval');
+      assert.ok(rel.interval.low <= rel.confidence && rel.confidence <= rel.interval.high);
+      assert.ok(rel.reverseInterval.low <= rel.reverseConfidence && rel.reverseConfidence <= rel.reverseInterval.high);
+    }
+    for (const fam of scanJson.families) {
+      for (const rel of fam.relationships) {
+        assert.ok(rel.interval, 'scan family relationship must expose interval');
+        assert.ok(rel.reverseInterval, 'scan family relationship must expose reverseInterval');
+      }
+    }
     assertMatchesSchema(scanJson, 'scan.schema.json');
 
     // 2. file --json
@@ -134,6 +146,13 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     const fileJson = JSON.parse(fileRes.stdout);
     assert.equal(fileJson.schemaVersion, 1);
     assert.deepEqual(fileJson.tool, { name: 'repo-archaeology', version: pkgVersion });
+    assert.ok(fileJson.companions.length >= 1);
+    for (const comp of fileJson.companions) {
+      assert.ok(comp.interval, 'file companion must expose interval');
+      assert.ok(comp.reverseInterval, 'file companion must expose reverseInterval');
+      assert.ok(comp.interval.low <= comp.confidence && comp.confidence <= comp.interval.high);
+      assert.ok(comp.reverseInterval.low <= comp.reverseConfidence && comp.reverseConfidence <= comp.reverseInterval.high);
+    }
     assertMatchesSchema(fileJson, 'file.schema.json');
 
     // 3. explain --json (with --counterexamples)
@@ -151,6 +170,13 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
     const explainJson = JSON.parse(explainRes.stdout);
     assert.equal(explainJson.schemaVersion, 1);
     assert.deepEqual(explainJson.tool, { name: 'repo-archaeology', version: pkgVersion });
+    assert.ok(explainJson.interval, 'explain --json must expose interval');
+    assert.ok(explainJson.reverseInterval, 'explain --json must expose reverseInterval');
+    assert.ok(explainJson.interval.low <= explainJson.confidence && explainJson.confidence <= explainJson.interval.high);
+    assert.ok(
+      explainJson.reverseInterval.low <= explainJson.reverseConfidence &&
+        explainJson.reverseConfidence <= explainJson.reverseInterval.high,
+    );
     assertMatchesSchema(explainJson, 'explain.schema.json');
 
     // 4. map --json
@@ -214,7 +240,48 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       const defaultDiffJson = JSON.parse(defaultDiffRes.stdout);
       assert.equal(defaultDiffJson.mode, 'diff');
       assert.ok(defaultDiffJson.suggestions.length >= 2);
+      for (const s of defaultDiffJson.suggestions) {
+        assert.ok(s.interval, 'diff suggestion must expose interval');
+        assert.ok(s.reverseInterval, 'diff suggestion must expose reverseInterval');
+        assert.ok(
+          s.interval.low <= s.confidence && s.confidence <= s.interval.high,
+          `expected ${s.interval.low} <= ${s.confidence} <= ${s.interval.high}`,
+        );
+        assert.ok(
+          s.reverseInterval.low <= s.reverseConfidence && s.reverseConfidence <= s.reverseInterval.high,
+          `expected ${s.reverseInterval.low} <= ${s.reverseConfidence} <= ${s.reverseInterval.high}`,
+        );
+        assert.equal(Math.round(s.interval.low * 10000) / 10000, s.interval.low);
+        assert.equal(Math.round(s.interval.high * 10000) / 10000, s.interval.high);
+      }
+      for (const fam of defaultDiffJson.families) {
+        for (const rel of fam.relationships) {
+          assert.ok(rel.interval, 'diff family relationship must expose interval');
+          assert.ok(rel.reverseInterval, 'diff family relationship must expose reverseInterval');
+          assert.ok(rel.interval.low <= rel.confidence && rel.confidence <= rel.interval.high);
+        }
+      }
       assertMatchesSchema(defaultDiffJson, 'default.schema.json');
+
+      // With --half-life set, interval and reverseInterval are unchanged (unweighted) while score may differ
+      const editApiRes = (() => {
+        repo.write('src/api.ts', "import { db } from './db';\nexport const api = db + 999;\n");
+        const flatRes = runCli(['diff', '--json'], repo.dir);
+        const weightedRes = runCli(['diff', '--half-life', '1', '--json'], repo.dir);
+        return { flat: JSON.parse(flatRes.stdout), weighted: JSON.parse(weightedRes.stdout) };
+      })();
+      assertMatchesSchema(editApiRes.weighted, 'diff.schema.json');
+      const flatDb = editApiRes.flat.suggestions.find((s: { to: string }) => s.to === 'src/db.ts');
+      const weightedDb = editApiRes.weighted.suggestions.find((s: { to: string }) => s.to === 'src/db.ts');
+      assert.ok(flatDb && weightedDb, 'expected src/db.ts suggestion in both flat and weighted diff runs');
+      assert.deepEqual(weightedDb.interval, flatDb.interval, 'interval must remain unweighted when --half-life is set');
+      assert.deepEqual(
+        weightedDb.reverseInterval,
+        flatDb.reverseInterval,
+        'reverseInterval must remain unweighted when --half-life is set',
+      );
+      assert.equal(weightedDb.weighted, true);
+      assert.notEqual(weightedDb.score, flatDb.score, 'score should reflect recency weighting when --half-life is set');
     } finally {
       repo.git('checkout', '-q', '--', '.');
     }

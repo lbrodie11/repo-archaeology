@@ -153,7 +153,7 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.match(md, /1\. \*\*`src\/adapter\/deno\/serve-static\.ts`\*\* — `ghost wire`/);
     assert.match(
       md,
-      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits \(60%\)\*\* · reverse \*\*66%\*\* \(12\/18\) · last together 2026-05-16 \(also linked to `src\/adapter\/cloudflare\/serve-static\.ts`\)/,
+      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits \(60%\)\*\* \(95% CI 39–78%\) · reverse \*\*66%\*\* \(12\/18\) · last together 2026-05-16 \(also linked to `src\/adapter\/cloudflare\/serve-static\.ts`\)/,
     );
     assert.match(md, /`26f8c33` \(2026-05-16\)/);
     assert.match(md, /`1196f14` \(2025-08-07\)/);
@@ -204,7 +204,7 @@ describe('Markdown PR summary renderer (src/report/markdown.ts)', () => {
     assert.match(md, /recency half-life 90d/);
     assert.match(
       md,
-      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits\*\* \(\*\*72%\*\* recency-weighted · reverse \*\*55%\*\* recency-weighted across 12\/18 raw commits\)/,
+      /Changed with `src\/adapter\/bun\/serve-static\.ts` in \*\*12 of 20 commits\*\* \(95% CI 39–78%\) \(\*\*72%\*\* recency-weighted · reverse \*\*55%\*\* recency-weighted across 12\/18 raw commits\)/,
     );
   });
 

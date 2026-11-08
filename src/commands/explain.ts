@@ -18,8 +18,8 @@ import {
 } from '../git/patch.js';
 import type { HiddenBridge, Relationship } from '../imports/classify.js';
 import { resolveCommitFileChange, type HistoryCommit } from '../model/history.js';
-import { buildMeta, printHeader, relationshipLabel, type Meta } from '../report/views.js';
-import { wilsonLowerBound } from '../util/stats.js';
+import { buildMeta, formatIntervalCi, printHeader, relationshipLabel, roundInterval, type Meta } from '../report/views.js';
+import { wilsonInterval, wilsonLowerBound, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 export const DEFAULT_EXPLAIN_COMMITS = 3;
@@ -91,6 +91,8 @@ export interface ExplainResult {
   toChanges: number;
   confidence: number;
   reverseConfidence: number;
+  interval?: WilsonInterval;
+  reverseInterval?: WilsonInterval;
   score: number;
   weighted: boolean;
   lastTogether?: string;
@@ -491,6 +493,8 @@ export async function explain(
     toChanges,
     confidence: round(confidence),
     reverseConfidence: round(reverseConfidence),
+    interval: roundInterval(wilsonInterval(shared, fromChanges)),
+    reverseInterval: roundInterval(wilsonInterval(shared, toChanges)),
     score: round(score),
     weighted: model.weighted,
     ...(stat && stat.lastTime > 0 ? { lastTogether: isoDate(stat.lastTime) } : {}),
@@ -588,6 +592,8 @@ export function printExplain(result: ExplainResult): void {
 
   const rateA = result.weighted ? `${pct(result.confidence)} recency-weighted` : pct(result.confidence);
   const rateB = result.weighted ? `${pct(result.reverseConfidence)} recency-weighted` : pct(result.reverseConfidence);
+  const intervalA = result.interval ?? wilsonInterval(result.shared, result.fromChanges);
+  const intervalB = result.reverseInterval ?? wilsonInterval(result.shared, result.toChanges);
   const lastStr = result.lastTogether
     ? ` · last together ${timeAgo(Date.parse(result.lastTogether) / 1000)} (${result.lastTogether})`
     : '';
@@ -595,10 +601,10 @@ export function printExplain(result: ExplainResult): void {
   console.log(`${c.bold('Relationship')}  ${relationshipLabel(result.relationship)}${lastStr}`);
   console.log(`${c.bold('Why')}           ${terminalText(result.why)}`);
   console.log(
-    `${c.bold('Direction')}     ${terminalText(result.from)} → ${terminalText(result.to)}: ${result.shared} of ${result.fromChanges} commits (${rateA})`,
+    `${c.bold('Direction')}     ${terminalText(result.from)} → ${terminalText(result.to)}: ${result.shared} of ${result.fromChanges} commits (${rateA}) ${formatIntervalCi(intervalA)}`,
   );
   console.log(
-    `              ${terminalText(result.to)} → ${terminalText(result.from)}: ${result.shared} of ${result.toChanges} commits (${rateB})`,
+    `              ${terminalText(result.to)} → ${terminalText(result.from)}: ${result.shared} of ${result.toChanges} commits (${rateB}) ${formatIntervalCi(intervalB)}`,
   );
   if (!result.meetsThresholds) {
     console.log(
