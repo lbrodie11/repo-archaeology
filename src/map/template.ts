@@ -296,7 +296,7 @@ const CLIENT = String.raw`
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
   function formatCi(iv, raw) {
-    return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100) + '\u2013' + Math.ceil(iv.high * 100) + '%)';
+    return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
   }
   function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
   function distinguishingPaths(a, b) {

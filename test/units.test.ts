@@ -91,8 +91,9 @@ describe('wilson lower bound', () => {
     }
   });
 
-  it('rounds intervals outward so the rounded interval contains the unrounded interval for all 0 <= k <= n <= 200', () => {
-    for (let n = 0; n <= 200; n++) {
+  it('rounds intervals outward and matches exact whole-percent bounds without double-rounding for all 0 <= k <= n <= 300', () => {
+    assert.equal(formatIntervalCi(roundInterval(wilsonInterval(11, 29))), '(95% CI 22–56%)');
+    for (let n = 0; n <= 300; n++) {
       for (let k = 0; k <= n; k++) {
         const raw = wilsonInterval(k, n);
         const rounded = roundInterval(raw);
@@ -105,6 +106,16 @@ describe('wilson lower bound', () => {
         assert.ok(match, `unexpected CI format: ${ciStr}`);
         const lowPct = Number(match[1]);
         const highPct = Number(match[2]);
+        assert.equal(
+          lowPct,
+          Math.floor(raw.low * 100),
+          `lowPct ${lowPct} != floor(raw.low * 100) for (${k}, ${n})`,
+        );
+        assert.equal(
+          highPct,
+          Math.ceil(raw.high * 100),
+          `highPct ${highPct} != ceil(raw.high * 100) for (${k}, ${n})`,
+        );
         assert.ok(lowPct / 100 <= raw.low && highPct / 100 >= raw.high);
         if (n > 0) {
           const displayedPct = Number(pct(k / n).slice(0, -1));

@@ -139,7 +139,7 @@ export function roundInterval(interval: WilsonInterval): WilsonInterval {
 }
 
 export function formatIntervalCi(interval: WilsonInterval, raw = false): string {
-  return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100)}–${Math.ceil(interval.high * 100)}%)`;
+  return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100 + 1e-9)}–${Math.ceil(interval.high * 100 - 1e-9)}%)`;
 }
 
 const LABELS: Record<Relationship, (s: string) => string> = {

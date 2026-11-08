@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Release Tarball & Schema Smoke Test ([`scripts/smoke-pack.mjs`](scripts/smoke-pack.mjs), [`scripts/schema-validator.mjs`](scripts/schema-validator.mjs)):** Packs the release tarball into a temporary directory, verifies the packed file allowlist, installs into an isolated prefix, runs the installed `repo-archaeology` binary (`diff --base <first-branch-point> --json` and `backtest --json`) against a 40-commit synthetic Git repository with sanitized `GIT_*` environment variables, and validates both outputs against `schema/diff.schema.json` and `schema/backtest.schema.json` in CI (`.github/workflows/ci.yml`).
 - **Automated Tag-Driven Release Pipeline ([`.github/workflows/release.yml`](.github/workflows/release.yml), [`scripts/release-helper.mjs`](scripts/release-helper.mjs)):** Consolidates release publishing into a single `v*.*.*` tag workflow split into least-privilege `verify`, `publish` (`id-token: write`), and `github-release` (`contents: write`) jobs, with SHA-pinned GitHub Actions, prerelease `--tag next` / `--prerelease` support, digest-verified retry recovery, and automatic triggering of `.github/workflows/action-smoke.yml`.
 
+### Changed
+- **`wilsonLowerBound` Default `z` Constant ([`src/util/stats.ts`](src/util/stats.ts)):** Changed `wilsonLowerBound`'s default `z` from `1.96` to `Z_95` (`1.959963984540054`), which shifts `score` by up to `1e-5`.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
