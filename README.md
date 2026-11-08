@@ -301,6 +301,27 @@ repo-archaeology backtest --head v1.2.0
 
 `diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). If `<ref>` contains a `.repo-archaeology.json` that the current version rejects, Repo Archaeology falls back to the working-tree configuration and records a warning in `meta.warnings`. JSON outputs include `meta.head: { ref, sha }`.
 
+### Library API (`openRepository`) & `imports`
+
+Use the programmatic ESM entry point (`import { openRepository } from 'repo-archaeology'`) to load a repository's Git history once and run multiple analyses (`diff`, `scan`, `file`, `explain`, `backtest`, and `importGraph`) in a single session without spawning subprocesses. Every `Repository` method returns the exact `schemaVersion: 1` object printed by the CLI with `--json`.
+
+```ts
+import { openRepository } from 'repo-archaeology';
+
+const repo = await openRepository({ cwd: '/path/to/repo', head: prHeadSha, base: prBaseSha });
+try {
+  const [diffJson, backtestJson, importsJson] = await Promise.all([
+    repo.diff({ limit: 10 }),
+    repo.backtest(),
+    repo.importGraph({ files: ['src/api.ts'] }),
+  ]);
+} finally {
+  await repo.close();
+}
+```
+
+You can also inspect internal JavaScript/TypeScript import edges from the CLI via `repo-archaeology imports [--files <path>...] [--json]` (validated against [`schema/import-graph.schema.json`](schema/import-graph.schema.json)). See [`docs/api.md`](docs/api.md) for the full library reference, TypeScript exports, and stability policy.
+
 ## How to read the results
 
 Every relationship has a kind:
@@ -442,7 +463,7 @@ Known limits:
 
 ## Project status
 
-The v0.3 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.3 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), the programmatic `openRepository()` library API and `importGraph` ([docs/api.md](docs/api.md) and [`schema/import-graph.schema.json`](schema/import-graph.schema.json)), `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 

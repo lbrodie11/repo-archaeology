@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { Command, InvalidArgumentError, Option } from 'commander';
+import { createRepository } from './api/index.js';
 import { backtest, printBacktest } from './commands/backtest.js';
 import { diff, printDiff } from './commands/diff.js';
 import { explain, printExplain } from './commands/explain.js';
 import { fileReport, printFile } from './commands/file.js';
+import { importGraph, printImports } from './commands/imports.js';
 import { openInBrowser, printMap, writeMap } from './commands/map.js';
 import { printScan, scan } from './commands/scan.js';
 import { ConfigError, type Settings } from './config.js';
@@ -120,6 +122,10 @@ function printJson(value: object): void {
   process.stdout.write(formatJsonContract(value));
 }
 
+function printVersionedJson(value: object): void {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
 const program = new Command();
 program
   .name('repo-archaeology')
@@ -152,9 +158,12 @@ program
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
     // Unless --kinds was chosen explicitly, keep config-file noise from crowding out ghost wires.
     const options = { ...opts, uncheckedCap: cmd.getOptionValueSource('kinds') === 'default' ? 5 : undefined };
-    const result = scan(ctx, options);
-    if (global.json) printJson(result);
-    else printScan(result, options);
+    if (global.json) {
+      printVersionedJson(await createRepository(ctx).scan(options));
+    } else {
+      const result = scan(ctx, options);
+      printScan(result, options);
+    }
   });
 
 program
@@ -188,6 +197,12 @@ program
         validateJsonOutPath(opts.jsonOut);
       }
       const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
+      if (global.json && opts.jsonOut === undefined) {
+        const jsonResult = await createRepository(ctx).diff(opts);
+        printVersionedJson(jsonResult);
+        if (opts.exitCode && jsonResult.suggestions.length > 0) process.exitCode = 1;
+        return;
+      }
       const result = await diff(ctx, opts);
       if (opts.jsonOut !== undefined) {
         writeJsonContractFile(opts.jsonOut, result);
@@ -218,9 +233,12 @@ program
   .action(async (path: string, opts: { limit: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    const result = fileReport(ctx, path, opts);
-    if (global.json) printJson(result);
-    else printFile(result);
+    if (global.json) {
+      printVersionedJson(await createRepository(ctx).file(path, opts));
+    } else {
+      const result = fileReport(ctx, path, opts);
+      printFile(result);
+    }
   });
 
 program
@@ -235,13 +253,22 @@ program
   .action(async (fileA: string, fileB: string, opts: { base?: string; commits: number; counterexamples?: boolean; context: number }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { base: opts.base, head: global.head });
-    const result = await explain(ctx, fileA, fileB, {
-      commits: opts.commits,
-      counterexamples: opts.counterexamples,
-      contextLines: opts.context,
-    });
-    if (global.json) printJson(result);
-    else printExplain(result);
+    if (global.json) {
+      printVersionedJson(
+        await createRepository(ctx).explain(fileA, fileB, {
+          commits: opts.commits,
+          counterexamples: opts.counterexamples,
+          context: opts.context,
+        }),
+      );
+    } else {
+      const result = await explain(ctx, fileA, fileB, {
+        commits: opts.commits,
+        counterexamples: opts.counterexamples,
+        contextLines: opts.context,
+      });
+      printExplain(result);
+    }
   });
 
 program
@@ -260,9 +287,37 @@ program
     }
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
-    const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow, compareOriginWeights: opts.compareOriginWeights });
-    if (global.json) printJson(result);
-    else printBacktest(result);
+    if (global.json) {
+      printVersionedJson(
+        await createRepository(ctx).backtest({
+          testFraction: opts.testFraction,
+          k: opts.k,
+          before: opts.before,
+          ghosts: opts.ghosts,
+          followUps: opts.followUps,
+          followUpWindowHours: opts.followUpWindow,
+          compareOriginWeights: opts.compareOriginWeights,
+        }),
+      );
+    } else {
+      const result = backtest(ctx, { ...opts, followUpWindowHours: opts.followUpWindow, compareOriginWeights: opts.compareOriginWeights });
+      printBacktest(result);
+    }
+  });
+
+program
+  .command('imports')
+  .description('inspect internal module imports and reverse importers across the repository')
+  .option('-f, --files <path...>', 'restrict from to these files plus every file that imports them')
+  .action(async (opts: { files?: string[] }, cmd: Command) => {
+    const global = cmd.optsWithGlobals<GlobalOptions>();
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
+    if (global.json) {
+      printVersionedJson(await createRepository(ctx).importGraph({ files: opts.files }));
+    } else {
+      const result = importGraph(ctx, { files: opts.files });
+      printImports(result);
+    }
   });
 
 program

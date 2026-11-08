@@ -34,6 +34,7 @@ export interface LogOptions {
   rev?: string;
   topoOrder?: boolean;
   reverse?: boolean;
+  signal?: AbortSignal;
 }
 
 const RS = '\u001e';
@@ -44,7 +45,7 @@ export const MAX_TRAILERS_PER_COMMIT = 20;
  * `%(trailers:only,unfold,separator=%x1d)` requires Git >= 2.22.0 (released June 2019).
  * Trailers are placed before `%s` so commit subjects containing control separators remain intact.
  */
-const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
+export const FORMAT = `--format=${RS}%H${US}%an${US}%ae${US}%at${US}%ct${GS}%(trailers:only,unfold,separator=%x1d)${US}%s`;
 
 /**
  * Builds the `git log` arguments. Merge commits are skipped (their diffs repeat
@@ -149,6 +150,6 @@ function parseHeader(header: string): RawCommit {
 /** Streams commits newest-first (git's default order). */
 export async function readLog(root: string, options: LogOptions, onCommit: (commit: RawCommit) => void): Promise<void> {
   const parser = new LogParser(onCommit);
-  await streamGitNulTokens(root, logArgs(options), (token) => parser.push(token));
+  await streamGitNulTokens(root, logArgs(options), (token) => parser.push(token), { signal: options.signal });
   parser.end();
 }

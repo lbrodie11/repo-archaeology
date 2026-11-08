@@ -15,6 +15,13 @@ export function typescript(): typeof TS {
   return cached;
 }
 
+export type ImportEdgeKind = 'static' | 'dynamic' | 'reexport' | 'require';
+
+export interface ExtractedImport {
+  specifier: string;
+  kind: ImportEdgeKind;
+}
+
 /**
  * Module specifiers referenced by a JS/TS source file: static imports, `export … from`,
  * `require()`, dynamic `import()` and side-effect imports. Uses TypeScript's
@@ -31,6 +38,59 @@ export function extractDependencies(sourceText: string, fileName = 'file.tsx'): 
     specifiers: info.importedFiles.map((file) => file.fileName),
     referencePaths: info.referencedFiles.map((file) => file.fileName),
     nonLiteralLoads: countNonLiteralLoads(sourceText, fileName),
+  };
+}
+
+/**
+ * Parses a JS/TS source file's AST to extract module specifiers together with their
+ * import syntax kind (`'static' | 'dynamic' | 'reexport' | 'require'`) and triple-slash
+ * `<reference path="..." />` directives.
+ */
+export function extractDetailedDependencies(
+  sourceText: string,
+  fileName = 'file.tsx',
+): { imports: ExtractedImport[]; referencePaths: string[] } {
+  const ts = typescript();
+  const source = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, false);
+  const imports: ExtractedImport[] = [];
+  const isLiteral = (node: TS.Node | undefined): node is TS.StringLiteralLike =>
+    node !== undefined && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node));
+
+  const visit = (node: TS.Node): void => {
+    if (ts.isImportDeclaration(node) && isLiteral(node.moduleSpecifier)) {
+      imports.push({ specifier: node.moduleSpecifier.text, kind: 'static' });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && isLiteral(node.moduleSpecifier)) {
+      imports.push({ specifier: node.moduleSpecifier.text, kind: 'reexport' });
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      isLiteral(node.moduleReference.expression)
+    ) {
+      imports.push({ specifier: node.moduleReference.expression.text, kind: 'require' });
+    } else if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const arg = node.arguments[0];
+      if (isLiteral(arg)) {
+        if (callee.kind === ts.SyntaxKind.ImportKeyword) {
+          imports.push({ specifier: arg.text, kind: 'dynamic' });
+        } else if (ts.isIdentifier(callee) && callee.text === 'require') {
+          imports.push({ specifier: arg.text, kind: 'require' });
+        }
+      }
+    } else if (
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      isLiteral(node.argument.literal)
+    ) {
+      imports.push({ specifier: node.argument.literal.text, kind: 'static' });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+
+  return {
+    imports,
+    referencePaths: source.referencedFiles.map((file) => file.fileName),
   };
 }
 

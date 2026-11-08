@@ -55,6 +55,7 @@ Machine-readable JSON Schema definitions (Draft 2020-12, `https://json-schema.or
 | `explain` | `repo-archaeology explain <a> <b> --json` | [`schema/explain.schema.json`](../schema/explain.schema.json) | Bounded Git diff hunks across shared commits and counterexample commits. |
 | `map` | `repo-archaeology map --json` | [`schema/map.schema.json`](../schema/map.schema.json) | Generated HTML file path, drawn node/edge counts, kind breakdown, and `patchesIncluded`. |
 | `backtest` | `repo-archaeology backtest --json` | [`schema/backtest.schema.json`](../schema/backtest.schema.json) | Chronological holdout replay scores, optional `ghostDiagnostics` (`--ghosts`), and optional `followUpBenchmark` (`--follow-ups`). |
+| `imports` / `importGraph` | `repo-archaeology imports --json`<br>`repo.importGraph()` | [`schema/import-graph.schema.json`](../schema/import-graph.schema.json) | Internal import graph (`files`, `edges`, `unresolved`, `languages`) and reverse-importer lookups. |
 | Default (bare) | `repo-archaeology --json` | [`schema/default.schema.json`](../schema/default.schema.json) | Discriminated union (`oneOf`) keyed by `mode`: `"diff"` when working tree has changes with history, otherwise `"scan"` (with `changedWithoutHistory`). |
 
 ---
@@ -337,6 +338,20 @@ When `repo-archaeology --json` is invoked with no subcommand, it inspects the wo
 
 - **`"mode": "diff"`:** Emitted when uncommitted changes touch at least one file with usable history. Contains all properties of `DiffResult` (`schema/diff.schema.json`) plus `"mode": "diff"`.
 - **`"mode": "scan"`:** Emitted when the working tree is clean or changed files have no prior history. Contains all properties of `ScanResult` (`schema/scan.schema.json`) plus `"mode": "scan"` and `"changedWithoutHistory"` (`integer`).
+
+---
+
+### 5.9 `imports --json` / `repo.importGraph()` ([`schema/import-graph.schema.json`](../schema/import-graph.schema.json))
+
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `schemaVersion` | `1` | Yes | JSON contract major version. |
+| `tool` | `{ name, version }` | Yes | Tool name and semver version. |
+| `meta` | `Meta` | Yes | Repository metadata. |
+| `files` | `string[]` | Yes | Sorted repository-relative paths included in the graph (`from` candidates). When `files` filter is passed, includes the requested files plus every file that imports them. |
+| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"` and `to` is an internal file present at head. |
+| `unresolved` | `ImportGraphUnresolved[]` | Yes | Unresolved local/alias module specifiers (`{ from, specifier, reason }`, e.g. `reason: "unmatched"`). |
+| `languages` | `string[]` | Yes | Sorted list of detected source languages (`"javascript"`, `"typescript"`). |
 
 ---
 

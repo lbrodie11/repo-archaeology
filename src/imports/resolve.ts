@@ -611,7 +611,7 @@ export class ImportResolver {
     this.packages = new LocalPackages(files);
   }
 
-  resolve(fromFile: string, rawSpecifier: string): Resolution {
+  resolve(fromFile: string, rawSpecifier: string, explicitMode?: 'import' | 'require'): Resolution {
     // Drop query/hash suffixes (`./x.svg?raw`), but a leading `#` is a subpath alias (`#/utils`).
     const specifier = rawSpecifier.startsWith('#') ? rawSpecifier.replace(/\?.*$/, '') : rawSpecifier.replace(/[?#].*$/, '');
     if (specifier === '') return { kind: 'unresolved' };
@@ -642,7 +642,7 @@ export class ImportResolver {
       const found = resolveFile(posix.join(config.baseUrl, specifier), this.files);
       if (found) return { kind: 'file', path: found };
     }
-    const mode = fromFile.endsWith('.cjs') || fromFile.endsWith('.cts') ? 'require' : 'import';
+    const mode = explicitMode ?? (fromFile.endsWith('.cjs') || fromFile.endsWith('.cts') ? 'require' : 'import');
     const local = this.packages.resolve(specifier, mode);
     if (local) return local;
     return ALIAS_LIKE.test(specifier) ? { kind: 'unresolved' } : { kind: 'external' };

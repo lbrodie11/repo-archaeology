@@ -1,0 +1,807 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import {
+  ConfigError,
+  GitError,
+  openRepository,
+  RELATIONSHIPS,
+  UsageError,
+  type BacktestJson,
+  type DiffJson,
+  type ExplainJson,
+  type FileJson,
+  type ImportGraphJson,
+  type Repository,
+  type ScanJson,
+} from '../src/api/index.js';
+import {
+  loadSchema as loadSchemaFromDir,
+  sanitizeGitEnv,
+  validateSchemaNode,
+} from '../scripts/schema-validator.mjs';
+import { FixtureRepo } from './helpers.js';
+
+const ROOT_DIR = join(import.meta.dirname, '..');
+const SCHEMA_DIR = join(ROOT_DIR, 'schema');
+const CLI = join(ROOT_DIR, 'src', 'cli.ts');
+const TSX = import.meta.resolve('tsx');
+
+function runCli(args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}) {
+  const result = spawnSync(process.execPath, ['--import', TSX, CLI, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: sanitizeGitEnv(process.env, { NO_COLOR: '1', ...extraEnv }),
+  });
+  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+function assertMatchesSchema(value: unknown, schemaFile: string): void {
+  const schema = loadSchemaFromDir(SCHEMA_DIR, schemaFile);
+  const errors: string[] = [];
+  validateSchemaNode(SCHEMA_DIR, value, schema, schemaFile, '$', errors);
+  assert.deepEqual(errors, [], `Schema validation failed for ${schemaFile}:\n${errors.join('\n')}`);
+}
+
+function findRealGit(): string {
+  const out = execFileSync(
+    process.platform === 'win32' ? 'where.exe' : 'which',
+    ['git'],
+    { encoding: 'utf8' },
+  );
+  const first = out
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  assert.ok(first, 'expected git binary on PATH');
+  return first;
+}
+
+describe('RA-03 Library API: openRepository() sessions', () => {
+  let repo: FixtureRepo;
+  let baseRefSha: string;
+  let headRefSha: string;
+
+  before(() => {
+    repo = new FixtureRepo();
+    repo.write(
+      'tsconfig.json',
+      JSON.stringify(
+        {
+          compilerOptions: {
+            target: 'ES2022',
+            module: 'NodeNext',
+            moduleResolution: 'NodeNext',
+            baseUrl: '.',
+            paths: {
+              '@/*': ['src/*'],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    repo.write('src/adapter/bun/serve-static.ts', 'export const bunServe = 1;\n');
+    repo.write('src/adapter/deno/serve-static.ts', 'export const denoServe = 1;\n');
+    repo.write('src/adapter/cloudflare/serve-static.ts', 'export const cfServe = 1;\n');
+    repo.write('src/db.ts', 'export const db = 1;\n');
+    repo.write('src/util.ts', 'export function format(x: number) { return String(x); }\n');
+    repo.write(
+      'src/api.ts',
+      [
+        '/// <reference path="./types.d.ts" />',
+        "import { db } from './db.js';",
+        "import { format } from '@/util';",
+        "import fs from 'node:fs';",
+        "export { db as reexportedDb } from './db.js';",
+        "const lazy = () => import('./adapter/bun/serve-static.js');",
+        "const legacy = require('./util');",
+        "import { missing } from './does-not-exist.js';",
+        'export const api = () => format(db) + typeof fs + typeof lazy + typeof legacy + typeof missing;',
+        '',
+      ].join('\n'),
+    );
+    repo.write('src/types.d.ts', 'export interface ApiTypes { ok: boolean; }\n');
+    repo.git('add', '.');
+    repo.commit({ message: 'initial setup', author: 'Alice' });
+
+    for (let i = 1; i <= 30; i++) {
+      repo.commit({
+        message: `feat(serve-static): sync adapter behavior ${i}`,
+        author: 'Alice',
+        write: {
+          'src/adapter/bun/serve-static.ts': `export const bunServe = ${i};\n`,
+          'src/adapter/deno/serve-static.ts': `export const denoServe = ${i};\n`,
+          'src/adapter/cloudflare/serve-static.ts': `export const cfServe = ${i};\n`,
+        },
+      });
+      if (i % 4 === 0) {
+        repo.commit({
+          message: `fix(api): update query ${i}`,
+          author: 'Bob',
+          write: {
+            'src/api.ts': [
+              '/// <reference path="./types.d.ts" />',
+              "import { db } from './db.js';",
+              "import { format } from '@/util';",
+              "import fs from 'node:fs';",
+              "export { db as reexportedDb } from './db.js';",
+              "const lazy = () => import('./adapter/bun/serve-static.js');",
+              "const legacy = require('./util');",
+              "import { missing } from './does-not-exist.js';",
+              `export const api = () => format(db + ${i}) + typeof fs + typeof lazy + typeof legacy + typeof missing;`,
+              '',
+            ].join('\n'),
+          },
+        });
+        repo.commit({
+          message: `fix(api): follow up db schema ${i}`,
+          author: 'Bob',
+          write: {
+            'src/api.ts': [
+              '/// <reference path="./types.d.ts" />',
+              "import { db } from './db.js';",
+              "import { format } from '@/util';",
+              "import fs from 'node:fs';",
+              "export { db as reexportedDb } from './db.js';",
+              "const lazy = () => import('./adapter/bun/serve-static.js');",
+              "const legacy = require('./util');",
+              "import { missing } from './does-not-exist.js';",
+              `export const api = () => format(db + ${i} + 1) + typeof fs + typeof lazy + typeof legacy + typeof missing;`,
+              '',
+            ].join('\n'),
+            'src/db.ts': `export const db = ${i};\n`,
+          },
+        });
+      }
+      if (i === 30) {
+        baseRefSha = repo.git('rev-parse', 'HEAD').trim();
+      }
+    }
+
+    // Create a branch-like commit modifying one member of the 3-way family so diff --base has suggestions
+    repo.commit({
+      message: 'feat(bun): update bun serve-static only',
+      author: 'Alice',
+      write: {
+        'src/adapter/bun/serve-static.ts': 'export const bunServe = 999;\n',
+      },
+    });
+    headRefSha = repo.git('rev-parse', 'HEAD').trim();
+  });
+
+  after(() => {
+    repo.cleanup();
+  });
+
+  it('guarantees byte-for-byte JSON parity between openRepository() methods and CLI --json', async () => {
+    // 1. Default session (no base) for scan, file, explain, backtest, importGraph, and working-tree diff
+    const defaultSession = await openRepository({
+      cwd: join(repo.dir, 'src'),
+    });
+    try {
+      assert.equal(defaultSession.root, realpathSync(repo.dir));
+      assert.equal(defaultSession.headSha, headRefSha);
+      assert.equal(defaultSession.mergeBaseSha, undefined);
+
+      // scan
+      const apiScan: ScanJson = await defaultSession.scan({ limit: 5, kinds: ['ghost', 'direct'] });
+      const cliScan = JSON.parse(
+        runCli(['scan', '--limit', '5', '--kinds', 'ghost,direct', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiScan, cliScan);
+      assertMatchesSchema(apiScan, 'scan.schema.json');
+
+      // diff (working-tree clean -> silence)
+      const apiCleanDiff: DiffJson = await defaultSession.diff({ limit: 5 });
+      const cliCleanDiff = JSON.parse(
+        runCli(['diff', '--limit', '5', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiCleanDiff, cliCleanDiff);
+      assertMatchesSchema(apiCleanDiff, 'diff.schema.json');
+
+      // file (session opened in join(repo.dir, 'src') resolves paths relative to cwd or repo root)
+      const apiFile: FileJson = await defaultSession.file('adapter/bun/serve-static.ts', { limit: 5 });
+      const cliFile = JSON.parse(
+        runCli(['file', 'src/adapter/bun/serve-static.ts', '--limit', '5', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiFile, cliFile);
+      assertMatchesSchema(apiFile, 'file.schema.json');
+
+      // explain
+      const apiExplain: ExplainJson = await defaultSession.explain(
+        'adapter/bun/serve-static.ts',
+        'adapter/deno/serve-static.ts',
+        { commits: 3, counterexamples: true, context: 2 },
+      );
+      const cliExplain = JSON.parse(
+        runCli(
+          [
+            'explain',
+            'src/adapter/bun/serve-static.ts',
+            'src/adapter/deno/serve-static.ts',
+            '--commits',
+            '3',
+            '--counterexamples',
+            '-U',
+            '2',
+            '--json',
+          ],
+          repo.dir,
+        ).stdout,
+      );
+      assert.deepEqual(apiExplain, cliExplain);
+      assertMatchesSchema(apiExplain, 'explain.schema.json');
+
+      // backtest
+      const apiBacktest: BacktestJson = await defaultSession.backtest({
+        testFraction: 0.25,
+        k: 3,
+        ghosts: true,
+        followUps: true,
+        followUpWindowHours: 48,
+        compareOriginWeights: 'bot=0,agent=0.5',
+      });
+      const cliBacktest = JSON.parse(
+        runCli(
+          [
+            'backtest',
+            '--test-fraction',
+            '0.25',
+            '-k',
+            '3',
+            '--ghosts',
+            '--follow-ups',
+            '--follow-up-window',
+            '48',
+            '--compare-origin-weights',
+            'bot=0,agent=0.5',
+            '--json',
+          ],
+          repo.dir,
+        ).stdout,
+      );
+      assert.deepEqual(apiBacktest, cliBacktest);
+      assertMatchesSchema(apiBacktest, 'backtest.schema.json');
+
+      // importGraph
+      const apiImports: ImportGraphJson = await defaultSession.importGraph();
+      const cliImports = JSON.parse(runCli(['imports', '--json'], repo.dir).stdout);
+      assert.deepEqual(apiImports, cliImports);
+      assertMatchesSchema(apiImports, 'import-graph.schema.json');
+
+      const apiFilteredImports: ImportGraphJson = await defaultSession.importGraph({ files: ['db.ts'] });
+      const cliFilteredImports = JSON.parse(
+        runCli(['imports', '--files', 'src/db.ts', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiFilteredImports, cliFilteredImports);
+      assertMatchesSchema(apiFilteredImports, 'import-graph.schema.json');
+    } finally {
+      await defaultSession.close();
+    }
+
+    // 2. Session with base set (diff --base and explain --base)
+    const baseSession = await openRepository({
+      cwd: repo.dir,
+      base: baseRefSha,
+    });
+    try {
+      assert.equal(baseSession.root, realpathSync(repo.dir));
+      assert.equal(baseSession.headSha, headRefSha);
+      assert.equal(baseSession.mergeBaseSha, baseRefSha);
+
+      const apiDiff: DiffJson = await baseSession.diff({ limit: 5 });
+      const cliDiff = JSON.parse(
+        runCli(['diff', '--base', baseRefSha, '--limit', '5', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiDiff, cliDiff);
+      assert.ok(apiDiff.suggestions.length >= 1, 'expected suggestions for bun serve-static change');
+      assertMatchesSchema(apiDiff, 'diff.schema.json');
+
+      const apiBaseExplain: ExplainJson = await baseSession.explain(
+        'src/adapter/bun/serve-static.ts',
+        'src/adapter/deno/serve-static.ts',
+        { commits: 3, counterexamples: true, context: 2 },
+      );
+      const cliBaseExplain = JSON.parse(
+        runCli(
+          [
+            'explain',
+            'src/adapter/bun/serve-static.ts',
+            'src/adapter/deno/serve-static.ts',
+            '--base',
+            baseRefSha,
+            '--commits',
+            '3',
+            '--counterexamples',
+            '-U',
+            '2',
+            '--json',
+          ],
+          repo.dir,
+        ).stdout,
+      );
+      assert.deepEqual(apiBaseExplain, cliBaseExplain);
+      assertMatchesSchema(apiBaseExplain, 'explain.schema.json');
+    } finally {
+      await baseSession.close();
+    }
+
+    // 3. Session with head + base set (RA-02 mode)
+    const headBaseSession = await openRepository({
+      cwd: repo.dir,
+      head: 'HEAD~1',
+      base: 'HEAD~3',
+    });
+    try {
+      const apiHeadDiff = await headBaseSession.diff();
+      const cliHeadDiff = JSON.parse(
+        runCli(['--head', 'HEAD~1', 'diff', '--base', 'HEAD~3', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiHeadDiff, cliHeadDiff);
+    } finally {
+      await headBaseSession.close();
+    }
+
+    const headOnlySession = await openRepository({
+      cwd: repo.dir,
+      head: 'HEAD~1',
+    });
+    try {
+      const apiHeadImports = await headOnlySession.importGraph();
+      const cliHeadImports = JSON.parse(
+        runCli(['--head', 'HEAD~1', 'imports', '--json'], repo.dir).stdout,
+      );
+      assert.deepEqual(apiHeadImports, cliHeadImports);
+    } finally {
+      await headOnlySession.close();
+    }
+  });
+
+  it('spawns git log exactly once across openRepository() and multiple method calls', async () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'repo-arch-git-spy-'));
+    const logFile = join(binDir, 'git-calls.log');
+    const realGit = findRealGit();
+
+    try {
+      writeFileSync(logFile, '');
+      if (process.platform === 'win32') {
+        const wrapperJs = join(binDir, 'git-wrapper.mjs');
+        writeFileSync(
+          wrapperJs,
+          [
+            "import { appendFileSync } from 'node:fs';",
+            "import { spawnSync } from 'node:child_process';",
+            `const logFile = ${JSON.stringify(logFile)};`,
+            `const realGit = ${JSON.stringify(realGit)};`,
+            'const args = process.argv.slice(2);',
+            "appendFileSync(logFile, args.join(' ') + '\\n');",
+            "const res = spawnSync(realGit, args, { stdio: 'inherit' });",
+            'process.exit(res.status ?? 1);',
+          ].join('\n'),
+        );
+        writeFileSync(
+          join(binDir, 'git.cmd'),
+          `@echo off\r\n"${process.execPath}" "${wrapperJs}" %*\r\n`,
+        );
+      } else {
+        const wrapperSh = join(binDir, 'git');
+        writeFileSync(
+          wrapperSh,
+          [
+            '#!/bin/sh',
+            `printf '%s\\n' "$*" >> "${logFile}"`,
+            `exec "${realGit}" "$@"`,
+            '',
+          ].join('\n'),
+        );
+        chmodSync(wrapperSh, 0o755);
+      }
+
+      const prevPath = process.env.PATH;
+      process.env.PATH = `${binDir}${delimiter}${prevPath ?? ''}`;
+      try {
+        const session = await openRepository({
+          cwd: repo.dir,
+          head: headRefSha,
+          base: baseRefSha,
+        });
+        try {
+          await session.diff({ limit: 5 });
+          await session.backtest({ testFraction: 0.2, k: 3 });
+          await session.scan({ limit: 5 });
+          await session.file('src/adapter/bun/serve-static.ts');
+          await session.importGraph();
+          await session.importGraph({ files: ['src/db.ts'] });
+        } finally {
+          await session.close();
+        }
+      } finally {
+        process.env.PATH = prevPath;
+      }
+
+      const calls = readFileSync(logFile, 'utf8')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const gitLogCalls = calls.filter(
+        (line) => line === 'log' || line.startsWith('log ') || line.includes(' log '),
+      );
+      assert.equal(
+        gitLogCalls.length,
+        1,
+        `Expected git log to be called exactly once per session, got ${gitLogCalls.length}:\n${calls.join('\n')}`,
+      );
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('never writes to stdout or stderr in library mode and reports progress via onProgress', () => {
+    const script = [
+      `import assert from 'node:assert/strict';`,
+      `import { openRepository } from ${JSON.stringify(join(ROOT_DIR, 'src', 'api', 'index.ts'))};`,
+      `const stdoutWrites = [];`,
+      `const stderrWrites = [];`,
+      `const progressEvents = [];`,
+      `process.stdout.write = (chunk) => { stdoutWrites.push(String(chunk)); return true; };`,
+      `process.stderr.write = (chunk) => { stderrWrites.push(String(chunk)); return true; };`,
+      `Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });`,
+      `const session = await openRepository({`,
+      `  cwd: ${JSON.stringify(repo.dir)},`,
+      `  base: ${JSON.stringify(baseRefSha)},`,
+      `  onProgress: (e) => progressEvents.push(e),`,
+      `});`,
+      `try {`,
+      `  await session.scan();`,
+      `  await session.diff();`,
+      `  await session.file('src/adapter/bun/serve-static.ts');`,
+      `  await session.explain('src/adapter/bun/serve-static.ts', 'src/adapter/deno/serve-static.ts');`,
+      `  await session.backtest();`,
+      `  await session.importGraph();`,
+      `} finally {`,
+      `  await session.close();`,
+      `}`,
+      `assert.deepEqual(stdoutWrites, [], 'Library API must never write to process.stdout');`,
+      `assert.deepEqual(stderrWrites, [], 'Library API must never write to process.stderr');`,
+      `assert.ok(progressEvents.some((e) => e.phase === 'history' && typeof e.done === 'number'));`,
+      `assert.ok(progressEvents.some((e) => e.phase === 'model' && e.done === 1 && e.total === 1));`,
+    ].join('\n');
+
+    const res = spawnSync(process.execPath, ['--import', TSX, '--input-type=module', '-e', script], {
+      cwd: repo.dir,
+      encoding: 'utf8',
+      env: sanitizeGitEnv(process.env, { NO_COLOR: '1' }),
+    });
+    assert.equal(res.status, 0, `Silence check subprocess failed:\n${res.stdout}\n${res.stderr}`);
+    assert.equal(res.stdout, '');
+    assert.equal(res.stderr, '');
+  });
+
+  it('builds importGraph with static, dynamic, reexport, require, unresolved edges, and cached reverse-importer lookup', async () => {
+    const session = await openRepository({ cwd: repo.dir });
+    try {
+      const fullGraph = await session.importGraph();
+      assert.equal(fullGraph.schemaVersion, 1);
+      assert.deepEqual(fullGraph.languages, ['typescript']);
+      assert.ok(fullGraph.files.includes('src/api.ts'));
+      assert.ok(fullGraph.files.includes('src/db.ts'));
+      assert.ok(fullGraph.files.includes('src/util.ts'));
+      assert.ok(fullGraph.files.includes('src/types.d.ts'));
+
+      const apiEdges = fullGraph.edges.filter((e) => e.from === 'src/api.ts');
+      assert.deepEqual(
+        apiEdges,
+        [
+          {
+            from: 'src/api.ts',
+            to: 'src/adapter/bun/serve-static.ts',
+            specifier: './adapter/bun/serve-static.js',
+            kind: 'dynamic',
+          },
+          {
+            from: 'src/api.ts',
+            to: 'src/db.ts',
+            specifier: './db.js',
+            kind: 'reexport',
+          },
+          {
+            from: 'src/api.ts',
+            to: 'src/db.ts',
+            specifier: './db.js',
+            kind: 'static',
+          },
+          {
+            from: 'src/api.ts',
+            to: 'src/types.d.ts',
+            specifier: './types.d.ts',
+            kind: 'static',
+          },
+          {
+            from: 'src/api.ts',
+            to: 'src/util.ts',
+            specifier: './util',
+            kind: 'require',
+          },
+          {
+            from: 'src/api.ts',
+            to: 'src/util.ts',
+            specifier: '@/util',
+            kind: 'static',
+          },
+        ],
+      );
+
+      // External 'node:fs' is ignored (not internal and not unresolved), while './does-not-exist.js' is reported in unresolved
+      assert.deepEqual(fullGraph.unresolved, [
+        {
+          from: 'src/api.ts',
+          specifier: './does-not-exist.js',
+          reason: 'unmatched',
+        },
+      ]);
+
+      // Reverse lookup: asking for files: ['src/db.ts'] restricts `from` to 'src/db.ts' plus 'src/api.ts' (which imports it)
+      const dbGraph = await session.importGraph({ files: ['src/db.ts'] });
+      assert.deepEqual(dbGraph.files, ['src/api.ts', 'src/db.ts']);
+      assert.ok(dbGraph.edges.every((e) => e.from === 'src/api.ts' || e.from === 'src/db.ts'));
+      assert.ok(dbGraph.edges.some((e) => e.from === 'src/api.ts' && e.to === 'src/db.ts'));
+      assert.deepEqual(dbGraph.unresolved, [
+        {
+          from: 'src/api.ts',
+          specifier: './does-not-exist.js',
+          reason: 'unmatched',
+        },
+      ]);
+
+      // Asking for a leaf file that nobody imports only includes that file
+      const denoGraph = await session.importGraph({ files: ['src/adapter/deno/serve-static.ts'] });
+      assert.deepEqual(denoGraph.files, ['src/adapter/deno/serve-static.ts']);
+      assert.deepEqual(denoGraph.edges, []);
+      assert.deepEqual(denoGraph.unresolved, []);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('honors useConfigFile and settings overrides and throws typed errors in library mode', async () => {
+    const configRepo = new FixtureRepo();
+    try {
+      configRepo.write('a.ts', 'export const a = 1;\n');
+      configRepo.write('b.ts', 'export const b = 1;\n');
+      configRepo.write('.repo-archaeology.json', JSON.stringify({ minShared: 10 }));
+      configRepo.git('add', '.');
+      configRepo.commit({ message: 'init', author: 'Alice' });
+      for (let i = 0; i < 4; i++) {
+        configRepo.commit({
+          message: `change ${i}`,
+          author: 'Alice',
+          write: {
+            'a.ts': `export const a = ${i + 2};\n`,
+            'b.ts': `export const b = ${i + 2};\n`,
+          },
+        });
+      }
+
+      // With useConfigFile: true (default), minShared is 10 from .repo-archaeology.json -> 0 relationships
+      const withConfig = await openRepository({ cwd: configRepo.dir });
+      try {
+        const scan1 = await withConfig.scan();
+        assert.equal(scan1.meta.settings.minShared, 10);
+        assert.equal(scan1.relationships.length, 0);
+      } finally {
+        await withConfig.close();
+      }
+
+      // With useConfigFile: false, default minShared is 3 -> 1 relationship
+      const withoutConfig = await openRepository({ cwd: configRepo.dir, useConfigFile: false });
+      try {
+        const scan2 = await withoutConfig.scan();
+        assert.equal(scan2.meta.settings.minShared, 3);
+        assert.equal(scan2.relationships.length, 1);
+      } finally {
+        await withoutConfig.close();
+      }
+
+      // Explicit settings override .repo-archaeology.json even when useConfigFile: true
+      const withOverride = await openRepository({
+        cwd: configRepo.dir,
+        settings: { minShared: 2, minConfidence: 0.5 },
+      });
+      try {
+        const scan3 = await withOverride.scan();
+        assert.equal(scan3.meta.settings.minShared, 2);
+        assert.equal(scan3.meta.settings.minConfidence, 0.5);
+        assert.equal(scan3.relationships.length, 1);
+      } finally {
+        await withOverride.close();
+      }
+
+      // Invalid .repo-archaeology.json throws ConfigError when useConfigFile is true, but succeeds when useConfigFile is false
+      configRepo.write('.repo-archaeology.json', '{ "unknownKey": 123 }');
+      await assert.rejects(
+        () => openRepository({ cwd: configRepo.dir }),
+        (err: unknown) => err instanceof ConfigError,
+      );
+      const ignoredBadConfig = await openRepository({ cwd: configRepo.dir, useConfigFile: false });
+      await ignoredBadConfig.close();
+
+      // Calling diff() in head mode without base throws UsageError
+      const headOnly = await openRepository({ cwd: configRepo.dir, head: 'HEAD', useConfigFile: false });
+      try {
+        await assert.rejects(
+          () => headOnly.diff(),
+          (err: unknown) => err instanceof UsageError && /requires --base/.test(err.message),
+        );
+      } finally {
+        await headOnly.close();
+      }
+
+      // Bad head ref throws UsageError; non-git directory throws GitError
+      await assert.rejects(
+        () => openRepository({ cwd: configRepo.dir, head: 'refs/heads/does-not-exist', useConfigFile: false }),
+        (err: unknown) => err instanceof UsageError,
+      );
+      const nonGitDir = mkdtempSync(join(tmpdir(), 'repo-arch-nongit-'));
+      try {
+        await assert.rejects(
+          () => openRepository({ cwd: nonGitDir }),
+          (err: unknown) => err instanceof GitError,
+        );
+      } finally {
+        rmSync(nonGitDir, { recursive: true, force: true });
+      }
+
+      assert.ok(Array.isArray(RELATIONSHIPS) && RELATIONSHIPS.includes('ghost'));
+    } finally {
+      configRepo.cleanup();
+    }
+  });
+
+  it('rejects openRepository() with an AbortError when signal is pre-aborted or aborted mid-load', async () => {
+    // 1. Pre-aborted signal
+    const preAborted = AbortSignal.abort();
+    await assert.rejects(
+      () => openRepository({ cwd: repo.dir, signal: preAborted }),
+      (err: unknown) => err instanceof Error && err.name === 'AbortError',
+    );
+
+    // 2. Mid-load abort during history streaming
+    const ac = new AbortController();
+    await assert.rejects(
+      () =>
+        openRepository({
+          cwd: repo.dir,
+          signal: ac.signal,
+          onProgress: (e) => {
+            if (e.phase === 'history') {
+              ac.abort();
+            }
+          },
+        }),
+      (err: unknown) => err instanceof Error && err.name === 'AbortError',
+    );
+  });
+
+  it('packs and resolves repo-archaeology ESM exports and TypeScript declarations from a tarball', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'repo-arch-api-pack-'));
+    try {
+      // Build dist/ first
+      const buildRes = spawnSync('npm', ['run', 'build'], {
+        cwd: ROOT_DIR,
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+      });
+      assert.equal(buildRes.status, 0, buildRes.stderr);
+
+      const packDir = join(tmp, 'pack');
+      const consumerDir = join(tmp, 'consumer');
+      mkdirSync(packDir, { recursive: true });
+      mkdirSync(consumerDir, { recursive: true });
+
+      const packRes = spawnSync('npm', ['pack', '--json', '--pack-destination', packDir], {
+        cwd: ROOT_DIR,
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+      });
+      assert.equal(packRes.status, 0, packRes.stderr);
+      const packInfo = JSON.parse(packRes.stdout) as { filename: string }[];
+      const tarballPath = join(packDir, packInfo[0]!.filename);
+      assert.ok(existsSync(tarballPath));
+
+      writeFileSync(
+        join(consumerDir, 'package.json'),
+        JSON.stringify({ name: 'test-consumer', private: true, type: 'module' }, null, 2),
+      );
+      const installRes = spawnSync(
+        'npm',
+        ['install', '--no-audit', '--no-fund', tarballPath],
+        {
+          cwd: consumerDir,
+          encoding: 'utf8',
+          shell: process.platform === 'win32',
+        },
+      );
+      assert.equal(installRes.status, 0, installRes.stderr);
+
+      // Verify runtime ESM import of 'repo-archaeology'
+      const mjsFile = join(consumerDir, 'verify.mjs');
+      writeFileSync(
+        mjsFile,
+        [
+          "import assert from 'node:assert/strict';",
+          "import { openRepository, UsageError, GitError, ConfigError, RELATIONSHIPS } from 'repo-archaeology';",
+          `const repo = await openRepository({ cwd: ${JSON.stringify(repo.dir)}, base: ${JSON.stringify(baseRefSha)} });`,
+          'try {',
+          '  const diff = await repo.diff({ limit: 3 });',
+          '  const graph = await repo.importGraph({ files: ["src/db.ts"] });',
+          '  assert.equal(diff.schemaVersion, 1);',
+          '  assert.equal(graph.schemaVersion, 1);',
+          '  assert.ok(RELATIONSHIPS.includes("ghost"));',
+          '  assert.equal(typeof UsageError, "function");',
+          '  assert.equal(typeof GitError, "function");',
+          '  assert.equal(typeof ConfigError, "function");',
+          '} finally {',
+          '  await repo.close();',
+          '}',
+        ].join('\n'),
+      );
+      const runMjs = spawnSync(process.execPath, [mjsFile], {
+        cwd: consumerDir,
+        encoding: 'utf8',
+        env: sanitizeGitEnv(process.env, { NO_COLOR: '1' }),
+      });
+      assert.equal(runMjs.status, 0, runMjs.stderr);
+
+      // Verify TypeScript declaration resolution via tsc --noEmit
+      const tsFile = join(consumerDir, 'verify.ts');
+      writeFileSync(
+        tsFile,
+        [
+          "import { openRepository, type OpenOptions, type Repository, type DiffJson, type ImportGraphJson } from 'repo-archaeology';",
+          'export async function check(opts: OpenOptions): Promise<{ diff: DiffJson; imports: ImportGraphJson }> {',
+          '  const repo: Repository = await openRepository(opts);',
+          '  try {',
+          '    const diff: DiffJson = await repo.diff({ limit: 5, kinds: ["ghost"] });',
+          '    const imports: ImportGraphJson = await repo.importGraph({ files: ["src/api.ts"] });',
+          '    return { diff, imports };',
+          '  } finally {',
+          '    await repo.close();',
+          '  }',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      writeFileSync(
+        join(consumerDir, 'tsconfig.json'),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              target: 'ES2022',
+              module: 'NodeNext',
+              moduleResolution: 'NodeNext',
+              strict: true,
+              noEmit: true,
+              skipLibCheck: true,
+            },
+            include: ['verify.ts'],
+          },
+          null,
+          2,
+        ),
+      );
+      const tscBin = join(ROOT_DIR, 'node_modules', 'typescript', 'bin', 'tsc');
+      const tscRes = spawnSync(process.execPath, [tscBin, '-p', consumerDir], {
+        cwd: consumerDir,
+        encoding: 'utf8',
+      });
+      assert.equal(tscRes.status, 0, `tsc failed on consumer verify.ts:\n${tscRes.stdout}\n${tscRes.stderr}`);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});

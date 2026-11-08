@@ -1,6 +1,6 @@
-import { readLog, type RawCommit } from './log.js';
+import { FORMAT, LogParser, type RawCommit } from './log.js';
 import { hasMergesInRange, listTreeFiles } from './repo.js';
-import { runGit, splitNul } from './run.js';
+import { runGit, splitNul, streamGitNulTokens } from './run.js';
 
 export type ChangeSource = 'branch' | 'staged' | 'unstaged' | 'untracked';
 
@@ -170,6 +170,25 @@ export async function workingTreeChanges(root: string): Promise<ChangedFile[]> {
   return mergeChanges(parsePorcelainStatus(out));
 }
 
+async function readBranchCommits(root: string, base: string, head: string): Promise<RawCommit[]> {
+  const revOut = await runGit(root, ['rev-list', '--no-merges', '--topo-order', '--reverse', '--end-of-options', `${base}..${head}`, '--']);
+  const shas = revOut.trim().split(/\s+/).filter(Boolean);
+  if (shas.length === 0) return [];
+  const commits: RawCommit[] = [];
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < shas.length; i += CHUNK_SIZE) {
+    const chunk = shas.slice(i, i + CHUNK_SIZE);
+    const parser = new LogParser((c) => commits.push(c));
+    await streamGitNulTokens(
+      root,
+      ['show', '-z', '-M', '--name-status', '--no-ext-diff', FORMAT, '--end-of-options', ...chunk, '--'],
+      (token) => parser.push(token),
+    );
+    parser.end();
+  }
+  return commits;
+}
+
 /** Files changed on this branch since it forked from `base` (merge-base semantics). */
 export async function branchChanges(
   root: string,
@@ -190,9 +209,8 @@ export async function branchChanges(
     options?.onMergeFallback?.();
     return netFiles;
   }
-  const commits: RawCommit[] = [];
-  const [, headFiles] = await Promise.all([
-    readLog(root, { rev: `${base}..${head}`, topoOrder: true, reverse: true }, (c) => commits.push(c)),
+  const [commits, headFiles] = await Promise.all([
+    readBranchCommits(root, base, head),
     listTreeFiles(root, head),
   ]);
   return reconcileBranchLineage(netFiles, commits, headFiles);

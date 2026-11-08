@@ -27,7 +27,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, '..');
 const SCHEMA_DIR = join(ROOT_DIR, 'schema');
 
-const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.js|schema\/.+\.schema\.json)$/;
+const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.(?:js|d\.ts(?:\.map)?)|schema\/.+\.schema\.json)$/;
 
 export function assertPackedFileList(files) {
   if (!Array.isArray(files) || files.length === 0) {
@@ -139,6 +139,12 @@ export function runSmokePack(options = {}) {
       throw new Error(`npm pack --json did not return a valid filename: ${packStdout}`);
     }
     assertPackedFileList(packMeta.files);
+    const packedPaths = packMeta.files.map((entry) => (typeof entry === 'string' ? entry : entry?.path)).filter(Boolean);
+    for (const apiFile of ['dist/api/index.js', 'dist/api/index.d.ts', 'dist/api/index.d.ts.map', 'schema/import-graph.schema.json']) {
+      if (!packedPaths.includes(apiFile)) {
+        throw new Error(`Tarball is missing required library API file '${apiFile}'.`);
+      }
+    }
 
     const tarballPath = join(packDir, packMeta.filename);
     if (!existsSync(tarballPath)) {
@@ -311,6 +317,38 @@ export function runSmokePack(options = {}) {
         )}`,
       );
     }
+
+    // 6. Verify ESM library API entry point (`import('repo-archaeology')`) and declarations from installed tarball.
+    if (!existsSync(join(installedPkgRoot, 'dist', 'api', 'index.d.ts'))) {
+      throw new Error(`Installed package missing dist/api/index.d.ts at ${installedPkgRoot}`);
+    }
+    const apiScript = [
+      "import { openRepository } from 'repo-archaeology';",
+      `const repo = await openRepository({ cwd: ${JSON.stringify(repoDir)}, base: ${JSON.stringify(firstBranchPoint)} });`,
+      'try {',
+      '  const [d, bt, ig] = await Promise.all([repo.diff(), repo.backtest(), repo.importGraph()]);',
+      '  process.stdout.write(JSON.stringify({ d, bt, ig }));',
+      '} finally {',
+      '  await repo.close();',
+      '}',
+    ].join('\n');
+    const apiRes = spawnSync(process.execPath, ['--input-type=module', '-e', apiScript], {
+      cwd: installDir,
+      encoding: 'utf8',
+      env: sanitizeGitEnv(process.env, { NO_COLOR: '1' }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    if (apiRes.status !== 0) {
+      throw new Error(`Library API import('repo-archaeology') failed:\n${apiRes.stderr || apiRes.stdout}`);
+    }
+    if (apiRes.stderr !== '') {
+      throw new Error(`Library API wrote unexpected output to stderr:\n${apiRes.stderr}`);
+    }
+    const apiParsed = JSON.parse(apiRes.stdout);
+    validateAgainstSchema(SCHEMA_DIR, apiParsed.d, 'diff.schema.json');
+    validateAgainstSchema(SCHEMA_DIR, apiParsed.bt, 'backtest.schema.json');
+    validateAgainstSchema(SCHEMA_DIR, apiParsed.ig, 'import-graph.schema.json');
 
     let exportedTarballPath;
     if (options.packOutDir) {
