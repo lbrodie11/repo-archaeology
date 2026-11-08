@@ -1,0 +1,1741 @@
+import { posix } from 'node:path';
+import type {
+  MapCounterexample,
+  MapData,
+  MapEdge,
+  MapEdgeEvidence,
+  MapFamily,
+  MapNode,
+} from '../commands/map.js';
+import type { Relationship } from '../imports/classify.js';
+import type { OriginShare } from '../model/origin.js';
+import type { RelationshipVerdictView } from '../report/views.js';
+import { sanitizeHtmlDisplayText } from '../style/frame12.js';
+import type { WilsonInterval } from '../util/stats.js';
+
+export const KICKER_MOST_INTERESTING = 'C-01 / MOST INTERESTING FINDING';
+export const STATUS_CHIP_EVIDENCE = 'EVIDENCE · NOT PROOF';
+export const HOW_TO_READ_SUMMARY = 'How to read this map ▸';
+export const HOW_TO_READ_BODY =
+  'Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or supported indirect import in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the Wilson lower bound with recency and commit-origin weights when configured.';
+
+export interface StrongerDirectionView {
+  /** True when `edge.source -> edge.target` is the stronger (or tied) direction; false when reversed. */
+  forward: boolean;
+  fromNodeIndex: number;
+  toNodeIndex: number;
+  fromNode: MapNode;
+  toNode: MapNode;
+  fromPath: string;
+  toPath: string;
+  shortFrom: string;
+  shortTo: string;
+  shared: number;
+  fromChanges: number;
+  toChanges: number;
+  confidence: number;
+  reverseConfidence: number;
+  interval: WilsonInterval;
+  reverseInterval: WilsonInterval;
+  fromOnlyTotal: number;
+  toOnlyTotal: number;
+  fromOnly: MapCounterexample[];
+  toOnly: MapCounterexample[];
+}
+
+export interface DirectionMetricCopy {
+  fromLabel: string;
+  toLabel: string;
+  pctText: string;
+  detailText: string;
+  pctValue: number;
+  shared: number;
+  totalChanges: number;
+  rangeLowPct: number;
+  rangeHighPct: number;
+}
+
+export interface PairHeadlineCopy {
+  headline: string;
+  subhead: string;
+  a: string;
+  b: string;
+  fromPath: string;
+  toPath: string;
+  shared: number;
+  fromChanges: number;
+  relationship: Relationship;
+}
+
+export interface FamilyHeadlineCopy {
+  headline: string;
+  subhead: string;
+  memberCount: number;
+  dirsPattern: string;
+  fileName: string;
+  commitsTouchingTwoOrMore: number;
+  commitsTouchingAll: number;
+  qualifyingPairs: number;
+  possiblePairs: number;
+}
+
+export interface EmptyStateCopy {
+  headline: string;
+  subhead: string;
+  contextNote: string | null;
+  repoName: string;
+  commits: number;
+  minShared: number;
+  minConfidencePct: number;
+}
+
+export interface EvidencePanelCopy {
+  kicker: string;
+  statusChip: string;
+  headline: string;
+  subhead: string;
+  primaryDirection: DirectionMetricCopy;
+  reverseDirection: DirectionMetricCopy;
+  lastTogetherText: string;
+  lastTogetherDate: string;
+  counterexamplesSummary: string;
+  reverseCounterexamplesSummary: string;
+  fromOnlyTotal: number;
+  toOnlyTotal: number;
+  fromOnly: MapCounterexample[];
+  toOnly: MapCounterexample[];
+  receiptsShown: MapEdgeEvidence[];
+  receiptsTotal: number;
+  receiptsOverflowCount: number;
+  ownerNotes: string[];
+  originShareNote: string | null;
+  verdictNote: string | null;
+  explainCommand: string;
+  howToReadSummary: string;
+  howToReadBody: string;
+  familySummary?: {
+    label: string;
+    members: { path: string; variant: string; changes: number }[];
+    commitsTouchingTwoOrMore: number;
+    commitsTouchingAll: number;
+    qualifyingPairs: number;
+    possiblePairs: number;
+  };
+}
+
+export type FeaturedFinding =
+  | {
+      kind: 'family';
+      familyIndex: number;
+      family: MapFamily;
+      leadEdgeIndex: number;
+      leadEdge: MapEdge;
+    }
+  | {
+      kind: 'pair';
+      edgeIndex: number;
+      edge: MapEdge;
+    }
+  | {
+      kind: 'empty';
+      contextClusterNodeIndices: number[];
+      contextClusterEdgeIndices: number[];
+    };
+
+export interface RankedFindingItem {
+  id: string;
+  cutLabel: string;
+  kind: 'family' | 'pair';
+  relationship: Relationship;
+  title: string;
+  subtitle: string;
+  fromPath: string;
+  toPath: string;
+  shared: number;
+  totalChanges: number;
+  ratioText: string;
+  confidence: number;
+  interval: WilsonInterval;
+  rangeLowPct: number;
+  rangeHighPct: number;
+  pointPct: number;
+  lastTogether: string;
+  overviewPriority: number;
+  score: number;
+  weak: boolean;
+  edgeIndex: number;
+  familyIndex?: number;
+}
+
+/**
+ * Middle-truncates a repository path with `…` so it fits within `maxChars` while
+ * preserving the leading directory context and the filename at the end.
+ */
+export function middleTruncatePath(rawPath: string, maxChars = 32): string {
+  const clean = sanitizeHtmlDisplayText(rawPath);
+  const limit = Math.max(8, Math.floor(maxChars));
+  if (clean.length <= limit) return clean;
+
+  const slashIdx = clean.lastIndexOf('/');
+  if (slashIdx <= 0) {
+    const headLen = Math.max(3, Math.ceil((limit - 1) * 0.5));
+    const tailLen = Math.max(3, limit - 1 - headLen);
+    return `${clean.slice(0, headLen)}…${clean.slice(clean.length - tailLen)}`;
+  }
+
+  const base = clean.slice(slashIdx + 1);
+  const dir = clean.slice(0, slashIdx);
+
+  // If the filename alone is nearly as long as the limit, keep the first folder initial + middle-truncated filename
+  if (base.length + 3 >= limit) {
+    const headLen = Math.max(3, Math.floor((limit - 1) * 0.45));
+    const tailLen = Math.max(3, limit - 1 - headLen);
+    return `${clean.slice(0, headLen)}…${clean.slice(clean.length - tailLen)}`;
+  }
+
+  const remainingForDir = limit - base.length - 2; // space for "…/"
+  if (remainingForDir <= 1) {
+    return `…/${base}`;
+  }
+  return `${dir.slice(0, remainingForDir)}…/${base}`;
+}
+
+/**
+ * Returns concise, unambiguous display names for a pair of repository paths.
+ * When the two files have distinct basenames (`tiny.ts` vs `quick.ts`), returns
+ * their basenames. When their basenames collide (`src/adapter/bun/serve-static.ts`
+ * vs `src/adapter/deno/serve-static.ts`), includes the distinguishing folder segment(s)
+ * (`bun/serve-static.ts` vs `deno/serve-static.ts`).
+ */
+export function disambiguatePairPaths(rawPathA: string, rawPathB: string): [string, string] {
+  const pathA = sanitizeHtmlDisplayText(rawPathA);
+  const pathB = sanitizeHtmlDisplayText(rawPathB);
+  if (pathA === pathB) {
+    return [posix.basename(pathA) || pathA, posix.basename(pathB) || pathB];
+  }
+
+  const partsA = pathA.split('/').filter(Boolean);
+  const partsB = pathB.split('/').filter(Boolean);
+  const baseA = partsA[partsA.length - 1] ?? pathA;
+  const baseB = partsB[partsB.length - 1] ?? pathB;
+
+  if (baseA !== baseB) {
+    return [baseA, baseB];
+  }
+
+  // Walk backwards from parent directory until segments differ
+  let offset = 2;
+  const maxDepth = Math.max(partsA.length, partsB.length);
+  while (offset <= maxDepth) {
+    const segA = partsA[partsA.length - offset];
+    const segB = partsB[partsB.length - offset];
+    if (segA !== segB) {
+      const labelA = segA ? `${segA}/${baseA}` : pathA;
+      const labelB = segB ? `${segB}/${baseB}` : pathB;
+      return [labelA, labelB];
+    }
+    offset++;
+  }
+
+  return [pathA, pathB];
+}
+
+/**
+ * Resolves the stronger directional orientation for a `MapEdge`.
+ */
+export function resolveStrongerDirection(data: MapData, edge: MapEdge): StrongerDirectionView {
+  const sourceNode: MapNode = data.nodes[edge.source] ?? {
+    path: `file-${edge.source}`,
+    dir: '.',
+    changes: edge.fromChanges,
+  };
+  const targetNode: MapNode = data.nodes[edge.target] ?? {
+    path: `file-${edge.target}`,
+    dir: '.',
+    changes: edge.toChanges,
+  };
+
+  const forward =
+    edge.confidence > edge.reverseConfidence ||
+    (edge.confidence === edge.reverseConfidence &&
+      edge.interval.low >= edge.reverseInterval.low);
+
+  const fromNodeIndex = forward ? edge.source : edge.target;
+  const toNodeIndex = forward ? edge.target : edge.source;
+  const fromNode = forward ? sourceNode : targetNode;
+  const toNode = forward ? targetNode : sourceNode;
+  const fromPath = sanitizeHtmlDisplayText(fromNode.path);
+  const toPath = sanitizeHtmlDisplayText(toNode.path);
+  const [shortFrom, shortTo] = disambiguatePairPaths(fromNode.path, toNode.path);
+
+  const fromChanges = forward ? edge.fromChanges : edge.toChanges;
+  const toChanges = forward ? edge.toChanges : edge.fromChanges;
+  const confidence = forward ? edge.confidence : edge.reverseConfidence;
+  const reverseConfidence = forward ? edge.reverseConfidence : edge.confidence;
+  const interval = forward ? edge.interval : edge.reverseInterval;
+  const reverseInterval = forward ? edge.reverseInterval : edge.interval;
+
+  const rawFromOnly = edge.counterexamples?.fromOnly ?? [];
+  const rawToOnly = edge.counterexamples?.toOnly ?? [];
+  const rawFromTotal = edge.counterexamples?.fromOnlyTotal ?? Math.max(0, edge.fromChanges - edge.shared);
+  const rawToTotal = edge.counterexamples?.toOnlyTotal ?? Math.max(0, edge.toChanges - edge.shared);
+
+  return {
+    forward,
+    fromNodeIndex,
+    toNodeIndex,
+    fromNode,
+    toNode,
+    fromPath,
+    toPath,
+    shortFrom,
+    shortTo,
+    shared: edge.shared,
+    fromChanges,
+    toChanges,
+    confidence,
+    reverseConfidence,
+    interval,
+    reverseInterval,
+    fromOnlyTotal: forward ? rawFromTotal : rawToTotal,
+    toOnlyTotal: forward ? rawToTotal : rawFromTotal,
+    fromOnly: forward ? rawFromOnly : rawToOnly,
+    toOnly: forward ? rawToOnly : rawFromOnly,
+  };
+}
+
+function relationshipLeadSentence(relationship: Relationship): string {
+  switch (relationship) {
+    case 'ghost':
+      return 'No import connects them.';
+    case 'unknown':
+      return "We couldn't check imports for these files.";
+    case 'indirect':
+      return 'Only an indirect import chain connects them.';
+    case 'direct':
+      return 'A direct import connects them in current code.';
+    case 'test':
+      return 'One file tests the other.';
+  }
+}
+
+/**
+ * Formats the deterministic headline and subhead for a two-file relationship.
+ *
+ * - Headline: `{a} and {b} keep changing together`
+ * - Subhead (ghost): `No import connects them. {shared} of {fromChanges} commits that changed {a} also changed {b}.`
+ * - Subhead (unknown): `We couldn't check imports for these files. {shared} of {fromChanges} commits that changed {a} also changed {b}.`
+ */
+export function formatPairHeadline(data: MapData, edge: MapEdge): PairHeadlineCopy {
+  const dir = resolveStrongerDirection(data, edge);
+  const a = dir.shortFrom;
+  const b = dir.shortTo;
+  const headline = `${a} and ${b} keep changing together`;
+  const firstSentence = relationshipLeadSentence(edge.relationship);
+  const commitNoun = dir.fromChanges === 1 ? 'commit' : 'commits';
+  const secondSentence = `${dir.shared} of ${dir.fromChanges} ${commitNoun} that changed ${a} also changed ${b}.`;
+  return {
+    headline,
+    subhead: `${firstSentence} ${secondSentence}`,
+    a,
+    b,
+    fromPath: dir.fromPath,
+    toPath: dir.toPath,
+    shared: dir.shared,
+    fromChanges: dir.fromChanges,
+    relationship: edge.relationship,
+  };
+}
+
+/**
+ * Formats the deterministic headline and subhead for a Finding Family (`MapFamily`).
+ *
+ * - Headline: `{n} files across {dirs} keep changing together`
+ * - Subhead: derived strictly from `MapFamily` counts.
+ */
+export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
+  const memberCount = family.members.length;
+  const fileNoun = memberCount === 1 ? 'file' : 'files';
+  const cleanParent = sanitizeHtmlDisplayText(family.parentDir || '.');
+  const dirsPattern = cleanParent === '.' || cleanParent === '' ? '*' : `${cleanParent}/*`;
+  const cleanFileName = sanitizeHtmlDisplayText(family.fileName);
+
+  const headline = `${memberCount} ${fileNoun} across ${dirsPattern} keep changing together`;
+
+  const hasGhost = family.relationshipKinds.includes('ghost');
+  const hasUnknownOnly =
+    !hasGhost &&
+    family.relationshipKinds.length > 0 &&
+    family.relationshipKinds.every((k) => k === 'unknown');
+
+  const firstSentence = hasGhost
+    ? `No import connects these ${memberCount} parallel implementations of ${cleanFileName}.`
+    : hasUnknownOnly
+      ? `We couldn't check imports for these ${memberCount} parallel implementations of ${cleanFileName}.`
+      : `These ${memberCount} parallel implementations of ${cleanFileName} move together across sibling folders.`;
+
+  const commitNoun = family.commitsTouchingTwoOrMore === 1 ? 'commit' : 'commits';
+  const pairClause =
+    family.complete || family.qualifyingPairs === family.possiblePairs
+      ? `All ${family.possiblePairs} pairwise links passed thresholds across ${family.commitsTouchingTwoOrMore} supporting ${commitNoun} (${family.commitsTouchingAll} touched all ${memberCount}).`
+      : `${family.qualifyingPairs} of ${family.possiblePairs} pairwise links passed thresholds across ${family.commitsTouchingTwoOrMore} supporting ${commitNoun} (${family.commitsTouchingAll} touched all ${memberCount}).`;
+
+  return {
+    headline,
+    subhead: `${firstSentence} ${pairClause}`,
+    memberCount,
+    dirsPattern,
+    fileName: cleanFileName,
+    commitsTouchingTwoOrMore: family.commitsTouchingTwoOrMore,
+    commitsTouchingAll: family.commitsTouchingAll,
+    qualifyingPairs: family.qualifyingPairs,
+    possiblePairs: family.possiblePairs,
+  };
+}
+
+/**
+ * Formats a single directional co-change metric:
+ * `{pct}%` + `{shared} of {n} commits · 95% range {lo}–{hi}%`.
+ */
+export function formatDirectionMetric(
+  fromLabel: string,
+  toLabel: string,
+  shared: number,
+  totalChanges: number,
+  confidence: number,
+  interval: WilsonInterval,
+): DirectionMetricCopy {
+  const pctValue = Math.round(confidence * 100);
+  const rangeLowPct = Math.round(interval.low * 100);
+  const rangeHighPct = Math.round(interval.high * 100);
+  const commitNoun = totalChanges === 1 ? 'commit' : 'commits';
+  return {
+    fromLabel,
+    toLabel,
+    pctText: `${pctValue}%`,
+    detailText: `${shared} of ${totalChanges} ${commitNoun} · 95% range ${rangeLowPct}–${rangeHighPct}%`,
+    pctValue,
+    shared,
+    totalChanges,
+    rangeLowPct,
+    rangeHighPct,
+  };
+}
+
+/**
+ * Formats the speech-balloon callout pointing at the featured relationship's midpoint on the plate:
+ * e.g. `8 of 8 commits together · no import`.
+ */
+export function formatBalloonCallout(data: MapData, edge: MapEdge): string {
+  const dir = resolveStrongerDirection(data, edge);
+  const commitNoun = dir.fromChanges === 1 ? 'commit' : 'commits';
+  const kindPhrase =
+    edge.relationship === 'ghost'
+      ? 'no import'
+      : edge.relationship === 'unknown'
+        ? 'imports unchecked'
+        : edge.relationship === 'indirect'
+          ? 'indirect import'
+          : edge.relationship === 'direct'
+            ? 'direct import'
+            : 'test link';
+  return `${dir.shared} of ${dir.fromChanges} ${commitNoun} together · ${kindPhrase}`;
+}
+
+/**
+ * Formats counterexample summary text: `Changed alone: {n} time(s)`.
+ */
+export function formatCounterexamplesLine(aloneCount: number): string {
+  const noun = aloneCount === 1 ? 'time' : 'times';
+  return `Changed alone: ${aloneCount} ${noun}`;
+}
+
+/**
+ * Formats the contributor ownership note when `topAuthorShare >= 0.4`.
+ */
+export function formatOwnerNote(
+  node: Pick<MapNode, 'path' | 'topAuthor' | 'topAuthorShare'>,
+  shortLabel?: string,
+): string | null {
+  if (!node.topAuthor || typeof node.topAuthorShare !== 'number' || node.topAuthorShare < 0.4) {
+    return null;
+  }
+  const author = sanitizeHtmlDisplayText(node.topAuthor);
+  const pct = Math.round(node.topAuthorShare * 100);
+  const label = shortLabel ?? (posix.basename(sanitizeHtmlDisplayText(node.path)) || sanitizeHtmlDisplayText(node.path));
+  return `Usually changed by ${author} (${pct}% of ${label})`;
+}
+
+/**
+ * Formats the commit origin share note when `originShare` is present.
+ */
+export function formatOriginShareNote(originShare?: OriginShare): string | null {
+  if (!originShare) return null;
+  const humanPct = Math.round(originShare.human * 100);
+  const agentPct = Math.round(originShare.agent * 100);
+  const botPct = Math.round(originShare.bot * 100);
+  if (agentPct === 0 && botPct === 0) {
+    return `Commit origin: ${humanPct}% human (0% agent or bot)`;
+  }
+  const parts: string[] = [];
+  if (agentPct > 0) parts.push(`${agentPct}% agent`);
+  if (botPct > 0) parts.push(`${botPct}% bot`);
+  if (humanPct > 0) parts.push(`${humanPct}% human`);
+  return `Commit origin: ${parts.join(', ')}`;
+}
+
+/**
+ * Formats the verdict annotation when `verdict` is present on an edge.
+ */
+export function formatVerdictNote(verdict?: RelationshipVerdictView): string | null {
+  if (!verdict) return null;
+  const prefix = verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship';
+  return `${prefix}: ${sanitizeHtmlDisplayText(verdict.reason)}`;
+}
+
+/**
+ * Formats the first-class empty state copy when a repository has no ghost wires (and no surprising links).
+ */
+export function formatEmptyStateCopy(
+  data: MapData,
+  contextCluster?: { nodeCount: number; edgeCount: number },
+): EmptyStateCopy {
+  const repoName = sanitizeHtmlDisplayText(data.repoName);
+  const commits = data.meta.commitsAnalyzed;
+  const minShared = data.meta.settings.minShared;
+  const minConfidencePct = Math.round(data.meta.settings.minConfidence * 100);
+  const commitNoun = commits === 1 ? 'commit' : 'commits';
+  const sharedNoun = minShared === 1 ? 'commit' : 'commits';
+
+  const headline = `No ghost wires in ${repoName}`;
+  const subhead = `Checked ${commits.toLocaleString('en-US')} ${commitNoun} at ≥${minShared} shared ${sharedNoun} and ≥${minConfidencePct}% confidence.`;
+
+  let contextNote: string | null = null;
+  if (contextCluster && contextCluster.edgeCount > 0) {
+    const fileNoun = contextCluster.nodeCount === 1 ? 'file' : 'files';
+    const linkNoun = contextCluster.edgeCount === 1 ? 'import link' : 'import links';
+    contextNote = `Showing the strongest import cluster (${contextCluster.nodeCount} ${fileNoun}, ${contextCluster.edgeCount} ${linkNoun}) on the plate for repository context.`;
+  }
+
+  return {
+    headline,
+    subhead,
+    contextNote,
+    repoName,
+    commits,
+    minShared,
+    minConfidencePct,
+  };
+}
+
+/**
+ * Assembles the complete Evidence Panel copy for a featured finding (family or pair).
+ */
+export function formatEvidencePanelCopy(
+  data: MapData,
+  featured: Exclude<FeaturedFinding, { kind: 'empty' }>,
+  cutLabel = 'C-01',
+): EvidencePanelCopy {
+  const edge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
+  const dir = resolveStrongerDirection(data, edge);
+
+  const headlineInfo =
+    featured.kind === 'family'
+      ? formatFamilyHeadline(featured.family)
+      : formatPairHeadline(data, edge);
+
+  const primaryDirection = formatDirectionMetric(
+    dir.shortFrom,
+    dir.shortTo,
+    dir.shared,
+    dir.fromChanges,
+    dir.confidence,
+    dir.interval,
+  );
+  const reverseDirection = formatDirectionMetric(
+    dir.shortTo,
+    dir.shortFrom,
+    dir.shared,
+    dir.toChanges,
+    dir.reverseConfidence,
+    dir.reverseInterval,
+  );
+
+  const lastTogetherDate = sanitizeHtmlDisplayText(
+    featured.kind === 'family' ? featured.family.lastTogether : edge.lastTogether,
+  );
+  const lastTogetherText = `Last together ${lastTogetherDate}`;
+
+  const counterexamplesSummary = formatCounterexamplesLine(dir.fromOnlyTotal);
+  const reverseCounterexamplesSummary = formatCounterexamplesLine(dir.toOnlyTotal);
+
+  const allReceipts: MapEdgeEvidence[] =
+    featured.kind === 'family' && featured.family.evidence.length > 0
+      ? featured.family.evidence.map((ev) => ({
+          hash: ev.hash,
+          date: ev.date,
+          subject: ev.subject,
+          origin: ev.origin,
+        }))
+      : edge.evidence;
+
+  const receiptsShown = allReceipts.slice(0, 3);
+  const receiptsTotal = allReceipts.length;
+  const receiptsOverflowCount = Math.max(0, receiptsTotal - receiptsShown.length);
+
+  const ownerNotes: string[] = [];
+  if (featured.kind === 'family') {
+    for (const ni of featured.family.nodeIndices) {
+      const node = data.nodes[ni];
+      if (!node) continue;
+      const member = featured.family.members.find((m) => m.path === node.path);
+      const shortLabel = member ? `${member.variant}/${featured.family.fileName}` : undefined;
+      const note = formatOwnerNote(node, shortLabel);
+      if (note && !ownerNotes.includes(note)) ownerNotes.push(note);
+    }
+  } else {
+    const noteA = formatOwnerNote(dir.fromNode, dir.shortFrom);
+    const noteB = formatOwnerNote(dir.toNode, dir.shortTo);
+    if (noteA) ownerNotes.push(noteA);
+    if (noteB && noteB !== noteA) ownerNotes.push(noteB);
+  }
+
+  const originShareNote = formatOriginShareNote(edge.originShare);
+  const verdictNote = formatVerdictNote(edge.verdict);
+  const explainCommand =
+    edge.explainCommand ?? `npx repo-archaeology explain ${dir.fromPath} ${dir.toPath}`;
+
+  return {
+    kicker: `${cutLabel} / MOST INTERESTING FINDING`,
+    statusChip: STATUS_CHIP_EVIDENCE,
+    headline: headlineInfo.headline,
+    subhead: headlineInfo.subhead,
+    primaryDirection,
+    reverseDirection,
+    lastTogetherText,
+    lastTogetherDate,
+    counterexamplesSummary,
+    reverseCounterexamplesSummary,
+    fromOnlyTotal: dir.fromOnlyTotal,
+    toOnlyTotal: dir.toOnlyTotal,
+    fromOnly: dir.fromOnly.slice(0, 3),
+    toOnly: dir.toOnly.slice(0, 3),
+    receiptsShown,
+    receiptsTotal,
+    receiptsOverflowCount,
+    ownerNotes,
+    originShareNote,
+    verdictNote,
+    explainCommand,
+    howToReadSummary: HOW_TO_READ_SUMMARY,
+    howToReadBody: HOW_TO_READ_BODY,
+    ...(featured.kind === 'family'
+      ? {
+          familySummary: {
+            label: sanitizeHtmlDisplayText(featured.family.label),
+            members: featured.family.members.map((m) => ({
+              path: sanitizeHtmlDisplayText(m.path),
+              variant: sanitizeHtmlDisplayText(m.variant),
+              changes: m.changes,
+            })),
+            commitsTouchingTwoOrMore: featured.family.commitsTouchingTwoOrMore,
+            commitsTouchingAll: featured.family.commitsTouchingAll,
+            qualifyingPairs: featured.family.qualifyingPairs,
+            possiblePairs: featured.family.possiblePairs,
+          },
+        }
+      : {}),
+  };
+}
+
+function isIndependentCrossDir(data: MapData, edge: MapEdge): boolean {
+  if (edge.hiddenBridge?.signal === 'parallel-implementation') return false;
+  const fromDir = data.nodes[edge.source]?.dir ?? '.';
+  const toDir = data.nodes[edge.target]?.dir ?? '.';
+  return (
+    fromDir !== toDir &&
+    fromDir !== '.' &&
+    toDir !== '.' &&
+    fromDir !== '(root)' &&
+    toDir !== '(root)' &&
+    !fromDir.startsWith(`${toDir}/`) &&
+    !toDir.startsWith(`${fromDir}/`)
+  );
+}
+
+function findStrongestImportCluster(data: MapData): {
+  nodeIndices: number[];
+  edgeIndices: number[];
+} {
+  const importEdgeIndices = data.edges
+    .map((e, idx) => ({ e, idx }))
+    .filter(({ e }) => e.relationship === 'direct' || e.relationship === 'indirect' || e.relationship === 'test')
+    .map(({ idx }) => idx);
+
+  if (importEdgeIndices.length === 0) {
+    return { nodeIndices: [], edgeIndices: [] };
+  }
+
+  const adjNodes = new Map<number, number[]>();
+  const adjEdges = new Map<number, number[]>();
+  for (const ei of importEdgeIndices) {
+    const e = data.edges[ei]!;
+    if (!adjNodes.has(e.source)) adjNodes.set(e.source, []);
+    if (!adjNodes.has(e.target)) adjNodes.set(e.target, []);
+    if (!adjEdges.has(e.source)) adjEdges.set(e.source, []);
+    if (!adjEdges.has(e.target)) adjEdges.set(e.target, []);
+    adjNodes.get(e.source)!.push(e.target);
+    adjNodes.get(e.target)!.push(e.source);
+    adjEdges.get(e.source)!.push(ei);
+    adjEdges.get(e.target)!.push(ei);
+  }
+
+  const visited = new Set<number>();
+  let bestNodes: number[] = [];
+  let bestEdges: number[] = [];
+  let bestScore = -1;
+  let bestShared = -1;
+
+  for (const startNode of adjNodes.keys()) {
+    if (visited.has(startNode)) continue;
+    visited.add(startNode);
+    const queue = [startNode];
+    const edgeSet = new Set<number>();
+    for (let q = 0; q < queue.length; q++) {
+      const u = queue[q]!;
+      for (const ei of adjEdges.get(u) ?? []) edgeSet.add(ei);
+      for (const v of adjNodes.get(u) ?? []) {
+        if (!visited.has(v)) {
+          visited.add(v);
+          queue.push(v);
+        }
+      }
+    }
+    const compEdges = Array.from(edgeSet).sort((a, b) => a - b);
+    const compScore = compEdges.reduce((m, ei) => Math.max(m, data.edges[ei]?.score ?? 0), 0);
+    const compShared = compEdges.reduce((s, ei) => s + (data.edges[ei]?.shared ?? 0), 0);
+    if (
+      compEdges.length > bestEdges.length ||
+      (compEdges.length === bestEdges.length &&
+        (compScore > bestScore || (compScore === bestScore && compShared > bestShared)))
+    ) {
+      bestNodes = queue.sort((a, b) => a - b);
+      bestEdges = compEdges;
+      bestScore = compScore;
+      bestShared = compShared;
+    }
+  }
+
+  return { nodeIndices: bestNodes, edgeIndices: bestEdges };
+}
+
+/**
+ * Deterministically selects the featured finding for the Investigation Board (`C-01`):
+ * 1. Top item of the existing overview priority among ghost wires, choosing a family over
+ *    a pair when the family's `overviewPriority` is highest.
+ * 2. If there are no ghost wires, the top "surprising" link.
+ * 3. If there's nothing at all, a first-class empty state with the strongest import cluster as context.
+ */
+export function selectFeaturedFinding(
+  data: MapData,
+  visible?: Partial<Record<Relationship, boolean>>,
+): FeaturedFinding {
+  const isRelVisible = (rel: Relationship): boolean =>
+    visible ? Boolean(visible[rel]) : true;
+
+  // 1. Check ghost wires
+  const ghostEdges = data.edges
+    .map((edge, edgeIndex) => ({ edge, edgeIndex }))
+    .filter(({ edge }) => edge.relationship === 'ghost' && isRelVisible('ghost'))
+    .sort(
+      (a, b) =>
+        b.edge.overviewPriority - a.edge.overviewPriority ||
+        b.edge.score - a.edge.score ||
+        b.edge.shared - a.edge.shared ||
+        a.edgeIndex - b.edgeIndex,
+    );
+
+  const ghostFamilies = (data.families ?? [])
+    .map((family, familyIndex) => {
+      const ghostMemberEdges = family.edgeIndices
+        .filter((ei) => {
+          const e = data.edges[ei];
+          return e !== undefined && e.relationship === 'ghost' && isRelVisible('ghost');
+        })
+        .sort((eiA, eiB) => {
+          const a = data.edges[eiA]!;
+          const b = data.edges[eiB]!;
+          return (
+            b.overviewPriority - a.overviewPriority ||
+            b.score - a.score ||
+            b.shared - a.shared ||
+            eiA - eiB
+          );
+        });
+      if (ghostMemberEdges.length === 0) return null;
+      const leadEdgeIndex = ghostMemberEdges[0]!;
+      const leadEdge = data.edges[leadEdgeIndex]!;
+      const maxGhostPrio = Math.max(
+        family.overviewPriority,
+        ...ghostMemberEdges.map((ei) => data.edges[ei]!.overviewPriority),
+      );
+      return {
+        family,
+        familyIndex,
+        leadEdgeIndex,
+        leadEdge,
+        overviewPriority: maxGhostPrio,
+      };
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null)
+    .sort(
+      (a, b) =>
+        b.overviewPriority - a.overviewPriority ||
+        b.family.peakScore - a.family.peakScore ||
+        b.family.commitsTouchingTwoOrMore - a.family.commitsTouchingTwoOrMore ||
+        b.family.maxPairShared - a.family.maxPairShared ||
+        a.familyIndex - b.familyIndex,
+    );
+
+  if (ghostEdges.length > 0 || ghostFamilies.length > 0) {
+    const topEdge = ghostEdges[0];
+    const topFam = ghostFamilies[0];
+
+    if (topFam && topEdge) {
+      // Choose a family over a pair when the family's overviewPriority is highest:
+      // - If topFam.overviewPriority > topEdge.edge.overviewPriority -> family wins
+      // - If tied at overviewPriority > 0 -> family wins (family's overviewPriority is highest)
+      // - If tied at overviewPriority === 0 -> family wins when it contains the top edge or its peakScore >= topEdge.score
+      const famWins =
+        topFam.overviewPriority > topEdge.edge.overviewPriority ||
+        (topFam.overviewPriority === topEdge.edge.overviewPriority &&
+          (topFam.overviewPriority > 0 ||
+            topFam.family.edgeIndices.includes(topEdge.edgeIndex) ||
+            topFam.family.peakScore >= topEdge.edge.score));
+
+      if (famWins) {
+        return {
+          kind: 'family',
+          familyIndex: topFam.familyIndex,
+          family: topFam.family,
+          leadEdgeIndex: topFam.leadEdgeIndex,
+          leadEdge: topFam.leadEdge,
+        };
+      }
+    } else if (topFam) {
+      return {
+        kind: 'family',
+        familyIndex: topFam.familyIndex,
+        family: topFam.family,
+        leadEdgeIndex: topFam.leadEdgeIndex,
+        leadEdge: topFam.leadEdge,
+      };
+    }
+
+    if (topEdge) {
+      return {
+        kind: 'pair',
+        edgeIndex: topEdge.edgeIndex,
+        edge: topEdge.edge,
+      };
+    }
+  }
+
+  // 2. If there are no ghost wires, look for the top "surprising" unchecked link
+  const surprisingEdges = data.edges
+    .map((edge, edgeIndex) => ({ edge, edgeIndex }))
+    .filter(
+      ({ edge }) =>
+        isRelVisible(edge.relationship) &&
+        edge.relationship === 'unknown' &&
+        (edge.overviewPriority >= 2 || isIndependentCrossDir(data, edge)),
+    )
+    .sort(
+      (a, b) =>
+        b.edge.overviewPriority - a.edge.overviewPriority ||
+        b.edge.score - a.edge.score ||
+        b.edge.shared - a.edge.shared ||
+        a.edgeIndex - b.edgeIndex,
+    );
+
+  if (surprisingEdges.length > 0) {
+    const topSurprising = surprisingEdges[0]!;
+    return {
+      kind: 'pair',
+      edgeIndex: topSurprising.edgeIndex,
+      edge: topSurprising.edge,
+    };
+  }
+
+  // 3. Otherwise, first-class empty state with the strongest import cluster as context
+  const cluster = findStrongestImportCluster(data);
+  return {
+    kind: 'empty',
+    contextClusterNodeIndices: cluster.nodeIndices,
+    contextClusterEdgeIndices: cluster.edgeIndices,
+  };
+}
+
+/**
+ * Formats a URL hash fragment (`#f=<sourcePath>..<targetPath>`) for deep-linking a finding.
+ */
+export function formatFindingHash(sourcePath: string, targetPath: string): string {
+  return `#f=${encodeURIComponent(sourcePath)}..${encodeURIComponent(targetPath)}`;
+}
+
+/**
+ * Resolves a `#f=<sourcePath>..<targetPath>` hash fragment against `data`.
+ * Returns `null` if the hash is missing, malformed, tampered with, or does not match any edge in `data`.
+ */
+export function resolveFindingFromHash(hash: string, data: MapData): FeaturedFinding | null {
+  if (!hash || typeof hash !== 'string') return null;
+  const trimmed = hash.startsWith('#') ? hash.slice(1) : hash;
+  const params = trimmed.split('&');
+  let rawPair: string | null = null;
+  for (const part of params) {
+    if (part.startsWith('f=')) {
+      rawPair = part.slice(2);
+      break;
+    }
+  }
+  if (!rawPair) return null;
+  const sepIdx = rawPair.indexOf('..');
+  if (sepIdx <= 0 || sepIdx === rawPair.length - 2) return null;
+
+  let pathA: string;
+  let pathB: string;
+  try {
+    pathA = decodeURIComponent(rawPair.slice(0, sepIdx));
+    pathB = decodeURIComponent(rawPair.slice(sepIdx + 2));
+  } catch {
+    return null;
+  }
+  if (!pathA || !pathB || pathA.length > 1024 || pathB.length > 1024) return null;
+  if (/[\u0000-\u001f\u007f]/.test(pathA) || /[\u0000-\u001f\u007f]/.test(pathB)) return null;
+
+  for (let ei = 0; ei < data.edges.length; ei++) {
+    const e = data.edges[ei]!;
+    const sPath = data.nodes[e.source]?.path;
+    const tPath = data.nodes[e.target]?.path;
+    if ((sPath === pathA && tPath === pathB) || (sPath === pathB && tPath === pathA)) {
+      return {
+        kind: 'pair',
+        edgeIndex: ei,
+        edge: e,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Builds the deterministic ranked list of findings (`RankedFindingItem[]`) from `MapData`.
+ */
+export function buildRankedFindings(
+  data: MapData,
+  visible?: Partial<Record<Relationship, boolean>>,
+): RankedFindingItem[] {
+  const isRelVisible = (rel: Relationship): boolean =>
+    visible ? Boolean(visible[rel]) : eDefaultVisible(data, rel);
+
+  const edgeToFamilyIdx = new Map<number, number>();
+  (data.families ?? []).forEach((fam, fIdx) => {
+    const activeEdges = fam.edgeIndices.filter((ei) => {
+      const e = data.edges[ei];
+      return e !== undefined && isRelVisible(e.relationship);
+    });
+    if (activeEdges.length >= 2) {
+      for (const ei of activeEdges) {
+        if (!edgeToFamilyIdx.has(ei)) edgeToFamilyIdx.set(ei, fIdx);
+      }
+    }
+  });
+
+  const sortedEdgeIndices = data.edges
+    .map((_, idx) => idx)
+    .filter((ei) => isRelVisible(data.edges[ei]!.relationship))
+    .sort((eiA, eiB) => {
+      const a = data.edges[eiA]!;
+      const b = data.edges[eiB]!;
+      const aGhost = a.relationship === 'ghost' ? 1 : 0;
+      const bGhost = b.relationship === 'ghost' ? 1 : 0;
+      return (
+        bGhost - aGhost ||
+        b.overviewPriority - a.overviewPriority ||
+        b.score - a.score ||
+        b.shared - a.shared ||
+        eiA - eiB
+      );
+    });
+
+  const emittedFamilies = new Set<number>();
+  const items: RankedFindingItem[] = [];
+
+  for (const ei of sortedEdgeIndices) {
+    const famIdx = edgeToFamilyIdx.get(ei);
+    if (famIdx !== undefined) {
+      if (emittedFamilies.has(famIdx)) continue;
+      emittedFamilies.add(famIdx);
+      const fam = data.families![famIdx]!;
+      const activeEdges = fam.edgeIndices
+        .filter((idx) => {
+          const e = data.edges[idx];
+          return e !== undefined && isRelVisible(e.relationship);
+        })
+        .sort((aIdx, bIdx) => {
+          const a = data.edges[aIdx]!;
+          const b = data.edges[bIdx]!;
+          return (
+            b.overviewPriority - a.overviewPriority ||
+            b.score - a.score ||
+            b.shared - a.shared ||
+            aIdx - bIdx
+          );
+        });
+      const leadEdgeIdx = activeEdges[0] ?? ei;
+      const leadEdge = data.edges[leadEdgeIdx]!;
+      const dir = resolveStrongerDirection(data, leadEdge);
+      const cutNum = items.length + 1;
+      const cutLabel = `C-${String(cutNum).padStart(2, '0')}`;
+      items.push({
+        id: `family:${fam.id}`,
+        cutLabel,
+        kind: 'family',
+        relationship: fam.relationshipKinds.includes('ghost') ? 'ghost' : leadEdge.relationship,
+        title: `${sanitizeHtmlDisplayText(fam.fileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
+        subtitle: `${fam.members.length} files (${fam.members.map((m) => sanitizeHtmlDisplayText(m.variant)).join(', ')}) · ${fam.commitsTouchingTwoOrMore} commits (2+ files)`,
+        fromPath: dir.fromPath,
+        toPath: dir.toPath,
+        shared: dir.shared,
+        totalChanges: dir.fromChanges,
+        ratioText: `${dir.shared}/${dir.fromChanges}`,
+        confidence: dir.confidence,
+        interval: dir.interval,
+        rangeLowPct: Math.round(dir.interval.low * 100),
+        rangeHighPct: Math.round(dir.interval.high * 100),
+        pointPct: Math.round(dir.confidence * 100),
+        lastTogether: sanitizeHtmlDisplayText(fam.lastTogether),
+        overviewPriority: fam.overviewPriority,
+        score: fam.peakScore,
+        weak: dir.interval.low < 0.3,
+        edgeIndex: leadEdgeIdx,
+        familyIndex: famIdx,
+      });
+      continue;
+    }
+
+    const edge = data.edges[ei]!;
+    const dir = resolveStrongerDirection(data, edge);
+    const cutNum = items.length + 1;
+    const cutLabel = `C-${String(cutNum).padStart(2, '0')}`;
+    items.push({
+      id: `pair:${dir.fromPath}..${dir.toPath}`,
+      cutLabel,
+      kind: 'pair',
+      relationship: edge.relationship,
+      title: `${dir.shortFrom} ⇢ ${dir.shortTo}`,
+      subtitle: `${dir.shared} of ${dir.fromChanges} ${dir.fromChanges === 1 ? 'commit' : 'commits'} (${Math.round(dir.confidence * 100)}%) · 95% range ${Math.round(dir.interval.low * 100)}–${Math.round(dir.interval.high * 100)}%`,
+      fromPath: dir.fromPath,
+      toPath: dir.toPath,
+      shared: dir.shared,
+      totalChanges: dir.fromChanges,
+      ratioText: `${dir.shared}/${dir.fromChanges}`,
+      confidence: dir.confidence,
+      interval: dir.interval,
+      rangeLowPct: Math.round(dir.interval.low * 100),
+      rangeHighPct: Math.round(dir.interval.high * 100),
+      pointPct: Math.round(dir.confidence * 100),
+      lastTogether: sanitizeHtmlDisplayText(edge.lastTogether),
+      overviewPriority: edge.overviewPriority,
+      score: edge.score,
+      weak:
+        (edge.relationship === 'ghost' || edge.relationship === 'unknown') &&
+        dir.interval.low < 0.3,
+      edgeIndex: ei,
+    });
+  }
+
+  return items;
+}
+
+function eDefaultVisible(data: MapData, rel: Relationship): boolean {
+  const hasPrimary = data.edges.some((e) => e.relationship !== 'unknown');
+  if (rel === 'unknown') return !hasPrimary;
+  return true;
+}
+
+export type LabelCandidatePosition = 'S' | 'N' | 'E' | 'W' | 'SE' | 'SW' | 'NE' | 'NW';
+
+export interface PlateLabelBox {
+  nodeIndex: number;
+  text: string;
+  fullPath: string;
+  position: LabelCandidatePosition;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  anchorX: number;
+  anchorY: number;
+  textAlign: 'left' | 'center' | 'right';
+}
+
+export interface PlateNodeLayout {
+  nodeIndex: number;
+  path: string;
+  shortLabel: string;
+  dir: string;
+  changes: number;
+  x: number;
+  y: number;
+  r: number;
+  isFeaturedEndpoint: boolean;
+  label: PlateLabelBox;
+}
+
+export interface PlateEdgeLayout {
+  edgeIndex: number;
+  sourceNodeIndex: number;
+  targetNodeIndex: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  relationship: Relationship;
+  intervalLow: number;
+  strokeWidth: number;
+  isFeatured: boolean;
+  isLeadEdge: boolean;
+}
+
+export interface FeaturedPlateLayout {
+  width: number;
+  height: number;
+  nodes: PlateNodeLayout[];
+  edges: PlateEdgeLayout[];
+  leadEdge: PlateEdgeLayout | null;
+  balloonTarget: { x: number; y: number } | null;
+  fullComponentNodeCount: number;
+  truncatedToEgoCap: boolean;
+}
+
+export const MAX_EGO_NODES = 12;
+export const CANDIDATE_POSITIONS: readonly LabelCandidatePosition[] = [
+  'S',
+  'N',
+  'E',
+  'W',
+  'SE',
+  'SW',
+  'NE',
+  'NW',
+] as const;
+
+function disambiguateNodeSetPaths(paths: readonly string[]): string[] {
+  const cleanPaths = paths.map((p) => sanitizeHtmlDisplayText(p));
+  const splitPaths = cleanPaths.map((p) => p.split('/').filter(Boolean));
+  const depth = cleanPaths.map(() => 1);
+
+  for (let pass = 0; pass < 5; pass++) {
+    const counts = new Map<string, number>();
+    for (let i = 0; i < cleanPaths.length; i++) {
+      const parts = splitPaths[i]!;
+      const d = Math.min(depth[i]!, parts.length);
+      const label = parts.slice(parts.length - d).join('/') || cleanPaths[i]!;
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    let anyCollision = false;
+    for (let i = 0; i < cleanPaths.length; i++) {
+      const parts = splitPaths[i]!;
+      const d = Math.min(depth[i]!, parts.length);
+      const label = parts.slice(parts.length - d).join('/') || cleanPaths[i]!;
+      if ((counts.get(label) ?? 0) > 1 && depth[i]! < parts.length) {
+        depth[i]! += 1;
+        anyCollision = true;
+      }
+    }
+    if (!anyCollision) break;
+  }
+
+  return cleanPaths.map((p, i) => {
+    const parts = splitPaths[i]!;
+    const d = Math.min(depth[i]!, parts.length);
+    const combined = parts.slice(parts.length - d).join('/') || p;
+    return middleTruncatePath(combined, 36);
+  });
+}
+
+function boxesOverlap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+  pad = 2,
+): boolean {
+  return (
+    a.x - pad < b.x + b.w &&
+    a.x + a.w + pad > b.x &&
+    a.y - pad < b.y + b.h &&
+    a.y + a.h + pad > b.y
+  );
+}
+
+function distToSegmentSq(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq <= 1e-6) {
+    const ex = px - x1;
+    const ey = py - y1;
+    return ex * ex + ey * ey;
+  }
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  const ex = px - projX;
+  const ey = py - projY;
+  return ex * ex + ey * ey;
+}
+
+function boxIntersectsSegment(
+  box: { x: number; y: number; w: number; h: number },
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): boolean {
+  // Sample 5 points along the segment and check if any fall inside the padded box
+  const pad = 3;
+  for (let s = 0; s <= 4; s++) {
+    const t = s / 4;
+    const sx = x1 + (x2 - x1) * t;
+    const sy = y1 + (y2 - y1) * t;
+    if (
+      sx >= box.x - pad &&
+      sx <= box.x + box.w + pad &&
+      sy >= box.y - pad &&
+      sy <= box.y + box.h + pad
+    ) {
+      return true;
+    }
+  }
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  return distToSegmentSq(cx, cy, x1, y1, x2, y2) < (box.h / 2 + 4) ** 2;
+}
+
+function candidateBoxForPosition(
+  nx: number,
+  ny: number,
+  r: number,
+  w: number,
+  h: number,
+  pos: LabelCandidatePosition,
+  extraOffset = 0,
+): Omit<PlateLabelBox, 'nodeIndex' | 'text' | 'fullPath'> {
+  const gap = 7 + extraOffset;
+  const diag = Math.round((r + gap) * 0.75);
+  switch (pos) {
+    case 'S':
+      return {
+        position: pos,
+        x: Math.round((nx - w / 2) * 10) / 10,
+        y: Math.round((ny + r + gap) * 10) / 10,
+        w,
+        h,
+        anchorX: nx,
+        anchorY: Math.round((ny + r + gap + h * 0.76) * 10) / 10,
+        textAlign: 'center',
+      };
+    case 'N':
+      return {
+        position: pos,
+        x: Math.round((nx - w / 2) * 10) / 10,
+        y: Math.round((ny - r - gap - h) * 10) / 10,
+        w,
+        h,
+        anchorX: nx,
+        anchorY: Math.round((ny - r - gap - h * 0.24) * 10) / 10,
+        textAlign: 'center',
+      };
+    case 'E':
+      return {
+        position: pos,
+        x: Math.round((nx + r + gap + 2) * 10) / 10,
+        y: Math.round((ny - h / 2) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx + r + gap + 2) * 10) / 10,
+        anchorY: Math.round((ny + h * 0.28) * 10) / 10,
+        textAlign: 'left',
+      };
+    case 'W':
+      return {
+        position: pos,
+        x: Math.round((nx - r - gap - 2 - w) * 10) / 10,
+        y: Math.round((ny - h / 2) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx - r - gap - 2) * 10) / 10,
+        anchorY: Math.round((ny + h * 0.28) * 10) / 10,
+        textAlign: 'right',
+      };
+    case 'SE':
+      return {
+        position: pos,
+        x: Math.round((nx + diag) * 10) / 10,
+        y: Math.round((ny + diag * 0.75) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx + diag) * 10) / 10,
+        anchorY: Math.round((ny + diag * 0.75 + h * 0.76) * 10) / 10,
+        textAlign: 'left',
+      };
+    case 'SW':
+      return {
+        position: pos,
+        x: Math.round((nx - diag - w) * 10) / 10,
+        y: Math.round((ny + diag * 0.75) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx - diag) * 10) / 10,
+        anchorY: Math.round((ny + diag * 0.75 + h * 0.76) * 10) / 10,
+        textAlign: 'right',
+      };
+    case 'NE':
+      return {
+        position: pos,
+        x: Math.round((nx + diag) * 10) / 10,
+        y: Math.round((ny - diag * 0.75 - h) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx + diag) * 10) / 10,
+        anchorY: Math.round((ny - diag * 0.75 - h * 0.24) * 10) / 10,
+        textAlign: 'left',
+      };
+    case 'NW':
+      return {
+        position: pos,
+        x: Math.round((nx - diag - w) * 10) / 10,
+        y: Math.round((ny - diag * 0.75 - h) * 10) / 10,
+        w,
+        h,
+        anchorX: Math.round((nx - diag) * 10) / 10,
+        anchorY: Math.round((ny - diag * 0.75 - h * 0.24) * 10) / 10,
+        textAlign: 'right',
+      };
+  }
+}
+
+/**
+ * Computes the deterministic ego-network layout (up to 12 nodes) and 8-position
+ * collision-free label placement for the featured finding on the cyanotype plate.
+ */
+export function computeFeaturedPlateLayout(
+  data: MapData,
+  featured: FeaturedFinding,
+  options?: {
+    width?: number;
+    height?: number;
+    visible?: Partial<Record<Relationship, boolean>>;
+  },
+): FeaturedPlateLayout {
+  const width = options?.width ?? 760;
+  const height = options?.height ?? 380;
+  const isRelVisible = (rel: Relationship): boolean =>
+    options?.visible ? Boolean(options.visible[rel]) : eDefaultVisible(data, rel);
+
+  const visibleEdgeIndices = data.edges
+    .map((_, idx) => idx)
+    .filter((ei) => isRelVisible(data.edges[ei]!.relationship));
+
+  const adjNodes = new Map<number, Set<number>>();
+  for (const ei of visibleEdgeIndices) {
+    const e = data.edges[ei]!;
+    if (!adjNodes.has(e.source)) adjNodes.set(e.source, new Set());
+    if (!adjNodes.has(e.target)) adjNodes.set(e.target, new Set());
+    adjNodes.get(e.source)!.add(e.target);
+    adjNodes.get(e.target)!.add(e.source);
+  }
+
+  let seedNodeIndices: number[] = [];
+  let featuredEdgeSet = new Set<number>();
+  let leadEdgeIndex = -1;
+
+  if (featured.kind === 'family') {
+    seedNodeIndices = featured.family.nodeIndices.filter((ni) => ni >= 0 && ni < data.nodes.length);
+    for (const ei of featured.family.edgeIndices) {
+      if (visibleEdgeIndices.includes(ei)) featuredEdgeSet.add(ei);
+    }
+    leadEdgeIndex = featured.leadEdgeIndex;
+  } else if (featured.kind === 'pair') {
+    seedNodeIndices = [featured.edge.source, featured.edge.target].filter(
+      (ni) => ni >= 0 && ni < data.nodes.length,
+    );
+    featuredEdgeSet.add(featured.edgeIndex);
+    leadEdgeIndex = featured.edgeIndex;
+  } else {
+    seedNodeIndices = featured.contextClusterNodeIndices.slice(0, MAX_EGO_NODES);
+  }
+
+  if (seedNodeIndices.length === 0) {
+    return {
+      width,
+      height,
+      nodes: [],
+      edges: [],
+      leadEdge: null,
+      balloonTarget: null,
+      fullComponentNodeCount: 0,
+      truncatedToEgoCap: false,
+    };
+  }
+
+  // Measure full connected component size from seed nodes
+  const compVisited = new Set<number>(seedNodeIndices);
+  const compQueue = [...seedNodeIndices];
+  for (let q = 0; q < compQueue.length; q++) {
+    const u = compQueue[q]!;
+    for (const v of adjNodes.get(u) ?? []) {
+      if (!compVisited.has(v)) {
+        compVisited.add(v);
+        compQueue.push(v);
+      }
+    }
+  }
+  const fullComponentNodeCount = compVisited.size;
+
+  // Build ego network: seed nodes + direct neighbors ranked by strongest connecting edge, capped at 12
+  const egoSet = new Set<number>(seedNodeIndices.slice(0, MAX_EGO_NODES));
+  if (egoSet.size < MAX_EGO_NODES) {
+    const candidateNeighbors = new Map<
+      number,
+      { ghost: number; prio: number; score: number; shared: number }
+    >();
+    for (const ei of visibleEdgeIndices) {
+      const e = data.edges[ei]!;
+      const sIn = egoSet.has(e.source);
+      const tIn = egoSet.has(e.target);
+      if (sIn === tIn) continue;
+      const nbr = sIn ? e.target : e.source;
+      const rank = {
+        ghost: e.relationship === 'ghost' ? 1 : 0,
+        prio: e.overviewPriority,
+        score: e.score,
+        shared: e.shared,
+      };
+      const prev = candidateNeighbors.get(nbr);
+      if (
+        !prev ||
+        rank.ghost > prev.ghost ||
+        (rank.ghost === prev.ghost &&
+          (rank.prio > prev.prio ||
+            (rank.prio === prev.prio &&
+              (rank.score > prev.score || (rank.score === prev.score && rank.shared > prev.shared)))))
+      ) {
+        candidateNeighbors.set(nbr, rank);
+      }
+    }
+
+    const sortedNeighbors = Array.from(candidateNeighbors.entries())
+      .sort(
+        (a, b) =>
+          b[1].ghost - a[1].ghost ||
+          b[1].prio - a[1].prio ||
+          b[1].score - a[1].score ||
+          b[1].shared - a[1].shared ||
+          a[0] - b[0],
+      )
+      .map(([ni]) => ni);
+
+    for (const nbr of sortedNeighbors) {
+      if (egoSet.size >= MAX_EGO_NODES) break;
+      egoSet.add(nbr);
+    }
+  }
+
+  const egoNodeIndices = Array.from(egoSet);
+  const seedSet = new Set<number>(seedNodeIndices);
+  // Keep seed nodes first in canonical order, then neighbor nodes
+  egoNodeIndices.sort((a, b) => {
+    const aSeed = seedSet.has(a) ? 0 : 1;
+    const bSeed = seedSet.has(b) ? 0 : 1;
+    return aSeed - bSeed || a - b;
+  });
+
+  const egoEdgeIndices = visibleEdgeIndices.filter((ei) => {
+    const e = data.edges[ei]!;
+    return egoSet.has(e.source) && egoSet.has(e.target);
+  });
+
+  const nCount = egoNodeIndices.length;
+  const cx = width / 2;
+  const cy = height / 2 + 12; // slightly lower center to leave room at top for speech balloon
+  const rx = Math.max(90, (width - 230) / 2);
+  const ry = Math.max(65, (height - 150) / 2);
+
+  const px = new Float64Array(nCount);
+  const py = new Float64Array(nCount);
+
+  if (nCount === 1) {
+    px[0] = cx;
+    py[0] = cy;
+  } else if (nCount === 2) {
+    px[0] = cx - Math.min(130, rx * 0.65);
+    py[0] = cy;
+    px[1] = cx + Math.min(130, rx * 0.65);
+    py[1] = cy;
+  } else if (nCount === 3) {
+    // Triangle with the top pair horizontal-ish so the balloon has a clear midpoint
+    px[0] = cx - Math.min(135, rx * 0.72);
+    py[0] = cy - Math.min(48, ry * 0.45);
+    px[1] = cx + Math.min(135, rx * 0.72);
+    py[1] = cy - Math.min(48, ry * 0.45);
+    px[2] = cx;
+    py[2] = cy + Math.min(78, ry * 0.72);
+  } else {
+    const seedsInEgo = egoNodeIndices.filter((ni) => seedSet.has(ni));
+    const nbrsInEgo = egoNodeIndices.filter((ni) => !seedSet.has(ni));
+    const sCount = seedsInEgo.length;
+    const mCount = nbrsInEgo.length;
+
+    const innerRx = mCount > 0 ? rx * 0.52 : rx * 0.82;
+    const innerRy = mCount > 0 ? ry * 0.52 : ry * 0.82;
+
+    for (let i = 0; i < sCount; i++) {
+      const angle = -Math.PI * 0.75 + (2 * Math.PI * i) / Math.max(1, sCount);
+      px[i] = cx + Math.cos(angle) * innerRx;
+      py[i] = cy + Math.sin(angle) * innerRy;
+    }
+    for (let j = 0; j < mCount; j++) {
+      const idx = sCount + j;
+      const angle = -Math.PI * 0.55 + (2 * Math.PI * j) / Math.max(1, mCount);
+      px[idx] = cx + Math.cos(angle) * rx * 0.92;
+      py[idx] = cy + Math.sin(angle) * ry * 0.88;
+    }
+
+    // Light deterministic relaxation + minimum distance enforcement
+    const localIdxByGlobal = new Map<number, number>();
+    egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
+
+    for (let iter = 0; iter < 80; iter++) {
+      const fx = new Float64Array(nCount);
+      const fy = new Float64Array(nCount);
+      for (let i = 0; i < nCount; i++) {
+        for (let j = i + 1; j < nCount; j++) {
+          const dx = px[j]! - px[i]!;
+          const dy = py[j]! - py[i]!;
+          const d2 = Math.max(16, dx * dx + dy * dy);
+          const d = Math.sqrt(d2);
+          const rep = 4200 / d2;
+          const rxForce = (dx / d) * rep;
+          const ryForce = (dy / d) * rep;
+          fx[i] = fx[i]! - rxForce;
+          fy[i] = fy[i]! - ryForce;
+          fx[j] = fx[j]! + rxForce;
+          fy[j] = fy[j]! + ryForce;
+        }
+      }
+      for (const ei of egoEdgeIndices) {
+        const e = data.edges[ei]!;
+        const li = localIdxByGlobal.get(e.source);
+        const lj = localIdxByGlobal.get(e.target);
+        if (li === undefined || lj === undefined) continue;
+        const dx = px[lj]! - px[li]!;
+        const dy = py[lj]! - py[li]!;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        const targetLen = featuredEdgeSet.has(ei) ? 145 : 125;
+        const kSpring = featuredEdgeSet.has(ei) ? 0.08 : 0.045;
+        const f = (d - targetLen) * kSpring;
+        const sx = (dx / d) * f;
+        const sy = (dy / d) * f;
+        fx[li] = fx[li]! + sx;
+        fy[li] = fy[li]! + sy;
+        fx[lj] = fx[lj]! - sx;
+        fy[lj] = fy[lj]! - sy;
+      }
+      for (let i = 0; i < nCount; i++) {
+        const pull = seedSet.has(egoNodeIndices[i]!) ? 0.04 : 0.02;
+        fx[i] = fx[i]! + (cx - px[i]!) * pull;
+        fy[i] = fy[i]! + (cy - py[i]!) * pull;
+        px[i] = Math.max(115, Math.min(width - 115, px[i]! + fx[i]! * 0.25));
+        py[i] = Math.max(66, Math.min(height - 46, py[i]! + fy[i]! * 0.25));
+      }
+    }
+  }
+
+  // Node radii and short disambiguated labels
+  const shortLabels = disambiguateNodeSetPaths(
+    egoNodeIndices.map((ni) => data.nodes[ni]?.path ?? `file-${ni}`),
+  );
+  const radii = egoNodeIndices.map((ni) => {
+    const changes = data.nodes[ni]?.changes ?? 1;
+    const baseR = Math.max(5.5, Math.min(11, 4.2 + Math.sqrt(changes) * 0.85));
+    return seedSet.has(ni) ? Math.max(7.5, baseR) : baseR;
+  });
+
+  const localIdxByGlobal = new Map<number, number>();
+  egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
+
+  const edges: PlateEdgeLayout[] = egoEdgeIndices.map((ei) => {
+    const e = data.edges[ei]!;
+    const li = localIdxByGlobal.get(e.source)!;
+    const lj = localIdxByGlobal.get(e.target)!;
+    const strokeWidth = Math.round((1.4 + Math.max(0, Math.min(1, e.interval.low)) * 2.8) * 10) / 10;
+    return {
+      edgeIndex: ei,
+      sourceNodeIndex: e.source,
+      targetNodeIndex: e.target,
+      x1: Math.round(px[li]! * 10) / 10,
+      y1: Math.round(py[li]! * 10) / 10,
+      x2: Math.round(px[lj]! * 10) / 10,
+      y2: Math.round(py[lj]! * 10) / 10,
+      relationship: e.relationship,
+      intervalLow: e.interval.low,
+      strokeWidth,
+      isFeatured: featuredEdgeSet.has(ei),
+      isLeadEdge: ei === leadEdgeIndex,
+    };
+  });
+
+  const leadEdge = edges.find((e) => e.isLeadEdge) ?? edges.find((e) => e.isFeatured) ?? edges[0] ?? null;
+  const balloonTarget = leadEdge
+    ? {
+        x: Math.round(((leadEdge.x1 + leadEdge.x2) / 2) * 10) / 10,
+        y: Math.round(((leadEdge.y1 + leadEdge.y2) / 2) * 10) / 10,
+      }
+    : null;
+
+  // Reserve a bounding box above the balloon target so node labels don't collide with the balloon
+  const balloonBox = balloonTarget
+    ? {
+        x: Math.max(12, Math.min(width - 232, balloonTarget.x - 110)),
+        y: Math.max(8, balloonTarget.y - 60),
+        w: 220,
+        h: 36,
+      }
+    : null;
+
+  // 8-position label placement around each node
+  const placedLabels: PlateLabelBox[] = [];
+  const nodes: PlateNodeLayout[] = [];
+
+  for (let i = 0; i < nCount; i++) {
+    const gi = egoNodeIndices[i]!;
+    const node = data.nodes[gi] ?? { path: `file-${gi}`, dir: '.', changes: 1 };
+    const text = shortLabels[i]!;
+    const fullPath = sanitizeHtmlDisplayText(node.path);
+    const nx = Math.round(px[i]! * 10) / 10;
+    const ny = Math.round(py[i]! * 10) / 10;
+    const r = Math.round(radii[i]! * 10) / 10;
+    const labelW = Math.ceil(text.length * 7.6 + 10);
+    const labelH = 18;
+
+    // Order the 8 candidates starting with those pointing away from the graph center
+    const dxCenter = nx - cx;
+    const dyCenter = ny - cy;
+    const orderedCandidates = [...CANDIDATE_POSITIONS].sort((posA, posB) => {
+      const scoreDir = (pos: LabelCandidatePosition): number => {
+        const vx = pos.includes('E') ? 1 : pos.includes('W') ? -1 : 0;
+        const vy = pos.includes('S') ? 1 : pos.includes('N') ? -1 : 0;
+        return -(vx * dxCenter + vy * dyCenter);
+      };
+      return scoreDir(posA) - scoreDir(posB);
+    });
+
+    let chosen: PlateLabelBox | null = null;
+    let bestFallback: { box: PlateLabelBox; penalty: number } | null = null;
+
+    for (const extraOffset of [0, 16, 32]) {
+      for (const pos of orderedCandidates) {
+        const cand = candidateBoxForPosition(nx, ny, r, labelW, labelH, pos, extraOffset);
+        const fullCand: PlateLabelBox = {
+          nodeIndex: gi,
+          text,
+          fullPath,
+          ...cand,
+        };
+
+        // Check bounds
+        const outOfBounds =
+          fullCand.x < 6 ||
+          fullCand.y < 6 ||
+          fullCand.x + fullCand.w > width - 6 ||
+          fullCand.y + fullCand.h > height - 6;
+
+        // Check overlap with already placed labels
+        const hitsLabel = placedLabels.some((other) => boxesOverlap(fullCand, other, 3));
+
+        // Check overlap with any node circle
+        let hitsNode = false;
+        for (let j = 0; j < nCount; j++) {
+          const ox = px[j]!;
+          const oy = py[j]!;
+          const or = radii[j]! + 3;
+          const nodeBox = { x: ox - or, y: oy - or, w: or * 2, h: or * 2 };
+          if (boxesOverlap(fullCand, nodeBox, 1)) {
+            hitsNode = true;
+            break;
+          }
+        }
+
+        // Check overlap with featured edge line
+        const hitsFeaturedLine =
+          leadEdge !== null &&
+          boxIntersectsSegment(fullCand, leadEdge.x1, leadEdge.y1, leadEdge.x2, leadEdge.y2);
+
+        // Check overlap with balloon callout box
+        const hitsBalloon = balloonBox !== null && boxesOverlap(fullCand, balloonBox, 2);
+
+        if (!outOfBounds && !hitsLabel && !hitsNode && !hitsFeaturedLine && !hitsBalloon) {
+          chosen = fullCand;
+          break;
+        }
+
+        const penalty =
+          (hitsLabel ? 1000 : 0) +
+          (hitsNode ? 300 : 0) +
+          (outOfBounds ? 200 : 0) +
+          (hitsBalloon ? 120 : 0) +
+          (hitsFeaturedLine ? 80 : 0) +
+          extraOffset;
+        if (!bestFallback || penalty < bestFallback.penalty) {
+          bestFallback = { box: fullCand, penalty };
+        }
+      }
+      if (chosen) break;
+    }
+
+    const finalLabel = chosen ?? bestFallback!.box;
+    placedLabels.push(finalLabel);
+    nodes.push({
+      nodeIndex: gi,
+      path: fullPath,
+      shortLabel: text,
+      dir: sanitizeHtmlDisplayText(node.dir),
+      changes: node.changes,
+      x: nx,
+      y: ny,
+      r,
+      isFeaturedEndpoint: seedSet.has(gi),
+      label: finalLabel,
+    });
+  }
+
+  return {
+    width,
+    height,
+    nodes,
+    edges,
+    leadEdge,
+    balloonTarget,
+    fullComponentNodeCount,
+    truncatedToEgoCap: fullComponentNodeCount > nCount,
+  };
+}
+
