@@ -43,10 +43,14 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function stripHeadMeta<T extends { meta?: { head?: unknown } }>(payload: T): T {
+/** Drops `meta.head` and the per-run `meta.cache` hit/miss counters (RA-04) before equivalence checks. */
+function stripHeadMeta<T extends { meta?: { head?: unknown; cache?: unknown } }>(payload: T): T {
   const clone = structuredClone(payload);
   if (clone.meta && 'head' in clone.meta) {
     delete clone.meta.head;
+  }
+  if (clone.meta && 'cache' in clone.meta) {
+    delete clone.meta.cache;
   }
   return clone;
 }
@@ -147,7 +151,7 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
     repo.cleanup();
   });
 
-  it('equivalence: scan, diff, file, explain, and backtest with --head X match checking out X (deep-equal excluding meta.head)', () => {
+  it('equivalence: scan, diff, file, explain, and backtest with --head X match checking out X (deep-equal excluding meta.head and meta.cache)', () => {
     // 1. Run all 5 commands in --head mode while on `main`
     const headScanOut = JSON.parse(runCli(['scan', '--head', headTagName, '--json'], repo.dir).stdout);
     const headDiffOut = JSON.parse(
@@ -201,11 +205,11 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       assert.equal(coExplainOut.meta.head, undefined);
       assert.equal(coBacktestOut.meta.head, undefined);
 
-      assert.deepEqual(stripHeadMeta(headScanOut), coScanOut);
-      assert.deepEqual(stripHeadMeta(headDiffOut), coDiffOut);
-      assert.deepEqual(stripHeadMeta(headFileOut), coFileOut);
-      assert.deepEqual(stripHeadMeta(headExplainOut), coExplainOut);
-      assert.deepEqual(stripHeadMeta(headBacktestOut), coBacktestOut);
+      assert.deepEqual(stripHeadMeta(headScanOut), stripHeadMeta(coScanOut));
+      assert.deepEqual(stripHeadMeta(headDiffOut), stripHeadMeta(coDiffOut));
+      assert.deepEqual(stripHeadMeta(headFileOut), stripHeadMeta(coFileOut));
+      assert.deepEqual(stripHeadMeta(headExplainOut), stripHeadMeta(coExplainOut));
+      assert.deepEqual(stripHeadMeta(headBacktestOut), stripHeadMeta(coBacktestOut));
     } finally {
       repo.git('checkout', '-q', 'main');
     }
@@ -825,7 +829,7 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
 
       const wtCtx = await loadContext(symRepo.dir, { minShared: 3, minConfidence: 0.4 });
       const wtScan = scan(wtCtx, { limit: 10, kinds: [...RELATIONSHIPS] });
-      assert.deepEqual(stripHeadMeta(symScan), wtScan, '--head scan must match working-tree scan on committed symlinks');
+      assert.deepEqual(stripHeadMeta(symScan), stripHeadMeta(wtScan), '--head scan must match working-tree scan on committed symlinks');
 
       const directTreeFiles = gitTreeFiles(symRepo.dir, symlinkHeadSha, new Set(['src/a.ts', 'src/b.ts']));
       try {
