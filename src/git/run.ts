@@ -19,6 +19,7 @@ export class GitError extends Error {
  * can graft a different history onto the repository.
  */
 export const CONFIG_OVERRIDES = [
+  '--no-optional-locks',
   '--no-replace-objects',
   '-c', 'core.quotepath=off',
   '-c', 'color.ui=never',

@@ -416,7 +416,7 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
     try {
       const indexPath = join(repo.dir, '.git', 'index');
       const headBefore = repo.git('rev-parse', 'HEAD');
-      const statusBefore = spawnSync('git', ['status', '--porcelain=v1', '-z'], {
+      const statusBefore = spawnSync('git', ['--no-optional-locks', 'status', '--porcelain=v1', '-z'], {
         cwd: repo.dir,
         encoding: 'buffer',
         env: sanitizeGitEnv(process.env),
@@ -438,13 +438,13 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       await writeMap(ctx, { edges: 20, kinds: [...RELATIONSHIPS], open: false, out: customMapPath });
       rmSync(customMapPath, { force: true });
 
+      const indexStatAfter = statSync(indexPath, { bigint: true });
       const headAfter = repo.git('rev-parse', 'HEAD');
-      const statusAfter = spawnSync('git', ['status', '--porcelain=v1', '-z'], {
+      const statusAfter = spawnSync('git', ['--no-optional-locks', 'status', '--porcelain=v1', '-z'], {
         cwd: repo.dir,
         encoding: 'buffer',
         env: sanitizeGitEnv(process.env),
       }).stdout;
-      const indexStatAfter = statSync(indexPath, { bigint: true });
 
       assert.equal(headAfter, headBefore, 'HEAD must not change');
       assert.deepEqual(statusAfter, statusBefore, 'git status --porcelain=v1 -z must not change');
