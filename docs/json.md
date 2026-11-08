@@ -91,7 +91,8 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `files` | `integer` | Yes | Distinct tracked file identities in the co-change model. |
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
 | `newestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the newest analyzed commit (omitted when `commitsAnalyzed === 0`). |
-| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`). |
+| `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
+| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 
 #### 5.1.1 Directional Confidence, Wilson Intervals (`interval`, `reverseInterval`), and `score`
@@ -100,7 +101,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 
 - **`interval`: `{ "low": number, "high": number }`** — Two-sided 95% Wilson score interval ($z = 1.959963984540054$) for the forward directional confidence $P(\text{to changes} \mid \text{from changes})$, computed from **unweighted raw commit counts** (`shared` successes out of `fromChanges` trials) and rounded outward to 4 decimal places (`floor` for `low`, `ceil` for `high`).
 - **`reverseInterval`: `{ "low": number, "high": number }`** — Two-sided 95% Wilson score interval for the reverse directional confidence $P(\text{from changes} \mid \text{to changes})$, computed from **unweighted raw commit counts** (`shared` successes out of `toChanges` trials) and rounded outward to 4 decimal places (`floor` for `low`, `ceil` for `high`).
-- **Unweighted `interval` vs. Recency-Weighted `score`:** `interval` and `reverseInterval` are **always unweighted** so they match the raw `shared`, `fromChanges`, and `toChanges` commit counts printed alongside them. When `--half-life <days>` is set (`weighted: true`), `confidence`, `reverseConfidence`, and the ranking `score` (the Wilson lower bound) use recency-weighted counts and may differ from `interval.low`; in Markdown, terminal, and map output, the interval is placed next to the raw commit count and labeled `(raw 95% CI …)`.
+- **Unweighted `interval` vs. Weighted `score`:** `interval` and `reverseInterval` are **always unweighted** so they match the raw `shared`, `fromChanges`, and `toChanges` commit counts printed alongside them. When `--half-life <days>` or `--origin-weights <spec>` is set (`weighted: true`, `weighting: "recency" | "origin" | "recency+origin"`), `confidence`, `reverseConfidence`, and the ranking `score` (the Wilson lower bound) use weighted counts and may differ from `interval.low`; in Markdown, terminal, and map output, the interval is placed next to the raw commit count and labeled `(raw 95% CI …)`.
 - **Worked Example (`14` of `19` commits):** Suppose `from` changed in `fromChanges = 19` commits and `to` changed alongside it in `shared = 14` of those commits (with no `--half-life` weighting):
   - Raw directional rate: $\hat{p} = 14 / 19 \approx 0.7368$ (`confidence: 0.737`).
   - Two-sided 95% Wilson score interval (`wilsonInterval(14, 19)` $\approx \{ \text{low}: 0.51208, \text{high}: 0.88194 \}$): outward-rounded to `interval: { "low": 0.512, "high": 0.882 }`, rendered in Markdown and terminal output as `(95% CI 51–89%)`.
@@ -143,6 +144,11 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
     "files": 42,
     "oldestCommit": "2025-01-10",
     "newestCommit": "2026-10-15",
+    "origins": {
+      "human": 110,
+      "agent": 5,
+      "bot": 3
+    },
     "settings": {
       "maxCommits": 5000,
       "maxFilesPerCommit": 25,
@@ -206,12 +212,18 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
       "weighted": false,
       "lastTogether": "2026-05-16",
       "crossesDirectories": true,
+      "originShare": {
+        "human": 0.917,
+        "agent": 0.083,
+        "bot": 0
+      },
       "evidence": [
         {
           "hash": "26f8c33000000000000000000000000000000000",
           "date": "2026-05-16",
           "author": "Alice",
-          "subject": "fix(serveStatic): make options parameter optional in all adapters"
+          "subject": "fix(serveStatic): make options parameter optional in all adapters",
+          "origin": "human"
         }
       ],
       "alsoLinkedFrom": []
@@ -268,14 +280,16 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `why` | `string` | Yes | Human-readable classification explanation. |
 | `hiddenBridge` | `HiddenBridge` | Optional | Shared AST signal when `relationship === "ghost"`. |
 | `meetsThresholds` | `boolean` | Yes | Whether the pair meets active `--min-shared` and `--min-confidence` in at least one direction. |
-| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts. |
+| `shared`, `fromChanges`, `toChanges` | `integer` | Yes | Raw shared and individual commit counts (stay raw even when `--half-life` or `--origin-weights` is set, while `minShared` uses the origin-weighted shared count when origin weights are active; `interval` from RA-05 stays raw as well). |
 | `confidence`, `reverseConfidence`, `score` | `number` | Yes | Directional confidences and Wilson score. |
 | `interval`, `reverseInterval` | `WilsonInterval` | Optional (always emitted) | Two-sided 95% Wilson score intervals (`{ low, high }`) for unweighted directional and reverse confidence. |
-| `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting is active. |
+| `weighted` | `boolean` | Yes | `true` when `--half-life` recency weighting or `--origin-weights` origin weighting is active. |
+| `weighting` | `"none" \| "recency" \| "origin" \| "recency+origin"` | Optional | Emitted when `weighted === true` to distinguish recency weighting (`"recency"`), origin weighting (`"origin"`), or both (`"recency+origin"`). |
 | `lastTogether` | `string` | Optional | ISO date of most recent shared commit (omitted when `shared === 0`). |
 | `crossesDirectories` | `boolean` | Yes | `true` when `dirname(from) !== dirname(to)`. |
-| `sharedCommits` | `SharedCommitEvidence[]` | Yes | Recent shared commits with bounded diff hunks (`fileA`, `fileB`). |
-| `counterexamples` | `object` | Yes | `fromWithoutToTotal`, `toWithoutFromTotal`, `fromWithoutTo`, `toWithoutFrom`. |
+| `originShare` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Share of all shared commits by origin (`human`, `agent`, `bot`), rounded to 3 decimals and summing to 1 (or all `0` when `shared === 0`). Optional in `schemaVersion: 1` for backward compatibility with older v1 payloads. |
+| `sharedCommits` | `SharedCommitEvidence[]` | Yes | Recent shared commits with `origin` (`"human" \| "agent" \| "bot"`) and bounded diff hunks (`fileA`, `fileB`). |
+| `counterexamples` | `object` | Yes | `fromWithoutToTotal`, `toWithoutFromTotal`, `fromWithoutTo`, `toWithoutFrom` (each commit includes `origin`). |
 | `bounds` | `ExplainBoundsSummary` | Yes | Active line/hunk/byte/timeout budgets and truncation flags. |
 | `cliCommand` | `string` | Yes | Reproducible CLI command string. |
 | `disclaimer` | `string` | Yes | Methodological caveat. |
@@ -312,7 +326,8 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 | `strategies` | `StrategyScore[]` | Yes | Precision, hit rate, coverage, false-alarm rate, and recall per strategy. |
 | `notes` | `string[]` | Yes | Methodological notes. |
 | `ghostDiagnostics` | `GhostDiagnostics` | Optional | Present when `--ghosts` was passed. |
-| `followUpBenchmark` | `FollowUpBenchmarkResult` | Optional | Present when `--follow-ups` was passed. |
+| `followUpBenchmark` | `FollowUpBenchmarkResult` | Optional | Present when `--follow-ups` was passed (each case's `initialCommit` and `followUpCommit` includes `origin`). |
+| `comparisons` | `OriginWeightComparison[]` | Optional | Present when `--compare-origin-weights <spec>` was passed; reports `defaultWeights` (`{ human: 1, agent: 1, bot: 1 }`), resolved `weights` (keys omitted in `<spec>` inherit from `origin.weights` in `.repo-archaeology.json`), `default`, `weighted` (each including `byOrigin` slices for `human`, `agent`, and `bot` held-out commits), `deltas` (`precision`, `hitRate`, `lift`, `coverage`, `falseAlarmRate`, `recall`, `fired`), and `caveat` on the same split. |
 
 ---
 

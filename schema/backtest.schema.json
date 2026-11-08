@@ -65,6 +65,12 @@
     },
     "followUpBenchmark": {
       "$ref": "#/$defs/FollowUpBenchmarkResult"
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OriginWeightComparison"
+      }
     }
   },
   "$defs": {
@@ -375,6 +381,9 @@
             "subject": {
               "type": "string"
             },
+            "origin": {
+              "$ref": "common.schema.json#/$defs/CommitOrigin"
+            },
             "files": {
               "type": "array",
               "items": {
@@ -406,6 +415,9 @@
             },
             "subject": {
               "type": "string"
+            },
+            "origin": {
+              "$ref": "common.schema.json#/$defs/CommitOrigin"
             },
             "laterFiles": {
               "type": "array",
@@ -548,6 +560,227 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "OriginSliceMetrics": {
+      "type": "object",
+      "required": [
+        "queries",
+        "fired",
+        "coverage",
+        "precision",
+        "hitRate"
+      ],
+      "properties": {
+        "queries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "OriginWeightRunMetrics": {
+      "type": "object",
+      "required": [
+        "fired",
+        "coverage",
+        "precision",
+        "hitRate",
+        "falseAlarmRate",
+        "recall",
+        "lift",
+        "strategies"
+      ],
+      "properties": {
+        "fired": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hitRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "falseAlarmRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lift": {
+          "type": "number",
+          "minimum": 0
+        },
+        "strategies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StrategyScore"
+          }
+        },
+        "byOrigin": {
+          "type": "object",
+          "required": [
+            "human",
+            "agent",
+            "bot"
+          ],
+          "properties": {
+            "human": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            },
+            "agent": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            },
+            "bot": {
+              "$ref": "#/$defs/OriginSliceMetrics"
+            }
+          }
+        }
+      }
+    },
+    "OriginWeightDeltaMetrics": {
+      "type": "object",
+      "required": [
+        "fired",
+        "coverage",
+        "precision",
+        "hitRate",
+        "falseAlarmRate",
+        "recall",
+        "lift"
+      ],
+      "properties": {
+        "fired": {
+          "type": "integer"
+        },
+        "coverage": {
+          "type": "number"
+        },
+        "precision": {
+          "type": "number"
+        },
+        "hitRate": {
+          "type": "number"
+        },
+        "falseAlarmRate": {
+          "type": "number"
+        },
+        "recall": {
+          "type": "number"
+        },
+        "lift": {
+          "type": "number"
+        }
+      }
+    },
+    "OriginWeightComparison": {
+      "type": "object",
+      "required": [
+        "spec",
+        "weights",
+        "default",
+        "weighted",
+        "deltas"
+      ],
+      "properties": {
+        "spec": {
+          "type": "string",
+          "minLength": 1
+        },
+        "defaultWeights": {
+          "type": "object",
+          "required": [
+            "human",
+            "agent",
+            "bot"
+          ],
+          "properties": {
+            "human": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "agent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "bot": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "weights": {
+          "type": "object",
+          "required": [
+            "human",
+            "agent",
+            "bot"
+          ],
+          "properties": {
+            "human": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "agent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "bot": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "default": {
+          "$ref": "#/$defs/OriginWeightRunMetrics"
+        },
+        "weighted": {
+          "$ref": "#/$defs/OriginWeightRunMetrics"
+        },
+        "deltas": {
+          "$ref": "#/$defs/OriginWeightDeltaMetrics"
+        },
+        "caveat": {
+          "type": "string"
         }
       }
     }

@@ -347,6 +347,7 @@ Global options work with every command:
 | `--skip-commits <regex>` | | Skip commits whose subject matches, e.g. `"^(chore\|style)\b"` |
 | `--half-life <days>` | | Weight recent commits more |
 | `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
+| `--origin-weights <spec>` | `human=1,agent=1,bot=1` | Weight commits by origin, e.g. `bot=0,agent=0.5` (values in `[0, 1]`) |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 
 Settings can also live in `.repo-archaeology.json` at the repository root (flags win):
@@ -363,6 +364,63 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 ```
 
 The config file is part of the repository, so it is treated as untrusted input: it must be a small regular file, `maxFilesPerCommit` is capped at 1000, and `skipCommits` patterns that can backtrack catastrophically (quantifiers vulnerable to polynomial/exponential ReDoS, repeated groups with alternation, or backreferences) are refused. For safe prefix-based skipping without regexes, use `skipCommitPrefixes`. Command-line flags are not restricted.
+
+## Bots and agents
+
+Automated dependency bots (such as Dependabot and Renovate) and coding agents (such as Copilot, Devin, Cursor, Claude, Codex, Gemini, Jules, Amp, and Argon) produce commits whose co-change patterns may differ from human edits. Repo Archaeology classifies every commit's `origin` as `"human"`, `"agent"`, or `"bot"` and exposes the breakdown in JSON (`meta.origins`, `originShare` across all shared commits on each suggestion/relationship, and `origin` on every evidence commit).
+
+### Classification order (heuristics)
+
+Each commit is classified using author identity and Git commit trailers (`%(trailers:only,unfold,separator=%x1d)`, which requires **Git ≥ 2.22**, released June 2019), evaluated in strict priority order (first match wins):
+
+1. **`agent` (author identity):** The author name or email matches an anchored agent-author pattern (`copilot-swe-agent`, `devin-ai-integration`, `cursor-agent`, `[bot]`-suffixed agent accounts such as `codex[bot]`, `jules[bot]`, `claude[bot]`, `gemini[bot]`, `argon[bot]`, or agent noreply addresses such as `noreply@anthropic.com` and `amp@ampcode.com`). Because many coding-agent GitHub Apps end in `[bot]`, this step runs **before** the bot step, while anchored matching ensures ordinary humans (such as `"Claude Monet"`, `"Jules Verne"`, `"Gemini Patel"`, `"Codex Team"`, or `"Argonaut"`) remain `human`.
+2. **`bot` (author identity):** The author name or email matches a bot pattern (`\[bot\]$`, `\[bot\]@users\.noreply\.github\.com$`, `^dependabot(?:\[bot\])?$`, `^renovate(?:\[bot\])?$`, `^github-actions(?:\[bot\])?$`, `^snyk-bot(?:\[bot\])?$`, `^greenkeeper(?:\[bot\])?$`, `^semantic-release-bot(?:\[bot\])?$`, `^allcontributors(?:\[bot\])?$`, `^pre-commit-ci(?:\[bot\])?$`, `^mergify(?:\[bot\])?$`, `^imgbot(?:\[bot\])?$`).
+3. **`agent` (commit trailers):** Any `Co-authored-by`, `Assisted-by`, `Generated-by`, or `AI-Assisted` trailer value matches a bounded agent-trailer pattern (known agent noreply emails such as `noreply@anthropic.com`, `amp@ampcode.com`, `noreply@cursor.com`, `noreply@cognition.ai`, `noreply@aider.chat`, `codex@openai.com`, `copilot@github.com`, `<agent>[bot]@users.noreply.github.com`, or exact agent display names). Ordinary human co-authors whose names or emails happen to contain agent substrings (such as `Bob <bob@example.com>`, `Pam Campbell`, `Sam Ampofo`, `Jean-Claude Van`, `Devin Smith`, or human `@openai.com` addresses) stay `human`. Because step 2 runs first, a bot commit carrying an agent trailer remains `bot`.
+4. **`human`:** Everything else.
+
+### Customizing patterns and opt-in weighting
+
+You can extend or replace the default heuristic patterns and configure opt-in origin weights in `.repo-archaeology.json` (each regex must be a valid regular expression of at most 200 characters and pass catastrophic-backtracking checks) or via `--origin-weights`:
+
+```json
+{
+  "origin": {
+    "agentAuthorPatterns": ["^internal-codegen-agent"],
+    "botPatterns": ["^release-please"],
+    "agentTrailerPatterns": ["InternalCopilot"],
+    "replaceDefaults": false,
+    "weights": {
+      "human": 1,
+      "agent": 0.5,
+      "bot": 0
+    }
+  }
+}
+```
+
+```bash
+# Down-weight agent commits and ignore bot commits at the CLI
+npx repo-archaeology diff --base main --origin-weights bot=0,agent=0.5
+```
+
+All weights default to `1` (`human=1,agent=1,bot=1`), so **rankings, scores, and existing fields are unchanged by default** until benchmark evidence across many repositories supports changing the defaults. When non-default weights are set:
+- Weighted counts feed directional `confidence`, Wilson `score`, and thresholds (`minShared` and `minConfidence`) the same way `--half-life` recency weighting feeds `weight`.
+- Specifically, `minShared` is checked against the origin-weighted shared commit count, while the displayed `shared` and `fromChanges` counts—as well as `interval` (RA-05)—stay raw. As a result, a pair with 4 raw shared commits where 2 were `bot` commits (`bot=0`) has an effective shared count of `2` and will be filtered out by `--min-shared 3`.
+- Relationships expose `weighting: "origin"` (or `"recency"` / `"recency+origin"`) and label weighted percentages as `origin-weighted`, `recency-weighted`, or `recency+origin-weighted`.
+
+### Measuring before re-weighting (`backtest --compare-origin-weights`)
+
+Before changing weights on a repository, measure whether down-weighting bots or agents actually improves holdout accuracy:
+
+```bash
+npx repo-archaeology backtest --compare-origin-weights bot=0,agent=0.5
+npx repo-archaeology backtest --compare-origin-weights bot=0,agent=0.5 --json
+```
+
+`--compare-origin-weights <spec>` runs the backtest twice on the **exact same chronological train/test split**:
+- **`default`:** Always the unweighted baseline (`human=1,agent=1,bot=1`).
+- **`weighted`:** Applies `<spec>`, where any origin key omitted in `<spec>` inherits from `origin.weights` in `.repo-archaeology.json` (or `1` if unset). Both resolved weight sets are printed in the CLI table and returned in JSON (`defaultWeights` and `weights`).
+- **Metrics and held-out commit caveat:** Prints and returns in JSON (`comparisons[]`) `default`, `weighted`, and `deltas` (`weighted - default`) for precision, hit rate, lift, coverage, false-alarm rate, and recall. Because the overall holdout window replays all commits (including `bot` and `agent` commits), setting `bot=0` stops the model from trying to predict Dependabot test commits; `default.byOrigin` and `weighted.byOrigin` break down accuracy by held-out commit origin (`human`, `agent`, `bot`) so you can inspect `byOrigin.human` directly.
 
 ## How it works
 

@@ -2,6 +2,13 @@ import type { Context } from '../context.js';
 import { UsageError } from '../context.js';
 import { CoChangeModel, type Thresholds } from '../model/cochange.js';
 import type { HistoryCommit } from '../model/history.js';
+import {
+  formatOriginWeightsSpec,
+  parseOriginWeightsSpec,
+  resolveOriginWeights,
+  type CommitOrigin,
+  type OriginWeights,
+} from '../model/origin.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
 import { ratio } from '../util/stats.js';
 import { c, isoDate, pct, plural } from '../util/term.js';
@@ -26,6 +33,50 @@ export interface BacktestOptions {
   followUps?: boolean;
   /** Maximum hours between an initial commit and a candidate follow-up commit (default 48). */
   followUpWindowHours?: number;
+  /** Optional origin weights for the primary backtest run. */
+  originWeights?: OriginWeights;
+  /** One or more origin-weight specs (e.g. "bot=0,agent=0.5") to compare against default weights on the same split. */
+  compareOriginWeights?: string | readonly string[];
+}
+
+export interface OriginSliceMetrics {
+  queries: number;
+  fired: number;
+  coverage: number;
+  precision: number;
+  hitRate: number;
+}
+
+export interface OriginWeightRunMetrics {
+  fired: number;
+  coverage: number;
+  precision: number;
+  hitRate: number;
+  falseAlarmRate: number;
+  recall: number;
+  lift: number;
+  strategies: StrategyScore[];
+  byOrigin?: Record<CommitOrigin, OriginSliceMetrics>;
+}
+
+export interface OriginWeightDeltaMetrics {
+  fired: number;
+  coverage: number;
+  precision: number;
+  hitRate: number;
+  falseAlarmRate: number;
+  recall: number;
+  lift: number;
+}
+
+export interface OriginWeightComparison {
+  spec: string;
+  defaultWeights?: Required<OriginWeights>;
+  weights: Required<OriginWeights>;
+  default: OriginWeightRunMetrics;
+  weighted: OriginWeightRunMetrics;
+  deltas: OriginWeightDeltaMetrics;
+  caveat?: string;
 }
 
 export interface GhostDiagnostics {
@@ -73,6 +124,7 @@ export interface BacktestResult {
   notes: string[];
   ghostDiagnostics?: GhostDiagnostics;
   followUpBenchmark?: Omit<FollowUpBenchmarkResult, 'meta'>;
+  comparisons?: OriginWeightComparison[];
 }
 
 type Recommender = (fileId: number) => number[];
@@ -96,7 +148,11 @@ export function backtest(ctx: Context, options: BacktestOptions): BacktestResult
   try {
     const isGhost = options.ghosts ? (from: string, to: string) => ctx.currentFiles.has(from)
       && ctx.currentFiles.has(to) && ctx.classifier.classify(from, to) === 'ghost' : undefined;
-    const result = backtestCommits(ctx.history.commits, ctx.thresholds, options, ctx.settings.halfLifeDays, ctx.history.excluded, isGhost);
+    const effectiveOptions: BacktestOptions = {
+      ...options,
+      originWeights: options.originWeights ?? ctx.settings.origin?.weights,
+    };
+    const result = backtestCommits(ctx.history.commits, ctx.thresholds, effectiveOptions, ctx.settings.halfLifeDays, ctx.history.excluded, isGhost);
     return { ...result, meta: buildMeta(ctx) };
   } finally {
     ctx.close?.();
@@ -145,86 +201,190 @@ export function backtestCommits(
   const testCommits = testTimeline.filter((commit) => commit.files.length <= EVALUATION_MAX_FILES);
   const trainingTimeline = ordered.slice(testCount);
   const trainCommits = trainingTimeline.filter((commit) => !left.has(commit));
-  const model = new CoChangeModel(trainCommits, { halfLifeDays });
-  const available = new Set<string>();
-  for (const commit of [...trainingTimeline].reverse()) updateAvailability(available, commit);
 
-  const popular = model.files.map((_, id) => id).sort((x, y) => (model.changeCount[y] ?? 0) - (model.changeCount[x] ?? 0) || x - y);
-  const existing = (ids: number[]) => ids.filter((id) => available.has(model.path(id)));
-  // Set per query: whether the main strategy suggested anything (used by the fair baseline).
-  let modelSpoke = false;
-  const strategies: [Omit<StrategyScore, 'fired' | 'coverage' | 'precision' | 'hitRate' | 'falseAlarmRate' | 'recall'>, Recommender][] = [
-    [
-      { name: 'co-change', description: `your thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence): what \`diff\` reports` },
-      (id) => existing(model.companions(id, thresholds).map((x) => x.to)).slice(0, options.k),
-    ],
-    [
-      { name: 'co-change, no thresholds', description: 'same ranking, always suggests something it has seen' },
-      (id) => existing(model.companions(id, { minShared: 1, minConfidence: 0 }).map((x) => x.to)).slice(0, options.k),
-    ],
-    [
-      { name: 'popularity baseline', description: `always suggests the ${options.k} most frequently changed files` },
-      (id) => existing(popular.filter((p) => p !== id)).slice(0, options.k),
-    ],
-    [
-      // The fair comparison: co-change only speaks up on some changes, which may be easier ones.
-      { name: 'popularity, same changes', description: 'the popularity guess, scored only where co-change spoke up' },
-      (id) => (modelSpoke ? existing(popular.filter((p) => p !== id)).slice(0, options.k) : []),
-    ],
-  ];
-
-  const tallies = strategies.map(() => ({ fired: 0, suggestions: 0, correct: 0, hitQueries: 0 }));
-  const ghostTally = { fired: 0, suggestions: 0, correct: 0, hitQueries: 0 };
-  let queries = 0;
-  let soloQueries = 0;
-  let expectedTotal = 0;
-
-  for (const commit of [...testTimeline].reverse()) {
-    if (commit.files.length <= EVALUATION_MAX_FILES) {
-      for (const file of commit.files) {
-        const id = model.id(file);
-        if (id === undefined) continue; // a file born after the split: nothing to learn from
-        const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
-        const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
-        queries++;
-        if (commit.files.length === 1) soloQueries++;
-        expectedTotal += expected.size + unseen;
-        strategies.forEach(([, recommend], i) => {
-          const suggested = recommend(id);
-          if (i === 0) modelSpoke = suggested.length > 0;
-          if (i === 0 && options.ghosts && isGhost) {
-            const ghosts = suggested.filter((target) => isGhost(model.path(id), model.path(target)));
-            const correct = ghosts.filter((target) => expected.has(target)).length;
-            ghostTally.suggestions += ghosts.length;
-            ghostTally.correct += correct;
-            if (ghosts.length > 0) ghostTally.fired++;
-            if (correct > 0) ghostTally.hitQueries++;
-          }
-          const t = tallies[i]!;
-          if (suggested.length === 0) return;
-          t.fired++;
-          t.suggestions += suggested.length;
-          const hits = suggested.filter((s) => expected.has(s)).length;
-          t.correct += hits;
-          if (hits > 0) t.hitQueries++;
-        });
-      }
+  const rawCompareSpecs =
+    options.compareOriginWeights === undefined
+      ? []
+      : typeof options.compareOriginWeights === 'string'
+        ? [options.compareOriginWeights]
+        : [...options.compareOriginWeights];
+  const parsedCompareSpecs = rawCompareSpecs.map((spec) => {
+    try {
+      const parsed = parseOriginWeightsSpec(spec, '--compare-origin-weights');
+      const weights = resolveOriginWeights({ ...options.originWeights, ...parsed });
+      return { spec: spec.trim() || formatOriginWeightsSpec(weights), weights };
+    } catch (err) {
+      throw new UsageError((err as Error).message);
     }
-    updateAvailability(available, commit);
-  }
-
-  const scores: StrategyScore[] = strategies.map(([info], i) => {
-    const t = tallies[i]!;
-    return {
-      ...info,
-      fired: t.fired,
-      coverage: ratio(t.fired, queries),
-      precision: ratio(t.correct, t.suggestions),
-      hitRate: ratio(t.hitQueries, t.fired),
-      falseAlarmRate: ratio(t.fired - t.hitQueries, t.fired),
-      recall: ratio(t.correct, expectedTotal),
-    };
   });
+
+  const evaluateSplit = (
+    originWeights: OriginWeights | undefined,
+    collectGhosts: boolean,
+  ) => {
+    const model = new CoChangeModel(trainCommits, { halfLifeDays, originWeights });
+    const available = new Set<string>();
+    for (const commit of [...trainingTimeline].reverse()) updateAvailability(available, commit);
+
+    const popular = model.files.map((_, id) => id).sort((x, y) => (model.changeCount[y] ?? 0) - (model.changeCount[x] ?? 0) || x - y);
+    const existing = (ids: number[]) => ids.filter((id) => available.has(model.path(id)));
+    // Set per query: whether the main strategy suggested anything (used by the fair baseline).
+    let modelSpoke = false;
+    const strategies: [Omit<StrategyScore, 'fired' | 'coverage' | 'precision' | 'hitRate' | 'falseAlarmRate' | 'recall'>, Recommender][] = [
+      [
+        { name: 'co-change', description: `your thresholds (≥${thresholds.minShared} shared, ≥${pct(thresholds.minConfidence)} confidence): what \`diff\` reports` },
+        (id) => existing(model.companions(id, thresholds).map((x) => x.to)).slice(0, options.k),
+      ],
+      [
+        { name: 'co-change, no thresholds', description: 'same ranking, always suggests something it has seen' },
+        (id) => existing(model.companions(id, { minShared: 1, minConfidence: 0 }).map((x) => x.to)).slice(0, options.k),
+      ],
+      [
+        { name: 'popularity baseline', description: `always suggests the ${options.k} most frequently changed files` },
+        (id) => existing(popular.filter((p) => p !== id)).slice(0, options.k),
+      ],
+      [
+        // The fair comparison: co-change only speaks up on some changes, which may be easier ones.
+        { name: 'popularity, same changes', description: 'the popularity guess, scored only where co-change spoke up' },
+        (id) => (modelSpoke ? existing(popular.filter((p) => p !== id)).slice(0, options.k) : []),
+      ],
+    ];
+
+    const tallies = strategies.map(() => ({ fired: 0, suggestions: 0, correct: 0, hitQueries: 0 }));
+    const ghostTally = { fired: 0, suggestions: 0, correct: 0, hitQueries: 0 };
+    const originTallies: Record<CommitOrigin, { queries: number; fired: number; suggestions: number; correct: number; hitQueries: number }> = {
+      human: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+      agent: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+      bot: { queries: 0, fired: 0, suggestions: 0, correct: 0, hitQueries: 0 },
+    };
+    let queries = 0;
+    let soloQueries = 0;
+    let expectedTotal = 0;
+
+    for (const commit of [...testTimeline].reverse()) {
+      if (commit.files.length <= EVALUATION_MAX_FILES) {
+        const commitOrigin: CommitOrigin = commit.origin ?? 'human';
+        for (const file of commit.files) {
+          const id = model.id(file);
+          if (id === undefined) continue; // a file born after the split: nothing to learn from
+          const expected = new Set(commit.files.filter((f) => f !== file).map((f) => model.id(f)).filter((x): x is number => x !== undefined));
+          const unseen = commit.files.length - 1 - expected.size; // companions that did not exist in training: impossible to predict, still count against recall
+          queries++;
+          originTallies[commitOrigin].queries++;
+          if (commit.files.length === 1) soloQueries++;
+          expectedTotal += expected.size + unseen;
+          strategies.forEach(([, recommend], i) => {
+            const suggested = recommend(id);
+            if (i === 0) modelSpoke = suggested.length > 0;
+            if (i === 0 && collectGhosts && isGhost) {
+              const ghosts = suggested.filter((target) => isGhost(model.path(id), model.path(target)));
+              const correct = ghosts.filter((target) => expected.has(target)).length;
+              ghostTally.suggestions += ghosts.length;
+              ghostTally.correct += correct;
+              if (ghosts.length > 0) ghostTally.fired++;
+              if (correct > 0) ghostTally.hitQueries++;
+            }
+            const t = tallies[i]!;
+            if (suggested.length === 0) return;
+            t.fired++;
+            t.suggestions += suggested.length;
+            const hits = suggested.filter((s) => expected.has(s)).length;
+            t.correct += hits;
+            if (hits > 0) t.hitQueries++;
+            if (i === 0) {
+              const ot = originTallies[commitOrigin];
+              ot.fired++;
+              ot.suggestions += suggested.length;
+              ot.correct += hits;
+              if (hits > 0) ot.hitQueries++;
+            }
+          });
+        }
+      }
+      updateAvailability(available, commit);
+    }
+
+    const scores: StrategyScore[] = strategies.map(([info], i) => {
+      const t = tallies[i]!;
+      return {
+        ...info,
+        fired: t.fired,
+        coverage: ratio(t.fired, queries),
+        precision: ratio(t.correct, t.suggestions),
+        hitRate: ratio(t.hitQueries, t.fired),
+        falseAlarmRate: ratio(t.fired - t.hitQueries, t.fired),
+        recall: ratio(t.correct, expectedTotal),
+      };
+    });
+
+    const toSlice = (ot: { queries: number; fired: number; suggestions: number; correct: number; hitQueries: number }): OriginSliceMetrics => ({
+      queries: ot.queries,
+      fired: ot.fired,
+      coverage: ratio(ot.fired, ot.queries),
+      precision: ratio(ot.correct, ot.suggestions),
+      hitRate: ratio(ot.hitQueries, ot.fired),
+    });
+    const byOrigin: Record<CommitOrigin, OriginSliceMetrics> = {
+      human: toSlice(originTallies.human),
+      agent: toSlice(originTallies.agent),
+      bot: toSlice(originTallies.bot),
+    };
+
+    return { scores, ghostTally, queries, soloQueries, byOrigin };
+  };
+
+  const primary = evaluateSplit(options.originWeights, Boolean(options.ghosts));
+  const { scores, ghostTally, queries, soloQueries } = primary;
+
+  const toRunMetrics = (runScores: StrategyScore[], byOrigin: Record<CommitOrigin, OriginSliceMetrics>): OriginWeightRunMetrics => {
+    const cochange = runScores[0]!;
+    const baseline = runScores[3]!;
+    const lift = ratio(cochange.hitRate, baseline.hitRate);
+    return {
+      fired: cochange.fired,
+      coverage: cochange.coverage,
+      precision: cochange.precision,
+      hitRate: cochange.hitRate,
+      falseAlarmRate: cochange.falseAlarmRate,
+      recall: cochange.recall,
+      lift,
+      strategies: runScores,
+      byOrigin,
+    };
+  };
+
+  let comparisons: OriginWeightComparison[] | undefined;
+  if (parsedCompareSpecs.length > 0) {
+    const defaultWeights: Required<OriginWeights> = { human: 1, agent: 1, bot: 1 };
+    const defaultEval =
+      options.originWeights === undefined
+        ? primary
+        : evaluateSplit(undefined, false);
+    const defaultMetrics = toRunMetrics(defaultEval.scores, defaultEval.byOrigin);
+    comparisons = parsedCompareSpecs.map(({ spec, weights }) => {
+      const weightedEval = evaluateSplit(weights, false);
+      const weightedMetrics = toRunMetrics(weightedEval.scores, weightedEval.byOrigin);
+      const deltas: OriginWeightDeltaMetrics = {
+        fired: weightedMetrics.fired - defaultMetrics.fired,
+        coverage: weightedMetrics.coverage - defaultMetrics.coverage,
+        precision: weightedMetrics.precision - defaultMetrics.precision,
+        hitRate: weightedMetrics.hitRate - defaultMetrics.hitRate,
+        falseAlarmRate: weightedMetrics.falseAlarmRate - defaultMetrics.falseAlarmRate,
+        recall: weightedMetrics.recall - defaultMetrics.recall,
+        lift: weightedMetrics.lift - defaultMetrics.lift,
+      };
+      return {
+        spec,
+        defaultWeights,
+        weights,
+        default: defaultMetrics,
+        weighted: weightedMetrics,
+        deltas,
+        caveat:
+          'Overall metrics replay all held-out commits (including agent and bot commits). Inspect byOrigin.human to see accuracy on human-authored held-out commits alone.',
+      };
+    });
+  }
 
   return {
     k: options.k,
@@ -258,11 +418,13 @@ export function backtestCommits(
           k: options.k,
           windowHours: options.followUpWindowHours,
           before: options.before,
+          originWeights: options.originWeights,
         },
         halfLifeDays,
         excluded,
       ),
     } : {}),
+    ...(comparisons ? { comparisons } : {}),
   };
 }
 
@@ -333,5 +495,65 @@ export function printBacktest(result: BacktestResult): void {
   if (result.followUpBenchmark) {
     console.log();
     printFollowUpBenchmarkSection(result.followUpBenchmark);
+  }
+  if (result.comparisons && result.comparisons.length > 0) {
+    const signedPct = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
+    const signedLift = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}×`;
+    for (const comp of result.comparisons) {
+      const resolvedDefaultSpec = formatOriginWeightsSpec(comp.defaultWeights ?? { human: 1, agent: 1, bot: 1 });
+      const resolvedWeightedSpec = formatOriginWeightsSpec(comp.weights);
+      console.log();
+      console.log(c.bold(`Origin weight comparison (${comp.spec} → ${resolvedWeightedSpec})`));
+      const cHeader = ['run', 'speaks up', `hit@${result.k}`, 'precision', 'lift', 'false alarms', 'recall'];
+      const cRows = [
+        [
+          `default (${resolvedDefaultSpec})`,
+          pct(comp.default.coverage),
+          pct(comp.default.hitRate),
+          pct(comp.default.precision),
+          `${comp.default.lift.toFixed(2)}×`,
+          pct(comp.default.falseAlarmRate),
+          pct(comp.default.recall),
+        ],
+        [
+          `weighted (${resolvedWeightedSpec})`,
+          pct(comp.weighted.coverage),
+          pct(comp.weighted.hitRate),
+          pct(comp.weighted.precision),
+          `${comp.weighted.lift.toFixed(2)}×`,
+          pct(comp.weighted.falseAlarmRate),
+          pct(comp.weighted.recall),
+        ],
+        [
+          'delta (weighted - default)',
+          signedPct(comp.deltas.coverage),
+          signedPct(comp.deltas.hitRate),
+          signedPct(comp.deltas.precision),
+          signedLift(comp.deltas.lift),
+          signedPct(comp.deltas.falseAlarmRate),
+          signedPct(comp.deltas.recall),
+        ],
+      ];
+      const cWidths = cHeader.map((h, i) => Math.max(h.length, ...cRows.map((r) => r[i]!.length)));
+      const cLine = (cells: string[]) =>
+        cells.map((cell, i) => (i === 0 ? cell.padEnd(cWidths[i]!) : cell.padStart(cWidths[i]!))).join('   ');
+      console.log(c.bold(cLine(cHeader)));
+      for (const row of cRows) console.log(cLine(row));
+      if (comp.default.byOrigin && comp.weighted.byOrigin) {
+        const dH = comp.default.byOrigin.human;
+        const wH = comp.weighted.byOrigin.human;
+        const nonHumanQueries = comp.default.byOrigin.agent.queries + comp.default.byOrigin.bot.queries;
+        if (nonHumanQueries > 0) {
+          console.log(
+            c.dim(
+              `human-only test queries (${dH.queries}): default hit@${result.k} ${pct(dH.hitRate)} / precision ${pct(dH.precision)} → weighted hit@${result.k} ${pct(wH.hitRate)} / precision ${pct(wH.precision)}`,
+            ),
+          );
+        }
+      }
+      if (comp.caveat) {
+        console.log(c.dim(comp.caveat));
+      }
+    }
   }
 }

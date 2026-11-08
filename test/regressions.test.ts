@@ -43,7 +43,7 @@ describe('1. deleted and recreated files', () => {
 
   it('keeps a renamed file’s history when a new file takes its old name in the same commit', () => {
     const tracker = new RenameTracker();
-    const commit = (changes: RawCommit['changes']): RawCommit => ({ hash: 'h', authorName: 'a', authorEmail: '', authorTime: 0, commitTime: 0, subject: '', changes });
+    const commit = (changes: RawCommit['changes']): RawCommit => ({ hash: 'h', authorName: 'a', authorEmail: '', authorTime: 0, commitTime: 0, subject: '', trailers: [], changes });
     assert.deepEqual(tracker.apply(commit([{ status: 'R', oldPath: 'old.ts', path: 'new.ts' }, { status: 'A', path: 'old.ts' }])), ['new.ts', 'old.ts']);
     assert.deepEqual(tracker.apply(commit([{ status: 'M', path: 'old.ts' }])), ['new.ts']);
   });

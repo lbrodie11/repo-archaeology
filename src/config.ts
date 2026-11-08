@@ -1,5 +1,8 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAX_ORIGIN_PATTERN_LENGTH, riskySkipPattern, type OriginConfig, type OriginWeights } from './model/origin.js';
+
+export { riskySkipPattern };
 
 export const CONFIG_FILE = '.repo-archaeology.json';
 
@@ -24,6 +27,8 @@ export interface Settings {
   ignore: string[];
   /** Set to false to drop the built-in ignore list. */
   useDefaultIgnores: boolean;
+  /** Optional commit origin classification overrides and per-origin weights. */
+  origin?: OriginConfig;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -58,7 +63,6 @@ export class ConfigError extends Error {
  */
 export const MAX_CONFIG_BYTES = 64 * 1024;
 export const MAX_FILES_PER_COMMIT_FROM_FILE = 1000;
-const MAX_SKIP_PATTERN_LENGTH = 200;
 
 /** Parses and validates raw JSON text from `.repo-archaeology.json`. */
 export function parseConfigText(content: string, source = CONFIG_FILE): Partial<Settings> {
@@ -96,44 +100,9 @@ export function loadConfigFile(root: string): Partial<Settings> {
   return parseConfigText(readFileSync(file, 'utf8'), CONFIG_FILE);
 }
 
-/**
- * Patterns that can backtrack catastrophically: a quantified group that itself contains
- * a quantifier or an alternation, like `(a+)+` or `(a|aa)*`, and backreferences.
- * Deliberately conservative: ordinary subject filters such as `^(chore|style)\b` pass.
- */
-export function riskySkipPattern(pattern: string): string | undefined {
-  if (pattern.length > MAX_SKIP_PATTERN_LENGTH) return `is longer than ${MAX_SKIP_PATTERN_LENGTH} characters`;
-  if (/\\(?:[1-9]|k<)/.test(pattern)) return 'uses a backreference';
-  let quantifierCount = 0;
-  // Find each group's contents and check whether the group is followed by a quantifier.
-  const stack: number[] = [];
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '\\') { i++; continue; }
-    if (ch === '[') {
-      // Skip character classes, where ( ) + * | { are literal.
-      for (i++; i < pattern.length && pattern[i] !== ']'; i++) if (pattern[i] === '\\') i++;
-      continue;
-    }
-    if (ch === '*' || ch === '+' || ch === '{') quantifierCount++;
-    if (ch === '(') stack.push(i);
-    else if (ch === ')' && stack.length > 0) {
-      const start = stack.pop()!;
-      const quantified = /^(?:[*+]|\{\d*,?\d*\})/.test(pattern.slice(i + 1));
-      if (quantified && /(?:^|[^\\])(?:[*+|]|\{\d*,?\d*\})/.test(pattern.slice(start + 1, i).replace(/\[(?:\\.|[^\]])*\]/g, 'x'))) {
-        return 'repeats a group that contains a quantifier or alternation, which can hang on some commit messages';
-      }
-    }
-  }
-  if (quantifierCount > 2) {
-    return 'has more than 2 repetition quantifiers (*, +, {n,m})';
-  }
-  return undefined;
-}
-
 export function validatePartial(raw: Record<string, unknown>, source: string): Partial<Settings> {
   const out: Partial<Settings> = {};
-  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes']));
+  const known = new Set(Object.keys(DEFAULT_SETTINGS).concat(['since', 'halfLifeDays', 'skipCommits', 'skipCommitPrefixes', 'origin']));
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new ConfigError(`${source}: unknown setting "${key}".`);
   }
@@ -183,6 +152,83 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
     if (typeof raw.useDefaultIgnores !== 'boolean') throw new ConfigError(`${source}: "useDefaultIgnores" must be true or false.`);
     out.useDefaultIgnores = raw.useDefaultIgnores;
   }
+  if (raw.origin !== undefined) {
+    out.origin = validateOriginConfig(raw.origin, source);
+  }
+  return out;
+}
+
+function validateOriginConfig(raw: unknown, source: string): OriginConfig {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ConfigError(`${source}: "origin" must be a JSON object.`);
+  }
+  const obj = raw as Record<string, unknown>;
+  const knownKeys = new Set(['agentAuthorPatterns', 'botPatterns', 'agentTrailerPatterns', 'replaceDefaults', 'weights']);
+  for (const key of Object.keys(obj)) {
+    if (!knownKeys.has(key)) {
+      throw new ConfigError(`${source}: unknown setting "origin.${key}".`);
+    }
+  }
+  const out: OriginConfig = {};
+  const validatePatternList = (field: 'agentAuthorPatterns' | 'botPatterns' | 'agentTrailerPatterns') => {
+    const val = obj[field];
+    if (val === undefined) return;
+    if (!Array.isArray(val)) {
+      throw new ConfigError(`${source}: "origin.${field}" must be an array of regular expression strings.`);
+    }
+    const list: string[] = [];
+    for (const item of val) {
+      if (typeof item !== 'string' || item.length === 0) {
+        throw new ConfigError(`${source}: "origin.${field}" entries must be non-empty regular expression strings.`);
+      }
+      if (item.length > MAX_ORIGIN_PATTERN_LENGTH) {
+        throw new ConfigError(`${source}: "origin.${field}" pattern is longer than ${MAX_ORIGIN_PATTERN_LENGTH} characters.`);
+      }
+      try {
+        new RegExp(item, 'i');
+      } catch (err) {
+        throw new ConfigError(`${source}: "origin.${field}" has invalid regular expression "${item}": ${(err as Error).message}`);
+      }
+      const problem = riskySkipPattern(item);
+      if (problem) {
+        throw new ConfigError(`${source}: "origin.${field}" pattern "${item}" ${problem}.`);
+      }
+      list.push(item);
+    }
+    out[field] = list;
+  };
+  validatePatternList('agentAuthorPatterns');
+  validatePatternList('botPatterns');
+  validatePatternList('agentTrailerPatterns');
+
+  if (obj.replaceDefaults !== undefined) {
+    if (typeof obj.replaceDefaults !== 'boolean') {
+      throw new ConfigError(`${source}: "origin.replaceDefaults" must be true or false.`);
+    }
+    out.replaceDefaults = obj.replaceDefaults;
+  }
+  if (obj.weights !== undefined) {
+    if (typeof obj.weights !== 'object' || obj.weights === null || Array.isArray(obj.weights)) {
+      throw new ConfigError(`${source}: "origin.weights" must be a JSON object.`);
+    }
+    const wObj = obj.weights as Record<string, unknown>;
+    const knownWeightKeys = new Set(['human', 'agent', 'bot']);
+    for (const key of Object.keys(wObj)) {
+      if (!knownWeightKeys.has(key)) {
+        throw new ConfigError(`${source}: unknown setting "origin.weights.${key}".`);
+      }
+    }
+    const weights: OriginWeights = {};
+    for (const key of ['human', 'agent', 'bot'] as const) {
+      const v = wObj[key];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1) {
+        throw new ConfigError(`${source}: "origin.weights.${key}" must be a number between 0 and 1.`);
+      }
+      weights[key] = v;
+    }
+    out.weights = weights;
+  }
   return out;
 }
 
@@ -190,6 +236,19 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
 export function resolveSettings(fromFile: Partial<Settings>, fromFlags: Partial<Settings>): Settings {
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stripUndefined(fromFile), ...stripUndefined(fromFlags) };
   merged.ignore = [...(fromFile.ignore ?? []), ...(fromFlags.ignore ?? [])];
+  if (fromFile.origin !== undefined || fromFlags.origin !== undefined) {
+    const fileOrigin = fromFile.origin ?? {};
+    const flagOrigin = fromFlags.origin ?? {};
+    const mergedWeights =
+      fileOrigin.weights !== undefined || flagOrigin.weights !== undefined
+        ? { ...stripUndefined(fileOrigin.weights ?? {}), ...stripUndefined(flagOrigin.weights ?? {}) }
+        : undefined;
+    merged.origin = {
+      ...stripUndefined(fileOrigin),
+      ...stripUndefined(flagOrigin),
+      ...(mergedWeights !== undefined ? { weights: mergedWeights } : {}),
+    };
+  }
   return merged;
 }
 

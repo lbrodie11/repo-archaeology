@@ -3,6 +3,7 @@ import { branchChanges, mergeChanges, workingTreeChanges, type ChangedFile } fro
 import { type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
 import { buildFindingFamilies, evaluateParallelPair, type FindingFamilyView } from '../model/families.js';
+import type { OriginWeights } from '../model/origin.js';
 import { buildMeta, describeStrength, DISCLAIMER, printEvidence, printHeader, relationshipLabel, toView, type Meta, type RelationshipView } from '../report/views.js';
 import { c, pct, plural, terminalText } from '../util/term.js';
 
@@ -96,6 +97,7 @@ export interface DiffEvaluation {
     halfLifeDays?: number;
     since?: string;
     skipCommits?: string;
+    originWeights?: OriginWeights;
   };
 }
 
@@ -552,6 +554,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
         ...(meta.settings.halfLifeDays !== undefined ? { halfLifeDays: meta.settings.halfLifeDays } : {}),
         ...(meta.settings.since !== undefined ? { since: meta.settings.since } : {}),
         ...(meta.settings.skipCommits !== undefined ? { skipCommits: meta.settings.skipCommits } : {}),
+        ...(meta.settings.origin?.weights !== undefined ? { originWeights: meta.settings.origin.weights } : {}),
       },
     };
     return {

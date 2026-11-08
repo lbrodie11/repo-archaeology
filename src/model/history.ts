@@ -1,6 +1,7 @@
 import { readLog, type LogOptions, type RawCommit } from '../git/log.js';
 import { hasParentCommit } from '../git/repo.js';
 import { PathMatcher } from '../util/glob.js';
+import { createOriginClassifier, type CommitOrigin, type OriginClassifier, type OriginConfig } from './origin.js';
 
 export interface CommitFileChange {
   /** First letter of git's name-status code in this commit (A, M, D, R, C, T, etc.). */
@@ -23,6 +24,8 @@ export interface HistoryCommit {
   /** Committer time, for chronological ordering (backtests). */
   commitTime: number;
   subject: string;
+  /** Commit origin classification ("human" | "agent" | "bot"). */
+  origin?: CommitOrigin;
   /**
    * Files in this commit, under their current (latest) names, after ignores.
    * Files that were later deleted and replaced carry a lifetime suffix (see pathOf).
@@ -69,9 +72,11 @@ export interface HistoryOptions extends LogOptions {
   ignore: readonly string[];
   /** Commits whose subject matches are left out (e.g. formatting or release commits). */
   skipCommits?: RegExp;
+  /** Commit origin classification overrides. */
+  origin?: OriginConfig;
 }
 
-type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits'>;
+type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin'>;
 
 /** Separates a path from the lifetime marker of an earlier, deleted file at that path. */
 const LIFETIME_SEPARATOR = '\u0000';
@@ -163,6 +168,7 @@ export class RenameTracker {
 /** Turns raw commits (fed newest first) into analysis-ready history. */
 export class HistoryBuilder {
   private readonly ignore: PathMatcher;
+  private readonly classifyOrigin: OriginClassifier;
   private readonly renames = new RenameTracker();
   private readonly commits: HistoryCommit[] = [];
   private readonly excluded: HistoryCommit[] = [];
@@ -170,6 +176,7 @@ export class HistoryBuilder {
 
   constructor(private readonly options: BuilderOptions) {
     this.ignore = new PathMatcher(options.ignore);
+    this.classifyOrigin = createOriginClassifier(options.origin);
   }
 
   add(commit: RawCommit): void {
@@ -195,6 +202,7 @@ export class HistoryBuilder {
       };
     });
     const email = commit.authorEmail.trim().toLowerCase();
+    const origin = this.classifyOrigin(commit);
     const entry: HistoryCommit = {
       hash: commit.hash,
       logOrder,
@@ -203,6 +211,7 @@ export class HistoryBuilder {
       time: commit.authorTime,
       commitTime: commit.commitTime,
       subject: commit.subject,
+      origin,
       files,
       deleted: [...new Set(commit.changes.flatMap((change, index) => change.status === 'D' && fileSet.has(names[index]!) ? [names[index]!] : []))],
       changesByIdentity,

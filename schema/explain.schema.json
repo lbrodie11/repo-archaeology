@@ -93,11 +93,17 @@
     "weighted": {
       "type": "boolean"
     },
+    "weighting": {
+      "$ref": "common.schema.json#/$defs/WeightingMode"
+    },
     "lastTogether": {
       "type": "string"
     },
     "crossesDirectories": {
       "type": "boolean"
+    },
+    "originShare": {
+      "$ref": "common.schema.json#/$defs/OriginShare"
     },
     "sharedCommits": {
       "type": "array",
@@ -323,6 +329,9 @@
         "subject": {
           "type": "string"
         },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/CommitOrigin"
+        },
         "fileA": {
           "$ref": "#/$defs/FilePatchEvidence"
         },
@@ -355,6 +364,9 @@
         },
         "subject": {
           "type": "string"
+        },
+        "origin": {
+          "$ref": "common.schema.json#/$defs/CommitOrigin"
         },
         "historicalPath": {
           "type": "string"

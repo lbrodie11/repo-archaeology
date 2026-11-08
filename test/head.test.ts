@@ -840,4 +840,87 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       rmSync(externalDir, { recursive: true, force: true });
     }
   });
+
+  it('--head X --origin-weights bot=0 passes origin classification and weighting through head-mode trainBaseline', () => {
+    const originRepo = new FixtureRepo();
+    try {
+      originRepo.write('src/root.ts', 'export const root = 0;\n');
+      originRepo.git('add', '.');
+      originRepo.commit({ message: 'root', author: 'Alice' });
+
+      for (let i = 1; i <= 4; i++) {
+        originRepo.commit({
+          message: `feat(human): update human pair ${i}`,
+          author: 'Alice',
+          write: {
+            'src/human-a.ts': `export const ha = ${i};\n`,
+            'src/human-b.ts': `export const hb = ${i};\n`,
+          },
+        });
+        originRepo.commit({
+          message: `chore(deps): bump bot pair ${i}`,
+          author: 'dependabot[bot]',
+          write: {
+            'src/bot-a.ts': `export const ba = ${i};\n`,
+            'src/bot-b.ts': `export const bb = ${i};\n`,
+          },
+        });
+      }
+      const targetHeadSha = originRepo.git('rev-parse', 'HEAD').trim();
+
+      // Advance main with extra human commits on bot-a + bot-b after targetHeadSha (must not leak into --head targetHeadSha)
+      for (let j = 1; j <= 4; j++) {
+        originRepo.commit({
+          message: `feat(after): human touches bot pair ${j}`,
+          author: 'Alice',
+          write: {
+            'src/bot-a.ts': `export const ba = ${100 + j};\n`,
+            'src/bot-b.ts': `export const bb = ${100 + j};\n`,
+          },
+        });
+      }
+
+      // 1. Unweighted scan at --head targetHeadSha includes both human and bot pairs
+      const unweightedScan = JSON.parse(runCli(['scan', '--head', targetHeadSha, '--json'], originRepo.dir).stdout);
+      assert.deepEqual(unweightedScan.meta.head, { ref: targetHeadSha, sha: targetHeadSha });
+      assert.deepEqual(unweightedScan.meta.origins, { human: 5, agent: 0, bot: 4 });
+      assert.equal(unweightedScan.relationships.length, 2);
+
+      // 2. Scan with --head targetHeadSha --origin-weights bot=0 drops the bot-only pair and marks remaining relationships origin-weighted
+      const weightedScanRes = runCli(
+        ['scan', '--head', targetHeadSha, '--origin-weights', 'bot=0', '--json'],
+        originRepo.dir,
+      );
+      assert.equal(weightedScanRes.code, 0, weightedScanRes.stderr);
+      const weightedScan = JSON.parse(weightedScanRes.stdout);
+      assert.deepEqual(weightedScan.meta.head, { ref: targetHeadSha, sha: targetHeadSha });
+      assert.deepEqual(weightedScan.meta.origins, { human: 5, agent: 0, bot: 4 });
+      assert.deepEqual(weightedScan.meta.settings.origin?.weights, { bot: 0 });
+      assert.equal(weightedScan.relationships.length, 1);
+      assert.equal(weightedScan.relationships[0].from, 'src/human-a.ts');
+      assert.equal(weightedScan.relationships[0].to, 'src/human-b.ts');
+      assert.equal(weightedScan.relationships[0].weighted, true);
+      assert.equal(weightedScan.relationships[0].weighting, 'origin');
+
+      // 3. Explain with --head targetHeadSha --origin-weights bot=0 reports meetsThresholds=false, confidence=0, and raw interval
+      const unweightedExplain = JSON.parse(
+        runCli(['explain', 'src/bot-a.ts', 'src/bot-b.ts', '--head', targetHeadSha, '--json'], originRepo.dir).stdout,
+      );
+      const weightedExplain = JSON.parse(
+        runCli(
+          ['explain', 'src/bot-a.ts', 'src/bot-b.ts', '--head', targetHeadSha, '--origin-weights', 'bot=0', '--json'],
+          originRepo.dir,
+        ).stdout,
+      );
+      assert.equal(weightedExplain.meetsThresholds, false);
+      assert.equal(weightedExplain.shared, 4);
+      assert.equal(weightedExplain.confidence, 0);
+      assert.equal(weightedExplain.weighted, true);
+      assert.equal(weightedExplain.weighting, 'origin');
+      assert.deepEqual(weightedExplain.interval, unweightedExplain.interval);
+      assert.deepEqual(weightedExplain.reverseInterval, unweightedExplain.reverseInterval);
+    } finally {
+      originRepo.cleanup();
+    }
+  });
 });

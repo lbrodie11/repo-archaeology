@@ -151,11 +151,17 @@
         "weighted": {
           "type": "boolean"
         },
+        "weighting": {
+          "$ref": "common.schema.json#/$defs/WeightingMode"
+        },
         "lastTogether": {
           "type": "string"
         },
         "crossesDirectories": {
           "type": "boolean"
+        },
+        "originShare": {
+          "$ref": "common.schema.json#/$defs/OriginShare"
         },
         "evidence": {
           "type": "array",

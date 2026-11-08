@@ -1,5 +1,12 @@
 import { wilsonLowerBound } from '../util/stats.js';
 import type { HistoryCommit } from './history.js';
+import {
+  hasNonDefaultOriginWeights,
+  resolveOriginWeights,
+  type CommitOrigin,
+  type OriginCounts,
+  type OriginWeights,
+} from './origin.js';
 
 /** How many example commits to keep per relationship. */
 export const EVIDENCE_LIMIT = 3;
@@ -9,13 +16,19 @@ export interface PairStat {
   b: number;
   /** Raw number of commits that touched both files. */
   count: number;
-  /** Recency-weighted count (equals `count` when no half-life is set). */
+  /** Combined recency- and origin-weighted count (equals `count` when unweighted). */
   weight: number;
+  /** Origin-weighted count (equals `count` when origin weights are all 1). */
+  originWeight: number;
+  /** Raw counts of shared commits by origin across all shared commits. */
+  originCounts: OriginCounts;
   /** Author time of the most recent shared commit. */
   lastTime: number;
   /** Indices into `model.commits`, newest first. */
   evidence: number[];
 }
+
+export type WeightingMode = 'none' | 'recency' | 'origin' | 'recency+origin';
 
 export interface Thresholds {
   minShared: number;
@@ -37,6 +50,7 @@ export interface Companion {
 
 export interface ModelOptions {
   halfLifeDays?: number;
+  originWeights?: OriginWeights;
 }
 
 /**
@@ -63,6 +77,8 @@ export class CoChangeModel {
   private readonly adjacency: Map<number, PairStat>[] = [];
   private referenceTime: number;
   private readonly halfLifeSeconds?: number;
+  private readonly originWeights: Required<OriginWeights>;
+  private readonly hasOriginWeights: boolean;
   private readonly commitList: HistoryCommit[];
 
   constructor(
@@ -72,6 +88,8 @@ export class CoChangeModel {
     this.commitList = [...commits];
     this.referenceTime = commits.reduce((max, c) => Math.max(max, c.commitTime), 0);
     if (options.halfLifeDays && options.halfLifeDays > 0) this.halfLifeSeconds = options.halfLifeDays * 86400;
+    this.originWeights = resolveOriginWeights(options.originWeights);
+    this.hasOriginWeights = hasNonDefaultOriginWeights(options.originWeights);
     this.commitList.forEach((commit, index) => this.addCommit(commit, index));
   }
 
@@ -120,9 +138,25 @@ export class CoChangeModel {
     return sumSq === 0 ? 0 : (sum * sum) / sumSq;
   }
 
-  /** Whether confidence is recency-weighted (a half-life is set). */
+  /** Whether confidence is recency- or origin-weighted. */
   get weighted(): boolean {
-    return this.halfLifeSeconds !== undefined;
+    return this.halfLifeSeconds !== undefined || this.hasOriginWeights;
+  }
+
+  /** Which weighting mode is active (`none`, `recency`, `origin`, or `recency+origin`). */
+  get weighting(): WeightingMode {
+    const recency = this.halfLifeSeconds !== undefined;
+    const origin = this.hasOriginWeights;
+    if (recency && origin) return 'recency+origin';
+    if (recency) return 'recency';
+    if (origin) return 'origin';
+    return 'none';
+  }
+
+  /** Effective shared count used for `minShared` threshold checks. */
+  effectiveShared(stat: PairStat | undefined): number {
+    if (!stat) return 0;
+    return this.hasOriginWeights ? stat.originWeight : stat.count;
   }
 
   /** Confidence that `to` changes, given that `from` changed. */
@@ -137,7 +171,7 @@ export class CoChangeModel {
     const neighbours = this.adjacency[from];
     if (!neighbours) return result;
     for (const [to, stat] of neighbours) {
-      if (stat.count < thresholds.minShared) continue;
+      if (this.effectiveShared(stat) + 1e-9 < thresholds.minShared) continue;
       const confidence = this.confidence(stat, from);
       if (confidence < thresholds.minConfidence) continue;
       result.push({
@@ -158,7 +192,7 @@ export class CoChangeModel {
       const neighbours = this.adjacency[a];
       if (!neighbours) continue;
       for (const [b, stat] of neighbours) {
-        if (b <= a || stat.count < thresholds.minShared) continue;
+        if (b <= a || this.effectiveShared(stat) + 1e-9 < thresholds.minShared) continue;
         const ab = this.confidence(stat, a);
         const ba = this.confidence(stat, b);
         const passAB = ab >= thresholds.minConfidence;
@@ -186,10 +220,16 @@ export class CoChangeModel {
       .map(([author, commits]) => ({ author, commits, share: total === 0 ? 0 : commits / total }));
   }
 
-  private weightOf(commit: HistoryCommit): number {
-    if (!this.halfLifeSeconds) return 1;
+  private originWeightOf(commit: HistoryCommit): number {
+    if (!this.hasOriginWeights) return 1;
+    const origin: CommitOrigin = commit.origin ?? 'human';
+    return this.originWeights[origin];
+  }
+
+  private weightOf(commit: HistoryCommit, originWeight: number): number {
+    if (!this.halfLifeSeconds) return originWeight;
     const age = Math.max(0, this.referenceTime - commit.commitTime);
-    return 0.5 ** (age / this.halfLifeSeconds);
+    return originWeight * 0.5 ** (age / this.halfLifeSeconds);
   }
 
   private intern(path: string): number {
@@ -209,7 +249,9 @@ export class CoChangeModel {
   }
 
   private addCommit(commit: HistoryCommit, index: number): void {
-    const weight = this.weightOf(commit);
+    const origin: CommitOrigin = commit.origin ?? 'human';
+    const originWeight = this.originWeightOf(commit);
+    const weight = this.weightOf(commit, originWeight);
     const ids = [...new Set(commit.files.map((f) => this.intern(f)))];
     for (const id of ids) {
       this.changeCount[id]!++;
@@ -225,12 +267,23 @@ export class CoChangeModel {
         const b = Math.max(ids[i]!, ids[j]!);
         let stat = this.adjacency[a]!.get(b);
         if (!stat) {
-          stat = { a, b, count: 0, weight: 0, lastTime: 0, evidence: [] };
+          stat = {
+            a,
+            b,
+            count: 0,
+            weight: 0,
+            originWeight: 0,
+            originCounts: { human: 0, agent: 0, bot: 0 },
+            lastTime: 0,
+            evidence: [],
+          };
           this.adjacency[a]!.set(b, stat);
           this.adjacency[b]!.set(a, stat);
         }
         stat.count++;
         stat.weight += weight;
+        stat.originWeight += originWeight;
+        stat.originCounts[origin]++;
         stat.lastTime = Math.max(stat.lastTime, commit.time);
         this.addEvidence(stat, index);
       }

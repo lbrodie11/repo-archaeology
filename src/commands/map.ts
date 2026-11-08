@@ -6,8 +6,10 @@ import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js'
 import { runGit } from '../git/run.js';
 import { parallelImplementation, type HiddenBridge, type Relationship } from '../imports/classify.js';
 import { renderMapHtml } from '../map/template.js';
+import type { WeightingMode } from '../model/cochange.js';
 import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
+import type { CommitOrigin, OriginShare } from '../model/origin.js';
 import { buildMeta, toView, type Meta, type RelationshipView } from '../report/views.js';
 import type { WilsonInterval } from '../util/stats.js';
 import { c, isoDate, plural, terminalText } from '../util/term.js';
@@ -42,6 +44,7 @@ export interface MapEdgeEvidence {
   hash: string;
   date: string;
   subject: string;
+  origin?: CommitOrigin;
   sourcePath?: string;
   targetPath?: string;
   sourceStatus?: string;
@@ -56,6 +59,7 @@ export interface MapCounterexample {
   hash: string;
   date: string;
   subject: string;
+  origin?: CommitOrigin;
 }
 
 export interface MapEdge {
@@ -75,8 +79,10 @@ export interface MapEdge {
   score: number;
   overviewPriority: number;
   weighted: boolean;
+  weighting?: WeightingMode;
   lastTogether: string;
   crossesDirectories: boolean;
+  originShare?: OriginShare;
   evidence: MapEdgeEvidence[];
   counterexamples?: {
     fromOnlyTotal?: number;
@@ -101,8 +107,10 @@ export interface MapUndrawnPair {
   reverseInterval: WilsonInterval;
   score: number;
   weighted: boolean;
+  weighting?: WeightingMode;
   lastTogether: string;
-  evidence: { hash: string; date: string; subject: string }[];
+  originShare?: OriginShare;
+  evidence: { hash: string; date: string; subject: string; origin?: CommitOrigin }[];
   explainCommand: string;
 }
 
@@ -191,7 +199,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         total++;
         if (items.length < MAX_COUNTEREXAMPLES_PER_SIDE) {
           const commit = ctx.model.commits[idx]!;
-          items.push({ hash: commit.hash, date: isoDate(commit.time), subject: commit.subject });
+          items.push({ hash: commit.hash, date: isoDate(commit.time), subject: commit.subject, origin: commit.origin ?? 'human' });
         }
       }
       return { total, items };
@@ -228,6 +236,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
           hash: commit.hash,
           date: isoDate(commit.time),
           subject: commit.subject,
+          origin: commit.origin ?? 'human',
           ...(srcChange.path !== view.from ? { sourcePath: srcChange.path } : {}),
           ...(tgtChange.path !== view.to ? { targetPath: tgtChange.path } : {}),
           ...(srcChange.status !== 'M' ? { sourceStatus: srcChange.status } : {}),
@@ -258,8 +267,10 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         score: companion.score,
         overviewPriority: mapOverviewPriority({ ...view, confidence: companion.confidence, reverseConfidence: companion.reverseConfidence }, ctx.thresholds.minConfidence, recencyReference),
         weighted: view.weighted,
+        ...(view.weighting ? { weighting: view.weighting } : {}),
         lastTogether: view.lastTogether,
         crossesDirectories: view.crossesDirectories,
+        originShare: view.originShare,
         evidence,
         counterexamples: {
           fromOnlyTotal: cxFrom.total,
@@ -300,8 +311,15 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
             reverseInterval: rel.reverseInterval,
             score: rel.score,
             weighted: rel.weighted,
+            ...(rel.weighting ? { weighting: rel.weighting } : {}),
             lastTogether: rel.lastTogether,
-            evidence: rel.evidence.slice(0, 3).map((ev) => ({ hash: ev.hash, date: ev.date, subject: ev.subject })),
+            originShare: rel.originShare,
+            evidence: rel.evidence.slice(0, 3).map((ev) => ({
+              hash: ev.hash,
+              date: ev.date,
+              subject: ev.subject,
+              ...(ev.origin ? { origin: ev.origin } : {}),
+            })),
             explainCommand: formatExplainCommand(rel.from, rel.to, ctx.settings, ctx.flagSettings),
           });
         }

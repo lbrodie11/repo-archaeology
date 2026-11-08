@@ -1210,11 +1210,17 @@ const CLIENT = String.raw`
     return lines.join('\n');
   }
 
+  function edgeWeightingLabel(d) {
+    if (!d.weighted) return '';
+    if (d.weighting === 'origin') return 'origin-weighted';
+    if (d.weighting === 'recency+origin') return 'recency+origin-weighted';
+    return 'recency-weighted';
+  }
   function directionEvidence(e, fromSource) {
     var total = fromSource ? e.d.fromChanges : e.d.toChanges;
     var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
     var iv = fromSource ? e.d.interval : e.d.reverseInterval;
-    if (e.d.weighted) return e.d.shared + ' of ' + total + ' commits ' + formatCi(iv, true) + ' (' + pct(confidence) + ' recency-weighted)';
+    if (e.d.weighted) return e.d.shared + ' of ' + total + ' commits ' + formatCi(iv, true) + ' (' + pct(confidence) + ' ' + edgeWeightingLabel(e.d) + ')';
     return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ') ' + formatCi(iv, false);
   }
   function findingLabel(e) {
@@ -1748,13 +1754,14 @@ const CLIENT = String.raw`
     var grid = el('div', 'cochange-grid');
     var card1 = el('div', 'cochange-card');
     card1.appendChild(el('div', 'cochange-pct', pct(e.d.confidence)));
-    var desc1 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits) ' + formatCi(e.d.interval, e.d.weighted);
+    var wLabel = edgeWeightingLabel(e.d);
+    var desc1 = (wLabel ? '(' + wLabel + ') ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits) ' + formatCi(e.d.interval, e.d.weighted);
     card1.appendChild(el('div', 'cochange-label', desc1));
     grid.appendChild(card1);
 
     var card2 = el('div', 'cochange-card');
     card2.appendChild(el('div', 'cochange-pct', pct(e.d.reverseConfidence)));
-    var desc2 = (e.d.weighted ? '(recency-weighted) ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits) ' + formatCi(e.d.reverseInterval, e.d.weighted);
+    var desc2 = (wLabel ? '(' + wLabel + ') ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits) ' + formatCi(e.d.reverseInterval, e.d.weighted);
     card2.appendChild(el('div', 'cochange-label', desc2));
     grid.appendChild(card2);
     panel.appendChild(grid);

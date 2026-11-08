@@ -1,6 +1,7 @@
 import { UsageError, type Context } from '../context.js';
 import { CoChangeModel, compareCompanions, type Companion, type Thresholds } from '../model/cochange.js';
 import { pathOf, type HistoryCommit } from '../model/history.js';
+import type { CommitOrigin, OriginWeights } from '../model/origin.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
 import { ratio } from '../util/stats.js';
 import { c, isoDate, pct, plural, terminalText } from '../util/term.js';
@@ -36,6 +37,8 @@ export interface FollowUpBenchmarkOptions {
   before?: number;
   /** Maximum candidate cases retained in `cases` (default `MAX_FOLLOW_UP_CASES`). */
   maxCases?: number;
+  /** Optional commit origin weights for the co-change model. */
+  originWeights?: OriginWeights;
 }
 
 export interface FollowUpCandidateCase {
@@ -44,6 +47,7 @@ export interface FollowUpCandidateCase {
     date: string;
     author: string;
     subject: string;
+    origin?: CommitOrigin;
     files: string[];
   };
   followUpCommit: {
@@ -51,6 +55,7 @@ export interface FollowUpCandidateCase {
     date: string;
     author: string;
     subject: string;
+    origin?: CommitOrigin;
     /** Pre-existing files modified in `followUpCommit` that were not touched in `initialCommit`. */
     laterFiles: string[];
   };
@@ -177,7 +182,7 @@ export function followUpBenchmark(ctx: Context, options: FollowUpBenchmarkOption
   const result = followUpBenchmarkCommits(
     ctx.history.commits,
     ctx.thresholds,
-    options,
+    { ...options, originWeights: options.originWeights ?? ctx.settings.origin?.weights },
     ctx.settings.halfLifeDays,
     ctx.history.excluded,
   );
@@ -311,7 +316,9 @@ export function followUpBenchmarkCommits(
   }
 
   const useIncrementalModel = !(halfLifeDays && halfLifeDays > 0);
-  const incrementalModel = useIncrementalModel ? new CoChangeModel(priorTrainCommits) : undefined;
+  const incrementalModel = useIncrementalModel
+    ? new CoChangeModel(priorTrainCommits, { originWeights: options.originWeights })
+    : undefined;
   let modelsBuilt = incrementalModel ? 1 : 0;
   let cachedWeightedModel: { count: number; model: CoChangeModel } | undefined;
 
@@ -368,7 +375,7 @@ export function followUpBenchmarkCommits(
               return cachedWeightedModel.model;
             }
             modelsBuilt++;
-            const built = new CoChangeModel(priorTrainCommits, { halfLifeDays });
+            const built = new CoChangeModel(priorTrainCommits, { halfLifeDays, originWeights: options.originWeights });
             cachedWeightedModel = { count: priorTrainCommits.length, model: built };
             return built;
           })();
@@ -409,6 +416,7 @@ export function followUpBenchmarkCommits(
               date: isoDate(initial.commitTime),
               author: initial.author,
               subject: initial.subject,
+              origin: initial.origin ?? 'human',
               files: cleanPaths(initialLiveFiles),
             },
             followUpCommit: {
@@ -416,6 +424,7 @@ export function followUpBenchmarkCommits(
               date: isoDate(followUp.commitTime),
               author: followUp.author,
               subject: followUp.subject,
+              origin: followUp.origin ?? 'human',
               laterFiles: cleanPaths(laterFiles),
             },
             deltaMinutes: Math.max(0, Math.round(deltaSeconds / 60)),
