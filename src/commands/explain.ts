@@ -203,6 +203,9 @@ export function formatExplainCommand(
     if (settings.skipCommits !== undefined) {
       flagParts.push(`--skip-commits ${shellQuoteArg(settings.skipCommits)}`);
     }
+    if (settings.skipReverts === false) {
+      flagParts.push('--include-reverts');
+    }
   }
   const useDefaultIgnores = flagSettings ? flagSettings.useDefaultIgnores : settings?.useDefaultIgnores;
   if (useDefaultIgnores === false) {

@@ -140,6 +140,7 @@ export interface DiffEvaluation {
     halfLifeDays?: number;
     since?: string;
     skipCommits?: string;
+    skipReverts?: boolean;
     originWeights?: OriginWeights;
     owners?: OwnersConfig;
   };
@@ -748,6 +749,7 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
         ...(meta.settings.halfLifeDays !== undefined ? { halfLifeDays: meta.settings.halfLifeDays } : {}),
         ...(meta.settings.since !== undefined ? { since: meta.settings.since } : {}),
         ...(meta.settings.skipCommits !== undefined ? { skipCommits: meta.settings.skipCommits } : {}),
+        ...(meta.settings.skipReverts !== undefined ? { skipReverts: meta.settings.skipReverts } : {}),
         ...(meta.settings.origin?.weights !== undefined ? { originWeights: meta.settings.origin.weights } : {}),
         ...(meta.settings.owners !== undefined ? { owners: meta.settings.owners } : {}),
       },

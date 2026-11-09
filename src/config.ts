@@ -39,6 +39,8 @@ export interface Settings {
   skipCommits?: string;
   /** Optional list of plain prefix strings to skip (e.g. ["chore", "style", "docs"]). */
   skipCommitPrefixes?: string[];
+  /** Leave out mechanical git revert/reapply commits ("Revert \"...\"" / "Reapply \"...\"") so a change and its revert are not double-counted (default: true). */
+  skipReverts?: boolean;
   /** Extra glob patterns to ignore, added to the defaults. */
   ignore: string[];
   /** Set to false to drop the built-in ignore list. */
@@ -136,6 +138,7 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
       'halfLifeDays',
       'skipCommits',
       'skipCommitPrefixes',
+      'skipReverts',
       'origin',
       'style',
       'cache',
@@ -180,6 +183,10 @@ export function validatePartial(raw: Record<string, unknown>, source: string): P
       throw new ConfigError(`${source}: "skipCommitPrefixes" must be an array of non-empty strings.`);
     }
     out.skipCommitPrefixes = raw.skipCommitPrefixes as string[];
+  }
+  if (raw.skipReverts !== undefined) {
+    if (typeof raw.skipReverts !== 'boolean') throw new ConfigError(`${source}: "skipReverts" must be true or false.`);
+    out.skipReverts = raw.skipReverts;
   }
   if (raw.ignore !== undefined) {
     if (!Array.isArray(raw.ignore) || raw.ignore.some((p) => typeof p !== 'string')) {

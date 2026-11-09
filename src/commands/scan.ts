@@ -1,7 +1,7 @@
 import type { Context } from '../context.js';
-import { parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
+import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { compareCompanions, type Companion } from '../model/cochange.js';
-import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
+import { buildFindingFamilies, isEligibleFamilyPair, type FindingFamilyView } from '../model/families.js';
 import {
   buildMeta,
   describeStrength,
@@ -107,7 +107,7 @@ export function scan(ctx: Context, options: ScanOptions): ScanResult {
     for (const entry of pending) {
       const fromPath = ctx.model.path(entry.companion.from);
       const toPath = ctx.model.path(entry.companion.to);
-      if (parallelImplementation(fromPath, toPath) !== undefined) {
+      if (isEligibleFamilyPair(fromPath, toPath)) {
         familyCandidates.push(toView(ctx, entry.companion, entry.relationship, fromPath, toPath));
       }
     }

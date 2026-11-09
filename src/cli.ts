@@ -118,6 +118,7 @@ interface GlobalOptions {
   minConfidence?: number;
   halfLife?: number;
   skipCommits?: string;
+  includeReverts?: boolean;
   originWeights?: OriginWeights;
   owners?: boolean;
   ignore?: string[];
@@ -151,6 +152,7 @@ function settingsFrom(opts: GlobalOptions, cmd?: Command): Partial<Settings> {
     minConfidence: opts.minConfidence,
     halfLifeDays: opts.halfLife,
     skipCommits: opts.skipCommits,
+    skipReverts: opts.includeReverts === true ? false : undefined,
     origin: opts.originWeights !== undefined ? { weights: opts.originWeights } : undefined,
     owners: ownersFlag !== undefined ? { enabled: ownersFlag } : undefined,
     ignore: opts.ignore,
@@ -248,6 +250,7 @@ program
   .option('--owners', 'include recent human contributor context and CODEOWNERS on diff suggestions')
   .option('--no-owners', 'disable contributor context and CODEOWNERS on diff suggestions')
   .option('--skip-commits <regex>', 'leave out commits whose subject matches, e.g. "^(chore|style)\\b"')
+  .option('--include-reverts', 'include mechanical Revert "..." and Reapply "..." commits instead of skipping them')
   .option('--ignore <glob>', 'ignore matching files (repeatable), e.g. --ignore "docs/**"', collect)
   .option('--no-default-ignores', 'do not ignore lockfiles, build output and snapshots by default')
   .option('--style <mode>', 'visual style mode: classic or rich', (value) => resolveStyleMode({ flag: value }))

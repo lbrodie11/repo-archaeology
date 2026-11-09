@@ -235,6 +235,7 @@ async function trainBaseline(
     maxFilesPerCommit: settings.maxFilesPerCommit,
     ignore: ignores,
     skipCommits: skipFilter,
+    skipReverts: settings.skipReverts,
     origin: settings.origin,
     mailmap,
     rev,

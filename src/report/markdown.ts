@@ -347,6 +347,9 @@ export function renderDiffMarkdown(result: DiffResult, options: RenderDiffMarkdo
   if (meta.sweepsSkipped > 0) {
     skippedParts.push(`${plural(meta.sweepsSkipped, 'sweeping commit')} skipped`);
   }
+  if ((meta.revertsSkipped ?? 0) > 0) {
+    skippedParts.push(`${plural(meta.revertsSkipped!, 'revert commit')} skipped`);
+  }
   if (meta.subjectSkipped > 0) {
     skippedParts.push(`${plural(meta.subjectSkipped, 'filtered commit')} skipped`);
   }

@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import type { Context } from '../context.js';
-import { isProjectConfig, parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
+import { isProjectConfig, isTestFile, parallelImplementation, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { EVIDENCE_LIMIT, type Companion } from './cochange.js';
 import { toView, type EvidenceView, type RelationshipView } from '../report/views.js';
 import { wilsonLowerBound } from '../util/stats.js';
@@ -96,8 +96,153 @@ export interface BuildFindingFamiliesOptions {
 
 const EXTENDED_FAMILY_CONFIG = /^[\w.-]+\.config-[\w.-]+\.[cm]?[jt]s$/i;
 
+const GENERIC_SAME_DIR_SUFFIXES = new Set([
+  'only',
+  'mid',
+  'final',
+  'old',
+  'new',
+  'test',
+  'tests',
+  'spec',
+  'specs',
+  'e2e',
+  'mock',
+  'mocks',
+  'fixture',
+  'fixtures',
+  'index',
+  'main',
+  'app',
+  'core',
+  'base',
+  'common',
+  'shared',
+  'default',
+  'type',
+  'types',
+  'util',
+  'utils',
+  'helper',
+  'helpers',
+  'config',
+  'configs',
+  'constant',
+  'constants',
+  'service',
+  'services',
+  'controller',
+  'controllers',
+  'handler',
+  'handlers',
+  'route',
+  'routes',
+  'router',
+  'slice',
+  'slices',
+  'store',
+  'stores',
+  'state',
+  'model',
+  'models',
+  'schema',
+  'schemas',
+  'view',
+  'views',
+  'page',
+  'pages',
+  'card',
+  'cards',
+  'modal',
+  'modals',
+  'dialog',
+  'dialogs',
+  'button',
+  'buttons',
+  'input',
+  'inputs',
+  'form',
+  'forms',
+  'table',
+  'tables',
+  'list',
+  'lists',
+  'item',
+  'items',
+  'field',
+  'fields',
+  'filter',
+  'filters',
+  'hook',
+  'hooks',
+  'context',
+  'provider',
+  'providers',
+  'client',
+  'clients',
+  'server',
+  'adapter',
+  'adapters',
+  'middleware',
+  'plugin',
+  'plugins',
+  'action',
+  'actions',
+  'reducer',
+  'reducers',
+  'selector',
+  'selectors',
+  'query',
+  'queries',
+  'mutation',
+  'mutations',
+  'widget',
+  'widgets',
+  'panel',
+  'panels',
+  'layout',
+  'layouts',
+  'section',
+  'sections',
+]);
+
 function isFamilyConfig(path: string): boolean {
   return isProjectConfig(path) || EXTENDED_FAMILY_CONFIG.test(posix.basename(path));
+}
+
+/**
+ * Returns the shared `*-<suffix>` pattern (e.g. `*-picker`) when two files in the same
+ * directory share a descriptive hyphenated suffix (`>= 3` letters) and extension (such as
+ * `accent-picker.tsx`, `menu-picker.tsx`, and `picker.tsx`), or `undefined` otherwise.
+ */
+export function sameDirectorySuffixFamilyStem(pathA: string, pathB: string): string | undefined {
+  if (isFamilyConfig(pathA) || isFamilyConfig(pathB) || isTestFile(pathA) || isTestFile(pathB)) {
+    return undefined;
+  }
+  const dirA = posix.dirname(pathA);
+  const dirB = posix.dirname(pathB);
+  if (dirA !== dirB) return undefined;
+  const extA = posix.extname(pathA);
+  const extB = posix.extname(pathB);
+  if (!extA || extA.toLowerCase() !== extB.toLowerCase()) return undefined;
+  const stemA = fileStem(pathA);
+  const stemB = fileStem(pathB);
+  if (!stemA || !stemB || stemA === stemB) return undefined;
+  const partsA = stemA.split('-').filter(Boolean);
+  const partsB = stemB.split('-').filter(Boolean);
+  if (partsA.length < 2 && partsB.length < 2) return undefined;
+  const lastA = partsA[partsA.length - 1]!.toLowerCase();
+  const lastB = partsB[partsB.length - 1]!.toLowerCase();
+  if (lastA !== lastB) return undefined;
+  if (!/^[a-z]{3,}$/.test(lastA) || GENERIC_SAME_DIR_SUFFIXES.has(lastA)) return undefined;
+  return `*-${lastA}`;
+}
+
+export function isEligibleFamilyPair(pathA: string, pathB: string): boolean {
+  return (
+    parallelImplementation(pathA, pathB) !== undefined ||
+    sameDirectorySuffixFamilyStem(pathA, pathB) !== undefined
+  );
 }
 
 /**
@@ -113,7 +258,7 @@ export function evaluateParallelPair(
   excludeSilenced = false,
 ): RelationshipView | undefined {
   if (isFamilyConfig(pathA) || isFamilyConfig(pathB)) return undefined;
-  if (!parallelImplementation(pathA, pathB)) return undefined;
+  if (!isEligibleFamilyPair(pathA, pathB)) return undefined;
   const { model, thresholds } = ctx;
   const histA = historyPathByMember?.get(pathA) ?? pathA;
   const histB = historyPathByMember?.get(pathB) ?? pathB;
@@ -179,6 +324,7 @@ interface CandidateFamily {
   id: string;
   stem: string;
   parentDir: string;
+  sameDirSuffix?: boolean;
   memberPaths: string[];
   pairs: RelationshipView[];
 }
@@ -217,11 +363,11 @@ export function buildFindingFamilies(
     && ctx.classifier !== undefined
     && ctx.settings !== undefined;
 
-  // 1. Deduplicate qualifying parallel-implementation pairs by unordered file pair.
+  // 1. Deduplicate qualifying parallel-implementation and same-directory suffix pairs by unordered file pair.
   const bestPairByKey = new Map<string, RelationshipView>();
   for (const rel of relationships) {
     if (isFamilyConfig(rel.from) || isFamilyConfig(rel.to)) continue;
-    if (!parallelImplementation(rel.from, rel.to)) continue;
+    if (!isEligibleFamilyPair(rel.from, rel.to)) continue;
     if (allowedKinds && !allowedKinds.includes(rel.relationship)) continue;
     if (
       excludeSilenced
@@ -239,14 +385,21 @@ export function buildFindingFamilies(
   if (bestPairByKey.size < 2) return [];
 
   // 2. Partition pairs by structural `(parentDir, stem)` key.
-  const buckets = new Map<string, { parentDir: string; stem: string; pairs: RelationshipView[] }>();
+  const buckets = new Map<
+    string,
+    { parentDir: string; stem: string; sameDirSuffix: boolean; pairs: RelationshipView[] }
+  >();
   for (const rel of bestPairByKey.values()) {
-    const parentDir = posix.dirname(posix.dirname(rel.from));
-    const stem = fileStem(rel.from);
-    const bucketKey = `${parentDir}\u0000${stem}`;
+    const suffixStem = parallelImplementation(rel.from, rel.to)
+      ? undefined
+      : sameDirectorySuffixFamilyStem(rel.from, rel.to);
+    const sameDirSuffix = suffixStem !== undefined;
+    const parentDir = sameDirSuffix ? posix.dirname(rel.from) : posix.dirname(posix.dirname(rel.from));
+    const stem = suffixStem ?? fileStem(rel.from);
+    const bucketKey = `${sameDirSuffix ? '1' : '0'}\u0000${parentDir}\u0000${stem}`;
     let bucket = buckets.get(bucketKey);
     if (!bucket) {
-      bucket = { parentDir, stem, pairs: [] };
+      bucket = { parentDir, stem, sameDirSuffix, pairs: [] };
       buckets.set(bucketKey, bucket);
     }
     bucket.pairs.push(rel);
@@ -295,7 +448,8 @@ export function buildFindingFamilies(
       }
       compNodes.sort(compareStrings);
       const distinctDirs = new Set(compNodes.map((p) => posix.dirname(p)));
-      if (compNodes.length < 3 || distinctDirs.size < 3) continue;
+      if (compNodes.length < 3) continue;
+      if (!bucket.sameDirSuffix && distinctDirs.size < 3) continue;
 
       const nodeSet = new Set(compNodes);
       const compPairs = bucket.pairs.filter((rel) => nodeSet.has(rel.from) && nodeSet.has(rel.to));
@@ -325,19 +479,24 @@ export function buildFindingFamilies(
         }
       }
       compPairs.sort(compareRelationshipViews);
-      if (compPairs.length < 2) continue;
+      if (compPairs.length < (bucket.sameDirSuffix ? 3 : 2)) continue;
       bucketComponents.push({ memberPaths: compNodes, pairs: compPairs });
     }
 
     bucketComponents.sort((a, b) => compareStrings(a.memberPaths[0]!, b.memberPaths[0]!));
-    const baseId = bucket.parentDir === '.' ? `*/${bucket.stem}` : `${bucket.parentDir}/*/${bucket.stem}`;
+    const baseId = bucket.sameDirSuffix
+      ? (bucket.parentDir === '.' ? bucket.stem : `${bucket.parentDir}/${bucket.stem}`)
+      : (bucket.parentDir === '.' ? `*/${bucket.stem}` : `${bucket.parentDir}/*/${bucket.stem}`);
     bucketComponents.forEach((comp, idx) => {
-      const firstVariant = posix.basename(posix.dirname(comp.memberPaths[0]!));
+      const firstVariant = bucket.sameDirSuffix
+        ? fileStem(comp.memberPaths[0]!)
+        : posix.basename(posix.dirname(comp.memberPaths[0]!));
       const id = bucketComponents.length === 1 ? baseId : `${baseId}#${firstVariant || idx + 1}`;
       candidates.push({
         id,
         stem: bucket.stem,
         parentDir: bucket.parentDir,
+        sameDirSuffix: bucket.sameDirSuffix,
         memberPaths: comp.memberPaths,
         pairs: comp.pairs,
       });
@@ -481,7 +640,17 @@ export function buildFindingFamilies(
       connectionsByPath.set(rel.to, (connectionsByPath.get(rel.to) ?? 0) + 1);
     }
 
-    const rawVariants = cand.memberPaths.map((p) => posix.basename(posix.dirname(p)));
+    const suffixToken = cand.sameDirSuffix && cand.stem.startsWith('*-') ? cand.stem.slice(1).toLowerCase() : '';
+    const rawVariants = cand.memberPaths.map((p) => {
+      if (cand.sameDirSuffix && suffixToken) {
+        const s = fileStem(p);
+        if (s.toLowerCase().endsWith(suffixToken) && s.length > suffixToken.length) {
+          return s.slice(0, s.length - suffixToken.length);
+        }
+        return s;
+      }
+      return posix.basename(posix.dirname(p));
+    });
     const variantCounts = new Map<string, number>();
     for (const v of rawVariants) variantCounts.set(v, (variantCounts.get(v) ?? 0) + 1);
 
@@ -504,17 +673,24 @@ export function buildFindingFamilies(
     });
 
     const basenames = [...new Set(cand.memberPaths.map((p) => posix.basename(p)))];
-    const fileName = basenames.length === 1 ? basenames[0]! : basenames.join(' / ');
-    const label = cand.parentDir === '.'
-      ? `${fileName} across sibling folders`
-      : `${fileName} across ${cand.parentDir}/*`;
+    const fileName = cand.sameDirSuffix
+      ? `${cand.stem}${posix.extname(cand.memberPaths[0]!) || ''}`
+      : basenames.length === 1
+        ? basenames[0]!
+        : basenames.join(' / ');
+    const suffixLabel = cand.sameDirSuffix && cand.stem.startsWith('*-') ? cand.stem.slice(1) : cand.stem;
+    const label = cand.sameDirSuffix
+      ? (cand.parentDir === '.' ? `${fileName} in root` : `${fileName} in ${cand.parentDir}`)
+      : (cand.parentDir === '.' ? `${fileName} across sibling folders` : `${fileName} across ${cand.parentDir}/*`);
 
     const variantsList = members.map((m) => m.variant).join(', ');
     const pairsPhrase = complete
       ? `all ${possiblePairs} pairwise links meet thresholds`
       : `${qualifyingPairs} of ${possiblePairs} pairwise links meet thresholds`;
     const commitsPhrase = `${plural(st.commitsTouchingTwoOrMore, 'supporting commit')} (2+ members via a qualifying pair), ${st.commitsTouchingAll} touched all ${totalMembers}`;
-    const why = `${totalMembers} parallel implementations of ${fileName} in sibling folders (${variantsList}); ${pairsPhrase} (${commitsPhrase})`;
+    const why = cand.sameDirSuffix
+      ? `${totalMembers} files sharing the ${suffixLabel} suffix in ${cand.parentDir === '.' ? 'root' : cand.parentDir} (${variantsList}); ${pairsPhrase} (${commitsPhrase})`
+      : `${totalMembers} parallel implementations of ${fileName} in sibling folders (${variantsList}); ${pairsPhrase} (${commitsPhrase})`;
 
     const presentKinds = new Set<Relationship>(cand.pairs.map((p) => p.relationship));
     const relationshipKinds = RELATIONSHIPS.filter((k) => presentKinds.has(k));

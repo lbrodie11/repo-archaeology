@@ -122,6 +122,7 @@ export interface EvidencePanelCopy {
   subhead: string;
   primaryDirection: DirectionMetricCopy;
   reverseDirection: DirectionMetricCopy;
+  asymmetrySummary: string;
   lastTogetherText: string;
   lastTogetherDate: string;
   counterexamplesSummary: string;
@@ -412,19 +413,32 @@ export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
     (family as { stem?: string }).stem ||
     posix.basename(family.members[0]?.path ?? family.label ?? 'file');
   const cleanFileName = sanitizeHtmlDisplayText(rawFileName);
+  const isSameDirSuffix = cleanFileName.startsWith('*-');
+  const suffixLabel = isSameDirSuffix
+    ? cleanFileName.slice(1).replace(/\.[^.]+$/, '')
+    : cleanFileName;
+  const parentLabel = cleanParent === '.' || cleanParent === '' ? 'root' : cleanParent;
 
-  const headline = `${memberCount} ${fileNoun} across ${dirsPattern} keep changing together`;
+  const headline = isSameDirSuffix
+    ? `${memberCount} ${fileNoun} sharing the ${suffixLabel} suffix in ${parentLabel} keep changing together`
+    : `${memberCount} ${fileNoun} across ${dirsPattern} keep changing together`;
 
   const relKinds = Array.isArray(family.relationshipKinds) ? family.relationshipKinds : [];
   const hasGhost = relKinds.includes('ghost');
   const hasUnknownOnly =
     !hasGhost && relKinds.length > 0 && relKinds.every((k) => k === 'unknown');
 
+  const groupPhrase = isSameDirSuffix
+    ? `${memberCount} ${fileNoun} sharing the ${suffixLabel} suffix (${cleanFileName})`
+    : `${memberCount} parallel implementations of ${cleanFileName}`;
+
   const firstSentence = hasGhost
-    ? `No direct or 2-hop import link was detected between these ${memberCount} parallel implementations of ${cleanFileName}.`
+    ? `No direct or 2-hop import link was detected between these ${groupPhrase}.`
     : hasUnknownOnly
-      ? `We couldn't check imports for these ${memberCount} parallel implementations of ${cleanFileName}.`
-      : `These ${memberCount} parallel implementations of ${cleanFileName} move together across sibling folders.`;
+      ? `We couldn't check imports for these ${groupPhrase}.`
+      : isSameDirSuffix
+        ? `These ${groupPhrase} move together in ${parentLabel}.`
+        : `These ${groupPhrase} move together across sibling folders.`;
 
   const commitNoun = family.commitsTouchingTwoOrMore === 1 ? 'commit' : 'commits';
   const pairClause =
@@ -482,6 +496,28 @@ export function formatDirectionMetric(
     rangeLowPct,
     rangeHighPct,
   };
+}
+
+/**
+ * Formats a plain-English 1-sentence comparison of the two directional co-change counts
+ * so first-time readers do not misread a small-sample `100%` rate as symmetrical proof.
+ */
+export function formatAsymmetrySummary(
+  fromLabel: string,
+  toLabel: string,
+  shared: number,
+  fromChanges: number,
+  toChanges: number,
+): string {
+  const safeFrom = sanitizeHtmlDisplayText(fromLabel);
+  const safeTo = sanitizeHtmlDisplayText(toLabel);
+  if (shared === fromChanges && shared < toChanges) {
+    return `Every observed change to ${safeFrom} (${shared} of ${fromChanges}) also changed ${safeTo}, whereas only ${shared} of ${toChanges} changes to ${safeTo} involved ${safeFrom}.`;
+  }
+  if (shared === fromChanges && shared === toChanges) {
+    return `Every observed change to ${safeFrom} (${shared} of ${fromChanges}) and ${safeTo} (${shared} of ${toChanges}) happened together in the analyzed window.`;
+  }
+  return `${shared} of ${fromChanges} changes to ${safeFrom} also changed ${safeTo}, compared with ${shared} of ${toChanges} changes to ${safeTo} that involved ${safeFrom}.`;
 }
 
 /**
@@ -683,7 +719,11 @@ export function formatEvidencePanelCopy(
       const node = data.nodes[ni];
       if (!node) continue;
       const member = featured.family.members.find((m) => m.path === node.path);
-      const shortLabel = member ? `${member.variant}/${featured.family.fileName}` : undefined;
+      const shortLabel = member
+        ? featured.family.stem.startsWith('*-')
+          ? member.path.slice(member.path.lastIndexOf('/') + 1)
+          : `${member.variant}/${featured.family.fileName}`
+        : undefined;
       const note = formatOwnerNote(node, shortLabel);
       if (note && !ownerNotes.includes(note)) ownerNotes.push(note);
     }
@@ -739,6 +779,13 @@ export function formatEvidencePanelCopy(
     subhead: headlineInfo.subhead,
     primaryDirection,
     reverseDirection,
+    asymmetrySummary: formatAsymmetrySummary(
+      dir.shortFrom,
+      dir.shortTo,
+      dir.shared,
+      dir.fromChanges,
+      dir.toChanges,
+    ),
     lastTogetherText,
     lastTogetherDate,
     counterexamplesSummary,
@@ -777,6 +824,8 @@ export function formatEvidencePanelCopy(
         featured.kind === 'family' ? featured.family.qualifyingPairs : undefined,
       familyPossiblePairs:
         featured.kind === 'family' ? featured.family.possiblePairs : undefined,
+      topAuthor: dir.fromNode.topAuthor,
+      topAuthorShare: dir.fromNode.topAuthorShare,
     }),
     ...(featured.kind === 'family'
       ? {
@@ -1167,7 +1216,9 @@ export function buildRankedFindings(
         cutLabel: findingId,
         kind: 'family',
         relationship: famHasGhost ? 'ghost' : leadEdge.relationship,
-        title: `${sanitizeHtmlDisplayText(famFileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
+        title: String(famFileName).startsWith('*-')
+          ? `${fam.members.length} files sharing the ${sanitizeHtmlDisplayText(String(famFileName).slice(1).replace(/\.[^.]+$/, ''))} suffix in ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? 'root' : fam.parentDir)}`
+          : `${sanitizeHtmlDisplayText(famFileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
         subtitle: `${fam.members.length} files (${fam.members.map((m) => sanitizeHtmlDisplayText(m.variant)).join(', ')}) · ${fam.commitsTouchingTwoOrMore} commits (2+ files)`,
         reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${famRevPctText})`,
         counterexampleLine: formatCounterexamplesLine(dir.fromOnlyTotal),
@@ -1315,6 +1366,8 @@ export interface FeaturedPlateLayout {
   balloonBox: { x: number; y: number; w: number; h: number } | null;
   fullComponentNodeCount: number;
   truncatedToEgoCap: boolean;
+  /** Number of non-featured context-to-context edges omitted from dense (>=5-node) plate diagrams. */
+  hiddenContextEdges: number;
 }
 
 export const MAX_EGO_NODES = 12;
@@ -1592,6 +1645,7 @@ export function computeFeaturedPlateLayout(
       balloonBox: null,
       fullComponentNodeCount: 0,
       truncatedToEgoCap: false,
+      hiddenContextEdges: 0,
     };
   }
 
@@ -1669,10 +1723,29 @@ export function computeFeaturedPlateLayout(
     return aLead - bLead || a - b;
   });
 
-  const egoEdgeIndices = visibleEdgeIndices.filter((ei) => {
+  const rawEgoEdgeIndices = visibleEdgeIndices.filter((ei) => {
     const e = data.edges[ei]!;
     return egoSet.has(e.source) && egoSet.has(e.target);
   });
+
+  // Avoid O(n^2) crossing-chord hairballs on dense >=5-node cliques by retaining
+  // lead-incident edges + ring-perimeter edges so the cluster stays clean and legible.
+  const egoPosByNode = new Map<number, number>();
+  egoNodeIndices.forEach((ni, idx) => egoPosByNode.set(ni, idx));
+  const egoEdgeIndices =
+    egoNodeIndices.length >= 5 && rawEgoEdgeIndices.length > egoNodeIndices.length + 3
+      ? rawEgoEdgeIndices.filter((ei) => {
+          if (ei === leadEdgeIndex) return true;
+          const e = data.edges[ei]!;
+          if (e.source === leadSource || e.target === leadSource || e.source === leadTarget || e.target === leadTarget) {
+            return true;
+          }
+          const pa = egoPosByNode.get(e.source) ?? -1;
+          const pb = egoPosByNode.get(e.target) ?? -1;
+          const diff = Math.abs(pa - pb);
+          return diff === 1 || diff === egoNodeIndices.length - 1;
+        })
+      : rawEgoEdgeIndices;
 
   const nCount = egoNodeIndices.length;
   const cx = width / 2;
@@ -1888,17 +1961,16 @@ export function computeFeaturedPlateLayout(
     return seedSet.has(ni) ? Math.max(7.5, baseR) : baseR;
   });
 
-  // Final hard guard: ensure no neighbor node circle falls inside the speech-balloon box above lead pair
+  // Final hard guard: ensure no non-lead node circle falls inside the speech-balloon box above lead pair
   if (nCount >= 2 && featured.kind !== 'empty') {
     const bMidX = (px[0]! + px[1]!) / 2;
     const bMidY = (py[0]! + py[1]!) / 2;
-    const bBoxW = 286;
+    const bBoxW = 368;
     const bBoxH = 44;
     const bBoxX = Math.max(12, Math.min(width - bBoxW - 12, bMidX - bBoxW / 2));
     const bBoxY = Math.max(8, bMidY - 58);
 
-    for (let i = 0; i < nCount; i++) {
-      if (seedSet.has(egoNodeIndices[i]!)) continue;
+    for (let i = 2; i < nCount; i++) {
       const rPad = radii[i]! + 12;
       if (
         px[i]! + rPad > bBoxX &&
@@ -1906,13 +1978,13 @@ export function computeFeaturedPlateLayout(
         py[i]! + rPad > bBoxY &&
         py[i]! - rPad < bBoxY + bBoxH
       ) {
-        // Push outward to the nearest horizontal side of the balloon box
+        // Push outward to the nearest horizontal side or below the balloon box
         if (px[i]! >= bMidX) {
           px[i] = Math.min(width - 95, bBoxX + bBoxW + rPad + 14);
         } else {
           px[i] = Math.max(95, bBoxX - rPad - 14);
         }
-        py[i] = Math.max(py[i]!, bMidY + 12);
+        py[i] = Math.max(py[i]!, bBoxY + bBoxH + rPad + 8);
       }
     }
   }
@@ -1953,10 +2025,10 @@ export function computeFeaturedPlateLayout(
   // Reserve a bounding box above the balloon target so node labels and nodes don't collide with the balloon
   const balloonBox = balloonTarget
     ? {
-        x: Math.round(Math.max(12, Math.min(width - 288, balloonTarget.x - 138)) * 10) / 10,
+        x: Math.round(Math.max(12, Math.min(width - 380, balloonTarget.x - 184)) * 10) / 10,
         y: Math.round(Math.max(8, balloonTarget.y - 54) * 10) / 10,
-        w: 276,
-        h: 40,
+        w: 368,
+        h: 42,
       }
     : null;
 
@@ -2076,6 +2148,7 @@ export function computeFeaturedPlateLayout(
     balloonBox,
     fullComponentNodeCount,
     truncatedToEgoCap: fullComponentNodeCount > nCount,
+    hiddenContextEdges: Math.max(0, rawEgoEdgeIndices.length - egoEdgeIndices.length),
   };
 }
 

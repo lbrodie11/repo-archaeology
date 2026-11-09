@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Blueprint `Focus selected pair` Toggle & Chord Pruning (`#focus-pair-btn`, [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):**
+  - Added a `Focus selected pair` / `Show ego network` toggle button (`#focus-pair-btn`, `aria-pressed`) in the Cut `C-01` blueprint footer whenever the ego network contains more than 2 files, isolating the primary pair on demand.
+  - Pruned crossing non-incident neighbor-to-neighbor chords on dense `>= 5`-node cliques with an explicit `N connection(s) between context files hidden (see Atlas)` disclosure in `.f12-plate-meta`, kept non-featured context wires at or above the WCAG 1.4.11 3:1 non-text contrast threshold against the plate background and grid lines in both themes (`stroke-opacity="0.9"`, `stroke-width="1.35"`), and rendered the primary connection last with a crisp `#fffef9` chalk halo (`stroke-opacity="0.45"`).
+- **Plain-Language Directional Asymmetry Summary & Single-Contributor Caveat ([`src/map/copy.ts`](src/map/copy.ts), [`src/report/glossary.ts`](src/report/glossary.ts), [`src/map/template.ts`](src/map/template.ts)):**
+  - Added `formatAsymmetrySummary` (`.f12-dir-asymmetry`) directly beneath the two directional boxes in `E-01 · EVIDENCE` explaining why `A → B` and `B → A` percentages differ in one sentence, and replaced `(≥X% CI)` jargon with `≥X% lower bound`.
+  - Added an unnamed single-contributor workflow habit note (`"One contributor made X% of the analyzed changes to …"`) in `Reading this finding` whenever one human contributor (canonicalized via `.mailmap`, excluding bots and non-human coding agents) made `>= 60%` of the lead file's analyzed commits (`topAuthorShare >= 0.6`).
+- **Same-Directory Suffix Sibling Finding Families ([`src/model/families.ts`](src/model/families.ts), [`src/commands/scan.ts`](src/commands/scan.ts), [`src/commands/map.ts`](src/commands/map.ts), [`src/map/copy.ts`](src/map/copy.ts)):**
+  - Grouped `>= 3` files in the same directory sharing a non-generic hyphenated suffix (such as `accent-picker.tsx`, `menu-picker.tsx`, `font-picker.tsx`, `picker.tsx` → `*-picker.tsx`, while excluding ubiquitous architectural layer suffixes like `-service`, `-controller`, `-slice`, `-store`, `-page`, `-card`) and `>= 3` qualifying pairs into a single Finding Family described as `"N files sharing the -<suffix> suffix in <dir>"`.
+
+### Changed
+- **Mechanical `git revert` & `Reapply` Commit Filtering (`revertsSkipped`, `--include-reverts`, [`src/model/history.ts`](src/model/history.ts), [`src/cli.ts`](src/cli.ts), [`src/config.ts`](src/config.ts), [`src/report/views.ts`](src/report/views.ts), [`schema/common.schema.json`](schema/common.schema.json)):** `HistoryBuilder` now skips mechanical `Revert "..."` and `Reapply "..."` commits by default across all commands so a commit, its revert, and a subsequent reapply are counted once rather than double- or triple-counted. Skipped revert commits are recorded in a dedicated `meta.revertsSkipped` counter and printed as `"N revert commit(s) skipped"` in classic, rich and Markdown headers, separate from `subjectSkipped` / `--skip-commits`. Pass `--include-reverts` or set `"skipReverts": false` in `.repo-archaeology.json` to opt out; the choice is echoed in `meta.settings.skipReverts` and `diff`'s `evaluation.effectiveOptions.skipReverts`. This changes counts for `scan`, `diff`, `file`, `explain`, `backtest` and all JSON consumers.
+- **FRAME/12 Typography, Three-Tier Border Hierarchy & Board Alignment ([`src/map/template.ts`](src/map/template.ts)):** Increased reading sizes across `body` (`16px`), `.f12-lede` (`15.5px`), directional evidence, receipts, and ranked findings; established a 3-tier border hierarchy (`--f-rule` for primary storyboard panels, `--f-ink-2` for supporting evidence boxes, and `--f-grid` / left-accent for metadata pills and receipts); and set `.f12-board-grid { align-items: start; }` to eliminate the vertical stretch gap beneath `#cut-c01`.
+
 ## [0.5.1] - 2026-11-09
 
 ### Added

@@ -78,6 +78,8 @@ export interface HistoryStats {
   sweepsSkipped: number;
   /** Commits skipped because their subject matched skipCommits. */
   subjectSkipped: number;
+  /** Commits skipped because their subject matched a mechanical git revert or reapply pattern. */
+  revertsSkipped: number;
   /** Commits skipped because every file they touched was ignored. */
   emptyAfterIgnores: number;
   renamesFollowed: number;
@@ -141,6 +143,8 @@ export interface HistoryOptions extends LogOptions {
   ignore: readonly string[];
   /** Commits whose subject matches are left out (e.g. formatting or release commits). */
   skipCommits?: RegExp;
+  /** Leave out mechanical Revert/Reapply commits (default: true). */
+  skipReverts?: boolean;
   /** Commit origin classification overrides. */
   origin?: OriginConfig;
   /** Revision-specific `.mailmap` resolver for canonical contributor identity aggregation. */
@@ -154,10 +158,20 @@ export interface HistoryOptions extends LogOptions {
   cache?: HistoryCacheOptions | false;
 }
 
-type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'origin' | 'mailmap'>;
+type BuilderOptions = Pick<
+  HistoryOptions,
+  'maxFilesPerCommit' | 'ignore' | 'skipCommits' | 'skipReverts' | 'origin' | 'mailmap'
+>;
 
 /** Separates a path from the lifetime marker of an earlier, deleted file at that path. */
 const LIFETIME_SEPARATOR = '\u0000';
+
+/**
+ * Matches mechanical `git revert` (`Revert "<subject>"`) and `git revert` of a revert
+ * (`Reapply "<subject>"`, Git 2.43+) commit subjects so a change, its revert, and a
+ * subsequent reapply are not double-counted.
+ */
+const REVERT_COMMIT_SUBJECT = /^\s*(?:Revert|Reapply)\s+["'].+["'](?:\s*\(#\d+\))?\s*$/i;
 
 /** The path part of a file identity (identities of earlier, deleted files carry a suffix). */
 export function pathOf(identity: string): string {
@@ -267,7 +281,14 @@ export class HistoryBuilder {
   private readonly renames = new RenameTracker();
   private readonly commits: HistoryCommit[] = [];
   private readonly excluded: HistoryCommit[] = [];
-  private readonly stats: HistoryStats = { commitsRead: 0, sweepsSkipped: 0, subjectSkipped: 0, emptyAfterIgnores: 0, renamesFollowed: 0 };
+  private readonly stats: HistoryStats = {
+    commitsRead: 0,
+    sweepsSkipped: 0,
+    subjectSkipped: 0,
+    revertsSkipped: 0,
+    emptyAfterIgnores: 0,
+    renamesFollowed: 0,
+  };
 
   constructor(private readonly options: BuilderOptions) {
     this.ignore = new PathMatcher(options.ignore);
@@ -340,6 +361,11 @@ export class HistoryBuilder {
     }
     if (this.options.skipCommits?.test(commit.subject)) {
       stats.subjectSkipped++;
+      this.excluded.push(entry);
+      return;
+    }
+    if (this.options.skipReverts !== false && REVERT_COMMIT_SUBJECT.test(commit.subject)) {
+      stats.revertsSkipped++;
       this.excluded.push(entry);
       return;
     }

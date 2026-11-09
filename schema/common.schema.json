@@ -333,6 +333,9 @@
         "skipCommits": {
           "type": "string"
         },
+        "skipReverts": {
+          "type": "boolean"
+        },
         "ignore": {
           "type": "array",
           "items": {
@@ -562,6 +565,10 @@
           "minimum": 0
         },
         "subjectSkipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revertsSkipped": {
           "type": "integer",
           "minimum": 0
         },
@@ -1094,6 +1101,9 @@
             },
             "skipCommits": {
               "type": "string"
+            },
+            "skipReverts": {
+              "type": "boolean"
             },
             "originWeights": {
               "$ref": "#/$defs/OriginWeights"
