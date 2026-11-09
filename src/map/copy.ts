@@ -1709,11 +1709,12 @@ export function computeFeaturedPlateLayout(
     const anchorY = new Float64Array(sCount);
 
     if (sCount === 2) {
-      const spanX = Math.min(125, rx * 0.52);
+      const spanX = mCount >= 5 ? Math.min(165, rx * 0.64) : Math.min(125, rx * 0.52);
+      const seedY = mCount >= 5 ? cy - Math.min(48, ry * 0.38) : cy - 14;
       anchorX[0] = cx - spanX;
-      anchorY[0] = cy - 14;
+      anchorY[0] = seedY;
       anchorX[1] = cx + spanX;
-      anchorY[1] = cy - 14;
+      anchorY[1] = seedY;
     } else if (sCount === 3) {
       const spanX = Math.min(122, rx * 0.5);
       const topY = cy - Math.min(42, ry * 0.52);
@@ -1725,8 +1726,10 @@ export function computeFeaturedPlateLayout(
       anchorX[2] = cx;
       anchorY[2] = botY;
     } else {
-      const innerRx = mCount > 0 ? rx * 0.52 : rx * 0.8;
-      const innerRy = mCount > 0 ? ry * 0.56 : ry * 0.8;
+      const innerScaleX = mCount > 0 ? (sCount >= 6 ? 0.78 : sCount >= 4 ? 0.66 : 0.52) : 0.85;
+      const innerScaleY = mCount > 0 ? (sCount >= 6 ? 0.78 : sCount >= 4 ? 0.66 : 0.56) : 0.85;
+      const innerRx = rx * innerScaleX;
+      const innerRy = ry * innerScaleY;
       for (let i = 0; i < sCount; i++) {
         const angle = -Math.PI * 0.78 + (2 * Math.PI * i) / Math.max(1, sCount);
         anchorX[i] = cx + Math.cos(angle) * innerRx;
@@ -1743,6 +1746,17 @@ export function computeFeaturedPlateLayout(
     // ordered by the horizontal position of the seed node(s) each neighbor connects to so edges don't cross.
     const localIdxByGlobal = new Map<number, number>();
     egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
+
+    const localDeg = new Int32Array(nCount);
+    for (const ei of egoEdgeIndices) {
+      const e = data.edges[ei]!;
+      const li = localIdxByGlobal.get(e.source);
+      const lj = localIdxByGlobal.get(e.target);
+      if (li !== undefined && lj !== undefined) {
+        localDeg[li] = localDeg[li]! + 1;
+        localDeg[lj] = localDeg[lj]! + 1;
+      }
+    }
 
     const nbrMeta = nbrsInEgo.map((ni, j) => {
       const localIdx = sCount + j;
@@ -1783,11 +1797,17 @@ export function computeFeaturedPlateLayout(
                 (_, k) => -0.14 * Math.PI + (1.28 * Math.PI * k) / Math.max(1, mCount - 1),
               );
 
+    const outerAnchorX = new Float64Array(nCount);
+    const outerAnchorY = new Float64Array(nCount);
     for (let k = 0; k < mCount; k++) {
       const { localIdx } = nbrMeta[k]!;
       const angle = arcAngles[k]!;
-      px[localIdx] = cx + Math.cos(angle) * rx * 0.92;
-      py[localIdx] = cy + Math.sin(angle) * ry * 0.86;
+      const ax = cx + Math.cos(angle) * rx * (mCount >= 6 ? 0.96 : 0.92);
+      const ay = cy + Math.sin(angle) * ry * (mCount >= 6 ? 0.92 : 0.86);
+      px[localIdx] = ax;
+      py[localIdx] = ay;
+      outerAnchorX[localIdx] = ax;
+      outerAnchorY[localIdx] = ay;
     }
 
     // Light deterministic relaxation for neighbors while keeping seed nodes anchored in their clear formation
@@ -1800,7 +1820,7 @@ export function computeFeaturedPlateLayout(
           const dy = py[j]! - py[i]!;
           const d2 = Math.max(25, dx * dx + dy * dy);
           const d = Math.sqrt(d2);
-          const rep = 3600 / d2;
+          const rep = (nCount >= 8 ? 5800 : 3600) / d2;
           const rxForce = (dx / d) * rep;
           const ryForce = (dy / d) * rep;
           fx[i] = fx[i]! - rxForce;
@@ -1817,8 +1837,9 @@ export function computeFeaturedPlateLayout(
         const dx = px[lj]! - px[li]!;
         const dy = py[lj]! - py[li]!;
         const d = Math.max(1, Math.hypot(dx, dy));
-        const targetLen = featuredEdgeSet.has(ei) ? 160 : 125;
-        const kSpring = featuredEdgeSet.has(ei) ? 0.05 : 0.04;
+        const targetLen = featuredEdgeSet.has(ei) ? 170 : nCount >= 8 ? 190 : 125;
+        const degNorm = Math.sqrt(Math.max(1, Math.max(localDeg[li]!, localDeg[lj]!)));
+        const kSpring = (featuredEdgeSet.has(ei) ? 0.05 : 0.035) / degNorm;
         const f = (d - targetLen) * kSpring;
         const sx = (dx / d) * f;
         const sy = (dy / d) * f;
@@ -1842,8 +1863,8 @@ export function computeFeaturedPlateLayout(
           fx[i] = fx[i]! + (anchorX[i]! - px[i]!) * 0.35;
           fy[i] = fy[i]! + (anchorY[i]! - py[i]!) * 0.35;
         } else {
-          fx[i] = fx[i]! + (cx - px[i]!) * 0.015;
-          fy[i] = fy[i]! + (cy - py[i]!) * 0.015;
+          fx[i] = fx[i]! + (outerAnchorX[i]! - px[i]!) * 0.12;
+          fy[i] = fy[i]! + (outerAnchorY[i]! - py[i]!) * 0.12;
           if (px[i]! > zoneLeft && px[i]! < zoneRight && py[i]! > zoneTop && py[i]! < zoneBottom) {
             const pushDirX = px[i]! >= bMidX ? 1 : -1;
             fx[i] = fx[i]! + pushDirX * 28;

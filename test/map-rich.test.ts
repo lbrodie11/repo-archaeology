@@ -1200,6 +1200,68 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         'Expected #f= deep link to an unchecked edge to display that finding in C-01',
       );
 
+      // 5) Interactive node dragging, wheel zoom, and reset on #featured-plate-svg in Briefing mode
+      const beforeDrag = await gPage.evaluate(() => {
+        const svg = document.getElementById('featured-plate-svg')!;
+        const nodeG = svg.querySelector('.f12-plate-node[data-plate-idx="0"]') as SVGGElement;
+        const circles = nodeG.querySelectorAll('circle');
+        const visibleCircle = circles[1] ?? circles[0]!;
+        const rect = visibleCircle.getBoundingClientRect();
+        const resetBtn = document.getElementById('reset-plate-btn') as HTMLButtonElement;
+        return {
+          userSelect: getComputedStyle(svg).userSelect,
+          cx: Number(visibleCircle.getAttribute('cx')),
+          cy: Number(visibleCircle.getAttribute('cy')),
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+          viewBox: svg.getAttribute('viewBox') ?? '',
+          resetHidden: resetBtn.hidden,
+        };
+      });
+      assert.equal(beforeDrag.userSelect, 'none', 'Expected #featured-plate-svg to disable text selection');
+      assert.equal(beforeDrag.resetHidden, true, 'Expected #reset-plate-btn to be hidden before dragging');
+
+      await gPage.mouse.move(beforeDrag.clientX, beforeDrag.clientY);
+      await gPage.mouse.down();
+      await gPage.mouse.move(beforeDrag.clientX + 60, beforeDrag.clientY + 40, { steps: 4 });
+      await gPage.mouse.up();
+
+      const afterDrag = await gPage.evaluate(() => {
+        const svg = document.getElementById('featured-plate-svg')!;
+        const nodeG = svg.querySelector('.f12-plate-node[data-plate-idx="0"]') as SVGGElement;
+        const circles = nodeG.querySelectorAll('circle');
+        const visibleCircle = circles[1] ?? circles[0]!;
+        const resetBtn = document.getElementById('reset-plate-btn') as HTMLButtonElement;
+        return {
+          cx: Number(visibleCircle.getAttribute('cx')),
+          cy: Number(visibleCircle.getAttribute('cy')),
+          resetHidden: resetBtn.hidden,
+        };
+      });
+      assert.equal(afterDrag.cx > beforeDrag.cx + 20, true, `Expected dragged node cx (${afterDrag.cx}) to move right from ${beforeDrag.cx}`);
+      assert.equal(afterDrag.cy > beforeDrag.cy + 15, true, `Expected dragged node cy (${afterDrag.cy}) to move down from ${beforeDrag.cy}`);
+      assert.equal(afterDrag.resetHidden, false, 'Expected #reset-plate-btn to appear after dragging a node');
+
+      // Reset plate layout and verify original coordinates are restored
+      await gPage.locator('#reset-plate-btn').click();
+      const afterReset = await gPage.evaluate(() => {
+        const svg = document.getElementById('featured-plate-svg')!;
+        const nodeG = svg.querySelector('.f12-plate-node[data-plate-idx="0"]') as SVGGElement;
+        const circles = nodeG.querySelectorAll('circle');
+        const visibleCircle = circles[1] ?? circles[0]!;
+        const resetBtn = document.getElementById('reset-plate-btn') as HTMLButtonElement;
+        return {
+          cx: Number(visibleCircle.getAttribute('cx')),
+          cy: Number(visibleCircle.getAttribute('cy')),
+          viewBox: svg.getAttribute('viewBox') ?? '',
+          resetHidden: resetBtn.hidden,
+        };
+      });
+      assert.equal(afterReset.cx, beforeDrag.cx, 'Expected #reset-plate-btn to restore initial node cx');
+      assert.equal(afterReset.cy, beforeDrag.cy, 'Expected #reset-plate-btn to restore initial node cy');
+      assert.equal(afterReset.viewBox, beforeDrag.viewBox, 'Expected #reset-plate-btn to restore initial viewBox');
+      assert.equal(afterReset.resetHidden, true, 'Expected #reset-plate-btn to hide after reset');
+
       await gPage.close();
     } finally {
       await browser.close();

@@ -3290,8 +3290,16 @@ canvas.pointing { cursor: pointer; }
 .f12-lede { margin: 0; font: 400 14px/1.5 var(--f-font-body); color: var(--f-ink-2); max-width: 72ch; overflow-wrap: anywhere; }
 
 .f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
-.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; }
+.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
+.f12-plate-svg.is-panning { cursor: grabbing; }
+.f12-plate-node { cursor: grab; }
+.f12-plate-node.is-dragging { cursor: grabbing; }
+.f12-plate-edge-hit { cursor: pointer; }
+.f12-plate-balloon { pointer-events: none; }
 .f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11px/1.3 var(--f-font-mono); }
+.f12-plate-footer-right { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.f12-plate-reset-btn { min-height: 24px; min-width: 24px; padding: 2px 8px; border: 1px solid #fffef9; background: #13304f; color: #fffef9; font: 700 10.5px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+.f12-plate-reset-btn:hover { background: #173b61; }
 .f12-plate-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .f12-plate-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -5956,33 +5964,53 @@ const RICH_CLIENT = String.raw`
     var posX = new Array(chosenNodes.length);
     var posY = new Array(chosenNodes.length);
     var sCount = Math.min(seedNodes.length, chosenNodes.length);
+    var outerCount = chosenNodes.length - sCount;
     if (sCount === 2) {
-      var span = isMobile ? 96 : 196;
-      posX[0] = cx - span * 0.5; posY[0] = cy;
-      posX[1] = cx + span * 0.5; posY[1] = cy;
+      var span = isMobile ? (outerCount >= 5 ? 116 : 96) : (outerCount >= 5 ? 236 : 196);
+      var seedY = outerCount >= 5 ? (cy - (isMobile ? 22 : 36)) : cy;
+      posX[0] = cx - span * 0.5; posY[0] = seedY;
+      posX[1] = cx + span * 0.5; posY[1] = seedY;
     } else {
-      var rx = isMobile ? 68 : 138;
-      var ry = isMobile ? 48 : 94;
+      var rx = isMobile
+        ? (sCount >= 6 ? 98 : sCount >= 4 ? 82 : 68)
+        : (sCount >= 6 ? 228 : sCount >= 4 ? 182 : 142);
+      var ry = isMobile
+        ? (sCount >= 6 ? 68 : sCount >= 4 ? 58 : 48)
+        : (sCount >= 6 ? 132 : sCount >= 4 ? 112 : 96);
       for (var si = 0; si < sCount; si++) {
         var sAng = -Math.PI / 2 + (2 * Math.PI * si) / Math.max(1, sCount);
         posX[si] = cx + Math.cos(sAng) * rx;
         posY[si] = cy + Math.sin(sAng) * ry;
       }
     }
-    var outerCount = chosenNodes.length - sCount;
+    var outerAnchorX = new Array(chosenNodes.length);
+    var outerAnchorY = new Array(chosenNodes.length);
+    for (var ai = 0; ai < sCount; ai++) {
+      outerAnchorX[ai] = posX[ai];
+      outerAnchorY[ai] = posY[ai];
+    }
     for (var oi = 0; oi < outerCount; oi++) {
       var oIdx = sCount + oi;
-      var oAng = -Math.PI * 0.35 + (2 * Math.PI * oi) / Math.max(1, outerCount);
-      posX[oIdx] = cx + Math.cos(oAng) * (isMobile ? 112 : 240);
-      posY[oIdx] = cy + Math.sin(oAng) * (isMobile ? 74 : 138);
+      var oAng = outerCount >= 4
+        ? (-0.14 * Math.PI + (1.28 * Math.PI * oi) / Math.max(1, outerCount - 1))
+        : (-Math.PI * 0.35 + (2 * Math.PI * oi) / Math.max(1, outerCount));
+      var ox = cx + Math.cos(oAng) * (isMobile ? 118 : 262);
+      var oy = cy + Math.sin(oAng) * (isMobile ? 78 : 146);
+      posX[oIdx] = ox;
+      posY[oIdx] = oy;
+      outerAnchorX[oIdx] = ox;
+      outerAnchorY[oIdx] = oy;
     }
 
-    // Collect internal edges
+    // Collect internal edges and per-node degree
     var subEdges = [];
+    var nodeDeg = new Array(chosenNodes.length).fill(0);
     edges.forEach(function (ce) {
       var u = chosenSet[ce.s.i], v = chosenSet[ce.t.i];
       if (u !== undefined && v !== undefined) {
         subEdges.push({ ce: ce, u: u, v: v, isFeat: Boolean(featuredEdgeIdxSet[ce.idx]) });
+        nodeDeg[u]++;
+        nodeDeg[v]++;
       }
     });
 
@@ -5992,8 +6020,8 @@ const RICH_CLIENT = String.raw`
     var balloonX = Math.round(cx - balloonW / 2);
     var balloonY = isMobile ? 8 : 34;
 
-    // 50-step deterministic force relaxation
-    var idealDist = isMobile ? 86 : 156;
+    // 50-step deterministic force relaxation (degree-normalized so cliques never collapse inward)
+    var idealDist = isMobile ? 88 : 168;
     for (var step = 0; step < 50; step++) {
       var cooling = 1 - step / 55;
       var fx = new Array(chosenNodes.length).fill(0);
@@ -6003,9 +6031,9 @@ const RICH_CLIENT = String.raw`
           var dx = posX[j] - posX[i];
           var dy = posY[j] - posY[i];
           var dist = Math.hypot(dx, dy) || 0.5;
-          var minSep = (i < sCount && j < sCount) ? idealDist * 1.12 : idealDist * 0.85;
-          if (dist < minSep * 1.4) {
-            var rep = ((minSep * 1.4 - dist) / dist) * 0.42 * cooling;
+          var minSep = (i < sCount && j < sCount) ? idealDist * 1.15 : idealDist * 0.92;
+          if (dist < minSep * 1.45) {
+            var rep = ((minSep * 1.45 - dist) / dist) * 0.46 * cooling;
             fx[i] -= dx * rep; fy[i] -= dy * rep;
             fx[j] += dx * rep; fy[j] += dy * rep;
           }
@@ -6015,14 +6043,19 @@ const RICH_CLIENT = String.raw`
         var dx = posX[se.v] - posX[se.u];
         var dy = posY[se.v] - posY[se.u];
         var dist = Math.hypot(dx, dy) || 1;
-        var target = se.isFeat ? idealDist * 1.05 : idealDist * 0.95;
-        var pull = ((dist - target) / dist) * 0.14 * cooling;
+        var target = se.isFeat ? idealDist * 1.08 : idealDist * 0.98;
+        var degNorm = Math.sqrt(Math.max(1, Math.max(nodeDeg[se.u] || 1, nodeDeg[se.v] || 1)));
+        var pull = ((dist - target) / dist) * (0.12 / degNorm) * cooling;
         fx[se.u] += dx * pull; fy[se.u] += dy * pull;
         fx[se.v] -= dx * pull; fy[se.v] -= dy * pull;
       });
       for (var k = 0; k < chosenNodes.length; k++) {
         var isSeedNode = k < sCount;
-        var damp = isSeedNode ? 0.35 : 0.85;
+        var damp = isSeedNode ? 0.35 : 0.78;
+        if (!isSeedNode && outerAnchorX[k] !== undefined) {
+          fx[k] += (outerAnchorX[k] - posX[k]) * 0.14 * cooling;
+          fy[k] += (outerAnchorY[k] - posY[k]) * 0.14 * cooling;
+        }
         // Keep nodes out of balloon box
         if (
           posX[k] > balloonX - 24 &&
@@ -6167,17 +6200,52 @@ const RICH_CLIENT = String.raw`
     };
   }
 
-  function renderPlateSvg(svgEl, plate, balloonText) {
+  var dynamicPlateCache = Object.create(null);
+
+  function snapshotPlateInitialState(plate, w, h) {
+    if (!plate || plate._initialNodes) return;
+    plate._initialNodes = (plate.nodes || []).map(function (pn) {
+      return {
+        x: pn.x,
+        y: pn.y,
+        label: pn.label
+          ? {
+              x: pn.label.x,
+              y: pn.label.y,
+              w: pn.label.w,
+              h: pn.label.h,
+              anchorX: pn.label.anchorX,
+              anchorY: pn.label.anchorY,
+              textAlign: pn.label.textAlign
+            }
+          : null
+      };
+    });
+    plate._initialEdges = (plate.edges || []).map(function (pe) {
+      return { x1: pe.x1, y1: pe.y1, x2: pe.x2, y2: pe.y2 };
+    });
+    plate._initialBalloonTarget = plate.balloonTarget
+      ? { x: plate.balloonTarget.x, y: plate.balloonTarget.y }
+      : null;
+    if (!plate._viewBox) {
+      plate._viewBox = { x: 0, y: 0, w: w, h: h };
+    }
+  }
+
+  function renderPlateSvg(svgEl, plate, balloonText, plateOpts) {
     var ns = 'http://www.w3.org/2000/svg';
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
     var w = plate.width || 760, h = plate.height || 420;
-    svgEl.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    snapshotPlateInitialState(plate, w, h);
+    var vb = plate._viewBox || (plate._viewBox = { x: 0, y: 0, w: w, h: h });
+    svgEl.setAttribute('viewBox', vb.x.toFixed(1) + ' ' + vb.y.toFixed(1) + ' ' + vb.w.toFixed(1) + ' ' + vb.h.toFixed(1));
 
     var defs = document.createElementNS(ns, 'defs');
     var grad = document.createElementNS(ns, 'linearGradient');
     grad.setAttribute('id', 'ra17-plate-bg');
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse');
     grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
-    grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+    grad.setAttribute('x2', '0'); grad.setAttribute('y2', String(h));
     [['0%', '#13304f'], ['60%', '#0e2540'], ['100%', '#09192c']].forEach(function (st) {
       var stop = document.createElementNS(ns, 'stop');
       stop.setAttribute('offset', st[0]);
@@ -6200,27 +6268,39 @@ const RICH_CLIENT = String.raw`
     svgEl.appendChild(defs);
 
     var bg1 = document.createElementNS(ns, 'rect');
-    bg1.setAttribute('width', String(w)); bg1.setAttribute('height', String(h));
+    bg1.setAttribute('x', '-2000'); bg1.setAttribute('y', '-2000');
+    bg1.setAttribute('width', '5000'); bg1.setAttribute('height', '5000');
     bg1.setAttribute('fill', 'url(#ra17-plate-bg)');
     svgEl.appendChild(bg1);
 
     var bg2 = document.createElementNS(ns, 'rect');
-    bg2.setAttribute('width', String(w)); bg2.setAttribute('height', String(h));
+    bg2.setAttribute('x', '-2000'); bg2.setAttribute('y', '-2000');
+    bg2.setAttribute('width', '5000'); bg2.setAttribute('height', '5000');
     bg2.setAttribute('fill', 'url(#ra17-plate-grid)');
     svgEl.appendChild(bg2);
 
+    var edgeLayer = document.createElementNS(ns, 'g');
+    var nodeLayer = document.createElementNS(ns, 'g');
+    var balloonLayer = document.createElementNS(ns, 'g');
+    balloonLayer.setAttribute('class', 'f12-plate-balloon');
+    svgEl.appendChild(edgeLayer);
+    svgEl.appendChild(nodeLayer);
+    svgEl.appendChild(balloonLayer);
+
+    var edgeRecords = [];
     (plate.edges || []).forEach(function (pe) {
       var strokeW = String(pe.strokeWidth || 2.2);
+      var halo = null;
       if (pe.isFeatured) {
         // Blueprint chalk halo (#fffef9) instead of #ffd60a stroke (--f-marker is never a stroke)
-        var halo = document.createElementNS(ns, 'line');
+        halo = document.createElementNS(ns, 'line');
         halo.setAttribute('x1', String(pe.x1)); halo.setAttribute('y1', String(pe.y1));
         halo.setAttribute('x2', String(pe.x2)); halo.setAttribute('y2', String(pe.y2));
         halo.setAttribute('stroke', '#fffef9');
         halo.setAttribute('stroke-width', String(Number(strokeW) + 3.6));
         halo.setAttribute('stroke-opacity', '0.28');
         halo.setAttribute('stroke-linecap', 'round');
-        svgEl.appendChild(halo);
+        edgeLayer.appendChild(halo);
       }
       var line = document.createElementNS(ns, 'line');
       line.setAttribute('x1', String(pe.x1)); line.setAttribute('y1', String(pe.y1));
@@ -6232,12 +6312,38 @@ const RICH_CLIENT = String.raw`
       else if (pe.relationship === 'unknown') line.setAttribute('stroke-dasharray', '2 5');
       else if (pe.relationship === 'indirect') line.setAttribute('stroke-dasharray', '5 4');
       line.setAttribute('stroke-linecap', 'round');
-      svgEl.appendChild(line);
+      edgeLayer.appendChild(line);
+
+      var hitLine = document.createElementNS(ns, 'line');
+      hitLine.setAttribute('class', 'f12-plate-edge-hit');
+      hitLine.setAttribute('x1', String(pe.x1)); hitLine.setAttribute('y1', String(pe.y1));
+      hitLine.setAttribute('x2', String(pe.x2)); hitLine.setAttribute('y2', String(pe.y2));
+      hitLine.setAttribute('stroke', 'transparent');
+      hitLine.setAttribute('stroke-width', '14');
+      hitLine.setAttribute('stroke-linecap', 'round');
+      edgeLayer.appendChild(hitLine);
+
+      edgeRecords.push({ pe: pe, haloEl: halo, lineEl: line, hitEl: hitLine });
     });
 
     var isCompactPlate = w <= 420;
-    (plate.nodes || []).forEach(function (pn) {
+    var nodeRecords = [];
+    (plate.nodes || []).forEach(function (pn, pIdx) {
       var g = document.createElementNS(ns, 'g');
+      g.setAttribute('class', 'f12-plate-node');
+      g.setAttribute('data-node-idx', String(pn.nodeIndex));
+      g.setAttribute('data-plate-idx', String(pIdx));
+
+      var titleEl = document.createElementNS(ns, 'title');
+      titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 drag to move';
+      g.appendChild(titleEl);
+
+      var hitC = document.createElementNS(ns, 'circle');
+      hitC.setAttribute('cx', String(pn.x)); hitC.setAttribute('cy', String(pn.y));
+      hitC.setAttribute('r', String(Math.max(15, (pn.r || 7) + 6)));
+      hitC.setAttribute('fill', 'transparent');
+      g.appendChild(hitC);
+
       var hue = hashHue(pn.dir || '.');
       var fillCol = 'hsl(' + hue + ', 72%, 64%)';
       var c = document.createElementNS(ns, 'circle');
@@ -6248,9 +6354,11 @@ const RICH_CLIENT = String.raw`
       c.setAttribute('stroke-width', pn.isFeaturedEndpoint ? '2.5' : '1.8');
       g.appendChild(c);
 
+      var pill = null;
+      var txt = null;
       var lbl = pn.label;
       if (lbl) {
-        var pill = document.createElementNS(ns, 'rect');
+        pill = document.createElementNS(ns, 'rect');
         pill.setAttribute('x', String(Math.round(lbl.x)));
         pill.setAttribute('y', String(Math.round(lbl.y)));
         pill.setAttribute('width', String(Math.round(lbl.w)));
@@ -6258,7 +6366,7 @@ const RICH_CLIENT = String.raw`
         pill.setAttribute('fill', 'rgba(9, 25, 44, 0.88)');
         g.appendChild(pill);
 
-        var txt = document.createElementNS(ns, 'text');
+        txt = document.createElementNS(ns, 'text');
         txt.setAttribute('x', String(lbl.anchorX));
         txt.setAttribute('y', String(lbl.anchorY));
         var anchor = lbl.textAlign === 'right' ? 'end' : (lbl.textAlign === 'center' ? 'middle' : 'start');
@@ -6270,9 +6378,11 @@ const RICH_CLIENT = String.raw`
         txt.textContent = pn.shortLabel;
         g.appendChild(txt);
       }
-      svgEl.appendChild(g);
+      nodeLayer.appendChild(g);
+      nodeRecords.push({ pn: pn, gEl: g, hitCircleEl: hitC, circleEl: c, pillEl: pill, txtEl: txt });
     });
 
+    var balloonDom = null;
     if (plate.balloonBox && balloonText) {
       var bb = plate.balloonBox;
       var shownBText = isCompactPlate ? middleTruncate(balloonText, 32) : balloonText;
@@ -6291,14 +6401,14 @@ const RICH_CLIENT = String.raw`
       bgShadow.setAttribute('x', String(bx + 3)); bgShadow.setAttribute('y', String(by + 3));
       bgShadow.setAttribute('width', String(bw)); bgShadow.setAttribute('height', String(bh));
       bgShadow.setAttribute('fill', '#121212');
-      svgEl.appendChild(bgShadow);
+      balloonLayer.appendChild(bgShadow);
 
       var tail = document.createElementNS(ns, 'polygon');
       tail.setAttribute('points', (tailBaseX - 6) + ',' + tailBaseY + ' ' + (tailBaseX + 6) + ',' + tailBaseY + ' ' + ax + ',' + (ay - 4));
       tail.setAttribute('fill', '#fffef9');
       tail.setAttribute('stroke', '#121212');
       tail.setAttribute('stroke-width', '2');
-      svgEl.appendChild(tail);
+      balloonLayer.appendChild(tail);
 
       var box = document.createElementNS(ns, 'rect');
       box.setAttribute('x', String(bx)); box.setAttribute('y', String(by));
@@ -6306,7 +6416,7 @@ const RICH_CLIENT = String.raw`
       box.setAttribute('fill', '#fffef9');
       box.setAttribute('stroke', '#121212');
       box.setAttribute('stroke-width', '2.5');
-      svgEl.appendChild(box);
+      balloonLayer.appendChild(box);
 
       var pin = document.createElementNS(ns, 'circle');
       pin.setAttribute('cx', String(ax)); pin.setAttribute('cy', String(ay));
@@ -6314,7 +6424,7 @@ const RICH_CLIENT = String.raw`
       pin.setAttribute('fill', '#fffef9');
       pin.setAttribute('stroke', '#121212');
       pin.setAttribute('stroke-width', '1.8');
-      svgEl.appendChild(pin);
+      balloonLayer.appendChild(pin);
 
       var bTxt = document.createElementNS(ns, 'text');
       bTxt.setAttribute('x', String(bx + bw / 2));
@@ -6325,8 +6435,252 @@ const RICH_CLIENT = String.raw`
       bTxt.setAttribute('font-size', isCompactPlate ? '12.5' : '12');
       bTxt.setAttribute('font-weight', '700');
       bTxt.textContent = shownBText;
-      svgEl.appendChild(bTxt);
+      balloonLayer.appendChild(bTxt);
+
+      balloonDom = { bx: bx, by: by, bw: bw, bh: bh, tailEl: tail, pinEl: pin };
     }
+
+    function syncPlateDom() {
+      var curVb = plate._viewBox;
+      svgEl.setAttribute('viewBox', curVb.x.toFixed(1) + ' ' + curVb.y.toFixed(1) + ' ' + curVb.w.toFixed(1) + ' ' + curVb.h.toFixed(1));
+      edgeRecords.forEach(function (er) {
+        var pe = er.pe;
+        if (er.haloEl) {
+          er.haloEl.setAttribute('x1', String(pe.x1)); er.haloEl.setAttribute('y1', String(pe.y1));
+          er.haloEl.setAttribute('x2', String(pe.x2)); er.haloEl.setAttribute('y2', String(pe.y2));
+        }
+        er.lineEl.setAttribute('x1', String(pe.x1)); er.lineEl.setAttribute('y1', String(pe.y1));
+        er.lineEl.setAttribute('x2', String(pe.x2)); er.lineEl.setAttribute('y2', String(pe.y2));
+        er.hitEl.setAttribute('x1', String(pe.x1)); er.hitEl.setAttribute('y1', String(pe.y1));
+        er.hitEl.setAttribute('x2', String(pe.x2)); er.hitEl.setAttribute('y2', String(pe.y2));
+      });
+      nodeRecords.forEach(function (nr) {
+        var pn = nr.pn;
+        nr.hitCircleEl.setAttribute('cx', String(pn.x)); nr.hitCircleEl.setAttribute('cy', String(pn.y));
+        nr.circleEl.setAttribute('cx', String(pn.x)); nr.circleEl.setAttribute('cy', String(pn.y));
+        if (pn.label && nr.pillEl && nr.txtEl) {
+          nr.pillEl.setAttribute('x', String(Math.round(pn.label.x)));
+          nr.pillEl.setAttribute('y', String(Math.round(pn.label.y)));
+          nr.txtEl.setAttribute('x', String(Math.round(pn.label.anchorX)));
+          nr.txtEl.setAttribute('y', String(Math.round(pn.label.anchorY)));
+        }
+      });
+      if (balloonDom && plate.balloonTarget) {
+        var ax = plate.balloonTarget.x, ay = plate.balloonTarget.y;
+        var tbx = Math.max(balloonDom.bx + 20, Math.min(balloonDom.bx + balloonDom.bw - 20, ax));
+        var tby = balloonDom.by + balloonDom.bh;
+        balloonDom.tailEl.setAttribute('points', (tbx - 6) + ',' + tby + ' ' + (tbx + 6) + ',' + tby + ' ' + ax + ',' + (ay - 4));
+        balloonDom.pinEl.setAttribute('cx', String(ax));
+        balloonDom.pinEl.setAttribute('cy', String(ay));
+      }
+      if (plateOpts && typeof plateOpts.onDirtyChange === 'function') {
+        plateOpts.onDirtyChange(Boolean(plate._dirty));
+      }
+    }
+
+    function resetPlateLayout() {
+      if (plate._initialNodes) {
+        plate._initialNodes.forEach(function (initN, idx) {
+          var pn = plate.nodes[idx];
+          if (!pn) return;
+          pn.x = initN.x;
+          pn.y = initN.y;
+          if (pn.label && initN.label) {
+            pn.label.x = initN.label.x;
+            pn.label.y = initN.label.y;
+            pn.label.anchorX = initN.label.anchorX;
+            pn.label.anchorY = initN.label.anchorY;
+          }
+        });
+      }
+      if (plate._initialEdges) {
+        plate._initialEdges.forEach(function (initE, idx) {
+          var pe = plate.edges[idx];
+          if (!pe) return;
+          pe.x1 = initE.x1; pe.y1 = initE.y1;
+          pe.x2 = initE.x2; pe.y2 = initE.y2;
+        });
+      }
+      if (plate._initialBalloonTarget && plate.balloonTarget) {
+        plate.balloonTarget.x = plate._initialBalloonTarget.x;
+        plate.balloonTarget.y = plate._initialBalloonTarget.y;
+      }
+      plate._viewBox = { x: 0, y: 0, w: w, h: h };
+      plate._dirty = false;
+      nodeRecords.forEach(function (nr) {
+        if (nr.gEl.parentNode === nodeLayer) nodeLayer.appendChild(nr.gEl);
+      });
+      syncPlateDom();
+    }
+
+    svgEl._resetPlateLayout = resetPlateLayout;
+
+    function clientToSvg(clientX, clientY) {
+      var rect = svgEl.getBoundingClientRect();
+      var curVb = plate._viewBox;
+      return {
+        x: curVb.x + ((clientX - rect.left) / Math.max(1, rect.width)) * curVb.w,
+        y: curVb.y + ((clientY - rect.top) / Math.max(1, rect.height)) * curVb.h
+      };
+    }
+
+    var plateDrag = null;
+    svgEl.addEventListener('pointerdown', function (ev) {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      var target = ev.target;
+      var foundNodeRec = null;
+      for (var ni = 0; ni < nodeRecords.length; ni++) {
+        if (nodeRecords[ni].gEl === target || nodeRecords[ni].gEl.contains(target)) {
+          foundNodeRec = nodeRecords[ni];
+          break;
+        }
+      }
+      var foundEdgeRec = null;
+      if (!foundNodeRec) {
+        for (var ei = 0; ei < edgeRecords.length; ei++) {
+          if (edgeRecords[ei].hitEl === target || edgeRecords[ei].lineEl === target || edgeRecords[ei].haloEl === target) {
+            foundEdgeRec = edgeRecords[ei];
+            break;
+          }
+        }
+      }
+      var startSvg = clientToSvg(ev.clientX, ev.clientY);
+      if (foundNodeRec) {
+        var pn = foundNodeRec.pn;
+        plateDrag = {
+          mode: 'node',
+          pointerId: ev.pointerId,
+          nodeRec: foundNodeRec,
+          startClientX: ev.clientX,
+          startClientY: ev.clientY,
+          startSvg: startSvg,
+          origX: pn.x,
+          origY: pn.y,
+          origLabel: pn.label
+            ? {
+                x: pn.label.x,
+                y: pn.label.y,
+                anchorX: pn.label.anchorX,
+                anchorY: pn.label.anchorY
+              }
+            : null,
+          moved: false
+        };
+        foundNodeRec.gEl.classList.add('is-dragging');
+        if (foundNodeRec.gEl.parentNode === nodeLayer) {
+          nodeLayer.appendChild(foundNodeRec.gEl);
+        }
+      } else {
+        plateDrag = {
+          mode: 'pan',
+          pointerId: ev.pointerId,
+          edgeRec: foundEdgeRec,
+          startClientX: ev.clientX,
+          startClientY: ev.clientY,
+          origVbX: plate._viewBox.x,
+          origVbY: plate._viewBox.y,
+          moved: false
+        };
+        svgEl.classList.add('is-panning');
+      }
+      try {
+        if (typeof svgEl.setPointerCapture === 'function') svgEl.setPointerCapture(ev.pointerId);
+      } catch (_) {}
+    });
+
+    svgEl.addEventListener('pointermove', function (ev) {
+      if (!plateDrag || plateDrag.pointerId !== ev.pointerId) return;
+      var distPx = Math.hypot(ev.clientX - plateDrag.startClientX, ev.clientY - plateDrag.startClientY);
+      if (distPx > 3) plateDrag.moved = true;
+      if (!plateDrag.moved) return;
+
+      if (plateDrag.mode === 'node') {
+        var curSvg = clientToSvg(ev.clientX, ev.clientY);
+        var dx = curSvg.x - plateDrag.startSvg.x;
+        var dy = curSvg.y - plateDrag.startSvg.y;
+        var pn = plateDrag.nodeRec.pn;
+        pn.x = Math.round(plateDrag.origX + dx);
+        pn.y = Math.round(plateDrag.origY + dy);
+        if (pn.label && plateDrag.origLabel) {
+          pn.label.x = Math.round(plateDrag.origLabel.x + dx);
+          pn.label.y = Math.round(plateDrag.origLabel.y + dy);
+          pn.label.anchorX = Math.round(plateDrag.origLabel.anchorX + dx);
+          pn.label.anchorY = Math.round(plateDrag.origLabel.anchorY + dy);
+        }
+        edgeRecords.forEach(function (er) {
+          var pe = er.pe;
+          var touched = false;
+          if (pe.sourceNodeIndex === pn.nodeIndex) {
+            pe.x1 = pn.x; pe.y1 = pn.y; touched = true;
+          }
+          if (pe.targetNodeIndex === pn.nodeIndex) {
+            pe.x2 = pn.x; pe.y2 = pn.y; touched = true;
+          }
+          if (touched && pe.isLeadEdge && plate.balloonTarget) {
+            plate.balloonTarget.x = Math.round((pe.x1 + pe.x2) / 2);
+            plate.balloonTarget.y = Math.round((pe.y1 + pe.y2) / 2);
+          }
+        });
+        plate._dirty = true;
+        syncPlateDom();
+      } else {
+        var rect = svgEl.getBoundingClientRect();
+        var curVb = plate._viewBox;
+        curVb.x = plateDrag.origVbX - ((ev.clientX - plateDrag.startClientX) / Math.max(1, rect.width)) * curVb.w;
+        curVb.y = plateDrag.origVbY - ((ev.clientY - plateDrag.startClientY) / Math.max(1, rect.height)) * curVb.h;
+        plate._dirty = true;
+        syncPlateDom();
+      }
+    });
+
+    function finishPlateDrag(ev) {
+      if (!plateDrag || (ev && ev.pointerId !== undefined && plateDrag.pointerId !== ev.pointerId)) return;
+      var wasMoved = plateDrag.moved;
+      var mode = plateDrag.mode;
+      var nodeRec = plateDrag.nodeRec;
+      var edgeRec = plateDrag.edgeRec;
+      if (nodeRec) nodeRec.gEl.classList.remove('is-dragging');
+      svgEl.classList.remove('is-panning');
+      try {
+        if (ev && typeof svgEl.releasePointerCapture === 'function') svgEl.releasePointerCapture(ev.pointerId);
+      } catch (_) {}
+      plateDrag = null;
+      if (!wasMoved && ev && ev.type === 'pointerup' && plateOpts) {
+        if (mode === 'node' && nodeRec && typeof plateOpts.onSelectNode === 'function') {
+          plateOpts.onSelectNode(nodeRec.pn.nodeIndex);
+        } else if (edgeRec && typeof plateOpts.onSelectEdge === 'function') {
+          plateOpts.onSelectEdge(edgeRec.pe.edgeIndex);
+        }
+      }
+    }
+
+    svgEl.addEventListener('pointerup', finishPlateDrag);
+    svgEl.addEventListener('pointercancel', finishPlateDrag);
+    svgEl.addEventListener('lostpointercapture', finishPlateDrag);
+
+    svgEl.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      var rect = svgEl.getBoundingClientRect();
+      var curVb = plate._viewBox;
+      var rx = (ev.clientX - rect.left) / Math.max(1, rect.width);
+      var ry = (ev.clientY - rect.top) / Math.max(1, rect.height);
+      var worldX = curVb.x + rx * curVb.w;
+      var worldY = curVb.y + ry * curVb.h;
+      var zoomFactor = Math.exp(ev.deltaY * 0.0014);
+      var nextW = Math.max(w * 0.3, Math.min(w * 1.75, curVb.w * zoomFactor));
+      var nextH = (nextW / w) * h;
+      curVb.w = nextW;
+      curVb.h = nextH;
+      curVb.x = worldX - rx * nextW;
+      curVb.y = worldY - ry * nextH;
+      plate._dirty = true;
+      syncPlateDom();
+    }, { passive: false });
+
+    svgEl.addEventListener('dblclick', function (ev) {
+      ev.preventDefault();
+      resetPlateLayout();
+    });
   }
 
   function buildPairRankedRowFromEdge(edgeObj, findingId) {
@@ -6661,9 +7015,14 @@ const RICH_CLIENT = String.raw`
 
     var plateObj = null;
     var bText = '';
+    var visMaskKey = ['ghost', 'unknown', 'indirect', 'direct', 'test'].map(function (k) { return visible[k] ? '1' : '0'; }).join('');
+    var plateCacheKey = (activeFamilyEntry ? 'fam:' + activeFamilyEntry.familyIndex + ':' + activeEdge.idx : 'edge:' + activeEdge.idx) + ':' + (isMobileViewport ? 'm' : 'd') + ':' + visMaskKey;
     if (usePrebuiltLeadCopy && !isMobileViewport) {
       plateObj = featuredPayload.plate;
       bText = featuredPayload.balloonText;
+    } else if (dynamicPlateCache[plateCacheKey]) {
+      plateObj = dynamicPlateCache[plateCacheKey].plate;
+      bText = dynamicPlateCache[plateCacheKey].bText;
     } else if (activeFamilyEntry) {
       var famNodes = [];
       var famEdgeSet = Object.create(null);
@@ -6682,14 +7041,55 @@ const RICH_CLIENT = String.raw`
       famEdgeSet[activeEdge.idx] = true;
       plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, isMobileViewport);
       bText = (!familyFilteredToSubset && activeFamilyEntry.balloonText) ? activeFamilyEntry.balloonText : plateObj.balloonText;
+      dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     } else {
       var pairSeedNodes = forwardFirst ? [activeEdge.s, activeEdge.t] : [activeEdge.t, activeEdge.s];
       var pairFeatSet = Object.create(null);
       pairFeatSet[activeEdge.idx] = true;
       plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, isMobileViewport);
       bText = usePrebuiltLeadCopy ? featuredPayload.balloonText : plateObj.balloonText;
+      dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     }
-    renderPlateSvg(svg, plateObj, bText);
+
+    var resetPlateBtn = el('button', 'f12-plate-reset-btn', 'Reset plate');
+    resetPlateBtn.type = 'button';
+    resetPlateBtn.id = 'reset-plate-btn';
+    resetPlateBtn.hidden = !plateObj._dirty;
+    resetPlateBtn.addEventListener('click', function () {
+      if (typeof svg._resetPlateLayout === 'function') svg._resetPlateLayout();
+      if (h2 && typeof h2.focus === 'function') h2.focus();
+    });
+
+    renderPlateSvg(svg, plateObj, bText, {
+      onDirtyChange: function (isDirty) {
+        resetPlateBtn.hidden = !isDirty;
+      },
+      onSelectEdge: function (edgeIdx) {
+        if (typeof edgeIdx === 'number' && edges[edgeIdx]) {
+          if (!activeFamilyEntry && edgeIdx === activeEdge.idx) return;
+          selectBriefingEdge(edgeIdx);
+        }
+      },
+      onSelectNode: function (nodeIdx) {
+        if (typeof nodeIdx !== 'number' || !plateObj.edges) return;
+        var incident = plateObj.edges.filter(function (pe) {
+          return (pe.sourceNodeIndex === nodeIdx || pe.targetNodeIndex === nodeIdx) &&
+                 edges[pe.edgeIndex] && visible[edges[pe.edgeIndex].d.relationship];
+        });
+        if (incident.length === 0) return;
+        incident.sort(function (a, b) {
+          var ea = edges[a.edgeIndex], eb = edges[b.edgeIndex];
+          var aDiff = a.edgeIndex !== activeEdge.idx ? 1 : 0;
+          var bDiff = b.edgeIndex !== activeEdge.idx ? 1 : 0;
+          var aGhost = ea.d.relationship === 'ghost' ? 1 : 0;
+          var bGhost = eb.d.relationship === 'ghost' ? 1 : 0;
+          return (bGhost - aGhost) || (bDiff - aDiff) || (eb.d.overviewPriority - ea.d.overviewPriority) || (eb.d.score - ea.d.score);
+        });
+        var nextEdgeIdx = incident[0].edgeIndex;
+        if (!activeFamilyEntry && nextEdgeIdx === activeEdge.idx) return;
+        selectBriefingEdge(nextEdgeIdx);
+      }
+    });
     plateWrap.appendChild(svg);
 
     var plateFooter = el('div', 'f12-plate-footer');
@@ -6700,7 +7100,10 @@ const RICH_CLIENT = String.raw`
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2500\u2500 Import (solid)'));
     plateFooter.appendChild(plateLegend);
     var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
-    plateFooter.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)'));
+    var footerRight = el('div', 'f12-plate-footer-right');
+    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component) \u00b7 Drag files to move'));
+    footerRight.appendChild(resetPlateBtn);
+    plateFooter.appendChild(footerRight);
     plateWrap.appendChild(plateFooter);
     cut01.appendChild(plateWrap);
     grid.appendChild(cut01);
