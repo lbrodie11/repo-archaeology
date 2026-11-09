@@ -659,6 +659,12 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         const gw = document.getElementById('glossary-ghost-wire') as HTMLDetailsElement | null;
         const glossaryItems = document.querySelectorAll('#field-guide-details .f12-glossary-item[name="f12-glossary"]');
         const readingEl = document.getElementById('reading-this-finding') as HTMLDetailsElement | null;
+        const readingSummaryText = readingEl?.querySelector('summary')?.textContent ?? '';
+        const readingOpenBeforeClick = Boolean(readingEl?.open);
+        readingEl?.querySelector('summary')?.click();
+        const readingOpenAfterClick = Boolean(readingEl?.open);
+        const dirHelpBtn = document.querySelector('#cut-c05 button[popovertarget="help-directional-pct"]') as HTMLButtonElement | null;
+        const ciHelpBtn = document.querySelector('#cut-c05 button[popovertarget="help-confidence-range"]') as HTMLButtonElement | null;
         const aboutEl = document.getElementById('about-this-analysis');
         const footerEl = document.querySelector('.f12-report-footer');
         const rootPath = JSON.parse(document.getElementById('ra-data')!.textContent!).meta.root;
@@ -667,8 +673,14 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
           fgOpen: Boolean(fg?.open),
           gwOpen: Boolean(gw?.open),
           glossaryCount: glossaryItems.length,
-          readingOpen: Boolean(readingEl?.open),
+          readingSummaryText,
+          readingOpenBeforeClick,
+          readingOpenAfterClick,
           readingText: readingEl?.textContent ?? '',
+          dirHelpText: dirHelpBtn?.textContent ?? '',
+          dirHelpAria: dirHelpBtn?.getAttribute('aria-label') ?? '',
+          ciHelpText: ciHelpBtn?.textContent ?? '',
+          ciHelpAria: ciHelpBtn?.getAttribute('aria-label') ?? '',
           hasAbout: Boolean(aboutEl),
           hasFooter: Boolean(footerEl && (footerEl.textContent ?? '').includes('Repo Archaeology')),
           leaksRootInVisibleText: Boolean(rootPath && visibleText.includes(rootPath)),
@@ -677,10 +689,25 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       assert.equal(fieldGuideCheck.fgOpen, true, 'Expected #field-guide-details to open when clicking Open in Field Guide');
       assert.equal(fieldGuideCheck.gwOpen, true, 'Expected #glossary-ghost-wire to open when clicking Open in Field Guide');
       assert.equal(fieldGuideCheck.glossaryCount, 12, 'Expected 12 native <details name="f12-glossary"> glossary items');
-      assert.equal(fieldGuideCheck.readingOpen, true, 'Expected #reading-this-finding worked explanation to be present and open');
+      assert.equal(fieldGuideCheck.readingOpenBeforeClick, false, 'Expected #reading-this-finding to start collapsed with 1-line summary');
+      assert.ok(
+        fieldGuideCheck.readingSummaryText.includes('is historical co-change, not proof'),
+        `Expected #reading-this-finding <summary> to show 1-line interpretation, got: ${fieldGuideCheck.readingSummaryText}`,
+      );
+      assert.equal(fieldGuideCheck.readingOpenAfterClick, true, 'Expected #reading-this-finding to expand on summary click');
       assert.ok(
         fieldGuideCheck.readingText.includes('Does that mean') && fieldGuideCheck.readingText.includes('What should I inspect next?'),
         'Expected #reading-this-finding to include worked 3-stage explanation',
+      );
+      assert.equal(fieldGuideCheck.dirHelpText, '% asymmetry ?', 'Expected E-01 directional help pill to show visible label');
+      assert.ok(
+        fieldGuideCheck.dirHelpAria.startsWith('% asymmetry ?'),
+        `Expected E-01 directional help pill aria-label to start with visible text (WCAG 2.5.3), got: ${fieldGuideCheck.dirHelpAria}`,
+      );
+      assert.equal(fieldGuideCheck.ciHelpText, '95% range ?', 'Expected E-01 Wilson CI help pill to show visible label');
+      assert.ok(
+        fieldGuideCheck.ciHelpAria.startsWith('95% range ?'),
+        `Expected E-01 Wilson CI help pill aria-label to start with visible text (WCAG 2.5.3), got: ${fieldGuideCheck.ciHelpAria}`,
       );
       assert.equal(fieldGuideCheck.hasAbout, true, 'Expected #about-this-analysis section in Briefing mode');
       assert.equal(fieldGuideCheck.hasFooter, true, 'Expected subtle .f12-report-footer with tool attribution');
@@ -1014,7 +1041,23 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         `Expected fallback explainCommand to shell-quote paths with spaces/single quotes, got: ${grammarAndSanitization.cliCodeText}`,
       );
 
-      // Verify clicking a non-default family row in Ranked Findings opens that specific family's headline & evidence
+      // Also verify classic map shell-quotes fallback explainCommand on paths with spaces and single quotes
+      const gClassicHtml = renderMapHtml(gData, computeLayout(gData, { style: 'classic' }), { style: 'classic' });
+      const gClassicPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await gClassicPage.setContent(gClassicHtml, { waitUntil: 'domcontentloaded' });
+      await gClassicPage.locator('.card.interactive').first().click();
+      const classicFallbackCmd = await gClassicPage.locator('.cli-box code').textContent();
+      assert.ok(
+        (classicFallbackCmd ?? '').includes("'src/e/my dir/it'\\''s-5.ts'"),
+        `Expected classic map fallbackExplainCommand to shell-quote paths with spaces and single quotes, got: ${classicFallbackCmd}`,
+      );
+      await gClassicPage.close();
+
+      // Verify:
+      // 1) clicking a non-default family row in Ranked Findings opens that specific family and preserves keyboard focus
+      // 2) Briefing <-> Atlas selection sync works in both directions
+      // 3) mixed-family filtering keeps a family when >= 2 member edges remain visible after toggling off Ghost wires
+      // 4) #f=<from>..<to> deep link to an Unchecked edge auto-enables the Unchecked filter
       gData.families = [
         {
           id: 'src/adapter/*/serve-static',
@@ -1034,13 +1077,13 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
           qualifyingPairs: 3,
           possiblePairs: 3,
           complete: true,
-          relationshipKinds: ['ghost'],
+          relationshipKinds: ['ghost', 'direct'],
           peakScore: 2.5,
           maxPairShared: 9,
           evidence: [],
           allMemberEvidence: [],
           nodeIndices: [0, 1, 2],
-          edgeIndices: [0, 1],
+          edgeIndices: [0, 1, 2],
           overviewPriority: 2,
         },
         {
@@ -1074,13 +1117,87 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       const famHtml = renderMapHtml(gData, computeRichLayout(gData), { style: 'rich' });
       await gPage.setContent(famHtml, { waitUntil: 'domcontentloaded' });
       await gPage.waitForTimeout(40);
-      await gPage.locator('#ranked-findings-list .f12-rank-row', { hasText: 'src/router/*' }).click();
+
+      // 1) Focus and activate the non-default family row in Ranked Findings and verify focus is preserved on the rebuilt row
+      const routerRow = gPage.locator('#ranked-findings-list .f12-rank-row', { hasText: 'src/router/*' });
+      await routerRow.focus();
+      await routerRow.click();
       await gPage.waitForTimeout(30);
-      const selectedFamilyHeadline = await gPage.locator('#briefing-headline').textContent();
+      const focusAndFamilyCheck = await gPage.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          activeClass: active?.className ?? '',
+          activeText: active?.textContent ?? '',
+        };
+      });
       assert.equal(
-        selectedFamilyHeadline,
+        focusAndFamilyCheck.headline,
         '3 files across src/router/* keep changing together',
         'Expected clicking non-default family row in Ranked Findings to open that specific family',
+      );
+      assert.ok(
+        focusAndFamilyCheck.activeClass.includes('f12-rank-row') && focusAndFamilyCheck.activeText.includes('src/router/*'),
+        `Expected keyboard focus to remain on the rebuilt .f12-rank-row for src/router/*, got: ${focusAndFamilyCheck.activeClass} (${focusAndFamilyCheck.activeText})`,
+      );
+
+      // 2) Switch to Atlas and verify the selected family is synchronized into the Atlas side panel
+      await gPage.locator('#view-atlas').click();
+      await gPage.waitForTimeout(30);
+      const atlasPanelText = await gPage.locator('#panel').textContent();
+      assert.ok(
+        (atlasPanelText ?? '').includes('router.ts across src/router/*'),
+        `Expected Briefing family selection to sync into Atlas side panel, got: ${atlasPanelText}`,
+      );
+
+      // Switch back to Briefing and test mixed-family filtering when Ghost wires is toggled off
+      await gPage.locator('#view-briefing').click();
+      await gPage.waitForTimeout(30);
+      await gPage.locator('#toggles .toggle[data-kind="ghost"]').click();
+      await gPage.waitForTimeout(30);
+      const mixedFamilyAfterGhostOff = await gPage.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#ranked-findings-list .f12-rank-row')).map((r) => r.textContent ?? '');
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          hasAdapterFamily: rows.some((t) => t.includes('src/adapter/*')),
+          hasRouterFamily: rows.some((t) => t.includes('src/router/*')),
+        };
+      });
+      assert.equal(
+        mixedFamilyAfterGhostOff.hasAdapterFamily,
+        true,
+        'Expected mixed family (2 direct edges + 1 ghost edge) to remain visible when Ghost wires is toggled off',
+      );
+      assert.equal(
+        mixedFamilyAfterGhostOff.hasRouterFamily,
+        false,
+        'Expected family with < 2 visible edges to be filtered out when Ghost wires is toggled off',
+      );
+
+      // 4) Navigate via #f=<from>..<to> to an Unchecked edge (while Unchecked is off) and verify it auto-enables Unchecked and renders in C-01
+      await gPage.evaluate(() => {
+        window.location.hash = '#f=src%2Fb%2Ffile-2.ts..src%2Ff%2Ffile-6.ts';
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      });
+      await gPage.waitForTimeout(40);
+      const uncheckedDeepLinkCheck = await gPage.evaluate(() => {
+        const unknownBtn = document.querySelector('#toggles .toggle[data-kind="unknown"]');
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          unknownPressed: unknownBtn?.getAttribute('aria-pressed'),
+          unknownHasOffClass: unknownBtn?.classList.contains('off'),
+        };
+      });
+      assert.equal(
+        uncheckedDeepLinkCheck.unknownPressed,
+        'true',
+        'Expected #f= deep link to an unchecked edge to auto-enable the Unchecked filter toggle',
+      );
+      assert.equal(uncheckedDeepLinkCheck.unknownHasOffClass, false);
+      assert.equal(
+        uncheckedDeepLinkCheck.headline,
+        'file-2.ts and file-6.ts keep changing together',
+        'Expected #f= deep link to an unchecked edge to display that finding in C-01',
       );
 
       await gPage.close();

@@ -81,6 +81,8 @@ interface FamilyBriefingPayload {
   findingId: string;
   edgeIndex: number;
   relationship: Relationship;
+  relationshipKinds: Relationship[];
+  edgeIndices: number[];
   kickerChip: string;
   kickerTag: string;
   lastTogether: string;
@@ -97,6 +99,7 @@ interface BriefingDataPayload {
   emptyState: (EmptyStateCopy & { suggestedCommand: string; plate: FeaturedPlateLayout }) | null;
   featured: {
     kind: 'family' | 'pair';
+    isFamily: boolean;
     edgeIndex: number;
     familyIndex?: number;
     familyId?: string;
@@ -233,12 +236,18 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     });
     const famHasGhost =
       Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.includes('ghost');
+    const famRelKinds: Relationship[] =
+      Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.length > 0
+        ? [...fam.relationshipKinds]
+        : [famLeadEdge.relationship];
     familiesPayload.push({
       familyIndex: famIdx,
       familyId: fam.id,
       findingId: famFindingId,
       edgeIndex: famLeadEdgeIdx,
       relationship: famHasGhost ? 'ghost' : famLeadEdge.relationship,
+      relationshipKinds: famRelKinds,
+      edgeIndices: [...validEdgeIndices],
       kickerChip:
         featured.kind === 'family' && featured.familyIndex === famIdx
           ? KICKER_MOST_INTERESTING
@@ -337,6 +346,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     emptyState: null,
     featured: {
       kind: featured.kind,
+      isFamily: featured.kind === 'family',
       edgeIndex: leadEdgeIndex,
       ...(featured.kind === 'family'
         ? { familyIndex: featured.familyIndex, familyId: featured.family.id }
@@ -1484,6 +1494,7 @@ const CLIENT = String.raw`
 
   function resolveActiveFamilyView(sel) {
     if (!sel) return null;
+    if (sel._isFallbackView) return sel;
     var baseFam = sel.family || sel;
     var views = getActiveFamilyViews(baseFam);
     if (views.length === 0) return null;
@@ -2723,13 +2734,15 @@ const CLIENT = String.raw`
 
     var p2 = el('p');
     if (e.d.relationship === 'ghost') {
-      p2.textContent = 'No direct or supported indirect import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+      p2.textContent = 'No direct or one-step-removed import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
     } else if (e.d.relationship === 'indirect') {
-      p2.textContent = 'Connected indirectly through intermediate files in the dependency tree.';
+      p2.textContent = 'Connected indirectly (one step removed through an intermediate file) in the dependency tree.';
     } else if (e.d.relationship === 'direct') {
       p2.textContent = 'Connected by a direct import link in the current codebase.';
     } else if (e.d.relationship === 'test') {
-      p2.textContent = 'Recognized test and implementation pair.';
+      p2.textContent = String(e.d.why || '').trim().toLowerCase() === 'both are tests'
+        ? 'Both files are test files that have moved together in ' + plural(e.d.shared, 'shared commit') + '.'
+        : 'Test file that repeatedly changes alongside this code (' + plural(e.d.shared, 'shared commit') + ').';
     } else {
       p2.textContent = 'Import relationship status could not be fully verified from static imports.';
     }
@@ -3228,7 +3241,7 @@ canvas.pointing { cursor: pointer; }
 .f12-help-more-btn { margin-top: 8px; padding: 4px 9px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
 .f12-help-more-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
 .f12-reading-finding { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; min-width: 0; }
-.f12-reading-finding > summary { cursor: pointer; font: 800 11px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-reading-finding > summary { cursor: pointer; font: 700 11.5px/1.38 var(--f-font-mono); letter-spacing: 0.01em; color: var(--f-ink); overflow-wrap: anywhere; }
 .f12-reading-body { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--f-rule); padding-top: 7px; }
 .f12-reading-item { font: 400 12.5px/1.45 var(--f-font-body); color: var(--f-ink-2); overflow-wrap: anywhere; }
 .f12-reading-item strong { display: block; font: 700 11.5px/1.3 var(--f-font-mono); color: var(--f-ink); margin-bottom: 2px; }
@@ -3242,6 +3255,7 @@ canvas.pointing { cursor: pointer; }
 .f12-mode-btn[aria-pressed="true"] { background: var(--f-ink); color: var(--f-sheet); }
 
 .f12-help-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; width: 24px; height: 24px; padding: 0; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 800 11.5px/1 var(--f-font-mono); cursor: pointer; flex-shrink: 0; }
+.f12-help-btn.f12-help-pill { width: auto; padding: 0 7px; gap: 4px; font-size: 10.5px; letter-spacing: 0.02em; }
 .f12-help-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
 .f12-help-popover { display: none; position: fixed; inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 80; width: min(440px, 92vw); max-height: 80vh; overflow-y: auto; margin: 0; padding: 14px 16px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); box-shadow: var(--f-shadow-sheet); }
 .f12-help-popover:is(:popover-open, .\:popover-open) { display: block; }
@@ -3264,7 +3278,7 @@ canvas.pointing { cursor: pointer; }
 .f12-board-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--f-gutter-scene); align-items: stretch; }
 .f12-cut-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .f12-cut-c01 { grid-column: span 7; }
-.f12-cut-c05 { grid-column: span 5; }
+.f12-cut-c05 { grid-column: span 5; gap: 12px; }
 .f12-cut-label { position: absolute; top: -10px; left: 12px; padding: 1px 6px; background: var(--f-sheet); border: 1.5px solid var(--f-rule); font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.06em; color: var(--f-ink); text-transform: uppercase; }
 
 .f12-kicker-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
@@ -3823,11 +3837,27 @@ const RICH_CLIENT = String.raw`
   function isActive(n) { return Boolean(n.active); }
 
   var toggles = document.getElementById('toggles');
+  function ensureRelationshipVisible(rel) {
+    if (!rel || visible[rel]) return;
+    visible[rel] = true;
+    if (toggles) {
+      var btns = toggles.querySelectorAll('.toggle[data-kind]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute('data-kind') === rel) {
+          btns[i].classList.remove('off');
+          btns[i].setAttribute('aria-pressed', 'true');
+        }
+      }
+    }
+    syncActiveNodes();
+    updateSummary();
+  }
   ORDER.forEach(function (kind) {
     var shown = edges.filter(function (e) { return e.d.relationship === kind; }).length;
     if (shown === 0 && !hasKindInData(kind)) return;
-    var b = el('button', 'toggle');
+    var b = el('button', 'toggle' + (visible[kind] ? '' : ' off'));
     b.type = 'button';
+    b.setAttribute('data-kind', kind);
     b.setAttribute('aria-pressed', String(visible[kind]));
     if (kind === 'unknown') b.title = 'Hidden by default when other links exist: import status could not be verified';
     b.appendChild(createSwatchSvg(kind));
@@ -3835,6 +3865,7 @@ const RICH_CLIENT = String.raw`
     b.appendChild(el('span', 'count', String(shown)));
     b.addEventListener('click', function () {
       visible[kind] = !visible[kind];
+      b.classList.toggle('off', !visible[kind]);
       b.setAttribute('aria-pressed', String(visible[kind]));
       syncActiveNodes();
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
@@ -4056,6 +4087,7 @@ const RICH_CLIENT = String.raw`
 
   function resolveActiveFamilyView(sel) {
     if (!sel) return null;
+    if (sel._isFallbackView) return sel;
     var baseFam = sel.family || sel;
     var views = getActiveFamilyViews(baseFam);
     if (views.length === 0) return null;
@@ -4779,6 +4811,9 @@ const RICH_CLIENT = String.raw`
       returnToFamily = prevView && prevView.edges.indexOf(e) >= 0 ? prevView : null;
     }
     selectedEdge = e; selectedNode = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    briefingSelectedEdgeIdx = e.idx;
+    briefingSelectedFamilyIdx = -1;
+    briefingUseDefaultFeatured = false;
     if (e.frame) flyToFrame(e.frame);
     else flyToNodes([e.s, e.t]);
     renderPanel(); requestDraw();
@@ -4787,6 +4822,24 @@ const RICH_CLIENT = String.raw`
     var view = resolveActiveFamilyView(fam);
     if (!view) return;
     selectedFamily = view; selectedNode = null; selectedEdge = null; returnToFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    if (briefingData && briefingData.families && view.d) {
+      var matchedFamIdx = -1;
+      for (var bfi = 0; bfi < briefingData.families.length; bfi++) {
+        if (briefingData.families[bfi].familyId === view.d.id) {
+          matchedFamIdx = bfi;
+          break;
+        }
+      }
+      if (matchedFamIdx >= 0) {
+        briefingSelectedFamilyIdx = matchedFamIdx;
+        briefingSelectedEdgeIdx = briefingData.families[matchedFamIdx].edgeIndex;
+        briefingUseDefaultFeatured = Boolean(
+          briefingData.featured &&
+          (briefingData.featured.isFamily || briefingData.featured.kind === 'family') &&
+          briefingData.featured.familyIndex === matchedFamIdx
+        );
+      }
+    }
     if (!keepExpandedPair) expandedFamilyPairKey = null;
     flyToNodes(view.nodes);
     renderPanel();
@@ -4798,6 +4851,11 @@ const RICH_CLIENT = String.raw`
   }
   function clearSelection() {
     selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
+    briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+    briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
+      ? briefingData.featured.familyIndex
+      : -1;
+    briefingSelectedEdgeIdx = briefingData && briefingData.featured ? briefingData.featured.edgeIndex : (edges[0] ? 0 : -1);
     renderPanel(); requestDraw();
   }
 
@@ -5367,13 +5425,15 @@ const RICH_CLIENT = String.raw`
     callout.appendChild(p1);
     var p2 = el('p');
     if (e.d.relationship === 'ghost') {
-      p2.textContent = 'No direct or supported indirect import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+      p2.textContent = 'No direct or one-step-removed import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
     } else if (e.d.relationship === 'indirect') {
-      p2.textContent = 'Connected indirectly through intermediate files in the dependency tree.';
+      p2.textContent = 'Connected indirectly (one step removed through an intermediate file) in the dependency tree.';
     } else if (e.d.relationship === 'direct') {
       p2.textContent = 'Connected by a direct import link in the current codebase.';
     } else if (e.d.relationship === 'test') {
-      p2.textContent = 'Recognized test and implementation pair.';
+      p2.textContent = String(e.d.why || '').trim().toLowerCase() === 'both are tests'
+        ? 'Both files are test files that have moved together in ' + plural(e.d.shared, 'shared commit') + '.'
+        : 'Test file that repeatedly changes alongside this code (' + plural(e.d.shared, 'shared commit') + ').';
     } else {
       p2.textContent = 'Import relationship status could not be fully verified from static imports.';
     }
@@ -5463,18 +5523,20 @@ const RICH_CLIENT = String.raw`
   }
   var viewMode = 'briefing';
   var briefingShowAllRanked = false;
+  var readingFindingOpen = false;
   var briefingSelectedEdgeIdx = briefingData && briefingData.featured ? briefingData.featured.edgeIndex : (edges[0] ? 0 : -1);
-  var briefingSelectedFamilyIdx = (briefingData && briefingData.featured && briefingData.featured.isFamily && typeof briefingData.featured.familyIndex === 'number')
+  var briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
     ? briefingData.featured.familyIndex
     : -1;
   var briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
 
-  function makeHelpBtn(popoverId, ariaLabel) {
-    var btn = el('button', 'f12-help-btn', '?');
+  function makeHelpBtn(popoverId, ariaLabel, visibleLabel) {
+    var btn = el('button', 'f12-help-btn' + (visibleLabel ? ' f12-help-pill' : ''), visibleLabel ? (visibleLabel + ' ?') : '?');
     btn.type = 'button';
     btn.setAttribute('popovertarget', popoverId);
-    btn.setAttribute('aria-label', ariaLabel);
-    btn.title = ariaLabel;
+    var fullLabel = visibleLabel ? (visibleLabel + ' ? \u2014 ' + ariaLabel) : ariaLabel;
+    btn.setAttribute('aria-label', fullLabel);
+    btn.title = fullLabel;
     btn.addEventListener('click', function (ev) {
       ev.stopPropagation();
       var pop = document.getElementById(popoverId);
@@ -5566,13 +5628,16 @@ const RICH_CLIENT = String.raw`
     var whatItDoesNotSayLabel = 'Does that mean ' + safeTo + ' needs changing now?';
     var relExp = '';
     if (d.relationship === 'ghost') {
-      relExp = 'This history does not establish a ' + pctVal + '% probability of a bug, a missing edit, or a runtime dependency. No direct or 2-hop static import link was detected between ' + safeFrom + ' and ' + safeTo + ' in current code\u2014this is a historical signal to investigate, not proof that your current change requires updating ' + safeTo + '.';
+      relExp = 'This history does not establish a ' + pctVal + '% probability of a bug, a missing edit, or a runtime dependency. No direct or one-step-removed static import link was detected between ' + safeFrom + ' and ' + safeTo + ' in current code\u2014this is a historical signal to investigate, not proof that your current change requires updating ' + safeTo + '.';
     } else if (d.relationship === 'unknown') {
       relExp = 'Static import analysis could not verify whether ' + safeFrom + ' and ' + safeTo + ' import each other (for example, non-JS/TS files, dynamic specifiers, or pairs beyond the import classification cap). "Unchecked" means import status is unknown\u2014not that an import link is absent\u2014and does not prove ' + safeTo + ' needs an update now.';
     } else if (d.relationship === 'indirect') {
-      relExp = 'These files are connected indirectly (1\u20132 hops through an intermediate module) in current code and have moved together historically, but that still does not guarantee every edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
+      relExp = 'These files are connected indirectly (one step removed through an intermediate module) in current code and have moved together historically, but that still does not guarantee every edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
     } else if (d.relationship === 'test') {
-      relExp = 'This is a recognized test and implementation pair. Historical co-change shows they are usually updated together, though internal refactors to ' + safeFrom + ' may not always require test changes in ' + safeTo + '.';
+      var isBothTests = String(d.why || '').trim().toLowerCase() === 'both are tests';
+      relExp = isBothTests
+        ? 'Both ' + safeFrom + ' and ' + safeTo + ' are test files that changed together in ' + d.shared + ' of ' + fromChanges + ' analyzed commits (' + pctVal + '%). Shared test edits often reflect fixture, helper, or suite-wide assertion updates rather than a direct runtime dependency, so check whether your current change affects shared test setup.'
+        : 'This links a test file and the code it exercises (' + d.shared + ' of ' + fromChanges + ' analyzed commits, ' + pctVal + '%). Behavioral changes to ' + safeFrom + ' usually require updating ' + safeTo + ', though internal refactors that preserve behavior may not.';
     } else {
       relExp = 'These files have a direct import link in current code, but historical co-change still does not prove that every isolated edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
     }
@@ -5588,8 +5653,12 @@ const RICH_CLIENT = String.raw`
     var whatToInspect = totalAlone > 0
       ? 'Review the ' + d.shared + ' shared commit receipts below alongside the ' + totalAlone + ' counterexample commit' + (totalAlone === 1 ? '' : 's') + ' where ' + safeFrom + ' (' + fromAlone + ') or ' + safeTo + ' (' + toAlone + ') changed alone. Check whether the historical co-changes resemble your current edit.'
       : 'Review the ' + d.shared + ' shared commit receipts below (neither file changed alone in the analyzed window) and run the CLI explain command to inspect the paired diff hunks.';
+    var summaryLine = isWeighted
+      ? 'Reading this finding \u00b7 ' + pctVal + '% weighted (' + d.shared + '/' + fromChanges + ' raw commits) is historical co-change, not proof \u2014 Explain these numbers \u25b8'
+      : 'Reading this finding \u00b7 ' + pctVal + '% (' + d.shared + '/' + fromChanges + ' commits) is historical co-change, not proof \u2014 Explain these numbers \u25b8';
     return {
       heading: 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS',
+      summaryLine: summaryLine,
       whatItSaysLabel: whatItSaysLabel,
       whatItSays: whatItSays,
       whatItDoesNotSayLabel: whatItDoesNotSayLabel,
@@ -5602,8 +5671,11 @@ const RICH_CLIENT = String.raw`
   function renderReadingFindingDisclosure(guide, idAttr) {
     var det = el('details', 'f12-reading-finding');
     if (idAttr) det.id = idAttr;
-    det.open = true;
-    det.appendChild(el('summary', '', guide.heading || 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS'));
+    det.open = readingFindingOpen;
+    det.addEventListener('toggle', function () {
+      readingFindingOpen = Boolean(det.open);
+    });
+    det.appendChild(el('summary', '', guide.summaryLine || guide.heading || 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS'));
     var body = el('div', 'f12-reading-body');
     var row1 = el('div', 'f12-reading-item');
     row1.appendChild(el('strong', '', guide.whatItSaysLabel));
@@ -5722,7 +5794,16 @@ const RICH_CLIENT = String.raw`
     }
     if (isAtlas) {
       resizeNow();
-      fitSheet();
+      if (selectedEdge) {
+        if (selectedEdge.frame) flyToFrame(selectedEdge.frame);
+        else flyToNodes([selectedEdge.s, selectedEdge.t]);
+      } else if (selectedFamily) {
+        var activeFamV = resolveActiveFamilyView(selectedFamily);
+        if (activeFamV) flyToNodes(activeFamV.nodes);
+        else fitSheet();
+      } else {
+        fitSheet();
+      }
       renderPanel();
       requestDraw();
     } else {
@@ -5744,12 +5825,36 @@ const RICH_CLIENT = String.raw`
     briefingSelectedEdgeIdx = famEntry.edgeIndex;
     briefingUseDefaultFeatured = Boolean(
       briefingData.featured &&
-      briefingData.featured.isFamily &&
+      (briefingData.featured.isFamily || briefingData.featured.kind === 'family') &&
       briefingData.featured.familyIndex === familyIdx
     );
-    selectedEdge = edges[famEntry.edgeIndex] || null;
+    selectedEdge = null;
     selectedNode = null;
-    selectedFamily = families[familyIdx] || null;
+    var famObj = families[familyIdx] || null;
+    var activeFamView = famObj ? resolveActiveFamilyView(famObj) : null;
+    if (!activeFamView && famObj) {
+      var visFamEdges = (famObj.edges || []).filter(isVisible);
+      activeFamView = {
+        id: famObj.d.id,
+        d: famObj.d,
+        family: famObj,
+        members: famObj.members || [],
+        nodes: famObj.nodes || [],
+        nodeSet: famObj.nodeSet || new Set(),
+        edges: visFamEdges,
+        edgeSet: new Set(visFamEdges),
+        undrawnPairs: famObj.undrawnPairs || [],
+        qualifyingPairs: famObj.d.qualifyingPairs,
+        possiblePairs: famObj.d.possiblePairs,
+        commitsTouchingTwoOrMore: famObj.d.commitsTouchingTwoOrMore,
+        commitsTouchingAll: famObj.d.commitsTouchingAll,
+        lastTogether: famObj.d.lastTogether,
+        evidence: famObj.d.evidence || [],
+        isSubset: false,
+        _isFallbackView: true
+      };
+    }
+    selectedFamily = activeFamView;
     if (updateHash && famEntry.hash) {
       try {
         if (window.history && typeof window.history.replaceState === 'function') {
@@ -5757,14 +5862,13 @@ const RICH_CLIENT = String.raw`
         }
       } catch (_) {}
     }
-    renderBriefingBoard();
-    syncMarkerDom();
+    renderPanel();
   }
 
   function selectBriefingEdge(edgeObj, isDefault, updateHash) {
     if (!edgeObj) return;
     briefingSelectedEdgeIdx = edgeObj.idx;
-    briefingSelectedFamilyIdx = (isDefault && briefingData && briefingData.featured && briefingData.featured.isFamily && typeof briefingData.featured.familyIndex === 'number')
+    briefingSelectedFamilyIdx = (isDefault && briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
       ? briefingData.featured.familyIndex
       : -1;
     briefingUseDefaultFeatured = Boolean(isDefault);
@@ -5782,8 +5886,7 @@ const RICH_CLIENT = String.raw`
         }
       } catch (_) {}
     }
-    renderBriefingBoard();
-    syncMarkerDom();
+    renderPanel();
   }
 
   function pointToSegDist(px, py, x1, y1, x2, y2) {
@@ -6226,8 +6329,56 @@ const RICH_CLIENT = String.raw`
     }
   }
 
+  function buildPairRankedRowFromEdge(edgeObj, findingId) {
+    var d = edgeObj.d;
+    var fFirst = d.confidence > d.reverseConfidence ||
+      (d.confidence === d.reverseConfidence && d.fromChanges <= d.toChanges);
+    var labels = distinguishingPaths(
+      fFirst ? edgeObj.s.safePath : edgeObj.t.safePath,
+      fFirst ? edgeObj.t.safePath : edgeObj.s.safePath
+    );
+    var denom = fFirst ? d.fromChanges : d.toChanges;
+    var confVal = fFirst ? d.confidence : d.reverseConfidence;
+    var iv = fFirst ? d.interval : d.reverseInterval;
+    var fPath = fFirst ? edgeObj.s.path : edgeObj.t.path;
+    var tPath = fFirst ? edgeObj.t.path : edgeObj.s.path;
+    return {
+      findingId: findingId,
+      kind: 'pair',
+      edgeIndex: edgeObj.idx,
+      title: labels[0] + ' \u2192 ' + labels[1],
+      fromPath: fPath,
+      toPath: tPath,
+      relationship: d.relationship,
+      shared: d.shared,
+      denom: denom,
+      ratioText: d.shared + '/' + denom,
+      pctText: d.weighted ? (pct(confVal) + ' weighted') : pct(confVal),
+      pointPct: Math.floor(confVal * 100 + 1e-9),
+      rangeLowPct: Math.floor(iv.low * 100 + 1e-9),
+      rangeHighPct: Math.ceil(iv.high * 100 - 1e-9),
+      lastTogether: d.lastTogether,
+      hash: makeFindingHash(fPath, tPath)
+    };
+  }
+
   function renderBriefingBoard() {
     if (!briefingEl || !briefingData) return;
+    var prevFocusDesc = null;
+    var activeEl = document.activeElement;
+    if (activeEl && briefingEl.contains(activeEl)) {
+      if (activeEl.id === 'toggle-all-findings') {
+        prevFocusDesc = { kind: 'toggle-all' };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-rank-row') && activeEl.getAttribute('data-finding-id')) {
+        prevFocusDesc = { kind: 'rank-row', findingId: activeEl.getAttribute('data-finding-id') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-sec-card') && activeEl.getAttribute('data-edge-idx')) {
+        prevFocusDesc = { kind: 'sec-card', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-family-pair-row') && activeEl.getAttribute('data-edge-idx')) {
+        prevFocusDesc = { kind: 'family-pair', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.id) {
+        prevFocusDesc = { kind: 'id', id: activeEl.id };
+      }
+    }
     briefingEl.textContent = '';
     var isMobileViewport = Boolean(window.innerWidth && window.innerWidth <= 640);
 
@@ -6300,43 +6451,101 @@ const RICH_CLIENT = String.raw`
       return;
     }
 
-    // Filter ranked findings by active relationship toggles and search query
+    // Filter ranked findings by active relationship toggles and search query (supporting mixed-kind families)
     var q = search && search.value ? search.value.trim().toLowerCase() : '';
-    var filteredRanked = (briefingData.ranked || []).filter(function (item) {
-      if (item.relationship && !visible[item.relationship]) return false;
+    var filteredRanked = [];
+    (briefingData.ranked || []).forEach(function (item) {
+      if (item.kind === 'family') {
+        var famEntryRef = (typeof item.familyIndex === 'number' && briefingData.families) ? briefingData.families[item.familyIndex] : null;
+        var memberIndices = item.edgeIndices || (famEntryRef && famEntryRef.edgeIndices) || [item.edgeIndex];
+        var visMemberIndices = memberIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+        if (visMemberIndices.length === 0) return;
+        if (visMemberIndices.length === 1) {
+          var singleRow = buildPairRankedRowFromEdge(edges[visMemberIndices[0]], item.findingId);
+          if (q) {
+            var sHay = (singleRow.title + ' ' + (singleRow.fromPath || '') + ' ' + (singleRow.toPath || '')).toLowerCase();
+            if (sHay.indexOf(q) < 0) return;
+          }
+          filteredRanked.push(singleRow);
+          return;
+        }
+        var leadVisEdge = edges[visMemberIndices[0]];
+        var hasVisGhost = visMemberIndices.some(function (ei) { return edges[ei].d.relationship === 'ghost'; });
+        var famRow = Object.assign({}, item, {
+          edgeIndex: leadVisEdge.idx,
+          relationship: hasVisGhost ? 'ghost' : leadVisEdge.d.relationship
+        });
+        if (leadVisEdge.idx !== item.edgeIndex) {
+          var leadPairRow = buildPairRankedRowFromEdge(leadVisEdge, item.findingId);
+          famRow.ratioText = leadPairRow.ratioText;
+          famRow.pctText = leadPairRow.pctText;
+          famRow.pointPct = leadPairRow.pointPct;
+          famRow.rangeLowPct = leadPairRow.rangeLowPct;
+          famRow.rangeHighPct = leadPairRow.rangeHighPct;
+        }
+        if (q) {
+          var fHay = (famRow.title + ' ' + (famEntryRef && famEntryRef.memberPaths ? famEntryRef.memberPaths.join(' ') : '')).toLowerCase();
+          if (fHay.indexOf(q) < 0) return;
+        }
+        filteredRanked.push(famRow);
+        return;
+      }
+      if (item.relationship && !visible[item.relationship]) return;
       if (q) {
         var hay = (item.title + ' ' + (item.fromPath || '') + ' ' + (item.toPath || '')).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
+        if (hay.indexOf(q) < 0) return;
       }
-      return true;
+      filteredRanked.push(item);
     });
 
-    // Resolve active finding: family or edge, respecting relationship filter toggles
+    // Resolve active finding: family or edge, respecting relationship filter toggles (including mixed families)
     var activeFamilyEntry = (briefingSelectedFamilyIdx >= 0 && briefingData.families && briefingData.families[briefingSelectedFamilyIdx])
       ? briefingData.families[briefingSelectedFamilyIdx]
       : null;
     var activeEdge = edges[briefingSelectedEdgeIdx] || edges[briefingData.featured.edgeIndex] || edges[0];
-    var currentRel = activeFamilyEntry ? activeFamilyEntry.relationship : (activeEdge ? activeEdge.d.relationship : 'ghost');
+    var familyFilteredToSubset = false;
+    if (activeFamilyEntry) {
+      var famIndices = activeFamilyEntry.edgeIndices || [activeFamilyEntry.edgeIndex];
+      var visFamIndices = famIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+      if (visFamIndices.length >= 2) {
+        activeEdge = edges[visFamIndices[0]] || activeEdge;
+        familyFilteredToSubset = visFamIndices.length < famIndices.length || activeEdge.idx !== activeFamilyEntry.edgeIndex;
+      } else if (visFamIndices.length === 1) {
+        activeFamilyEntry = null;
+        activeEdge = edges[visFamIndices[0]] || activeEdge;
+      } else {
+        activeFamilyEntry = null;
+      }
+    }
+    var currentRel = activeFamilyEntry
+      ? (activeEdge ? activeEdge.d.relationship : activeFamilyEntry.relationship)
+      : (activeEdge ? activeEdge.d.relationship : 'ghost');
 
     // If current finding's relationship kind is hidden by filter toggles, promote top visible finding
     if (currentRel && !visible[currentRel] && filteredRanked.length > 0) {
       var topVis = filteredRanked[0];
       if (topVis.kind === 'family' && typeof topVis.familyIndex === 'number' && briefingData.families && briefingData.families[topVis.familyIndex]) {
         activeFamilyEntry = briefingData.families[topVis.familyIndex];
-        activeEdge = edges[activeFamilyEntry.edgeIndex] || activeEdge;
+        var promFamIndices = activeFamilyEntry.edgeIndices || [activeFamilyEntry.edgeIndex];
+        var visPromIndices = promFamIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+        activeEdge = edges[visPromIndices[0] != null ? visPromIndices[0] : activeFamilyEntry.edgeIndex] || activeEdge;
+        familyFilteredToSubset = visPromIndices.length < promFamIndices.length || activeEdge.idx !== activeFamilyEntry.edgeIndex;
       } else {
         activeFamilyEntry = null;
         var promEdge = edges[topVis.edgeIndex] || (topVis.fromPath && topVis.toPath ? edgeByPairKey[edgeKey(topVis.fromPath, topVis.toPath)] : null);
         if (promEdge) activeEdge = promEdge;
       }
-      currentRel = activeFamilyEntry ? activeFamilyEntry.relationship : (activeEdge ? activeEdge.d.relationship : 'ghost');
+      currentRel = activeFamilyEntry
+        ? (activeEdge ? activeEdge.d.relationship : activeFamilyEntry.relationship)
+        : (activeEdge ? activeEdge.d.relationship : 'ghost');
     }
 
     var isDefaultFeatured = Boolean(
       briefingUseDefaultFeatured &&
-      ((activeFamilyEntry && briefingData.featured.isFamily && briefingData.featured.familyIndex === activeFamilyEntry.familyIndex) ||
-       (!activeFamilyEntry && !briefingData.featured.isFamily && activeEdge && activeEdge.idx === briefingData.featured.edgeIndex)) &&
-      visible[briefingData.featured.relationship || 'ghost']
+      !familyFilteredToSubset &&
+      ((activeFamilyEntry && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && briefingData.featured.familyIndex === activeFamilyEntry.familyIndex) ||
+       (!activeFamilyEntry && !(briefingData.featured.isFamily || briefingData.featured.kind === 'family') && activeEdge && activeEdge.idx === briefingData.featured.edgeIndex)) &&
+      visible[activeEdge ? activeEdge.d.relationship : (briefingData.featured.relationship || 'ghost')]
     );
 
     // If all relationship toggles are off and nothing matches, show filter empty state in C-01
@@ -6352,6 +6561,7 @@ const RICH_CLIENT = String.raw`
     }
 
     var featuredPayload = activeFamilyEntry || (isDefaultFeatured ? briefingData.featured : null);
+    var usePrebuiltLeadCopy = Boolean(featuredPayload && !familyFilteredToSubset);
 
     // 3. Main 12-col Board Grid: Cut C-01 (Featured Finding + Plate) & Cut E-01 (Evidence)
     var grid = el('div', 'f12-board-grid');
@@ -6424,10 +6634,10 @@ const RICH_CLIENT = String.raw`
     var dynRateDetail = isWeightedEdge
       ? (dynPct + ' (' + rawRateStr + ' raw), 95% confidence range ' + dynLow + '\u2013' + dynHigh + '%')
       : (dynPct + ', 95% confidence range ' + dynLow + '\u2013' + dynHigh + '%');
-    var ledeText = featuredPayload
+    var ledeText = usePrebuiltLeadCopy
       ? featuredPayload.lede
       : ((activeEdge.d.relationship === 'ghost'
-        ? 'No direct or 2-hop import link was detected between these files in current code, yet '
+        ? 'No direct or one-step-removed import link was detected between these files in current code, yet '
         : (activeEdge.d.relationship === 'unknown'
           ? 'Import relationship was not statically verified for this file pair, yet '
           : 'Connected via ' + activeEdge.d.relationship + ' relationship: ')) +
@@ -6436,6 +6646,7 @@ const RICH_CLIENT = String.raw`
 
     var h2 = el('h2', 'f12-headline', headlineText);
     h2.id = 'briefing-headline';
+    h2.tabIndex = -1;
     cut01.appendChild(h2);
     var ledeP = el('p', 'f12-lede', ledeText);
     ledeP.id = 'briefing-lede';
@@ -6450,7 +6661,7 @@ const RICH_CLIENT = String.raw`
 
     var plateObj = null;
     var bText = '';
-    if (featuredPayload && !isMobileViewport) {
+    if (usePrebuiltLeadCopy && !isMobileViewport) {
       plateObj = featuredPayload.plate;
       bText = featuredPayload.balloonText;
     } else if (activeFamilyEntry) {
@@ -6461,7 +6672,8 @@ const RICH_CLIENT = String.raw`
         if (fn) famNodes.push(fn);
       });
       edges.forEach(function (ce) {
-        if ((activeFamilyEntry.memberPaths || []).indexOf(ce.s.path) >= 0 &&
+        if (visible[ce.d.relationship] &&
+            (activeFamilyEntry.memberPaths || []).indexOf(ce.s.path) >= 0 &&
             (activeFamilyEntry.memberPaths || []).indexOf(ce.t.path) >= 0) {
           famEdgeSet[ce.idx] = true;
         }
@@ -6469,13 +6681,13 @@ const RICH_CLIENT = String.raw`
       if (famNodes.length < 2) famNodes = [activeEdge.s, activeEdge.t];
       famEdgeSet[activeEdge.idx] = true;
       plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, isMobileViewport);
-      bText = activeFamilyEntry.balloonText || plateObj.balloonText;
+      bText = (!familyFilteredToSubset && activeFamilyEntry.balloonText) ? activeFamilyEntry.balloonText : plateObj.balloonText;
     } else {
       var pairSeedNodes = forwardFirst ? [activeEdge.s, activeEdge.t] : [activeEdge.t, activeEdge.s];
       var pairFeatSet = Object.create(null);
       pairFeatSet[activeEdge.idx] = true;
       plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, isMobileViewport);
-      bText = featuredPayload ? featuredPayload.balloonText : plateObj.balloonText;
+      bText = usePrebuiltLeadCopy ? featuredPayload.balloonText : plateObj.balloonText;
     }
     renderPlateSvg(svg, plateObj, bText);
     plateWrap.appendChild(svg);
@@ -6498,12 +6710,12 @@ const RICH_CLIENT = String.raw`
     cut05.id = 'cut-c05';
     cut05.appendChild(el('span', 'f12-cut-label', 'E-01 \u00b7 EVIDENCE'));
 
-    // Beat 02: What the history shows + Contextual '?' help buttons
+    // Beat 02: What the history shows + Contextual '?' help buttons with visible labels
     var beat02 = el('div', 'f12-beat-row');
     beat02.appendChild(el('span', 'f12-beat-tag', '02 \u00b7 WHAT THE HISTORY SHOWS \u00b7 Historical co-change rate (not defect probability)'));
     var evHelpWrap = el('div', 'f12-kicker-left');
-    evHelpWrap.appendChild(makeHelpBtn('help-directional-pct', 'Why do the two directional percentages differ?'));
-    evHelpWrap.appendChild(makeHelpBtn('help-confidence-range', 'What does the 95% confidence range mean?'));
+    evHelpWrap.appendChild(makeHelpBtn('help-directional-pct', 'Why do the two directional percentages differ?', '% asymmetry'));
+    evHelpWrap.appendChild(makeHelpBtn('help-confidence-range', 'What does the 95% confidence range mean?', '95% range'));
     beat02.appendChild(evHelpWrap);
     cut05.appendChild(beat02);
 
@@ -6513,7 +6725,7 @@ const RICH_CLIENT = String.raw`
     cut05.appendChild(evKicker);
 
     var dirGrid = el('div', 'f12-dir-grid');
-    if (featuredPayload && featuredPayload.evidence) {
+    if (usePrebuiltLeadCopy && featuredPayload.evidence) {
       var evCopy = featuredPayload.evidence;
       var pd = evCopy.primaryDirection;
       var rd = evCopy.reverseDirection;
@@ -6559,7 +6771,7 @@ const RICH_CLIENT = String.raw`
     }
     cut05.appendChild(dirGrid);
 
-    var readingGuideObj = (featuredPayload && featuredPayload.evidence && featuredPayload.evidence.readingGuide)
+    var readingGuideObj = (usePrebuiltLeadCopy && featuredPayload.evidence && featuredPayload.evidence.readingGuide)
       ? featuredPayload.evidence.readingGuide
       : buildClientReadingGuide(activeEdge, forwardFirst, dynLabels, activeFamilyEntry);
     cut05.appendChild(renderReadingFindingDisclosure(readingGuideObj, 'reading-this-finding'));
@@ -6588,27 +6800,34 @@ const RICH_CLIENT = String.raw`
     // Family pairs breakdown (when active finding is a family)
     if (featuredPayload && featuredPayload.evidence && featuredPayload.evidence.familySummary && featuredPayload.evidence.familySummary.pairs && featuredPayload.evidence.familySummary.pairs.length > 0) {
       var famSum = featuredPayload.evidence.familySummary;
-      var famBox = el('div', 'f12-family-pairs');
-      famBox.appendChild(el('div', 'f12-family-pairs-hdr', 'QUALIFYING FAMILY PAIRS (' + famSum.qualifyingPairs + ' OF ' + famSum.possiblePairs + ')'));
-      famSum.pairs.forEach(function (fp) {
-        var fpBtn = el('button', 'f12-family-pair-row');
-        fpBtn.type = 'button';
-        fpBtn.appendChild(el('span', '', fp.shortFrom + ' \u2194 ' + fp.shortTo));
-        fpBtn.appendChild(el('span', '', fp.shared + ' shared \u00b7 ' + fp.pctText + ' (' + fp.lowerBoundText + ')'));
-        var matchingEdge = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
-        if (matchingEdge) {
-          fpBtn.addEventListener('click', function () {
-            selectBriefingEdge(matchingEdge, false, true);
-          });
-        }
-        famBox.appendChild(fpBtn);
+      var visFamPairs = famSum.pairs.filter(function (fp) {
+        var pe = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
+        return !pe || Boolean(visible[pe.d.relationship]);
       });
-      cut05.appendChild(famBox);
+      if (visFamPairs.length > 0) {
+        var famBox = el('div', 'f12-family-pairs');
+        famBox.appendChild(el('div', 'f12-family-pairs-hdr', 'QUALIFYING FAMILY PAIRS (' + visFamPairs.length + ' OF ' + famSum.possiblePairs + ')'));
+        visFamPairs.forEach(function (fp) {
+          var fpBtn = el('button', 'f12-family-pair-row');
+          fpBtn.type = 'button';
+          fpBtn.appendChild(el('span', '', fp.shortFrom + ' \u2194 ' + fp.shortTo));
+          fpBtn.appendChild(el('span', '', fp.shared + ' shared \u00b7 ' + fp.pctText + ' (' + fp.lowerBoundText + ')'));
+          var matchingEdge = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
+          if (matchingEdge) {
+            fpBtn.setAttribute('data-edge-idx', String(matchingEdge.idx));
+            fpBtn.addEventListener('click', function () {
+              selectBriefingEdge(matchingEdge, false, true);
+            });
+          }
+          famBox.appendChild(fpBtn);
+        });
+        cut05.appendChild(famBox);
+      }
     }
 
     // Counterexamples
     var cxData = activeEdge.d.counterexamples;
-    if (featuredPayload && featuredPayload.evidence) {
+    if (usePrebuiltLeadCopy && featuredPayload.evidence) {
       var evCx = featuredPayload.evidence;
       var totalStandalone = (evCx.fromOnlyTotal || 0) + (evCx.toOnlyTotal || 0);
       if (totalStandalone > 0) {
@@ -6646,10 +6865,10 @@ const RICH_CLIENT = String.raw`
     }
 
     // Supporting Commit Receipts
-    var rawReceipts = featuredPayload && featuredPayload.evidence
+    var rawReceipts = usePrebuiltLeadCopy && featuredPayload.evidence
       ? (featuredPayload.evidence.receiptsShown || [])
       : (activeEdge.d.evidence || []).slice(0, 3);
-    var receiptsTotal = featuredPayload && featuredPayload.evidence
+    var receiptsTotal = usePrebuiltLeadCopy && featuredPayload.evidence
       ? featuredPayload.evidence.receiptsTotal
       : activeEdge.d.shared;
     cut05.appendChild(el('div', 'f12-receipts-hdr', 'SUPPORTING COMMIT RECEIPTS (' + rawReceipts.length + ' OF ' + receiptsTotal + ')'));
@@ -6674,7 +6893,7 @@ const RICH_CLIENT = String.raw`
     nextStepBox.appendChild(document.createTextNode('If you modify one of these files, inspect the companion file(s) and supporting commits above to decide whether a coordinated update is needed.'));
     cut05.appendChild(nextStepBox);
 
-    var explainCmd = (featuredPayload && featuredPayload.evidence)
+    var explainCmd = (usePrebuiltLeadCopy && featuredPayload.evidence)
       ? featuredPayload.evidence.explainCommand
       : (activeEdge.d.explainCommand || fallbackExplainCommand(activeEdge.s.path, activeEdge.t.path));
     var cliRow = el('div', 'f12-cli-row');
@@ -6706,6 +6925,7 @@ const RICH_CLIENT = String.raw`
           var isSel = !activeFamilyEntry && !isDefaultFeatured && activeEdge && activeEdge.idx === sc.edgeIndex;
           var card = el('button', 'f12-sec-card card interactive' + (isSel ? ' selected' : ''));
           card.type = 'button';
+          card.setAttribute('data-edge-idx', String(sc.edgeIndex));
           card.appendChild(el('span', 'f12-cut-label', 'C-0' + (sIdx + 2)));
           var kRow = el('div', 'f12-kicker-row');
           kRow.appendChild(el('span', 'f12-tag', sc.findingId + ' \u00b7 ' + sc.badge));
@@ -6815,11 +7035,35 @@ const RICH_CLIENT = String.raw`
     }
     briefingEl.appendChild(rankedPanel);
     renderAboutAnalysisSection(briefingEl);
+
+    // Restore keyboard focus across full DOM rebuilds when triggered from inside briefingEl
+    if (prevFocusDesc) {
+      var nextFocusEl = null;
+      if (prevFocusDesc.kind === 'toggle-all') {
+        nextFocusEl = document.getElementById('toggle-all-findings');
+      } else if (prevFocusDesc.kind === 'rank-row') {
+        nextFocusEl = briefingEl.querySelector('.f12-rank-row[data-finding-id="' + prevFocusDesc.findingId + '"]');
+      } else if (prevFocusDesc.kind === 'sec-card') {
+        nextFocusEl = briefingEl.querySelector('.f12-sec-card[data-edge-idx="' + prevFocusDesc.edgeIdx + '"]');
+      } else if (prevFocusDesc.kind === 'family-pair') {
+        nextFocusEl = briefingEl.querySelector('.f12-family-pair-row[data-edge-idx="' + prevFocusDesc.edgeIdx + '"]')
+          || briefingEl.querySelector('.f12-rank-row.active');
+      } else if (prevFocusDesc.kind === 'id') {
+        nextFocusEl = document.getElementById(prevFocusDesc.id);
+      }
+      if (!nextFocusEl) {
+        nextFocusEl = briefingEl.querySelector('.f12-rank-row.active') || document.getElementById('briefing-headline');
+      }
+      if (nextFocusEl && typeof nextFocusEl.focus === 'function') {
+        try { nextFocusEl.focus({ preventScroll: true }); } catch (_) { nextFocusEl.focus(); }
+      }
+    }
   }
 
   if (window.location && window.location.hash) {
     var hashEdge = resolveEdgeFromHash(window.location.hash);
     if (hashEdge) {
+      ensureRelationshipVisible(hashEdge.d.relationship);
       briefingSelectedEdgeIdx = hashEdge.idx;
       briefingSelectedFamilyIdx = -1;
       briefingUseDefaultFeatured = false;
@@ -6828,7 +7072,10 @@ const RICH_CLIENT = String.raw`
   }
   window.addEventListener('hashchange', function () {
     var he = resolveEdgeFromHash(window.location.hash);
-    if (he) selectBriefingEdge(he, false, false);
+    if (he) {
+      ensureRelationshipVisible(he.d.relationship);
+      selectBriefingEdge(he, false, false);
+    }
   });
 
   var lastBriefingMobile = Boolean(window.innerWidth && window.innerWidth <= 640);

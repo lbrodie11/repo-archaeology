@@ -203,6 +203,8 @@ export interface RankedFindingItem {
   weak: boolean;
   edgeIndex: number;
   familyIndex?: number;
+  relationshipKinds?: Relationship[];
+  edgeIndices?: number[];
 }
 
 /**
@@ -706,6 +708,9 @@ export function formatEvidencePanelCopy(
             const pDir = resolveStrongerDirection(data, pe);
             const lo = Math.round(pDir.interval.low * 100);
             const hi = Math.round(pDir.interval.high * 100);
+            const pPct = Math.round(pDir.confidence * 100);
+            const pRawPct = pDir.fromChanges > 0 ? Math.round((pDir.shared / pDir.fromChanges) * 100) : 0;
+            const pPctText = pe.weighted ? `${pPct}% weighted (${pRawPct}% raw)` : `${pPct}%`;
             return {
               edgeIndex: ei,
               fromPath: pDir.fromPath,
@@ -715,7 +720,7 @@ export function formatEvidencePanelCopy(
               shared: pDir.shared,
               fromChanges: pDir.fromChanges,
               toChanges: pDir.toChanges,
-              pctText: `${Math.round(pDir.confidence * 100)}%`,
+              pctText: pPctText,
               lowerBoundText: `≥${lo}% CI`,
               rangeText: `${lo}–${hi}%`,
               rangeLowPct: lo,
@@ -762,6 +767,7 @@ export function formatEvidencePanelCopy(
       interval: dir.interval,
       reverseInterval: dir.reverseInterval,
       relationship: edge.relationship,
+      why: edge.why,
       weighted: edge.weighted,
       weighting: edge.weighting,
       verdict: edge.verdict,
@@ -1188,6 +1194,10 @@ export function buildRankedFindings(
         weak: dir.interval.low < 0.3,
         edgeIndex: leadEdgeIdx,
         familyIndex: famIdx,
+        relationshipKinds: Array.isArray(fam.relationshipKinds)
+          ? [...fam.relationshipKinds]
+          : [leadEdge.relationship],
+        edgeIndices: [...fam.edgeIndices],
       });
       continue;
     }

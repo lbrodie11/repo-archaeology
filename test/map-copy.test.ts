@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS } from '../src/config.js';
 import { RELATIONSHIPS } from '../src/imports/classify.js';
 import { computeLayout } from '../src/map/layout.js';
 import { renderMapHtml } from '../src/map/template.js';
+import { formatIntervalCi, roundInterval } from '../src/report/views.js';
+import { wilsonInterval } from '../src/util/stats.js';
 import {
   buildAnalysisProvenance,
   formatReadingFindingGuide,
@@ -754,10 +756,30 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       assert.ok(entry.summary.length > 20);
       assert.ok(entry.detail.length > 30);
     }
-    // Check alignment with DEFAULT_SETTINGS and RELATIONSHIPS
+    // Check alignment with DEFAULT_SETTINGS, RELATIONSHIPS, wilsonInterval, heuristic-import, and hiddenBridge
     const ghostEntry = getGlossaryEntry('ghost-wire');
     assert.ok(ghostEntry.detail.includes(String(DEFAULT_SETTINGS.minShared)));
     assert.ok(ghostEntry.detail.includes(String(Math.round(DEFAULT_SETTINGS.minConfidence * 100))));
+    assert.ok(ghostEntry.summary.includes('one-step-removed'));
+    assert.ok(ghostEntry.detail.includes('hiddenBridge'));
+
+    const indirectEntry = getGlossaryEntry('indirect-import');
+    assert.ok(indirectEntry.summary.includes('one step removed'));
+    assert.equal(indirectEntry.detail.includes('hiddenBridge'), false);
+
+    const heuristicEntry = getGlossaryEntry('heuristic-import');
+    assert.ok(heuristicEntry.summary.includes('heuristic: true'));
+    assert.ok(heuristicEntry.detail.includes('meta.imports.heuristicEdges'));
+    assert.ok(heuristicEntry.summary.includes('dist/'));
+
+    const wilsonEntry = getGlossaryEntry('wilson-interval');
+    const expected2of2 = formatIntervalCi(roundInterval(wilsonInterval(2, 2)));
+    const expected9of10 = formatIntervalCi(roundInterval(wilsonInterval(9, 10)));
+    assert.equal(expected2of2, '(95% CI 34–100%)');
+    assert.equal(expected9of10, '(95% CI 59–99%)');
+    assert.ok(wilsonEntry.detail.includes(`2 of 2 (100%) has a wide interval ${expected2of2}`));
+    assert.ok(wilsonEntry.detail.includes(`9 of 10 (90%) has a tighter interval ${expected9of10}`));
+
     for (const rel of ['ghost', 'unknown', 'indirect', 'direct', 'test'] as const) {
       assert.ok(RELATIONSHIPS.includes(rel));
     }
@@ -778,6 +800,11 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       relationship: e0.relationship,
     });
     assert.equal(unweightedGuide.heading, 'READING THIS FINDING · EXPLAIN THESE NUMBERS');
+    assert.equal(
+      unweightedGuide.summaryLine.includes('75% (6/8 commits) is historical co-change, not proof'),
+      true,
+      `Unexpected unweighted summaryLine: ${unweightedGuide.summaryLine}`,
+    );
     assert.equal(unweightedGuide.whatItSaysLabel, 'What does 75% mean?');
     assert.ok(unweightedGuide.whatItSays.includes('Of the 8 analyzed commits that changed tiny.ts, 6 also changed quick.ts (75%, 95% Wilson confidence range 35–97%)'));
     assert.ok(unweightedGuide.whatItDoesNotSay.includes('does not establish a 75% probability of a bug'));
@@ -806,12 +833,113 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       familyQualifyingPairs: 3,
       familyPossiblePairs: 3,
     });
+    assert.equal(
+      weightedGuide.summaryLine.includes('84% weighted (6/8 raw)'),
+      true,
+      `Unexpected weighted summaryLine: ${weightedGuide.summaryLine}`,
+    );
     assert.equal(weightedGuide.whatItSaysLabel, 'What does 84% weighted (75% raw) mean?');
     assert.ok(weightedGuide.whatItSays.includes('Across this 3-file family (3 of 3 pairs qualifying)'));
     assert.ok(weightedGuide.whatItSays.includes('recency+origin-weighted scoring active'));
     assert.ok(weightedGuide.whatItSays.includes('75% raw ratio; unweighted 95% Wilson range 35–97%'));
     assert.ok(weightedGuide.whatItDoesNotSay.includes('Recorded verdict (expected / silenced relationship): "Intentional preset parity'));
     assert.equal(weightedGuide.whatItDoesNotSay.includes('\u202e'), false);
+
+    // Test relationship guides derive from `why` ('both are tests' vs 'a test that changes with this code') and actual commit counts
+    const bothTestsGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.test.ts',
+      toLabel: 'quick.test.ts',
+      shared: 5,
+      fromChanges: 8,
+      toChanges: 10,
+      confidence: 0.625,
+      reverseConfidence: 0.5,
+      interval: { low: 0.3, high: 0.86 },
+      reverseInterval: e0.reverseInterval,
+      relationship: 'test',
+      why: 'both are tests',
+    });
+    assert.equal(
+      bothTestsGuide.whatItDoesNotSay.includes(
+        'Both files are classified as tests (both are tests) and changed together in 5 of 8 commits (62%)',
+      ),
+      true,
+      `Unexpected bothTestsGuide: ${bothTestsGuide.whatItDoesNotSay}`,
+    );
+
+    const oneTestGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'tiny.test.ts',
+      shared: 7,
+      fromChanges: 8,
+      toChanges: 9,
+      confidence: 0.875,
+      reverseConfidence: 0.778,
+      interval: { low: 0.53, high: 0.98 },
+      reverseInterval: e0.reverseInterval,
+      relationship: 'test',
+      why: 'a test that changes with this code',
+    });
+    assert.equal(
+      oneTestGuide.whatItDoesNotSay.includes(
+        'Classified as a test relationship (a test that changes with this code) that changed together in 7 of 8 commits (87%)',
+      ),
+      true,
+      `Unexpected oneTestGuide: ${oneTestGuide.whatItDoesNotSay}`,
+    );
+
+    // Weighted familyPairs[].pctText includes weighted + raw label
+    const weightedFamilyEdge: MapEdge = {
+      ...e0,
+      source: 2,
+      target: 3,
+      shared: 12,
+      fromChanges: 20,
+      toChanges: 24,
+      confidence: 0.84,
+      reverseConfidence: 0.5,
+      weighted: true,
+      weighting: 'recency',
+    };
+    const weightedFam: MapFamily = {
+      id: 'src/adapter/*/serve-static',
+      label: 'serve-static.ts across src/adapter/*',
+      stem: 'serve-static',
+      fileName: 'serve-static.ts',
+      parentDir: 'src/adapter',
+      why: '3 parallel implementations',
+      members: [
+        { path: 'src/adapter/bun/serve-static.ts', dir: 'src/adapter/bun', variant: 'bun', changes: 20, connections: 2 },
+        { path: 'src/adapter/cloudflare-workers/serve-static.ts', dir: 'src/adapter/cloudflare-workers', variant: 'cloudflare-workers', changes: 27, connections: 2 },
+        { path: 'src/adapter/deno/serve-static.ts', dir: 'src/adapter/deno', variant: 'deno', changes: 24, connections: 2 },
+      ],
+      commitsTouchingTwoOrMore: 16,
+      commitsTouchingAll: 9,
+      lastTogether: '2026-05-16',
+      qualifyingPairs: 3,
+      possiblePairs: 3,
+      complete: true,
+      relationshipKinds: ['ghost'],
+      peakScore: 0.55,
+      maxPairShared: 12,
+      evidence: [],
+      allMemberEvidence: [],
+      nodeIndices: [2, 4, 3],
+      edgeIndices: [0],
+      overviewPriority: 1,
+    };
+    const weightedFamData = makeBaseData({
+      edges: [weightedFamilyEdge],
+      families: [weightedFam],
+    });
+    const weightedFamPanel = formatEvidencePanelCopy(weightedFamData, {
+      kind: 'family',
+      familyIndex: 0,
+      family: weightedFam,
+      leadEdgeIndex: 0,
+      leadEdge: weightedFamilyEdge,
+    });
+    assert.equal(weightedFamPanel.familySummary?.pairs[0]?.pctText, '84% weighted (60% raw)');
 
     const unknownGuide = formatReadingFindingGuide({
       fromLabel: 'tiny.ts',
@@ -868,5 +996,8 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.ok(serializedProv.includes('3 unresolved specifiers'));
     assert.ok(prov.footerText.includes('Repo Archaeology v0.4.0'));
     assert.equal(redactFilesystemPaths('Failed at /var/folders/99/abc/T/repo'), 'Failed at <repo-path>');
+    assert.equal(redactFilesystemPaths('Failed at /opt/hostedtoolcache/node/repo'), 'Failed at <repo-path>');
+    assert.equal(redactFilesystemPaths('Failed at /workspaces/secret-project/src'), 'Failed at <repo-path>');
+    assert.equal(redactFilesystemPaths('Failed at /Volumes/Macintosh_HD/project'), 'Failed at <repo-path>');
   });
 });

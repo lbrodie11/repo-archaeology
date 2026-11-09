@@ -4,8 +4,17 @@ import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import type { WeightingMode } from '../model/cochange.js';
 import { VERDICTS_FILE, type RelationshipVerdictView } from '../model/verdicts.js';
 import { sanitizeHtmlDisplayText } from '../style/frame12.js';
-import type { WilsonInterval } from '../util/stats.js';
+import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { getToolVersion } from './contract.js';
+import { formatIntervalCi, roundInterval } from './views.js';
+
+const WILSON_EXAMPLE_2_OF_2 = roundInterval(wilsonInterval(2, 2));
+const WILSON_EXAMPLE_2_OF_2_CI = formatIntervalCi(WILSON_EXAMPLE_2_OF_2);
+const WILSON_EXAMPLE_2_OF_2_LOW = Math.floor(WILSON_EXAMPLE_2_OF_2.low * 100 + 1e-9);
+
+const WILSON_EXAMPLE_9_OF_10 = roundInterval(wilsonInterval(9, 10));
+const WILSON_EXAMPLE_9_OF_10_CI = formatIntervalCi(WILSON_EXAMPLE_9_OF_10);
+const WILSON_EXAMPLE_9_OF_10_LOW = Math.floor(WILSON_EXAMPLE_9_OF_10.low * 100 + 1e-9);
 
 export type GlossaryTermId =
   | 'ghost-wire'
@@ -36,8 +45,8 @@ export const GLOSSARY_TERMS: readonly GlossaryEntry[] = Object.freeze([
     term: 'Ghost wire (ghost)',
     shortTitle: 'GHOST WIRE · DEFINITION',
     summary:
-      'A pair of files that repeatedly change in the same Git commits, but have no direct or 2-hop static import link in current code.',
-    detail: `Requires at least ${DEFAULT_SETTINGS.minShared} shared commits and ${Math.round(DEFAULT_SETTINGS.minConfidence * 100)}% directional co-change by default. A ghost wire is historical evidence to investigate (such as duplicated logic, shared schema/route assumptions, or parallel adapters), not automatic proof of a bug or runtime dependency.`,
+      'A pair of files that repeatedly change in the same Git commits, where no direct or one-step-removed import link was detected in current code and the files could be checked.',
+    detail: `Requires at least ${DEFAULT_SETTINGS.minShared} shared commits and ${Math.round(DEFAULT_SETTINGS.minConfidence * 100)}% directional co-change by default. A ghost wire is historical evidence to investigate, not automatic proof of a bug or runtime dependency. When both files in a ghost wire share a parallel sibling filename or reference the same rare environment variable, /api/... route, event name, or named export (used by at most 3 files), Repo Archaeology attaches a hiddenBridge clue to suggest why they might move together.`,
     relatedRelationship: 'ghost',
   },
   {
@@ -55,8 +64,7 @@ export const GLOSSARY_TERMS: readonly GlossaryEntry[] = Object.freeze([
     shortTitle: '95% WILSON CONFIDENCE RANGE',
     summary:
       'A sample-size-aware statistical interval computed from raw commit counts so small samples do not outrank well-supported findings.',
-    detail:
-      'A raw ratio of 2 of 2 (100%) has a wide 95% Wilson interval (34–100%, lower bound 34%), whereas 9 of 10 (90%) has a tighter interval (60–98%, lower bound 60%). Repo Archaeology ranks findings and scales line widths by the conservative 95% Wilson lower bound. Even when recency or origin weighting is enabled, the Wilson interval is always computed from unweighted raw commit counts.',
+    detail: `A raw ratio of 2 of 2 (100%) has a wide interval ${WILSON_EXAMPLE_2_OF_2_CI} (lower bound ${WILSON_EXAMPLE_2_OF_2_LOW}%), whereas 9 of 10 (90%) has a tighter interval ${WILSON_EXAMPLE_9_OF_10_CI} (lower bound ${WILSON_EXAMPLE_9_OF_10_LOW}%). Repo Archaeology ranks findings and scales line widths by the conservative 95% Wilson lower bound (rounded outward so bounds never overstate certainty). Even when recency or origin weighting is enabled, the Wilson interval is always computed from unweighted raw commit counts.`,
   },
   {
     id: 'weighted-confidence',
@@ -88,21 +96,21 @@ export const GLOSSARY_TERMS: readonly GlossaryEntry[] = Object.freeze([
   },
   {
     id: 'heuristic-import',
-    term: 'Heuristic import link (via: heuristic)',
+    term: 'Heuristic import link (heuristic: true)',
     shortTitle: 'HEURISTIC IMPORT RESOLUTION',
     summary:
-      'An import or path reference matched by fallback suffix/stem heuristics when strict TypeScript or relative path resolution could not resolve a specifier.',
+      'An internal import edge marked with heuristic: true (while via stays relative, paths, workspace, exports, or imports) when the resolver maps build output directories (dist/, lib/, build/, out/) back to source files, or falls back to an in-repo package not declared in a workspace manifest.',
     detail:
-      'Heuristic matches prevent obvious false-positive ghost wires in monorepos or custom bundler setups, and are counted separately in the import-coverage summary so you can see how many links relied on fallback resolution.',
+      'Heuristic resolution prevents false-positive ghost wires in monorepos and unbuilt package layouts. The total count of heuristic edges is reported in meta.imports.heuristicEdges inside About this analysis.',
   },
   {
     id: 'indirect-import',
-    term: 'Indirect import (1–2 hops) & hidden bridge',
-    shortTitle: 'INDIRECT IMPORTS & HIDDEN BRIDGES',
+    term: 'Indirect import (one step removed)',
+    shortTitle: 'INDIRECT IMPORTS · ONE STEP REMOVED',
     summary:
-      'Files that do not import each other directly, but are connected one step removed through an intermediate module (or share an environment variable, route, or event token).',
+      'No direct import link connects the two files, but one file imports a file that imports the other (one step removed).',
     detail:
-      'Indirect imports explain why two files move together through a shared barrel or helper module. When no import path exists but both files reference the same env var, API route, or event name, Repo Archaeology annotates that token as a hidden bridge clue.',
+      'Indirect imports explain why two files move together through an intermediate module (for example, a.ts → helper.ts → b.ts). Because the dependency path is visible in current code one step removed, indirect imports are separated from ghost wires.',
     relatedRelationship: 'indirect',
   },
   {
@@ -162,6 +170,7 @@ export interface ReadingFindingInput {
   interval: WilsonInterval;
   reverseInterval: WilsonInterval;
   relationship: Relationship;
+  why?: string;
   weighted?: boolean;
   weighting?: WeightingMode;
   verdict?: RelationshipVerdictView;
@@ -173,6 +182,7 @@ export interface ReadingFindingInput {
 
 export interface ReadingFindingGuide {
   heading: string;
+  summaryLine: string;
   whatItSaysLabel: string;
   whatItSays: string;
   whatItDoesNotSayLabel: string;
@@ -224,13 +234,19 @@ export function formatReadingFindingGuide(input: ReadingFindingInput): ReadingFi
   const whatItDoesNotSayLabel = `Does that mean ${safeTo} needs changing now?`;
   let relationshipExplanation: string;
   if (input.relationship === 'ghost') {
-    relationshipExplanation = `This history does not establish a ${pctVal}% probability of a bug, a missing edit, or a runtime dependency. No direct or 2-hop static import link was detected between ${safeFrom} and ${safeTo} in current code—this is a historical signal to investigate, not proof that your current change requires updating ${safeTo}.`;
+    relationshipExplanation = `This history does not establish a ${pctVal}% probability of a bug, a missing edit, or a runtime dependency. No direct or one-step-removed import link was detected between ${safeFrom} and ${safeTo} in current code, and the files could be checked—this is a historical signal to investigate, not proof that your current change requires updating ${safeTo}.`;
   } else if (input.relationship === 'unknown') {
     relationshipExplanation = `Static import analysis could not verify whether ${safeFrom} and ${safeTo} import each other (for example, non-JS/TS files, dynamic specifiers, or pairs beyond the import classification cap). "Unchecked" means import status is unknown—not that an import link is absent—and does not prove ${safeTo} needs an update now.`;
   } else if (input.relationship === 'indirect') {
-    relationshipExplanation = `These files are connected indirectly (1–2 hops through an intermediate module) in current code and have moved together historically, but that still does not guarantee every edit to ${safeFrom} requires modifying ${safeTo}.`;
+    relationshipExplanation = `One file imports a file that imports the other (one step removed) in current code and they have moved together historically, but that still does not guarantee every edit to ${safeFrom} requires modifying ${safeTo}.`;
   } else if (input.relationship === 'test') {
-    relationshipExplanation = `This is a recognized test and implementation pair. Historical co-change shows they are usually updated together, though internal refactors to ${safeFrom} may not always require test changes in ${safeTo}.`;
+    const cleanWhy = input.why ? sanitizeHtmlDisplayText(input.why) : '';
+    if (cleanWhy === 'both are tests') {
+      relationshipExplanation = `Both files are classified as tests (${cleanWhy}) and changed together in ${input.shared} of ${input.fromChanges} commits (${pctVal}%). That historical co-change does not prove every edit to ${safeFrom} requires updating ${safeTo}.`;
+    } else {
+      const whyNote = cleanWhy ? ` (${cleanWhy})` : '';
+      relationshipExplanation = `Classified as a test relationship${whyNote} that changed together in ${input.shared} of ${input.fromChanges} commits (${pctVal}%). Isolated edits or internal refactors to ${safeFrom} do not automatically require updating ${safeTo}.`;
+    }
   } else {
     relationshipExplanation = `These files have a direct import link in current code, but historical co-change still does not prove that every isolated edit to ${safeFrom} requires modifying ${safeTo}.`;
   }
@@ -253,8 +269,13 @@ export function formatReadingFindingGuide(input: ReadingFindingInput): ReadingFi
       ? `Review the ${input.shared} shared commit receipts below alongside the ${totalAlone} counterexample commit${totalAlone === 1 ? '' : 's'} where ${safeFrom} (${fromAlone}) or ${safeTo} (${toAlone}) changed alone. Check whether the historical co-changes resemble your current edit.`
       : `Review the ${input.shared} shared commit receipts below (neither file changed alone in the analyzed window) and run the CLI explain command to inspect the paired diff hunks.`;
 
+  const summaryRate = isWeighted
+    ? `${pctVal}% weighted (${input.shared}/${input.fromChanges} raw)`
+    : `${pctVal}% (${input.shared}/${input.fromChanges} commits)`;
+
   return {
     heading: 'READING THIS FINDING · EXPLAIN THESE NUMBERS',
+    summaryLine: `Reading this finding · ${summaryRate} is historical co-change, not proof — Explain these numbers`,
     whatItSaysLabel,
     whatItSays,
     whatItDoesNotSayLabel,
@@ -279,12 +300,14 @@ export interface AnalysisProvenance {
 }
 
 /**
- * Strips any accidental absolute filesystem paths from warning messages so shared HTML
- * reports never leak the author's local machine directory structure.
+ * Strips common local/CI absolute filesystem paths from warning messages so shared HTML
+ * reports avoid leaking the machine directory structure where the report was generated.
  */
 export function redactFilesystemPaths(text: string): string {
-  return sanitizeHtmlDisplayText(text)
-    .replace(/(?:\/Users\/|\/home\/|\/var\/folders\/|\/private\/var\/|\/tmp\/|[A-Za-z]:\\)[^\s"'<>)+,;]+/g, '<repo-path>');
+  return sanitizeHtmlDisplayText(text).replace(
+    /(?:\/(?:Users|home|var|private|tmp|opt|srv|etc|root|mnt|Volumes|workspaces?|builds|runner)\/|[A-Za-z]:\\)[^\s"'<>)+,;]+/g,
+    '<repo-path>',
+  );
 }
 
 export function buildAnalysisProvenance(data: MapData, toolVersion?: string): AnalysisProvenance {
