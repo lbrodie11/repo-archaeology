@@ -1,20 +1,17 @@
 # RA-17 · Investigation Board Design Review & Production Briefing (`--style rich`, Take Two)
 
-This directory contains the design review artifacts and verification snapshots for **RA-17**: two art-directed FRAME/12 concepts (`Concept A: Investigation Board` and `Concept B: Storyboard`), the first-class empty state (`concept-empty.html`), the real Hono `MapData` snapshot (`hono.mapdata.json`, 2,757 commits at `08807ce1`), and side-by-side comparison sheets against RA-16 (`v0.4.0`) and FRAME/12's `social-hero.png`.
+This directory documents the design review and production Briefing architecture for **RA-17**: two art-directed FRAME/12 concepts (`Concept A: Investigation Board` and `Concept B: Storyboard`), the first-class empty state, and the production **`Briefing`** + **`Atlas`** implementation in [`src/map/template.ts`](../../../src/map/template.ts) and [`src/map/copy.ts`](../../../src/map/copy.ts).
 
-**Approved Production Direction:** **Concept A (Investigation Board)** with Concept B's diagonal `<PanelPair>` treatment (`slant-bottom` / `slant-top`) is wired into [`src/map/template.ts`](../../../src/map/template.ts) (`renderRichMapHtml`) as the default **`Briefing`** mode alongside the **`Atlas`** contact sheet (`Briefing | Atlas` toggle).
+**Approved Production Direction:** **Concept A (Investigation Board)** is wired into [`src/map/template.ts`](../../../src/map/template.ts) (`renderRichMapHtml`) as the default **`Briefing`** mode alongside the **`Atlas`** contact sheet (`Briefing | Atlas` toggle).
 
-All HTML concepts, production Briefing data, and screenshots are generated deterministically from real `buildMapData` output and pure formatting functions in [`src/map/copy.ts`](../../../src/map/copy.ts) via [`scripts/design-concepts.mjs`](../../../scripts/design-concepts.mjs) — zero numbers or commit hashes are hand-typed.
+Canonical production screenshots live in [`docs/repo-archaeology-map-rich.png`](../../repo-archaeology-map-rich.png) (light) and [`docs/repo-archaeology-map-rich-dark.png`](../../repo-archaeology-map-rich-dark.png) (dark). Historical Part 1 concept HTML/PNG snapshots (`concept-a.html`, `concept-b.html`, `side-by-side-concept-a.png`, `side-by-side-concept-b.png`) were reviewed in commit `14e0ee2` and removed before merge to keep the Git repository lean; they can be regenerated at any time with `node scripts/design-concepts.mjs --repo /path/to/repo`.
 
 ---
 
-## Side-by-Side Comparisons (`540px` Equal Height)
+## Production Screenshots (`--style rich`)
 
-### Concept A — Investigation Board
-![Side-by-side comparison: RA-16 vs Concept A vs FRAME/12 social-hero](./side-by-side-concept-a.png)
-
-### Concept B — Storyboard
-![Side-by-side comparison: RA-16 vs Concept B vs FRAME/12 social-hero](./side-by-side-concept-b.png)
+- **Light theme:** [`docs/repo-archaeology-map-rich.png`](../../repo-archaeology-map-rich.png)
+- **Dark theme:** [`docs/repo-archaeology-map-rich-dark.png`](../../repo-archaeology-map-rich-dark.png)
 
 ---
 
@@ -47,20 +44,13 @@ All HTML concepts, production Briefing data, and screenshots are generated deter
 
 ---
 
-## Rendered Viewport Gallery
+## Regenerating Concept Artifacts on Demand
 
-### Concept A — Desktop Light (`1440×900`), Desktop Dark (`1440×900`), Mobile Light (`390×844`)
-- [`concept-a-desktop-light.png`](./concept-a-desktop-light.png)
-- [`concept-a-desktop-dark.png`](./concept-a-desktop-dark.png)
-- [`concept-a-mobile-light.png`](./concept-a-mobile-light.png)
+Run [`scripts/design-concepts.mjs`](../../../scripts/design-concepts.mjs) against any local Git repository to regenerate `concept-a.html`, `concept-b.html`, `concept-empty.html`, and the desktop/mobile comparison screenshots locally:
 
-### Concept B — Desktop Light (`1440×900`), Desktop Dark (`1440×900`), Mobile Light (`390×844`)
-- [`concept-b-desktop-light.png`](./concept-b-desktop-light.png)
-- [`concept-b-desktop-dark.png`](./concept-b-desktop-dark.png)
-- [`concept-b-mobile-light.png`](./concept-b-mobile-light.png)
-
-### First-Class Empty State — Desktop Light (`1440×900`)
-- [`concept-empty-desktop-light.png`](./concept-empty-desktop-light.png)
+```bash
+node scripts/design-concepts.mjs --repo /path/to/repo
+```
 
 ---
 

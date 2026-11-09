@@ -52,6 +52,8 @@ export interface DirectionMetricCopy {
   ratioHeadline: string;
   detailText: string;
   pctValue: number;
+  rawPctValue: number;
+  weighted: boolean;
   shared: number;
   totalChanges: number;
   rangeLowPct: number;
@@ -68,6 +70,7 @@ export interface PairHeadlineCopy {
   shared: number;
   fromChanges: number;
   relationship: Relationship;
+  weighted: boolean;
 }
 
 export interface FamilyHeadlineCopy {
@@ -90,6 +93,7 @@ export interface EmptyStateCopy {
   commits: number;
   minShared: number;
   minConfidencePct: number;
+  looserCommand: string;
 }
 
 export interface FamilyPairRowCopy {
@@ -174,12 +178,19 @@ export interface RankedFindingItem {
   subtitle: string;
   reverseSummary: string;
   counterexampleLine: string;
+  reverseCounterexampleLine: string;
   fromPath: string;
   toPath: string;
+  shortFrom: string;
+  shortTo: string;
   shared: number;
   totalChanges: number;
+  fromOnlyTotal: number;
+  toOnlyTotal: number;
   ratioText: string;
   confidence: number;
+  weighted: boolean;
+  rawPct: number;
   interval: WilsonInterval;
   rangeLowPct: number;
   rangeHighPct: number;
@@ -361,7 +372,12 @@ export function formatPairHeadline(data: MapData, edge: MapEdge): PairHeadlineCo
   const headline = `${a} and ${b} keep changing together`;
   const firstSentence = relationshipLeadSentence(edge.relationship);
   const commitNoun = dir.fromChanges === 1 ? 'commit' : 'commits';
-  const secondSentence = `${dir.shared} of ${dir.fromChanges} ${commitNoun} that changed ${a} also changed ${b}.`;
+  const weighted = Boolean(edge.weighted);
+  const rawPct = dir.fromChanges > 0 ? Math.round((dir.shared / dir.fromChanges) * 100) : 0;
+  const weightedPct = Math.round(dir.confidence * 100);
+  const secondSentence = weighted
+    ? `${dir.shared} of ${dir.fromChanges} ${commitNoun} that changed ${a} also changed ${b} (${weightedPct}% weighted; ${rawPct}% raw).`
+    : `${dir.shared} of ${dir.fromChanges} ${commitNoun} that changed ${a} also changed ${b}.`;
   return {
     headline,
     subhead: `${firstSentence} ${secondSentence}`,
@@ -372,6 +388,7 @@ export function formatPairHeadline(data: MapData, edge: MapEdge): PairHeadlineCo
     shared: dir.shared,
     fromChanges: dir.fromChanges,
     relationship: edge.relationship,
+    weighted,
   };
 }
 
@@ -435,19 +452,27 @@ export function formatDirectionMetric(
   totalChanges: number,
   confidence: number,
   interval: WilsonInterval,
+  weighted = false,
 ): DirectionMetricCopy {
   const pctValue = Math.round(confidence * 100);
+  const rawPctValue = totalChanges > 0 ? Math.round((shared / totalChanges) * 100) : 0;
   const rangeLowPct = Math.round(interval.low * 100);
   const rangeHighPct = Math.round(interval.high * 100);
   const commitNoun = totalChanges === 1 ? 'commit' : 'commits';
+  const pctText = weighted ? `${pctValue}% weighted` : `${pctValue}%`;
+  const detailText = weighted
+    ? `Raw ${shared} of ${totalChanges} ${commitNoun} (${rawPctValue}%) · raw 95% range ${rangeLowPct}–${rangeHighPct}%`
+    : `${shared} of ${totalChanges} ${commitNoun} · 95% range ${rangeLowPct}–${rangeHighPct}%`;
   return {
     fromLabel,
     toLabel,
-    pctText: `${pctValue}%`,
+    pctText,
     lowerBoundText: `≥${rangeLowPct}% CI`,
     ratioHeadline: `${shared}/${totalChanges} ${commitNoun}`,
-    detailText: `${shared} of ${totalChanges} ${commitNoun} · 95% range ${rangeLowPct}–${rangeHighPct}%`,
+    detailText,
     pctValue,
+    rawPctValue,
+    weighted,
     shared,
     totalChanges,
     rangeLowPct,
@@ -527,6 +552,28 @@ export function formatVerdictNote(verdict?: RelationshipVerdictView): string | n
 }
 
 /**
+ * Builds a dynamic empty-state CLI command that lowers `minShared` and/or `minConfidence`
+ * relative to the current run settings, omitting any threshold already at its floor.
+ */
+export function formatLooserThresholdCommand(
+  settings?: { minShared?: number; minConfidence?: number },
+  style: 'classic' | 'rich' = 'rich',
+): string {
+  const curShared = typeof settings?.minShared === 'number' ? settings.minShared : 3;
+  const curConf = typeof settings?.minConfidence === 'number' ? settings.minConfidence : 0.4;
+  const args: string[] = ['npx repo-archaeology map'];
+  if (style === 'rich') args.push('--style rich');
+  if (curShared > 1) {
+    args.push(`--min-shared ${Math.max(1, curShared - 1)}`);
+  }
+  if (curConf > 0.05) {
+    const nextConf = Math.max(0.05, Math.round(curConf * 50) / 100);
+    args.push(`--min-confidence ${nextConf}`);
+  }
+  return args.join(' ');
+}
+
+/**
  * Formats the first-class empty state copy when a repository has no ghost wires (and no surprising links).
  */
 export function formatEmptyStateCopy(
@@ -539,6 +586,7 @@ export function formatEmptyStateCopy(
   const minConfidencePct = Math.round(data.meta.settings.minConfidence * 100);
   const commitNoun = commits === 1 ? 'commit' : 'commits';
   const sharedNoun = minShared === 1 ? 'commit' : 'commits';
+  const looserCommand = formatLooserThresholdCommand(data.meta.settings, 'rich');
 
   const headline = `No ghost wires in ${repoName}`;
   const subhead = `Checked ${commits.toLocaleString('en-US')} ${commitNoun} at ≥${minShared} shared ${sharedNoun} and ≥${minConfidencePct}% confidence.`;
@@ -560,6 +608,7 @@ export function formatEmptyStateCopy(
     commits,
     minShared,
     minConfidencePct,
+    looserCommand,
   };
 }
 
@@ -573,6 +622,7 @@ export function formatEvidencePanelCopy(
 ): EvidencePanelCopy {
   const edge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const dir = resolveStrongerDirection(data, edge);
+  const isWeighted = Boolean(edge.weighted);
 
   const headlineInfo =
     featured.kind === 'family'
@@ -586,6 +636,7 @@ export function formatEvidencePanelCopy(
     dir.fromChanges,
     dir.confidence,
     dir.interval,
+    isWeighted,
   );
   const reverseDirection = formatDirectionMetric(
     dir.shortTo,
@@ -594,6 +645,7 @@ export function formatEvidencePanelCopy(
     dir.toChanges,
     dir.reverseConfidence,
     dir.reverseInterval,
+    isWeighted,
   );
 
   const lastTogetherDate = sanitizeHtmlDisplayText(
@@ -1074,6 +1126,12 @@ export function buildRankedFindings(
         posix.basename(fam.members[0]?.path ?? fam.label ?? 'file');
       const famHasGhost =
         Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.includes('ghost');
+      const famWeighted = Boolean(leadEdge.weighted);
+      const famRawPct = dir.fromChanges > 0 ? Math.round((dir.shared / dir.fromChanges) * 100) : 0;
+      const famRevRawPct = dir.toChanges > 0 ? Math.round((dir.shared / dir.toChanges) * 100) : 0;
+      const famRevPctText = famWeighted
+        ? `${Math.round(dir.reverseConfidence * 100)}% weighted, ${famRevRawPct}% raw`
+        : `${Math.round(dir.reverseConfidence * 100)}%`;
       items.push({
         id: `family:${fam.id}`,
         findingId,
@@ -1082,14 +1140,21 @@ export function buildRankedFindings(
         relationship: famHasGhost ? 'ghost' : leadEdge.relationship,
         title: `${sanitizeHtmlDisplayText(famFileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
         subtitle: `${fam.members.length} files (${fam.members.map((m) => sanitizeHtmlDisplayText(m.variant)).join(', ')}) · ${fam.commitsTouchingTwoOrMore} commits (2+ files)`,
-        reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%)`,
+        reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${famRevPctText})`,
         counterexampleLine: formatCounterexamplesLine(dir.fromOnlyTotal),
+        reverseCounterexampleLine: formatCounterexamplesLine(dir.toOnlyTotal),
         fromPath: dir.fromPath,
         toPath: dir.toPath,
+        shortFrom: dir.shortFrom,
+        shortTo: dir.shortTo,
         shared: dir.shared,
         totalChanges: dir.fromChanges,
+        fromOnlyTotal: dir.fromOnlyTotal,
+        toOnlyTotal: dir.toOnlyTotal,
         ratioText: `${dir.shared}/${dir.fromChanges}`,
         confidence: dir.confidence,
+        weighted: famWeighted,
+        rawPct: famRawPct,
         interval: dir.interval,
         rangeLowPct: Math.round(dir.interval.low * 100),
         rangeHighPct: Math.round(dir.interval.high * 100),
@@ -1108,6 +1173,15 @@ export function buildRankedFindings(
     const dir = resolveStrongerDirection(data, edge);
     const rankNum = items.length + 1;
     const findingId = `F-${String(rankNum).padStart(2, '0')}`;
+    const isWeighted = Boolean(edge.weighted);
+    const rawPct = dir.fromChanges > 0 ? Math.round((dir.shared / dir.fromChanges) * 100) : 0;
+    const revRawPct = dir.toChanges > 0 ? Math.round((dir.shared / dir.toChanges) * 100) : 0;
+    const pctSummary = isWeighted
+      ? `${Math.round(dir.confidence * 100)}% weighted, ${rawPct}% raw`
+      : `${Math.round(dir.confidence * 100)}%`;
+    const revPctSummary = isWeighted
+      ? `${Math.round(dir.reverseConfidence * 100)}% weighted, ${revRawPct}% raw`
+      : `${Math.round(dir.reverseConfidence * 100)}%`;
     items.push({
       id: `pair:${dir.fromPath}..${dir.toPath}`,
       findingId,
@@ -1115,15 +1189,22 @@ export function buildRankedFindings(
       kind: 'pair',
       relationship: edge.relationship,
       title: `${dir.shortFrom} ⇢ ${dir.shortTo}`,
-      subtitle: `${dir.shared} of ${dir.fromChanges} ${dir.fromChanges === 1 ? 'commit' : 'commits'} (${Math.round(dir.confidence * 100)}%) · 95% range ${Math.round(dir.interval.low * 100)}–${Math.round(dir.interval.high * 100)}%`,
-      reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%)`,
+      subtitle: `${dir.shared} of ${dir.fromChanges} ${dir.fromChanges === 1 ? 'commit' : 'commits'} (${pctSummary}) · 95% range ${Math.round(dir.interval.low * 100)}–${Math.round(dir.interval.high * 100)}%`,
+      reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${revPctSummary})`,
       counterexampleLine: formatCounterexamplesLine(dir.fromOnlyTotal),
+      reverseCounterexampleLine: formatCounterexamplesLine(dir.toOnlyTotal),
       fromPath: dir.fromPath,
       toPath: dir.toPath,
+      shortFrom: dir.shortFrom,
+      shortTo: dir.shortTo,
       shared: dir.shared,
       totalChanges: dir.fromChanges,
+      fromOnlyTotal: dir.fromOnlyTotal,
+      toOnlyTotal: dir.toOnlyTotal,
       ratioText: `${dir.shared}/${dir.fromChanges}`,
       confidence: dir.confidence,
+      weighted: isWeighted,
+      rawPct,
       interval: dir.interval,
       rangeLowPct: Math.round(dir.interval.low * 100),
       rangeHighPct: Math.round(dir.interval.high * 100),

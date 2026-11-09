@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { MapData, MapEdge, MapFamily, MapNode } from '../src/commands/map.js';
+import { computeLayout } from '../src/map/layout.js';
+import { renderMapHtml } from '../src/map/template.js';
 import {
   buildRankedFindings,
   computeFeaturedPlateLayout,
@@ -559,269 +558,166 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(ranked[0]?.findingId, 'F-01');
   });
 
-  it('verifies Hono design concepts trace every number to docs/design/ra-17/hono.mapdata.json with zero label or balloon overlaps', () => {
-    const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-    const ra17Dir = join(rootDir, 'docs', 'design', 'ra-17');
-    const mapDataPath = join(ra17Dir, 'hono.mapdata.json');
-    assert.ok(existsSync(mapDataPath), 'expected hono.mapdata.json to exist');
+  it('distinguishes weighted vs raw percentages, attributes reverse counterexamples to the reverse file, and adapts empty-state threshold suggestions', () => {
+    const base = makeBaseData();
+    const weightedEdge: MapEdge = {
+      ...base.edges[0]!,
+      shared: 5,
+      fromChanges: 10,
+      toChanges: 12,
+      confidence: 0.72,
+      reverseConfidence: 0.61,
+      weighted: true,
+      weighting: 'recency',
+      counterexamples: {
+        fromOnlyTotal: 5,
+        toOnlyTotal: 7,
+        fromOnly: [],
+        toOnly: [],
+      },
+    };
+    const weightedData = makeBaseData({ edges: [weightedEdge] });
 
-    const honoData = JSON.parse(readFileSync(mapDataPath, 'utf8')) as MapData;
-    const featured = selectFeaturedFinding(honoData);
-    assert.equal(featured.kind, 'family');
-    if (featured.kind !== 'family') return;
+    const metric = formatDirectionMetric('tiny.ts', 'quick.ts', 5, 10, 0.72, { low: 0.2366, high: 0.7634 }, true);
+    assert.equal(metric.pctText, '72% weighted');
+    assert.equal(metric.rawPctValue, 50);
+    assert.equal(metric.detailText, 'Raw 5 of 10 commits (50%) · raw 95% range 24–76%');
 
-    const evCopy = formatEvidencePanelCopy(honoData, featured, 'C-01');
-    const plate = computeFeaturedPlateLayout(honoData, featured, { width: 760, height: 274 });
-    assert.equal(plate.nodes.length, 6);
-    const bb = plate.balloonBox;
-    assert.ok(bb, 'expected balloonBox on featured plate');
+    const pairCopy = formatPairHeadline(weightedData, weightedEdge);
+    assert.ok(
+      pairCopy.subhead.includes('72% weighted; 50% raw'),
+      `expected weighted + raw rate in subhead, got: ${pairCopy.subhead}`,
+    );
 
-    for (let i = 0; i < plate.nodes.length; i++) {
-      const nodeI = plate.nodes[i]!;
-      const a = nodeI.label;
-      // Check against balloonBox
-      const labelHitsBalloon: boolean =
-        a.x < bb.x + bb.w && a.x + a.w > bb.x && a.y < bb.y + bb.h && a.y + a.h > bb.y;
-      assert.equal(labelHitsBalloon, false, `Label ${a.text} overlaps speech balloon`);
-      const circleHitsBalloon: boolean =
-        nodeI.x + nodeI.r > bb.x &&
-        nodeI.x - nodeI.r < bb.x + bb.w &&
-        nodeI.y + nodeI.r > bb.y &&
-        nodeI.y - nodeI.r < bb.y + bb.h;
-      assert.equal(circleHitsBalloon, false, `Node circle ${a.text} overlaps speech balloon`);
-      for (let j = i + 1; j < plate.nodes.length; j++) {
-        const b = plate.nodes[j]!.label;
-        const overlaps =
-          a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-        assert.equal(overlaps, false, `Hono plate label overlap between ${a.text} and ${b.text}`);
-      }
-    }
+    const ranked = buildRankedFindings(weightedData);
+    assert.equal(ranked.length, 1);
+    assert.equal(ranked[0]?.weighted, true);
+    assert.equal(ranked[0]?.reverseCounterexampleLine, 'Changed alone: 7 times');
 
-    for (const htmlFile of ['concept-a.html', 'concept-b.html']) {
-      const html = readFileSync(join(ra17Dir, htmlFile), 'utf8');
-      assert.ok(html.includes(evCopy.subhead));
-      assert.ok(html.includes(evCopy.primaryDirection.pctText));
-      assert.ok(html.includes(evCopy.reverseDirection.pctText));
-      assert.ok(html.includes(honoData.meta.commitsAnalyzed.toLocaleString('en-US')));
-      for (const r of evCopy.receiptsShown) {
-        assert.ok(html.includes(r.hash.slice(0, 7)), `expected commit hash ${r.hash.slice(0, 7)} in ${htmlFile}`);
-      }
-    }
+    // Dynamic empty-state threshold suggestions when current settings are already at or below 2 / 0.25
+    const defaultEmpty = formatEmptyStateCopy(makeBaseData({ edges: [] }));
+    assert.equal(
+      defaultEmpty.looserCommand,
+      'npx repo-archaeology map --style rich --min-shared 2 --min-confidence 0.2',
+    );
+
+    const alreadyLooseData = makeBaseData({
+      edges: [],
+      meta: {
+        ...base.meta,
+        settings: {
+          ...base.meta.settings,
+          minShared: 2,
+          minConfidence: 0.25,
+        },
+      },
+    });
+    const looseEmpty = formatEmptyStateCopy(alreadyLooseData);
+    assert.equal(
+      looseEmpty.looserCommand,
+      'npx repo-archaeology map --style rich --min-shared 1 --min-confidence 0.13',
+    );
   });
 
-  it('verifies Concept A, Concept B, and Empty State meet first-viewport, >=11px font-size, zero horizontal scroll, zero canvas label/balloon collisions, and marker budget in Chromium', async (t) => {
-    let chromium: typeof import('playwright').chromium | undefined;
-    try {
-      ({ chromium } = await import('playwright'));
-    } catch {
-      t.skip('Playwright not installed');
-      return;
-    }
+  it('embeds complete multi-family, totalUnchecked, and collision-free plate payloads in production renderMapHtml', () => {
+    const fam1: MapFamily = {
+      id: 'src/adapter/*/serve-static',
+      label: 'serve-static.ts across src/adapter/*',
+      stem: 'serve-static',
+      fileName: 'serve-static.ts',
+      parentDir: 'src/adapter',
+      why: '3 parallel implementations',
+      members: [
+        { path: 'src/adapter/bun/serve-static.ts', dir: 'src/adapter/bun', variant: 'bun', changes: 20, connections: 2 },
+        { path: 'src/adapter/cloudflare-workers/serve-static.ts', dir: 'src/adapter/cloudflare-workers', variant: 'cloudflare-workers', changes: 27, connections: 2 },
+        { path: 'src/adapter/deno/serve-static.ts', dir: 'src/adapter/deno', variant: 'deno', changes: 24, connections: 2 },
+      ],
+      commitsTouchingTwoOrMore: 16,
+      commitsTouchingAll: 9,
+      lastTogether: '2026-05-16',
+      qualifyingPairs: 3,
+      possiblePairs: 3,
+      complete: true,
+      relationshipKinds: ['ghost'],
+      peakScore: 0.387,
+      maxPairShared: 12,
+      evidence: [],
+      allMemberEvidence: [],
+      nodeIndices: [2, 4, 3],
+      edgeIndices: [0],
+      overviewPriority: 2,
+    };
+    const fam2: MapFamily = {
+      ...fam1,
+      id: 'src/router/*/router',
+      label: 'router.ts across src/router/*',
+      stem: 'router',
+      fileName: 'router.ts',
+      parentDir: 'src/router',
+      members: [
+        { path: 'src/preset/tiny.ts', dir: 'src/preset', variant: 'tiny', changes: 8, connections: 1 },
+        { path: 'src/preset/quick.ts', dir: 'src/preset', variant: 'quick', changes: 10, connections: 1 },
+        { path: 'src/adapter/bun/serve-static.ts', dir: 'src/adapter/bun', variant: 'bun', changes: 20, connections: 1 },
+      ],
+      commitsTouchingTwoOrMore: 9,
+      commitsTouchingAll: 5,
+      lastTogether: '2026-04-01',
+      peakScore: 0.31,
+      overviewPriority: 1,
+    };
+    const base = makeBaseData();
+    const unknownEdge: MapEdge = {
+      ...base.edges[0]!,
+      source: 2,
+      target: 3,
+      relationship: 'unknown',
+      shared: 6,
+      fromChanges: 20,
+      toChanges: 24,
+      confidence: 0.3,
+      reverseConfidence: 0.25,
+      overviewPriority: 1,
+    };
+    const multiData = makeBaseData({
+      counts: { ghost: 1, unknown: 56, indirect: 0, direct: 0, test: 0 },
+      edges: [base.edges[0]!, unknownEdge],
+      families: [fam1, fam2],
+    });
 
-    let browser: import('playwright').Browser | undefined;
-    try {
-      browser = await chromium.launch();
-    } catch {
-      t.skip('Playwright Chromium browser binary not available');
-      return;
-    }
+    const html = renderMapHtml(multiData, computeLayout(multiData, { style: 'rich' }), { style: 'rich' });
+    const match = /<script type="application\/json" id="ra-briefing">([\s\S]*?)<\/script>/.exec(html);
+    assert.ok(match, 'expected #ra-briefing JSON script');
+    const briefing = JSON.parse(match[1]!);
 
-    const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-    const ra17Dir = join(rootDir, 'docs', 'design', 'ra-17');
+    // 1. totalUnchecked uses data.counts.unknown (56) while unknownCount is displayed unknown edges (1)
+    assert.equal(briefing.stats.unknownCount, 1);
+    assert.equal(briefing.stats.totalUnchecked, 56);
 
-    try {
-      const context = await browser.newContext({
-        viewport: { width: 1440, height: 900 },
-        deviceScaleFactor: 2,
-      });
-      const page = await context.newPage();
+    // 2. Both families are precomputed with distinct headlines and findingIds
+    assert.equal(briefing.families.length, 2);
+    assert.equal(briefing.families[0].headline, '3 files across src/adapter/* keep changing together');
+    assert.equal(briefing.families[1].headline, '3 files across src/router/* keep changing together');
 
-      for (const file of ['concept-a.html', 'concept-b.html']) {
-        await page.setViewportSize({ width: 1440, height: 900 });
-        await page.goto(pathToFileURL(join(ra17Dir, file)).href, { waitUntil: 'load' });
-        await page.evaluate(() => document.fonts && document.fonts.ready);
+    // 3. Unchecked edge is included in ranked findings so toggling Unchecked reveals it in Briefing mode
+    assert.ok(
+      briefing.ranked.some((r: { relationship: string }) => r.relationship === 'unknown'),
+      'expected unknown relationship in briefing.ranked',
+    );
 
-        const audit = await page.evaluate(() => {
-          const headline = document.querySelector('.f12-headline')?.getBoundingClientRect();
-          const dirCards = Array.from(document.querySelectorAll('.f12-dir-card')).map((el) =>
-            el.getBoundingClientRect(),
-          );
-          const plate = document.getElementById('featured-plate-canvas')?.getBoundingClientRect();
-          const balloon = document.querySelector('.f12-balloon')?.getBoundingClientRect();
-          const firstReceipt = document.querySelector('.f12-receipt-item')?.getBoundingClientRect();
-          const horizOverflow = document.documentElement.scrollWidth > window.innerWidth;
-
-          let minFontSize = Infinity;
-          let minFontSelector = '';
-          let markerTextColorUsed = false;
-          let markerBgCount = 0;
-
-          const all = Array.from(document.querySelectorAll('body *'));
-          for (const el of all) {
-            const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') continue;
-            const fs = parseFloat(style.fontSize);
-            if (el.textContent && el.textContent.trim().length > 0 && fs < minFontSize) {
-              minFontSize = fs;
-              minFontSelector = `${el.tagName.toLowerCase()}.${el.className}`;
-            }
-            if (style.color === 'rgb(255, 214, 10)') {
-              markerTextColorUsed = true;
-            }
-            if (style.backgroundColor === 'rgb(255, 214, 10)') {
-              markerBgCount += 1;
-            }
-          }
-
-          type Box = { x: number; y: number; w: number; h: number; text?: string };
-          type NodePt = { x: number; y: number; radius: number; label: string };
-          const w = window as unknown as {
-            __raPlateRenderedLabels?: Box[];
-            __raPlateRenderedNodes?: NodePt[];
-            __raPlateBalloonBox?: Box | null;
-          };
-          const labels = w.__raPlateRenderedLabels ?? [];
-          const nodes = w.__raPlateRenderedNodes ?? [];
-          const balloonBox = w.__raPlateBalloonBox ?? null;
-          const collisions: string[] = [];
-          for (let i = 0; i < labels.length; i++) {
-            const a = labels[i]!;
-            if (balloonBox) {
-              if (
-                a.x < balloonBox.x + balloonBox.w &&
-                a.x + a.w > balloonBox.x &&
-                a.y < balloonBox.y + balloonBox.h &&
-                a.y + a.h > balloonBox.y
-              ) {
-                collisions.push(`label ${a.text} hits balloon`);
-              }
-            }
-            for (let j = i + 1; j < labels.length; j++) {
-              const b = labels[j]!;
-              if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
-                collisions.push(`label ${a.text} hits label ${b.text}`);
-              }
-            }
-            for (const n of nodes) {
-              if (n.label === a.text) continue;
-              const nr = n.radius + 3;
-              if (a.x < n.x + nr && a.x + a.w > n.x - nr && a.y < n.y + nr && a.y + a.h > n.y - nr) {
-                collisions.push(`label ${a.text} hits node ${n.label}`);
-              }
-            }
-          }
-
-          return {
-            headlineBottom: headline?.bottom ?? 9999,
-            dirCardsCountInView: dirCards.filter((r) => r.bottom <= 900).length,
-            plateBottom: plate?.bottom ?? 900,
-            balloonBottom: balloon?.bottom ?? 900,
-            firstReceiptBottom: firstReceipt?.bottom ?? 9999,
-            horizOverflow,
-            minFontSize,
-            minFontSelector,
-            markerTextColorUsed,
-            markerBgCount,
-            collisions,
-          };
-        });
-
-        assert.ok(audit.headlineBottom <= 900, `${file}: headline bottom ${audit.headlineBottom} > 900`);
-        assert.ok(audit.dirCardsCountInView >= 2, `${file}: expected >=2 directional metrics in first viewport`);
-        assert.ok(audit.plateBottom <= 900, `${file}: plate bottom ${audit.plateBottom} > 900`);
-        assert.ok(audit.balloonBottom <= 900, `${file}: balloon bottom ${audit.balloonBottom} > 900`);
-        assert.ok(audit.firstReceiptBottom <= 900, `${file}: first receipt bottom ${audit.firstReceiptBottom} > 900`);
-        assert.equal(audit.horizOverflow, false, `${file}: unexpected horizontal overflow at 1440x900`);
-        assert.deepEqual(audit.collisions, [], `${file}: desktop canvas collisions: ${audit.collisions.join(', ')}`);
-        assert.ok(
-          audit.minFontSize >= 11,
-          `${file}: found font-size ${audit.minFontSize}px on ${audit.minFontSelector} (< 11px)`,
-        );
-        assert.equal(audit.markerTextColorUsed, false, `${file}: marker yellow used as text color`);
-        // Only masthead status chip + C-01 kicker chip have marker yellow background
-        assert.equal(audit.markerBgCount, 2, `${file}: expected 2 marker-yellow chips (masthead + C-01), got ${audit.markerBgCount}`);
-
-        // Verify "Show all 78 findings" button toggles hidden ranked items
-        const hiddenBefore = await page.locator('#ranked-findings-list [data-extra-row="true"][hidden]').count();
-        assert.equal(hiddenBefore, 63, `${file}: expected 63 initially hidden ranked rows`);
-        await page.click('#toggle-all-findings');
-        const hiddenAfter = await page.locator('#ranked-findings-list [data-extra-row="true"][hidden]').count();
-        assert.equal(hiddenAfter, 0, `${file}: expected 0 hidden ranked rows after clicking Show all`);
-
-        // Check mobile 390x844 and 200% zoom (720x450) for zero horizontal overflow and zero mobile collisions
-        for (const vp of [
-          { width: 390, height: 844 },
-          { width: 720, height: 450 },
-        ]) {
-          await page.setViewportSize(vp);
-          await page.waitForTimeout(50);
-          const vpAudit = await page.evaluate(() => {
-            const overflow = document.documentElement.scrollWidth > window.innerWidth;
-            const overflowingEls = Array.from(document.querySelectorAll('body *'))
-              .filter((el) => {
-                const r = el.getBoundingClientRect();
-                return r.right > window.innerWidth + 0.5;
-              })
-              .slice(0, 5)
-              .map((el) => {
-                const r = el.getBoundingClientRect();
-                return `${el.tagName.toLowerCase()}.${el.className}(right=${Math.round(r.right)})`;
-              });
-            type Box = { x: number; y: number; w: number; h: number; text?: string };
-            type NodePt = { x: number; y: number; radius: number; label: string };
-            const w = window as unknown as {
-              __raPlateRenderedLabels?: Box[];
-              __raPlateRenderedNodes?: NodePt[];
-              __raPlateBalloonBox?: Box | null;
-            };
-            const labels = w.__raPlateRenderedLabels ?? [];
-            const nodes = w.__raPlateRenderedNodes ?? [];
-            const balloonBox = w.__raPlateBalloonBox ?? null;
-            const collisions: string[] = [];
-            for (let i = 0; i < labels.length; i++) {
-              const a = labels[i]!;
-              if (balloonBox) {
-                if (
-                  a.x < balloonBox.x + balloonBox.w &&
-                  a.x + a.w > balloonBox.x &&
-                  a.y < balloonBox.y + balloonBox.h &&
-                  a.y + a.h > balloonBox.y
-                ) {
-                  collisions.push(`label ${a.text} hits balloon`);
-                }
-              }
-              for (let j = i + 1; j < labels.length; j++) {
-                const b = labels[j]!;
-                if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
-                  collisions.push(`label ${a.text} hits label ${b.text}`);
-                }
-              }
-              for (const n of nodes) {
-                if (n.label === a.text) continue;
-                const nr = n.radius + 3;
-                if (a.x < n.x + nr && a.x + a.w > n.x - nr && a.y < n.y + nr && a.y + a.h > n.y - nr) {
-                  collisions.push(`label ${a.text} hits node ${n.label}`);
-                }
-              }
-            }
-            return { overflow, overflowingEls, collisions };
-          });
-          assert.equal(
-            vpAudit.overflow,
-            false,
-            `${file}: unexpected horizontal overflow at ${vp.width}x${vp.height}: ${vpAudit.overflowingEls.join(', ')}`,
-          );
-          assert.deepEqual(
-            vpAudit.collisions,
-            [],
-            `${file}: canvas collisions at ${vp.width}x${vp.height}: ${vpAudit.collisions.join(', ')}`,
-          );
-        }
+    // 4. Featured plate has zero label-to-label or label-to-balloon collisions
+    const plate = briefing.featured.plate;
+    const bb = plate.balloonBox;
+    for (let i = 0; i < plate.nodes.length; i++) {
+      const a = plate.nodes[i].label;
+      if (bb) {
+        const hitsBalloon = a.x < bb.x + bb.w && a.x + a.w > bb.x && a.y < bb.y + bb.h && a.y + a.h > bb.y;
+        assert.equal(hitsBalloon, false, `Label ${a.text} overlaps balloon`);
       }
-
-      await context.close();
-    } finally {
-      await browser.close();
+      for (let j = i + 1; j < plate.nodes.length; j++) {
+        const b = plate.nodes[j].label;
+        const overlaps = a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+        assert.equal(overlaps, false, `Label ${a.text} overlaps ${b.text}`);
+      }
     }
   });
 });

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **FRAME/12 Investigation Board (`RA-17`, `--style rich` Briefing + Atlas, [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts), [`scripts/design-concepts.mjs`](scripts/design-concepts.mjs)):**
+  - Added pure copy, ranking, deep-link hash (`#f=<sourcePath>..<targetPath>`), and collision-free ego-network layout templates (`src/map/copy.ts`) for `map --style rich`, promoting the highest-priority finding family or pair to Cut `C-01` while keeping panel cut labels (`C-01`–`C-05`, `E-01`) distinct from finding IDs (`F-01`–`F-NN`).
+  - Added the default **Briefing** view alongside **Atlas** (`Briefing | Atlas` view toggle in `src/map/template.ts`) with offline-embedded `Dela Gothic One` and `M PLUS 1 Code` woff2 fonts (`assets/fonts/`), a compact stat strip with native HTML `popover="auto"` `?` help explainers, a 3-beat plain-language guide (`01 · WHAT WE FOUND`, `02 · WHAT THE HISTORY SHOWS`, `03 · WHAT TO DO NEXT`), a `760×420` desktop / `340×240` mobile cyanotype blueprint plate SVG (`<= 12` ego nodes on desktop, `<= 6` on mobile) with speech-balloon callout and `#fffef9` chalk halo + `#ff4f9a` ghost-wire stroke (never using `--f-marker` `#ffd60a` as a stroke), side-by-side directional co-change cards (explicitly distinguishing `weighted` vs. `raw` rates), qualifying family pair breakdowns, counterexample disclosures, commit receipts, secondary cards (`C-02`–`C-04`), an interactive Ranked Findings index (`C-05`) synchronized with all relationship filter toggles (`Ghost wires`, `Unchecked`, `Indirect imports`, `Import links`, `Tests`) and multi-family selection, and a contextual empty state with a looser-threshold CLI command.
+  - Added `<meta name="text-scale" content="scale">`, single-active `<main>` landmark toggling (`hidden` + `inert`), and 150ms hover-delayed, `Escape`-dismissible, hoverable tooltips in Atlas mode.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added
