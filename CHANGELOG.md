@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-09
+
 ### Added
 - **Briefing Plate Keyboard Access & `Back to family` ([`src/map/template.ts`](src/map/template.ts)):** Files on the Cut `C-01` blueprint plate are now focusable buttons (`role="button"`, `tabindex="0"`, `Inspect <path>` label) that select with `Enter`/`Space` and keep focus after the Briefing re-renders. After pivoting from a Finding Family to one of its pairs (via a plate file, wire, or family pair row), C-01 shows a `← Back to family (N files)` button (`#back-to-family-btn`). The plate footer and node tooltips now say files and wires can be clicked to inspect.
 

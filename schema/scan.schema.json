@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.6.0/schema/scan.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.7.0/schema/scan.schema.json",
   "title": "Repo Archaeology Scan Result (v1)",
   "description": "JSON output contract for `repo-archaeology scan --json`.",
   "type": "object",
