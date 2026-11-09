@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **FRAME/12 Investigation Board & Built-In Field Guide (`RA-17`, `--style rich` Briefing + Atlas + Field Guide, [`src/report/glossary.ts`](src/report/glossary.ts), [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts), [`scripts/design-concepts.mjs`](scripts/design-concepts.mjs)):**
+  - Added pure copy, ranking, deep-link hash (`#f=<sourcePath>..<targetPath>`), and collision-free ego-network layout templates (`src/map/copy.ts`) for `map --style rich`, promoting the highest-priority finding family or pair to Cut `C-01` while keeping panel cut labels (`C-01`–`C-05`, `E-01`) distinct from finding IDs (`F-01`–`F-NN`).
+  - Added the default **Briefing** view alongside **Atlas** (`Briefing | Atlas` view toggle in `src/map/template.ts`) with offline-embedded `Dela Gothic One` and `M PLUS 1 Code` woff2 fonts (`assets/fonts/`), a compact stat strip with native HTML `popover="auto"` `?` help explainers, a 3-beat plain-language guide (`01 · WHAT WE FOUND`, `02 · WHAT THE HISTORY SHOWS`, `03 · WHAT TO DO NEXT`), a `760×420` desktop / `340×240` mobile cyanotype blueprint plate SVG (`<= 12` ego nodes on desktop, `<= 6` on mobile) with speech-balloon callout and `#fffef9` chalk halo + `#ff4f9a` ghost-wire stroke (never using `--f-marker` `#ffd60a` as a stroke), side-by-side directional co-change cards (explicitly distinguishing `weighted` vs. `raw` rates) with labeled `% asymmetry ?` and `95% range ?` help pills, qualifying family pair breakdowns, counterexample disclosures, commit receipts, secondary cards (`C-02`–`C-04`), an interactive Ranked Findings index (`C-05`) synchronized with all relationship filter toggles (`Ghost wires`, `Unchecked`, `Indirect imports`, `Import links`, `Tests`), mixed-family member-edge filtering, bidirectional `Briefing ↔ Atlas` selection sync, keyboard focus preservation across board re-renders, and a contextual empty state with a dynamic looser-threshold CLI command.
+  - Added the built-in **Repo Archaeology Field Guide** (`src/report/glossary.ts`, accessible from both `Briefing` and `Atlas` via `Field Guide ▾` and contextual `?` popover deep links) with a `Start Here` orientation, a 12-term native `<details>` glossary aligned with codebase constants (`wilsonInterval`, `DEFAULT_SETTINGS`, `heuristic: true` / `meta.imports.heuristicEdges`, and `hiddenBridge`), a dynamic `Reading This Finding` worked explanation in `C-01` (with a 1-line summary in `<summary>` and expandable 3-stage interpretation), and a path-redacted `About This Analysis` provenance section.
+  - Added `<meta name="text-scale" content="scale">`, single-active `<main>` landmark toggling (`hidden` + `inert`), and 150ms hover-delayed, `Escape`-dismissible, hoverable tooltips in Atlas mode.
+
+### Fixed
+- **Shell-Safe Fallback `explain` Commands in `map` (`classic` & `rich`, [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):** `fallbackExplainCommand` in both the default `classic` map view and `--style rich` now POSIX single-quotes file paths containing spaces, quotes, or shell metacharacters when `edge.explainCommand` is absent.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added

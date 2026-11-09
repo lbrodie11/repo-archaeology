@@ -1,9 +1,378 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { formatExplainCommand } from '../commands/explain.js';
 import type { MapData } from '../commands/map.js';
+import type { Relationship } from '../imports/classify.js';
+import {
+  GLOSSARY_TERMS,
+  buildAnalysisProvenance,
+  getGlossaryEntry,
+  type AnalysisProvenance,
+} from '../report/glossary.js';
 import { sanitizeHtmlDisplayText, type StyleMode } from '../style/frame12.js';
+import {
+  KICKER_MOST_INTERESTING,
+  buildRankedFindings,
+  computeFeaturedPlateLayout,
+  formatBalloonCallout,
+  formatCounterexamplesLine,
+  formatDirectionMetric,
+  formatEmptyStateCopy,
+  formatEvidencePanelCopy,
+  formatFindingHash,
+  resolveStrongerDirection,
+  selectFeaturedFinding,
+  type EmptyStateCopy,
+  type EvidencePanelCopy,
+  type FeaturedFinding,
+  type FeaturedPlateLayout,
+  type RankedFindingItem,
+} from './copy.js';
 import { computeLayout, computeRichLayout, type LayoutResult } from './layout.js';
+
+let cachedEmbeddedFontCss: string | null = null;
+
+function getEmbeddedFontsCss(): string {
+  if (cachedEmbeddedFontCss !== null) return cachedEmbeddedFontCss;
+  try {
+    const fontsDir = fileURLToPath(new URL('../../assets/fonts', import.meta.url));
+    const dela400 = readFileSync(join(fontsDir, 'dela-gothic-one-400.woff2')).toString('base64');
+    const mplus500 = readFileSync(join(fontsDir, 'm-plus-1-code-500.woff2')).toString('base64');
+    const mplus700 = readFileSync(join(fontsDir, 'm-plus-1-code-700.woff2')).toString('base64');
+    const oflHeader = readFileSync(join(fontsDir, 'OFL.txt'), 'utf8')
+      .split(/\r?\n/)
+      .slice(0, 14)
+      .join('\n');
+    cachedEmbeddedFontCss = `/*\n${oflHeader}\n*/\n@font-face{font-family:"Dela Gothic One";font-style:normal;font-weight:400 900;font-display:swap;src:url("data:font/woff2;base64,${dela400}") format("woff2");}\n@font-face{font-family:"M PLUS 1 Code";font-style:normal;font-weight:500;font-display:swap;src:url("data:font/woff2;base64,${mplus500}") format("woff2");}\n@font-face{font-family:"M PLUS 1 Code";font-style:normal;font-weight:700 800;font-display:swap;src:url("data:font/woff2;base64,${mplus700}") format("woff2");}\n`;
+  } catch {
+    cachedEmbeddedFontCss = '';
+  }
+  return cachedEmbeddedFontCss;
+}
 
 export interface RenderMapOptions {
   style?: StyleMode;
+}
+
+interface SecondaryCardBriefing {
+  cutId: string;
+  findingId: string;
+  edgeIndex: number;
+  relationship: Relationship;
+  badge: string;
+  pairLabel: string;
+  headlinePct: string;
+  detailText: string;
+  lowPct: number;
+  highPct: number;
+  pointPct: number;
+  reverseLine: string;
+  lastTogether: string;
+  receiptHash: string;
+  receiptDate: string;
+  receiptSubject: string;
+  hash: string;
+}
+
+interface FamilyBriefingPayload {
+  familyIndex: number;
+  familyId: string;
+  findingId: string;
+  edgeIndex: number;
+  relationship: Relationship;
+  relationshipKinds: Relationship[];
+  edgeIndices: number[];
+  kickerChip: string;
+  kickerTag: string;
+  lastTogether: string;
+  headline: string;
+  lede: string;
+  plate: FeaturedPlateLayout;
+  balloonText: string;
+  evidence: EvidencePanelCopy;
+  hash: string;
+  memberPaths: string[];
+}
+
+interface BriefingDataPayload {
+  emptyState: (EmptyStateCopy & { suggestedCommand: string; plate: FeaturedPlateLayout }) | null;
+  featured: {
+    kind: 'family' | 'pair';
+    isFamily: boolean;
+    edgeIndex: number;
+    familyIndex?: number;
+    familyId?: string;
+    relationship: Relationship;
+    kickerChip: string;
+    kickerTag: string;
+    lastTogether: string;
+    headline: string;
+    lede: string;
+    plate: FeaturedPlateLayout;
+    balloonText: string;
+    evidence: EvidencePanelCopy;
+    hash: string;
+  } | null;
+  families: FamilyBriefingPayload[];
+  secondaryCards: SecondaryCardBriefing[];
+  ranked: RankedFindingItem[];
+  provenance: AnalysisProvenance;
+  stats: {
+    ghostCount: number;
+    familyCount: number;
+    unknownCount: number;
+    totalUnchecked: number;
+    edgesCount: number;
+    commitsAnalyzed: number;
+    oldestCommit: string;
+    newestCommit: string;
+    nodesCount: number;
+  };
+}
+
+const ALL_KINDS_VISIBLE: Record<Relationship, boolean> = {
+  ghost: true,
+  unknown: true,
+  indirect: true,
+  direct: true,
+  test: true,
+};
+
+function buildBriefingData(data: MapData): BriefingDataPayload {
+  const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
+  const familyCount = (data.families ?? []).length;
+  const unknownCount = data.edges.filter((e) => e.relationship === 'unknown').length;
+  const totalUnchecked = Math.max(unknownCount, data.counts?.unknown ?? unknownCount);
+  const stats = {
+    ghostCount,
+    familyCount,
+    unknownCount,
+    totalUnchecked,
+    edgesCount: data.edges.length,
+    commitsAnalyzed: data.meta.commitsAnalyzed,
+    oldestCommit: data.meta.oldestCommit ?? '',
+    newestCommit: data.meta.newestCommit ?? '',
+    nodesCount: data.nodes.length,
+  };
+
+  const provenance = buildAnalysisProvenance(data);
+  const featured = selectFeaturedFinding(data);
+  if (featured.kind === 'empty') {
+    const emptyCopy = formatEmptyStateCopy(data, {
+      nodeCount: featured.contextClusterNodeIndices.length,
+      edgeCount: featured.contextClusterEdgeIndices.length,
+    });
+    const emptyPlate = computeFeaturedPlateLayout(data, featured, {
+      width: 760,
+      height: 360,
+      visible: ALL_KINDS_VISIBLE,
+    });
+    return {
+      emptyState: {
+        ...emptyCopy,
+        suggestedCommand: emptyCopy.looserCommand,
+        plate: emptyPlate,
+      },
+      featured: null,
+      families: [],
+      secondaryCards: [],
+      ranked: [],
+      provenance,
+      stats,
+    };
+  }
+
+  const ranked = buildRankedFindings(data, ALL_KINDS_VISIBLE);
+  const evidence = formatEvidencePanelCopy(data, featured);
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 420 });
+  const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
+  const leadEdgeIndex = featured.kind === 'family' ? featured.leadEdgeIndex : featured.edgeIndex;
+  const balloonText = formatBalloonCallout(data, leadEdge);
+  const leadDir = resolveStrongerDirection(data, leadEdge);
+  const featuredHash = formatFindingHash(leadDir.fromNode.path, leadDir.toNode.path);
+  const kickerTag =
+    featured.kind === 'family'
+      ? `FAMILY · ${featured.family.members.length} FILES · ${featured.family.qualifyingPairs}/${featured.family.possiblePairs} PAIRS`
+      : `${leadEdge.relationship === 'ghost' ? 'GHOST WIRE' : leadEdge.relationship.toUpperCase()} · ${leadEdge.shared} SHARED COMMITS`;
+  const lastTogether =
+    featured.kind === 'family' ? featured.family.lastTogether : leadEdge.lastTogether;
+
+  const familiesPayload: FamilyBriefingPayload[] = [];
+  (data.families ?? []).forEach((fam, famIdx) => {
+    const validEdgeIndices = fam.edgeIndices
+      .filter((ei) => data.edges[ei] !== undefined)
+      .sort((a, b) => {
+        const ea = data.edges[a]!;
+        const eb = data.edges[b]!;
+        return (
+          eb.overviewPriority - ea.overviewPriority ||
+          eb.score - ea.score ||
+          eb.shared - ea.shared ||
+          a - b
+        );
+      });
+    const famLeadEdgeIdx = validEdgeIndices[0] ?? 0;
+    const famLeadEdge = data.edges[famLeadEdgeIdx] ?? leadEdge;
+    if (!famLeadEdge) return;
+    const famFeatured: FeaturedFinding = {
+      kind: 'family',
+      familyIndex: famIdx,
+      family: fam,
+      leadEdgeIndex: famLeadEdgeIdx,
+      leadEdge: famLeadEdge,
+    };
+    const famRank = ranked.find((r) => r.kind === 'family' && r.familyIndex === famIdx);
+    const famFindingId = famRank?.findingId ?? `F-${String(famIdx + 1).padStart(2, '0')}`;
+    const famEv = formatEvidencePanelCopy(data, famFeatured, famFindingId);
+    const famDir = resolveStrongerDirection(data, famLeadEdge);
+    if (!famEv.explainCommand) {
+      famEv.explainCommand = formatExplainCommand(famDir.fromNode.path, famDir.toNode.path);
+    }
+    const famPlate = computeFeaturedPlateLayout(data, famFeatured, {
+      width: 760,
+      height: 420,
+      visible: ALL_KINDS_VISIBLE,
+    });
+    const famHasGhost =
+      Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.includes('ghost');
+    const famRelKinds: Relationship[] =
+      Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.length > 0
+        ? [...fam.relationshipKinds]
+        : [famLeadEdge.relationship];
+    familiesPayload.push({
+      familyIndex: famIdx,
+      familyId: fam.id,
+      findingId: famFindingId,
+      edgeIndex: famLeadEdgeIdx,
+      relationship: famHasGhost ? 'ghost' : famLeadEdge.relationship,
+      relationshipKinds: famRelKinds,
+      edgeIndices: [...validEdgeIndices],
+      kickerChip:
+        featured.kind === 'family' && featured.familyIndex === famIdx
+          ? KICKER_MOST_INTERESTING
+          : `${famFindingId} · SELECTED FAMILY`,
+      kickerTag: `FAMILY · ${fam.members.length} FILES · ${fam.qualifyingPairs}/${fam.possiblePairs} PAIRS`,
+      lastTogether: fam.lastTogether,
+      headline: famEv.headline,
+      lede: famEv.subhead,
+      plate: famPlate,
+      balloonText: formatBalloonCallout(data, famLeadEdge),
+      evidence: famEv,
+      hash: formatFindingHash(famDir.fromNode.path, famDir.toNode.path),
+      memberPaths: fam.members.map((m) => m.path),
+    });
+  });
+
+  const excludedPaths = new Set<string>();
+  if (featured.kind === 'family') {
+    for (const m of featured.family.members) excludedPaths.add(m.path);
+  }
+  const candidateSecondary = data.edges
+    .map((e, idx) => ({ e, idx }))
+    .filter(({ e, idx }) => {
+      if (idx === leadEdgeIndex) return false;
+      const sPath = data.nodes[e.source]?.path ?? '';
+      const tPath = data.nodes[e.target]?.path ?? '';
+      if (excludedPaths.size > 0 && excludedPaths.has(sPath) && excludedPaths.has(tPath)) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const aGhost = a.e.relationship === 'ghost' ? 1 : 0;
+      const bGhost = b.e.relationship === 'ghost' ? 1 : 0;
+      if (bGhost !== aGhost) return bGhost - aGhost;
+      if (b.e.overviewPriority !== a.e.overviewPriority) return b.e.overviewPriority - a.e.overviewPriority;
+      const aLow = Math.max(a.e.interval.low, a.e.reverseInterval.low);
+      const bLow = Math.max(b.e.interval.low, b.e.reverseInterval.low);
+      if (bLow !== aLow) return bLow - aLow;
+      return b.e.shared - a.e.shared;
+    })
+    .slice(0, 24);
+
+  const secondaryCards: SecondaryCardBriefing[] = candidateSecondary.map(({ e, idx }, cardIdx) => {
+    const isWeighted = Boolean(e.weighted);
+    const dir = resolveStrongerDirection(data, e);
+    const fwd = formatDirectionMetric(
+      dir.shortFrom,
+      dir.shortTo,
+      dir.shared,
+      dir.fromChanges,
+      dir.confidence,
+      dir.interval,
+      isWeighted,
+    );
+    const rev = formatDirectionMetric(
+      dir.shortTo,
+      dir.shortFrom,
+      dir.shared,
+      dir.toChanges,
+      dir.reverseConfidence,
+      dir.reverseInterval,
+      isWeighted,
+    );
+    const standalonePart = `${formatCounterexamplesLine(dir.toOnlyTotal)} (${dir.shortTo})`;
+    const hash = formatFindingHash(dir.fromNode.path, dir.toNode.path);
+    const rankMatch = ranked.find((r) => r.kind === 'pair' && r.edgeIndex === idx);
+    const ev0 = e.evidence?.[0];
+    return {
+      cutId: `C-0${Math.min(4, cardIdx + 2)}`,
+      findingId: rankMatch?.findingId ?? `F-0${cardIdx + 2}`,
+      edgeIndex: idx,
+      relationship: e.relationship,
+      badge: e.relationship === 'ghost' ? 'GHOST WIRE' : e.relationship.toUpperCase(),
+      pairLabel: `${dir.shortFrom} → ${dir.shortTo}`,
+      headlinePct: fwd.pctText,
+      detailText: `${fwd.detailText} (${fwd.lowerBoundText})`,
+      lowPct: fwd.rangeLowPct,
+      highPct: fwd.rangeHighPct,
+      pointPct: fwd.pctValue,
+      reverseLine: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${rev.pctText}) · ${standalonePart}`,
+      lastTogether: e.lastTogether,
+      receiptHash: ev0 ? ev0.hash.slice(0, 7) : '',
+      receiptDate: ev0 ? ev0.date : '',
+      receiptSubject: ev0 ? sanitizeHtmlDisplayText(ev0.subject) : '',
+      hash,
+    };
+  });
+
+  // Ensure explainCommand uses formatExplainCommand when missing
+  if (!evidence.explainCommand) {
+    evidence.explainCommand = formatExplainCommand(leadDir.fromNode.path, leadDir.toNode.path);
+  }
+
+  return {
+    emptyState: null,
+    featured: {
+      kind: featured.kind,
+      isFamily: featured.kind === 'family',
+      edgeIndex: leadEdgeIndex,
+      ...(featured.kind === 'family'
+        ? { familyIndex: featured.familyIndex, familyId: featured.family.id }
+        : {}),
+      relationship:
+        featured.kind === 'family' &&
+        Array.isArray(featured.family.relationshipKinds) &&
+        featured.family.relationshipKinds.includes('ghost')
+          ? 'ghost'
+          : leadEdge.relationship,
+      kickerChip: KICKER_MOST_INTERESTING,
+      kickerTag,
+      lastTogether,
+      headline: evidence.headline,
+      lede: evidence.subhead,
+      plate,
+      balloonText,
+      evidence,
+      hash: featuredHash,
+    },
+    families: familiesPayload,
+    secondaryCards,
+    ranked,
+    provenance,
+    stats,
+  };
 }
 
 /**
@@ -97,41 +466,102 @@ export function renderMapHtml(
 function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   const safeRepoName = sanitizeHtmlDisplayText(data.repoName);
   const title = `REPO ARCHAEOLOGY / MAP — ${safeRepoName}`;
+  const briefing = buildBriefingData(data);
+  const prov = briefing.provenance;
+  const embeddedFontCss = getEmbeddedFontsCss();
   const layoutScript = layout !== null
     ? `\n<script type="application/json" id="ra-layout">${embedJson(layout)}</script>`
     : '';
+  const briefingScript = `\n<script type="application/json" id="ra-briefing">${embedJson(briefing)}</script>`;
+  const glossaryHtml = GLOSSARY_TERMS.map(
+    (entry) =>
+      `<details class="f12-glossary-item" name="f12-glossary" id="glossary-${entry.id}"><summary>${escapeHtml(entry.term)}</summary><div class="f12-glossary-body"><p class="f12-glossary-sum">${escapeHtml(entry.summary)}</p><p>${escapeHtml(entry.detail)}</p></div></details>`,
+  ).join('\n              ');
+  const provenanceDlHtml = prov.items
+    .map(
+      (item) =>
+        `<div class="f12-prov-row"><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`,
+    )
+    .join('\n              ');
+  const provWarningsHtml =
+    prov.warnings.length > 0
+      ? `<div class="f12-prov-warnings">${prov.warnings.map((w) => `! ${escapeHtml(w)}`).join('<br>')}</div>`
+      : '';
+  const ghostEntry = getGlossaryEntry('ghost-wire');
+  const familyEntry = getGlossaryEntry('file-family');
+  const uncheckedEntry = getGlossaryEntry('unchecked-link');
+  const dirEntry = getGlossaryEntry('directional-cochange');
+  const wilsonEntry = getGlossaryEntry('wilson-interval');
   return `<!doctype html>
 <html lang="en" data-theme-mode="system">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="text-scale" content="scale">
 <meta name="ra-style" content="rich">
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(title)}</title>
-<style>${RICH_STYLES}</style>
+<style>${embeddedFontCss}${RICH_STYLES}</style>
 </head>
 <body>
 <span id="fc-probe" class="fc-probe" hidden aria-hidden="true"></span>
-<div class="app">
+<div class="app" data-view="briefing">
   <header class="bar">
     <div class="heading">
       <div class="masthead-row">
-        <h1>REPO ARCHAEOLOGY / MAP</h1>
+        <h1>REPO ARCHAEOLOGY // INVESTIGATION BOARD</h1>
         <span class="repo-tag">${escapeHtml(safeRepoName)}</span>
+        <span class="f12-evidence-pill">EVIDENCE · NOT PROOF</span>
+        <details class="f12-howto" id="field-guide-details">
+          <summary>Field Guide · How to read this map ▸</summary>
+          <div class="f12-howto-pop" role="region" aria-label="Repo Archaeology Field Guide">
+            <div class="f12-fg-head">
+              <span class="f12-fg-kicker">REPO ARCHAEOLOGY // FIELD GUIDE</span>
+              <button type="button" id="field-guide-close" class="f12-fg-close" aria-label="Close Field Guide">Close ✕</button>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">01 · START HERE</div>
+              <p class="f12-fg-intro">Repo Archaeology examines Git history to identify files that repeatedly change together. Select a finding, inspect its directional numbers and supporting commits, and decide whether the companion file deserves coordinated review. Historical co-change is a signal to investigate, not proof that a change is required.</p>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">02 · GLOSSARY (${GLOSSARY_TERMS.length} TERMS)</div>
+              <div class="f12-glossary-list">
+              ${glossaryHtml}
+              </div>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">03 · ${escapeHtml(prov.title)}</div>
+              <p class="f12-fg-sub">${escapeHtml(prov.subtitle)}</p>
+              <dl class="f12-provenance-list">
+              ${provenanceDlHtml}
+              </dl>
+              ${provWarningsHtml}
+              <div class="f12-fg-footer">
+                <span>${escapeHtml(prov.footerText)}</span>
+                <a href="${escapeHtml(prov.githubUrl)}" target="_blank" rel="noopener noreferrer">View project on GitHub ↗</a>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="masthead-rule" aria-hidden="true"></div>
       <p id="summary" class="summary"></p>
-      ${data.meta.warnings && data.meta.warnings.length > 0 ? `<div class="banner-warning">${data.meta.warnings.map((w) => `! ${escapeHtml(sanitizeHtmlDisplayText(w))}`).join('<br>')}</div>` : ''}
+      ${prov.warnings.length > 0 ? `<div class="banner-warning">${prov.warnings.map((w) => `! ${escapeHtml(w)}`).join('<br>')}</div>` : ''}
     </div>
     <div class="controls">
       <label class="search"><span class="visually-hidden">Find a file</span>
         <input id="search" type="search" placeholder="Find a file  ( / )" autocomplete="off" spellcheck="false">
       </label>
+      <div class="f12-mode-switch" role="group" aria-label="Map view mode">
+        <button id="view-briefing" class="f12-mode-btn" type="button" aria-pressed="true" title="Narrative investigation board (B)">Briefing</button>
+        <button id="view-atlas" class="f12-mode-btn" type="button" aria-pressed="false" title="Contact-sheet network atlas (A)">Atlas</button>
+      </div>
       <button id="theme-toggle" class="map-btn theme-btn" type="button" data-theme-mode="system" title="Cycle theme: System, Light, Dark">Theme: System</button>
       <div id="toggles" class="toggles" role="group" aria-label="Relationship types"></div>
     </div>
   </header>
-  <main class="stage">
+  <main id="briefing-view" class="f12-briefing" aria-label="Investigation board briefing"></main>
+  <main id="atlas-stage" class="stage" hidden inert>
     <canvas id="map" role="img" aria-label="Contact-sheet dig map of files that change together. The panel lists the same relationships as text."></canvas>
     <img id="print-map-img" class="print-map-img" alt="Contact-sheet map of files that change together" hidden>
     <div id="tooltip" class="tooltip" hidden></div>
@@ -144,9 +574,34 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
     </div>
     <p class="hint">Drag to pan, scroll to zoom, drag a file inside its frame, or click a card to inspect.</p>
   </main>
-  <aside id="panel" class="panel" aria-live="polite"></aside>
+  <aside id="panel" class="panel" aria-live="polite" hidden inert></aside>
+  <div id="help-ghost-wire" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is a Ghost Wire?">
+    <div class="f12-help-title">${escapeHtml(ghostEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(ghostEntry.summary)}</strong> ${escapeHtml(ghostEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-ghost-wire">Open in Field Guide ▸</button>
+  </div>
+  <div id="help-family" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is a Finding Family?">
+    <div class="f12-help-title">${escapeHtml(familyEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(familyEntry.summary)}</strong> ${escapeHtml(familyEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-file-family">Open in Field Guide ▸</button>
+  </div>
+  <div id="help-unchecked" class="f12-help-popover" popover="auto" role="dialog" aria-label="What are Unchecked Links?">
+    <div class="f12-help-title">${escapeHtml(uncheckedEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(uncheckedEntry.summary)}</strong> ${escapeHtml(uncheckedEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-unchecked-link">Open in Field Guide ▸</button>
+  </div>
+  <div id="help-directional-pct" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is Directional Co-Change Percentage?">
+    <div class="f12-help-title">${escapeHtml(dirEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(dirEntry.summary)}</strong> ${escapeHtml(dirEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-directional-cochange">Open in Field Guide ▸</button>
+  </div>
+  <div id="help-confidence-range" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is the 95% Wilson Confidence Range?">
+    <div class="f12-help-title">${escapeHtml(wilsonEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(wilsonEntry.summary)}</strong> ${escapeHtml(wilsonEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-wilson-interval">Open in Field Guide ▸</button>
+  </div>
 </div>
-<script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}
+<script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}${briefingScript}
 <script>${RICH_CLIENT}</script>
 </body>
 </html>
@@ -1039,6 +1494,7 @@ const CLIENT = String.raw`
 
   function resolveActiveFamilyView(sel) {
     if (!sel) return null;
+    if (sel._isFallbackView) return sel;
     var baseFam = sel.family || sel;
     var views = getActiveFamilyViews(baseFam);
     if (views.length === 0) return null;
@@ -1627,6 +2083,16 @@ const CLIENT = String.raw`
       .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
   }
 
+  function shellQuoteArg(arg) {
+    var s = String(arg == null ? '' : arg);
+    if (/^[A-Za-z0-9_./-]+$/.test(s) && s.charAt(0) !== '-') return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+
+  function fallbackExplainCommand(a, b) {
+    return 'npx repo-archaeology explain ' + shellQuoteArg(a) + ' ' + shellQuoteArg(b);
+  }
+
   function mdCode(text) {
     var q = String.fromCharCode(96);
     var s = defuseMentions(text).replace(/[\r\n]+/g, ' ');
@@ -1668,7 +2134,7 @@ const CLIENT = String.raw`
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
@@ -2268,13 +2734,15 @@ const CLIENT = String.raw`
 
     var p2 = el('p');
     if (e.d.relationship === 'ghost') {
-      p2.textContent = 'No direct or supported indirect import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+      p2.textContent = 'No direct or one-step-removed import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
     } else if (e.d.relationship === 'indirect') {
-      p2.textContent = 'Connected indirectly through intermediate files in the dependency tree.';
+      p2.textContent = 'Connected indirectly (one step removed through an intermediate file) in the dependency tree.';
     } else if (e.d.relationship === 'direct') {
       p2.textContent = 'Connected by a direct import link in the current codebase.';
     } else if (e.d.relationship === 'test') {
-      p2.textContent = 'Recognized test and implementation pair.';
+      p2.textContent = String(e.d.why || '').trim().toLowerCase() === 'both are tests'
+        ? 'Both files are test files that have moved together in ' + plural(e.d.shared, 'shared commit') + '.'
+        : 'Test file that repeatedly changes alongside this code (' + plural(e.d.shared, 'shared commit') + ').';
     } else {
       p2.textContent = 'Import relationship status could not be fully verified from static imports.';
     }
@@ -2410,7 +2878,7 @@ const CLIENT = String.raw`
     }
 
     // Copyable CLI explain command + privacy note
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     var cliBox = el('div', 'cli-box');
     var cliHead = el('div', 'cli-box-head');
     cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
@@ -2560,9 +3028,9 @@ const RICH_STYLES = String.raw`
   --f-gutter-change: 32px;
   --f-stroke-ink: 2.5px;
   --f-shadow-sheet: 0 1px 0 rgba(0, 0, 0, 0.05), 0 18px 40px -26px rgba(0, 0, 0, 0.5);
-  --f-font-display: "Arial Black", "Helvetica Neue", sans-serif;
+  --f-font-display: "Dela Gothic One", "Arial Black", "Helvetica Neue", sans-serif;
   --f-font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --f-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --f-font-mono: "M PLUS 1 Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -2605,7 +3073,8 @@ const RICH_STYLES = String.raw`
   }
 }
 * { box-sizing: border-box; border-radius: 0; }
-html, body { margin: 0; height: 100%; max-width: 100%; overflow-x: hidden; background: var(--f-desk); color: var(--f-ink); font: 15px/1.55 var(--f-font-body); }
+html { margin: 0; height: 100%; max-width: 100%; overflow-x: hidden; background: var(--f-desk); color: var(--f-ink); }
+body { margin: 0; height: 100%; max-width: 100%; overflow-x: hidden; background: var(--f-desk); color: var(--f-ink); font: 0.9375rem/1.55 var(--f-font-body); }
 button, input { font: inherit; color: inherit; border-radius: 0; min-height: 24px; min-width: 24px; }
 :focus-visible { outline: var(--f-stroke-ink) solid var(--f-ink); outline-offset: 2px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -2615,7 +3084,7 @@ button, input { font: inherit; color: inherit; border-radius: 0; min-height: 24p
 .bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--f-gutter-pair) var(--f-gutter-change); align-items: flex-end; justify-content: space-between; padding: var(--f-gutter-scene) var(--f-gutter-change); border-bottom: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); min-width: 0; }
 .heading { min-width: 0; flex: 1 1 320px; }
 .masthead-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--f-gutter-pair); }
-h1 { margin: 0; font: 900 26px/1.05 var(--f-font-display); letter-spacing: 0.03em; text-transform: uppercase; color: var(--f-ink); }
+h1 { margin: 0; font: 900 24px/1.08 var(--f-font-display); letter-spacing: 0.02em; text-transform: uppercase; color: var(--f-ink); }
 .repo-tag { font: 700 13px/1.2 var(--f-font-mono); padding: 2px 6px; border: 1.5px solid var(--f-rule); color: var(--f-ink); background: var(--f-sheet); }
 .masthead-rule { height: var(--f-stroke-ink); width: 100%; max-width: 640px; margin: 8px 0 8px; background: var(--f-rule); transform: skewX(-18deg); }
 .summary { margin: 0; color: var(--f-ink-2); font-size: 13.5px; max-width: 78ch; overflow-wrap: anywhere; }
@@ -2641,7 +3110,7 @@ canvas.pointing { cursor: pointer; }
 .map-btn { display: inline-flex; align-items: center; gap: var(--f-gutter-pair); min-height: 28px; min-width: 28px; padding: 5px 10px; background: var(--f-panel); border: 1.5px solid var(--f-rule); color: var(--f-ink); font: 600 12px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; }
 .map-btn[aria-pressed="true"] { border-width: var(--f-stroke-ink); }
 .hint { position: absolute; left: var(--f-gutter-pair); bottom: var(--f-gutter-pair); margin: 0; padding: 2px 6px; background: var(--f-panel); border: 1px solid var(--f-rule); font: 12px/1.3 var(--f-font-mono); color: var(--f-ink-2); pointer-events: none; }
-.tooltip { position: absolute; pointer-events: none; max-width: 440px; padding: 8px 12px; background: var(--f-panel); border: var(--f-stroke-ink) solid var(--f-rule); color: var(--f-ink); font-size: 13px; z-index: 20; }
+.tooltip { position: absolute; pointer-events: auto; max-width: 440px; padding: 8px 12px; background: var(--f-panel); border: var(--f-stroke-ink) solid var(--f-rule); color: var(--f-ink); font-size: 13px; z-index: 20; }
 .tooltip code { font-family: var(--f-font-mono); font-size: 12.5px; word-break: break-all; color: var(--f-ink); }
 
 .panel { overflow-y: auto; overflow-x: hidden; min-width: 0; padding: var(--f-gutter-scene); background: var(--f-panel); border-left: var(--f-stroke-ink) solid var(--f-rule); display: flex; flex-direction: column; gap: var(--f-gutter-pair); }
@@ -2737,14 +3206,161 @@ canvas.pointing { cursor: pointer; }
 .legend-item { display: inline-flex; align-items: center; gap: var(--f-gutter-pair); font: 12px/1.3 var(--f-font-mono); color: var(--f-ink-2); }
 .legend-dot { width: 10px; height: 10px; border: 1.5px solid var(--f-rule); }
 
+/* RA-17 Investigation Board (Briefing Mode) */
+.app[data-view="briefing"] { display: flex; flex-direction: column; height: auto; min-height: 100vh; max-width: 1440px; width: 100%; margin: 0 auto; overflow-x: hidden; }
+.app[data-view="briefing"] > .stage, .app[data-view="briefing"] > .panel { display: none !important; }
+.app[data-view="atlas"] > .f12-briefing { display: none !important; }
+
+.f12-evidence-pill { display: inline-flex; align-items: center; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-marker); color: var(--f-marker-ink); font: 800 11px/1.3 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; }
+.f12-howto { position: relative; display: inline-block; }
+.f12-howto > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11.5px/1.3 var(--f-font-mono); }
+.f12-howto > summary::-webkit-details-marker { display: none; }
+.f12-howto-pop { position: fixed; top: 56px; right: 16px; left: auto; z-index: 60; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 72px); overflow-y: auto; padding: 14px 16px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); font: 400 12.5px/1.5 var(--f-font-body); box-shadow: var(--f-shadow-sheet); display: flex; flex-direction: column; gap: 12px; }
+.f12-fg-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--f-rule); }
+.f12-fg-kicker { font: 800 12px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink); }
+.f12-fg-close { min-height: 24px; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
+.f12-fg-close:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-fg-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.f12-fg-sec-title { font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink-2); }
+.f12-fg-intro, .f12-fg-sub { margin: 0; font: 400 12.5px/1.5 var(--f-font-body); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-fg-sub { color: var(--f-ink-2); font-size: 12px; }
+.f12-glossary-list { display: flex; flex-direction: column; gap: 4px; }
+.f12-glossary-item { border: 1px solid var(--f-rule); background: var(--f-sheet); min-width: 0; }
+.f12-glossary-item > summary { cursor: pointer; padding: 6px 8px; font: 700 12px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-glossary-item[open] > summary { border-bottom: 1px dashed var(--f-rule); background: var(--f-panel); }
+.f12-glossary-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; font: 400 12.5px/1.45 var(--f-font-body); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-glossary-body p { margin: 0; }
+.f12-glossary-sum { font-weight: 600; color: var(--f-ink); }
+.f12-provenance-list { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.f12-prov-row { display: grid; grid-template-columns: minmax(120px, 165px) minmax(0, 1fr); gap: 4px 10px; padding: 5px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font-size: 12px; line-height: 1.4; }
+.f12-prov-row dt { font: 700 11px/1.35 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.03em; color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-prov-row dd { margin: 0; font: 500 12px/1.4 var(--f-font-mono); color: var(--f-ink); min-width: 0; overflow-wrap: anywhere; }
+.f12-prov-warnings { padding: 6px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); font: 600 11.5px/1.4 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-fg-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding-top: 6px; border-top: 1px dashed var(--f-rule); font: 500 11.5px/1.4 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-fg-footer a, .f12-report-footer a { color: var(--f-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.f12-help-more-btn { margin-top: 8px; padding: 4px 9px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
+.f12-help-more-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-reading-finding { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; min-width: 0; }
+.f12-reading-finding > summary { cursor: pointer; font: 700 11.5px/1.38 var(--f-font-mono); letter-spacing: 0.01em; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-reading-body { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--f-rule); padding-top: 7px; }
+.f12-reading-item { font: 400 12.5px/1.45 var(--f-font-body); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-reading-item strong { display: block; font: 700 11.5px/1.3 var(--f-font-mono); color: var(--f-ink); margin-bottom: 2px; }
+.f12-about-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-about-details > summary { cursor: pointer; font: 800 12px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-about-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.f12-report-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; padding-top: 8px; border-top: 1px dashed var(--f-rule); font: 500 11.5px/1.4 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-mode-switch { display: inline-flex; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-sheet); }
+.f12-mode-btn { min-height: 28px; min-width: 28px; padding: 4px 12px; border: 0; background: var(--f-sheet); color: var(--f-ink); font: 800 12px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+.f12-mode-btn + .f12-mode-btn { border-left: 1.5px solid var(--f-rule); }
+.f12-mode-btn[aria-pressed="true"] { background: var(--f-ink); color: var(--f-sheet); }
+
+.f12-help-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; width: 24px; height: 24px; padding: 0; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 800 11.5px/1 var(--f-font-mono); cursor: pointer; flex-shrink: 0; }
+.f12-help-btn.f12-help-pill { width: auto; padding: 0 7px; gap: 4px; font-size: 10.5px; letter-spacing: 0.02em; }
+.f12-help-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-help-popover { display: none; position: fixed; inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 80; width: min(440px, 92vw); max-height: 80vh; overflow-y: auto; margin: 0; padding: 14px 16px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); box-shadow: var(--f-shadow-sheet); }
+.f12-help-popover:is(:popover-open, .\:popover-open) { display: block; }
+.f12-help-title { font: 800 11.5px/1.3 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1.5px solid var(--f-rule); }
+.f12-help-popover p { margin: 0; font: 400 13px/1.5 var(--f-font-body); color: var(--f-ink); }
+.f12-help-popover code { font: 700 12px/1.3 var(--f-font-mono); color: var(--f-ink); }
+
+.f12-beat-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.f12-beat-tag { font: 800 10.5px/1.2 var(--f-font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--f-ink-2); }
+.f12-jump-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
+.f12-jump-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-next-step { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; font: 500 12px/1.45 var(--f-font-body); color: var(--f-ink); }
+.f12-next-step strong { display: block; font: 800 10.5px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink-2); margin-bottom: 3px; }
+
+.f12-briefing { display: flex; flex-direction: column; gap: var(--f-gutter-scene); padding: var(--f-gutter-scene) var(--f-gutter-change) var(--f-gutter-change); background: var(--f-sheet); min-width: 0; }
+.f12-stat-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.f12-stat-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1.5px solid var(--f-rule); background: var(--f-panel); font: 700 11.5px/1.2 var(--f-font-mono); color: var(--f-ink-2); }
+.f12-stat-pill strong { font: 900 17px/1 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+
+.f12-board-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--f-gutter-scene); align-items: stretch; }
+.f12-cut-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-cut-c01 { grid-column: span 7; }
+.f12-cut-c05 { grid-column: span 5; gap: 12px; }
+.f12-cut-label { position: absolute; top: -10px; left: 12px; padding: 1px 6px; background: var(--f-sheet); border: 1.5px solid var(--f-rule); font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.06em; color: var(--f-ink); text-transform: uppercase; }
+
+.f12-kicker-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.f12-kicker-left { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.f12-kicker-chip { display: inline-flex; align-items: center; padding: 3px 8px; background: var(--f-marker); color: var(--f-marker-ink); border: 1.5px solid var(--f-rule); font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+.f12-tag { display: inline-flex; align-items: center; padding: 2px 7px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); letter-spacing: 0.03em; text-transform: uppercase; }
+.f12-last-date { font: 600 11.5px/1.2 var(--f-font-mono); color: var(--f-ink-2); }
+.f12-headline { margin: 2px 0 0; font: 900 clamp(21px, 2.2vw, 28px)/1.12 var(--f-font-display); letter-spacing: -0.01em; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-lede { margin: 0; font: 400 14px/1.5 var(--f-font-body); color: var(--f-ink-2); max-width: 72ch; overflow-wrap: anywhere; }
+
+.f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
+.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; }
+.f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11px/1.3 var(--f-font-mono); }
+.f12-plate-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.f12-plate-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.f12-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.f12-dir-box { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 10px; min-width: 0; }
+.f12-dir-pair { font: 700 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; margin-bottom: 4px; }
+.f12-dir-pct { font: 900 24px/1.08 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+.f12-dir-sub { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); margin-top: 3px; overflow-wrap: anywhere; }
+
+.f12-meta-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.f12-meta-pill { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font: 600 11.5px/1.3 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+
+.f12-family-pairs { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; }
+.f12-family-pairs-hdr { font: 800 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
+.f12-family-pair-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 6px; border: 0; border-top: 1px dashed var(--f-grid); background: transparent; text-align: left; cursor: pointer; font: 600 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); }
+.f12-family-pair-row:first-of-type { border-top: 0; }
+.f12-family-pair-row:hover { background: var(--f-panel); }
+
+.f12-counterexamples { border: 1.5px dashed var(--f-rule); background: var(--f-sheet); padding: 7px 10px; font: 600 11.5px/1.4 var(--f-font-mono); color: var(--f-ink); }
+.f12-counterexamples summary { cursor: pointer; overflow-wrap: anywhere; }
+.f12-cx-list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-weight: 500; color: var(--f-ink-2); }
+
+.f12-receipts-hdr { font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink-2); margin-top: 2px; }
+.f12-receipts-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.f12-receipt-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font: 500 12px/1.35 var(--f-font-body); }
+.f12-receipt-hash { padding: 2px 6px; border: 1px solid var(--f-rule); background: var(--f-panel); font: 700 11.5px/1.2 var(--f-font-mono); color: var(--f-ink); cursor: pointer; }
+.f12-receipt-subj { min-width: 0; overflow-wrap: anywhere; color: var(--f-ink); }
+.f12-receipt-date { font: 600 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); white-space: nowrap; }
+
+.f12-cli-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); margin-top: auto; }
+.f12-cli-code { flex: 1 1 200px; min-width: 0; font: 600 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-copy-btn { padding: 4px 10px; border: 1.5px solid var(--f-rule); background: var(--f-ink); color: var(--f-sheet); font: 800 11px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+
+.f12-secondary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--f-gutter-scene); }
+.f12-sec-card { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 16px 14px 14px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); cursor: pointer; }
+.f12-sec-card:hover { background: var(--f-sheet); }
+.f12-sec-card.selected { background-image: radial-gradient(circle, var(--f-tone) 0.65px, transparent 0.65px); background-size: 12px 12px; }
+.f12-sec-pair { font: 800 14px/1.3 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-sec-sub { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-ci-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; margin: 2px 0; }
+.f12-ci-pct { font: 900 19px/1 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+.f12-ci-track { position: relative; height: 14px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); overflow: hidden; }
+.f12-ci-fill { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--f-rule); border-right: 1px solid var(--f-rule); background-image: repeating-linear-gradient(-45deg, var(--f-tone) 0, var(--f-tone) 2px, transparent 2px, transparent 5px); opacity: 0.72; }
+.f12-ci-tick { position: absolute; top: -1px; bottom: -1px; width: 2.5px; background: var(--f-ink); }
+.f12-ci-bounds { font: 700 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.f12-sec-rev { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-sec-receipt { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); padding-top: 4px; border-top: 1px dashed var(--f-grid); overflow-wrap: anywhere; }
+
+.f12-ranked-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-ranked-hdr { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.f12-ranked-title { margin: 0; font: 900 18px/1.15 var(--f-font-display); text-transform: uppercase; letter-spacing: 0.02em; color: var(--f-ink); }
+.f12-ranked-list { display: flex; flex-direction: column; gap: 6px; }
+.f12-rank-row { display: grid; grid-template-columns: auto minmax(0, 1.5fr) auto auto minmax(120px, 1.2fr) auto auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px 10px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); cursor: pointer; font: 600 12px/1.3 var(--f-font-mono); }
+.f12-rank-row:hover { background: var(--f-panel); }
+.f12-rank-row.active { border-width: var(--f-stroke-ink); background-image: repeating-linear-gradient(-45deg, var(--f-grid) 0, var(--f-grid) 2px, transparent 2px, transparent 6px); }
+.f12-rank-id { padding: 2px 6px; border: 1.5px solid var(--f-rule); background: var(--f-panel); font: 800 11px/1.2 var(--f-font-mono); color: var(--f-ink); }
+.f12-rank-row.active .f12-rank-id { background: var(--f-ink); color: var(--f-sheet); }
+.f12-rank-pair { min-width: 0; overflow-wrap: anywhere; font-weight: 700; color: var(--f-ink); }
+.f12-rank-ratio { font-variant-numeric: tabular-nums; color: var(--f-ink); }
+.f12-toggle-all-btn { width: 100%; padding: 8px 12px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 800 11.5px/1.3 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-align: center; }
+
 @media (forced-colors: active) {
-  html, body, .app, .bar, .panel, .card, .pair-box, .cli-box, .map-btn, .toggle, .tab-btn, .badge, .cut-chip, .cut-section-label {
+  html, body, .app, .bar, .panel, .card, .pair-box, .cli-box, .map-btn, .toggle, .tab-btn, .badge, .cut-chip, .cut-section-label, .f12-cut-panel, .f12-sec-card, .f12-ranked-panel, .f12-rank-row, .f12-help-btn, .f12-help-popover {
     forced-color-adjust: auto;
     background-color: Canvas;
     color: CanvasText;
     border-color: CanvasText;
   }
-  .badge.marker-active, .card.selected {
+  .badge.marker-active, .card.selected, .f12-kicker-chip.marker-active {
     background-color: Highlight;
     color: HighlightText;
     border-color: Highlight;
@@ -2753,14 +3369,40 @@ canvas.pointing { cursor: pointer; }
 
 @media (max-width: 960px) {
   html, body { height: auto; overflow-x: hidden; }
-  .app { display: flex; flex-direction: column; height: auto; min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
-  .bar { order: 1; padding: var(--f-gutter-pair); }
+  .app, .app[data-view="briefing"], .app[data-view="atlas"] { display: flex; flex-direction: column; height: auto; min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
+  .bar { order: 1; padding: 10px 12px; gap: 8px; }
+  .f12-briefing { order: 2; padding: 12px; gap: 14px; }
   .panel { order: 2; border-left: 0; border-bottom: var(--f-stroke-ink) solid var(--f-rule); padding: var(--f-gutter-pair); overflow-y: visible; }
   .stage { order: 3; height: 70vh; min-height: 360px; width: 100%; }
   canvas { touch-action: pan-y; }
   .search input { width: 100%; }
-  .controls, .search { width: 100%; }
-  .cochange-grid { grid-template-columns: 1fr; }
+  .controls, .search { width: 100%; gap: 6px; }
+  .cochange-grid, .f12-dir-grid, .f12-secondary-grid { grid-template-columns: 1fr; }
+  .f12-board-grid { display: flex; flex-direction: column; gap: 14px; }
+  .f12-cut-c05 { clip-path: none; padding-bottom: 16px; }
+  .f12-kicker-left .f12-tag, .f12-kicker-chip, .f12-last-date, .f12-ci-bounds { white-space: normal; }
+  .f12-rank-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .f12-rank-row .f12-tag, .f12-rank-row .f12-ci-track, .f12-rank-row .f12-last-date { display: none; }
+}
+
+@media (max-width: 640px) {
+  h1 { font-size: 16px; line-height: 1.15; }
+  .masthead-rule, .summary { display: none; }
+  .f12-stat-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .f12-stat-pill { padding: 4px 8px; gap: 6px; font-size: 10.5px; min-width: 0; overflow-wrap: anywhere; }
+  .f12-stat-pill strong { font-size: 14px; }
+  .f12-plate-svg { aspect-ratio: 340 / 240; }
+  .f12-cut-panel { padding: 14px 12px 12px; gap: 8px; }
+  .f12-howto { width: 100%; }
+  .f12-howto-pop { position: static; width: 100%; max-width: 100%; max-height: none; margin-top: 6px; padding: 10px; box-shadow: none; }
+  .f12-prov-row { grid-template-columns: 1fr; gap: 2px; }
+}
+
+@media (max-width: 400px) {
+  .bar { padding: 8px; }
+  .f12-briefing { padding: 8px; gap: 10px; }
+  .f12-stat-strip { grid-template-columns: 1fr; }
+  .f12-cli-code { flex-basis: 100%; }
 }
 
 @media print {
@@ -3195,11 +3837,27 @@ const RICH_CLIENT = String.raw`
   function isActive(n) { return Boolean(n.active); }
 
   var toggles = document.getElementById('toggles');
+  function ensureRelationshipVisible(rel) {
+    if (!rel || visible[rel]) return;
+    visible[rel] = true;
+    if (toggles) {
+      var btns = toggles.querySelectorAll('.toggle[data-kind]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute('data-kind') === rel) {
+          btns[i].classList.remove('off');
+          btns[i].setAttribute('aria-pressed', 'true');
+        }
+      }
+    }
+    syncActiveNodes();
+    updateSummary();
+  }
   ORDER.forEach(function (kind) {
     var shown = edges.filter(function (e) { return e.d.relationship === kind; }).length;
     if (shown === 0 && !hasKindInData(kind)) return;
-    var b = el('button', 'toggle');
+    var b = el('button', 'toggle' + (visible[kind] ? '' : ' off'));
     b.type = 'button';
+    b.setAttribute('data-kind', kind);
     b.setAttribute('aria-pressed', String(visible[kind]));
     if (kind === 'unknown') b.title = 'Hidden by default when other links exist: import status could not be verified';
     b.appendChild(createSwatchSvg(kind));
@@ -3207,6 +3865,7 @@ const RICH_CLIENT = String.raw`
     b.appendChild(el('span', 'count', String(shown)));
     b.addEventListener('click', function () {
       visible[kind] = !visible[kind];
+      b.classList.toggle('off', !visible[kind]);
       b.setAttribute('aria-pressed', String(visible[kind]));
       syncActiveNodes();
       if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
@@ -3428,6 +4087,7 @@ const RICH_CLIENT = String.raw`
 
   function resolveActiveFamilyView(sel) {
     if (!sel) return null;
+    if (sel._isFallbackView) return sel;
     var baseFam = sel.family || sel;
     var views = getActiveFamilyViews(baseFam);
     if (views.length === 0) return null;
@@ -3918,6 +4578,7 @@ const RICH_CLIENT = String.raw`
       requestDraw();
     }
     if (n || e) {
+      if (tooltipHideTimer) { clearTimeout(tooltipHideTimer); tooltipHideTimer = null; }
       tooltip.textContent = '';
       if (n) {
         if (n.frame) tooltip.appendChild(el('div', '', n.frame.id));
@@ -3934,10 +4595,25 @@ const RICH_CLIENT = String.raw`
       var left = Math.min(px + 14, size.w - tooltip.offsetWidth - 8);
       tooltip.style.left = Math.max(8, left) + 'px';
       tooltip.style.top = (py + 14) + 'px';
-    } else {
-      tooltip.hidden = true;
+    } else if (!tooltipHovered && !tooltip.hidden && !tooltipHideTimer) {
+      tooltipHideTimer = setTimeout(function () {
+        tooltipHideTimer = null;
+        if (!tooltipHovered) tooltip.hidden = true;
+      }, 150);
     }
   });
+  var tooltipHideTimer = null;
+  var tooltipHovered = false;
+  if (tooltip) {
+    tooltip.addEventListener('pointerenter', function () {
+      tooltipHovered = true;
+      if (tooltipHideTimer) { clearTimeout(tooltipHideTimer); tooltipHideTimer = null; }
+    });
+    tooltip.addEventListener('pointerleave', function () {
+      tooltipHovered = false;
+      tooltip.hidden = true;
+    });
+  }
   function endDrag(ev) {
     if (ev.pointerType === 'touch') {
       activeTouches.delete(ev.pointerId);
@@ -3979,7 +4655,12 @@ const RICH_CLIENT = String.raw`
   });
   canvas.addEventListener('pointerleave', function () {
     if (!drag) {
-      tooltip.hidden = true;
+      if (!tooltip.hidden && !tooltipHideTimer) {
+        tooltipHideTimer = setTimeout(function () {
+          tooltipHideTimer = null;
+          if (!tooltipHovered) tooltip.hidden = true;
+        }, 150);
+      }
       if (hoverNode || hoverEdge) {
         hoverNode = null;
         hoverEdge = null;
@@ -4009,6 +4690,29 @@ const RICH_CLIENT = String.raw`
 
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape') {
+      var fgDetails = document.getElementById('field-guide-details');
+      if (fgDetails && fgDetails.open) {
+        fgDetails.open = false;
+        var fgSum = fgDetails.querySelector('summary');
+        if (fgSum && typeof fgSum.focus === 'function') fgSum.focus();
+        return;
+      }
+      var openPopovers = document.querySelectorAll('.f12-help-popover.\\:popover-open');
+      if (openPopovers.length > 0) {
+        for (var pi = 0; pi < openPopovers.length; pi++) {
+          openPopovers[pi].classList.remove(':popover-open');
+          try { if (typeof openPopovers[pi].hidePopover === 'function') openPopovers[pi].hidePopover(); } catch (_) {}
+        }
+        return;
+      }
+      if (tooltip && !tooltip.hidden) {
+        tooltip.hidden = true;
+        hoverNode = null;
+        hoverEdge = null;
+        syncCardMarkerBadges();
+        requestDraw();
+        return;
+      }
       if ((selectedEdge || selectedNode) && returnToFamily && resolveActiveFamilyView(returnToFamily)) {
         selectFamily(returnToFamily, true);
       } else {
@@ -4021,10 +4725,16 @@ const RICH_CLIENT = String.raw`
       }
     }
     if (ev.key === '/' && document.activeElement !== search) { ev.preventDefault(); search.focus(); }
+    var tag = document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : '';
+    if (tag !== 'input' && tag !== 'textarea' && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+      if (ev.key === 'b' || ev.key === 'B') setViewMode('briefing');
+      if (ev.key === 'a' || ev.key === 'A') setViewMode('atlas');
+    }
   });
   search.addEventListener('input', function () {
     var q = search.value.trim().toLowerCase();
     matches = q ? nodes.filter(function (n) { return n.safePath.toLowerCase().indexOf(q) >= 0; }) : null;
+    if (typeof renderBriefingBoard === 'function') renderBriefingBoard();
     requestDraw();
   });
   search.addEventListener('keydown', function (ev) {
@@ -4101,6 +4811,9 @@ const RICH_CLIENT = String.raw`
       returnToFamily = prevView && prevView.edges.indexOf(e) >= 0 ? prevView : null;
     }
     selectedEdge = e; selectedNode = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    briefingSelectedEdgeIdx = e.idx;
+    briefingSelectedFamilyIdx = -1;
+    briefingUseDefaultFeatured = false;
     if (e.frame) flyToFrame(e.frame);
     else flyToNodes([e.s, e.t]);
     renderPanel(); requestDraw();
@@ -4109,6 +4822,24 @@ const RICH_CLIENT = String.raw`
     var view = resolveActiveFamilyView(fam);
     if (!view) return;
     selectedFamily = view; selectedNode = null; selectedEdge = null; returnToFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    if (briefingData && briefingData.families && view.d) {
+      var matchedFamIdx = -1;
+      for (var bfi = 0; bfi < briefingData.families.length; bfi++) {
+        if (briefingData.families[bfi].familyId === view.d.id) {
+          matchedFamIdx = bfi;
+          break;
+        }
+      }
+      if (matchedFamIdx >= 0) {
+        briefingSelectedFamilyIdx = matchedFamIdx;
+        briefingSelectedEdgeIdx = briefingData.families[matchedFamIdx].edgeIndex;
+        briefingUseDefaultFeatured = Boolean(
+          briefingData.featured &&
+          (briefingData.featured.isFamily || briefingData.featured.kind === 'family') &&
+          briefingData.featured.familyIndex === matchedFamIdx
+        );
+      }
+    }
     if (!keepExpandedPair) expandedFamilyPairKey = null;
     flyToNodes(view.nodes);
     renderPanel();
@@ -4120,6 +4851,11 @@ const RICH_CLIENT = String.raw`
   }
   function clearSelection() {
     selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
+    briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+    briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
+      ? briefingData.featured.familyIndex
+      : -1;
+    briefingSelectedEdgeIdx = briefingData && briefingData.featured ? briefingData.featured.edgeIndex : (edges[0] ? 0 : -1);
     renderPanel(); requestDraw();
   }
 
@@ -4163,6 +4899,16 @@ const RICH_CLIENT = String.raw`
     return defuseMentions(text)
       .replace(/[\r\n]+/g, ' ')
       .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
+  }
+
+  function shellQuoteArg(arg) {
+    var s = String(arg == null ? '' : arg);
+    if (/^[A-Za-z0-9_./-]+$/.test(s) && s.charAt(0) !== '-') return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+
+  function fallbackExplainCommand(a, b) {
+    return 'npx repo-archaeology explain ' + shellQuoteArg(a) + ' ' + shellQuoteArg(b);
   }
 
   function mdCode(text) {
@@ -4224,7 +4970,7 @@ const RICH_CLIENT = String.raw`
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
@@ -4664,19 +5410,30 @@ const RICH_CLIENT = String.raw`
     grid.appendChild(card2);
     panel.appendChild(grid);
 
+    var atlasForwardFirst = e.d.confidence > e.d.reverseConfidence ||
+      (e.d.confidence === e.d.reverseConfidence && e.d.fromChanges <= e.d.toChanges);
+    var atlasLabels = distinguishingPaths(
+      atlasForwardFirst ? e.s.safePath : e.t.safePath,
+      atlasForwardFirst ? e.t.safePath : e.s.safePath
+    );
+    var atlasReadingGuide = buildClientReadingGuide(e, atlasForwardFirst, atlasLabels, null);
+    panel.appendChild(renderReadingFindingDisclosure(atlasReadingGuide, 'atlas-reading-finding'));
+
     var callout = el('div', 'callout ' + e.d.relationship);
     callout.appendChild(el('div', 'callout-title', 'Why it matters'));
     var p1 = el('p', '', 'These files have been updated together before. If you are making changes to one, consider reviewing both.');
     callout.appendChild(p1);
     var p2 = el('p');
     if (e.d.relationship === 'ghost') {
-      p2.textContent = 'No direct or supported indirect import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+      p2.textContent = 'No direct or one-step-removed import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
     } else if (e.d.relationship === 'indirect') {
-      p2.textContent = 'Connected indirectly through intermediate files in the dependency tree.';
+      p2.textContent = 'Connected indirectly (one step removed through an intermediate file) in the dependency tree.';
     } else if (e.d.relationship === 'direct') {
       p2.textContent = 'Connected by a direct import link in the current codebase.';
     } else if (e.d.relationship === 'test') {
-      p2.textContent = 'Recognized test and implementation pair.';
+      p2.textContent = String(e.d.why || '').trim().toLowerCase() === 'both are tests'
+        ? 'Both files are test files that have moved together in ' + plural(e.d.shared, 'shared commit') + '.'
+        : 'Test file that repeatedly changes alongside this code (' + plural(e.d.shared, 'shared commit') + ').';
     } else {
       p2.textContent = 'Import relationship status could not be fully verified from static imports.';
     }
@@ -4703,7 +5460,7 @@ const RICH_CLIENT = String.raw`
       panel.appendChild(details);
     }
 
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     var cliBox = el('div', 'cli-box');
     var cliHead = el('div', 'cli-box-head');
     cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
@@ -4753,6 +5510,1586 @@ const RICH_CLIENT = String.raw`
     }
   }
 
+  // ---- RA-17 Investigation Board (Briefing Mode) ---------------------------
+  var appEl = document.querySelector('.app');
+  var briefingEl = document.getElementById('briefing-view');
+  var atlasStageEl = document.getElementById('atlas-stage');
+  var viewBriefingBtn = document.getElementById('view-briefing');
+  var viewAtlasBtn = document.getElementById('view-atlas');
+  var briefingScriptEl = document.getElementById('ra-briefing');
+  var briefingData = null;
+  if (briefingScriptEl && briefingScriptEl.textContent) {
+    try { briefingData = JSON.parse(briefingScriptEl.textContent); } catch (_) { briefingData = null; }
+  }
+  var viewMode = 'briefing';
+  var briefingShowAllRanked = false;
+  var readingFindingOpen = false;
+  var briefingSelectedEdgeIdx = briefingData && briefingData.featured ? briefingData.featured.edgeIndex : (edges[0] ? 0 : -1);
+  var briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
+    ? briefingData.featured.familyIndex
+    : -1;
+  var briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+
+  function makeHelpBtn(popoverId, ariaLabel, visibleLabel) {
+    var btn = el('button', 'f12-help-btn' + (visibleLabel ? ' f12-help-pill' : ''), visibleLabel ? (visibleLabel + ' ?') : '?');
+    btn.type = 'button';
+    btn.setAttribute('popovertarget', popoverId);
+    var fullLabel = visibleLabel ? (visibleLabel + ' ? \u2014 ' + ariaLabel) : ariaLabel;
+    btn.setAttribute('aria-label', fullLabel);
+    btn.title = fullLabel;
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var pop = document.getElementById(popoverId);
+      if (!pop) return;
+      if (typeof pop.togglePopover === 'function') return;
+      var isOpen = pop.classList.contains(':popover-open');
+      var allPops = document.querySelectorAll('.f12-help-popover');
+      for (var i = 0; i < allPops.length; i++) {
+        allPops[i].classList.remove(':popover-open');
+      }
+      if (!isOpen) pop.classList.add(':popover-open');
+    });
+    return btn;
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.closest && (t.closest('.f12-help-popover') || t.closest('.f12-help-btn'))) return;
+    var openPops = document.querySelectorAll('.f12-help-popover');
+    for (var i = 0; i < openPops.length; i++) {
+      openPops[i].classList.remove(':popover-open');
+    }
+  });
+
+  var fgDetailsEl = document.getElementById('field-guide-details');
+  var fgCloseBtn = document.getElementById('field-guide-close');
+  if (fgCloseBtn && fgDetailsEl) {
+    fgCloseBtn.addEventListener('click', function () {
+      fgDetailsEl.open = false;
+      var fgSum = fgDetailsEl.querySelector('summary');
+      if (fgSum && typeof fgSum.focus === 'function') fgSum.focus();
+    });
+  }
+  var moreGlossaryBtns = document.querySelectorAll('.f12-help-more-btn');
+  for (var mgi = 0; mgi < moreGlossaryBtns.length; mgi++) {
+    moreGlossaryBtns[mgi].addEventListener('click', function (ev) {
+      var btn = ev.currentTarget;
+      var targetId = btn ? btn.getAttribute('data-glossary-target') : null;
+      var openPops = document.querySelectorAll('.f12-help-popover');
+      for (var pi = 0; pi < openPops.length; pi++) {
+        openPops[pi].classList.remove(':popover-open');
+        try { if (typeof openPops[pi].hidePopover === 'function') openPops[pi].hidePopover(); } catch (_) {}
+      }
+      if (fgDetailsEl) {
+        fgDetailsEl.open = true;
+      }
+      if (targetId) {
+        var targetDet = document.getElementById(targetId);
+        if (targetDet) {
+          targetDet.open = true;
+          var sum = targetDet.querySelector('summary');
+          if (sum && typeof sum.focus === 'function') sum.focus();
+          if (typeof targetDet.scrollIntoView === 'function') {
+            targetDet.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
+          }
+        }
+      }
+    });
+  }
+
+  function buildClientReadingGuide(edgeObj, forwardFirst, dynLabels, activeFamilyEntry) {
+    var d = edgeObj.d;
+    var safeFrom = dynLabels[0];
+    var safeTo = dynLabels[1];
+    var fromChanges = forwardFirst ? d.fromChanges : d.toChanges;
+    var toChanges = forwardFirst ? d.toChanges : d.fromChanges;
+    var conf = forwardFirst ? d.confidence : d.reverseConfidence;
+    var revConf = forwardFirst ? d.reverseConfidence : d.confidence;
+    var iv = forwardFirst ? d.interval : d.reverseInterval;
+    var pctVal = Math.floor(conf * 100 + 1e-9);
+    var revPctVal = Math.floor(revConf * 100 + 1e-9);
+    var rawPctVal = fromChanges > 0 ? Math.floor((d.shared / fromChanges) * 100 + 1e-9) : 0;
+    var revRawPctVal = toChanges > 0 ? Math.floor((d.shared / toChanges) * 100 + 1e-9) : 0;
+    var lowPct = Math.floor(iv.low * 100 + 1e-9);
+    var highPct = Math.ceil(iv.high * 100 - 1e-9);
+    var isWeighted = Boolean(d.weighted);
+    var wPhrase = edgeWeightingLabel(d);
+    var familyPrefix = '';
+    if (activeFamilyEntry && activeFamilyEntry.evidence && activeFamilyEntry.evidence.familySummary) {
+      var fs = activeFamilyEntry.evidence.familySummary;
+      familyPrefix = 'Across this ' + fs.members.length + '-file family (' + fs.qualifyingPairs + ' of ' + fs.possiblePairs + ' pairs qualifying), the lead pair is ' + safeFrom + ' \u2192 ' + safeTo + '. ';
+    }
+    var whatItSaysLabel = isWeighted
+      ? 'What does ' + pctVal + '% weighted (' + rawPctVal + '% raw) mean?'
+      : 'What does ' + pctVal + '% mean?';
+    var whatItSays = isWeighted
+      ? familyPrefix + 'With ' + wPhrase + ' scoring active, ' + safeFrom + ' \u2192 ' + safeTo + ' scores ' + pctVal + '% weighted confidence across ' + d.shared + ' of ' + fromChanges + ' raw analyzed commits (' + rawPctVal + '% raw ratio; unweighted 95% Wilson range ' + lowPct + '\u2013' + highPct + '%). In the reverse direction (' + safeTo + ' \u2192 ' + safeFrom + '), the score is ' + revPctVal + '% weighted (' + d.shared + ' of ' + toChanges + ' raw commits, ' + revRawPctVal + '% raw).'
+      : familyPrefix + 'Of the ' + fromChanges + ' analyzed commits that changed ' + safeFrom + ', ' + d.shared + ' also changed ' + safeTo + ' (' + pctVal + '%, 95% Wilson confidence range ' + lowPct + '\u2013' + highPct + '%). In the reverse direction (' + safeTo + ' \u2192 ' + safeFrom + '), ' + d.shared + ' of ' + toChanges + ' commits moved together (' + revPctVal + '%).';
+    var whatItDoesNotSayLabel = 'Does that mean ' + safeTo + ' needs changing now?';
+    var relExp = '';
+    if (d.relationship === 'ghost') {
+      relExp = 'This history does not establish a ' + pctVal + '% probability of a bug, a missing edit, or a runtime dependency. No direct or one-step-removed static import link was detected between ' + safeFrom + ' and ' + safeTo + ' in current code\u2014this is a historical signal to investigate, not proof that your current change requires updating ' + safeTo + '.';
+    } else if (d.relationship === 'unknown') {
+      relExp = 'Static import analysis could not verify whether ' + safeFrom + ' and ' + safeTo + ' import each other (for example, non-JS/TS files, dynamic specifiers, or pairs beyond the import classification cap). "Unchecked" means import status is unknown\u2014not that an import link is absent\u2014and does not prove ' + safeTo + ' needs an update now.';
+    } else if (d.relationship === 'indirect') {
+      relExp = 'These files are connected indirectly (one step removed through an intermediate module) in current code and have moved together historically, but that still does not guarantee every edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
+    } else if (d.relationship === 'test') {
+      var isBothTests = String(d.why || '').trim().toLowerCase() === 'both are tests';
+      relExp = isBothTests
+        ? 'Both ' + safeFrom + ' and ' + safeTo + ' are test files that changed together in ' + d.shared + ' of ' + fromChanges + ' analyzed commits (' + pctVal + '%). Shared test edits often reflect fixture, helper, or suite-wide assertion updates rather than a direct runtime dependency, so check whether your current change affects shared test setup.'
+        : 'This links a test file and the code it exercises (' + d.shared + ' of ' + fromChanges + ' analyzed commits, ' + pctVal + '%). Behavioral changes to ' + safeFrom + ' usually require updating ' + safeTo + ', though internal refactors that preserve behavior may not.';
+    } else {
+      relExp = 'These files have a direct import link in current code, but historical co-change still does not prove that every isolated edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
+    }
+    if (d.verdict) {
+      var vTag = d.verdict.kind === 'confirmed'
+        ? 'Recorded verdict (confirmed dependency): "' + sanitizeText(d.verdict.reason) + '".'
+        : 'Recorded verdict (expected / silenced relationship): "' + sanitizeText(d.verdict.reason) + '".';
+      relExp += ' ' + vTag;
+    }
+    var fromAlone = Math.max(0, fromChanges - d.shared);
+    var toAlone = Math.max(0, toChanges - d.shared);
+    var totalAlone = fromAlone + toAlone;
+    var whatToInspect = totalAlone > 0
+      ? 'Review the ' + d.shared + ' shared commit receipts below alongside the ' + totalAlone + ' counterexample commit' + (totalAlone === 1 ? '' : 's') + ' where ' + safeFrom + ' (' + fromAlone + ') or ' + safeTo + ' (' + toAlone + ') changed alone. Check whether the historical co-changes resemble your current edit.'
+      : 'Review the ' + d.shared + ' shared commit receipts below (neither file changed alone in the analyzed window) and run the CLI explain command to inspect the paired diff hunks.';
+    var summaryLine = isWeighted
+      ? 'Reading this finding \u00b7 ' + pctVal + '% weighted (' + d.shared + '/' + fromChanges + ' raw commits) is historical co-change, not proof \u2014 Explain these numbers \u25b8'
+      : 'Reading this finding \u00b7 ' + pctVal + '% (' + d.shared + '/' + fromChanges + ' commits) is historical co-change, not proof \u2014 Explain these numbers \u25b8';
+    return {
+      heading: 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS',
+      summaryLine: summaryLine,
+      whatItSaysLabel: whatItSaysLabel,
+      whatItSays: whatItSays,
+      whatItDoesNotSayLabel: whatItDoesNotSayLabel,
+      whatItDoesNotSay: relExp,
+      whatToInspectLabel: 'What should I inspect next?',
+      whatToInspect: whatToInspect
+    };
+  }
+
+  function renderReadingFindingDisclosure(guide, idAttr) {
+    var det = el('details', 'f12-reading-finding');
+    if (idAttr) det.id = idAttr;
+    det.open = readingFindingOpen;
+    det.addEventListener('toggle', function () {
+      readingFindingOpen = Boolean(det.open);
+    });
+    det.appendChild(el('summary', '', guide.summaryLine || guide.heading || 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS'));
+    var body = el('div', 'f12-reading-body');
+    var row1 = el('div', 'f12-reading-item');
+    row1.appendChild(el('strong', '', guide.whatItSaysLabel));
+    row1.appendChild(document.createTextNode(guide.whatItSays));
+    body.appendChild(row1);
+    var row2 = el('div', 'f12-reading-item');
+    row2.appendChild(el('strong', '', guide.whatItDoesNotSayLabel));
+    row2.appendChild(document.createTextNode(guide.whatItDoesNotSay));
+    body.appendChild(row2);
+    var row3 = el('div', 'f12-reading-item');
+    row3.appendChild(el('strong', '', guide.whatToInspectLabel));
+    row3.appendChild(document.createTextNode(guide.whatToInspect));
+    body.appendChild(row3);
+    det.appendChild(body);
+    return det;
+  }
+
+  function renderAboutAnalysisSection(targetEl) {
+    if (!targetEl || !briefingData || !briefingData.provenance) return;
+    var prov = briefingData.provenance;
+    var sec = el('section', 'f12-about-panel');
+    sec.id = 'about-this-analysis';
+    sec.setAttribute('aria-label', 'About this analysis');
+    var det = el('details', 'f12-about-details');
+    det.id = 'about-analysis-details';
+    det.appendChild(el('summary', '', prov.title + ' \u25b8'));
+    var body = el('div', 'f12-about-body');
+    body.appendChild(el('p', 'f12-fg-sub', prov.subtitle));
+    var dl = el('dl', 'f12-provenance-list');
+    (prov.items || []).forEach(function (it) {
+      var row = el('div', 'f12-prov-row');
+      row.appendChild(el('dt', '', it.label));
+      row.appendChild(el('dd', '', it.value));
+      dl.appendChild(row);
+    });
+    body.appendChild(dl);
+    if (prov.warnings && prov.warnings.length > 0) {
+      var wBox = el('div', 'f12-prov-warnings');
+      wBox.textContent = prov.warnings.map(function (w) { return '! ' + w; }).join(' | ');
+      body.appendChild(wBox);
+    }
+    det.appendChild(body);
+    sec.appendChild(det);
+
+    var foot = el('footer', 'f12-report-footer');
+    foot.appendChild(el('span', '', prov.footerText));
+    var ghLink = el('a', '', 'View project on GitHub \u2197');
+    ghLink.href = prov.githubUrl || 'https://github.com/lbrodie11/repo-archaeology';
+    ghLink.target = '_blank';
+    ghLink.rel = 'noopener noreferrer';
+    foot.appendChild(ghLink);
+    sec.appendChild(foot);
+    targetEl.appendChild(sec);
+  }
+
+  function encodeHashPart(p) {
+    return encodeURIComponent(String(p || '')).replace(/\.\./g, '%2E%2E');
+  }
+  function makeFindingHash(a, b) {
+    return '#f=' + encodeHashPart(a) + '..' + encodeHashPart(b);
+  }
+  function resolveEdgeFromHash(hashStr) {
+    var trimmed = String(hashStr || '').replace(/^#/, '');
+    if (trimmed.indexOf('f=') !== 0) return null;
+    var payload = trimmed.slice(2);
+    var sep = payload.indexOf('..');
+    if (sep <= 0 || sep >= payload.length - 2) return null;
+    var fromPath = '', toPath = '';
+    try {
+      fromPath = decodeURIComponent(payload.slice(0, sep));
+      toPath = decodeURIComponent(payload.slice(sep + 2));
+    } catch (_) {
+      return null;
+    }
+    var found = edgeByPairKey[edgeKey(fromPath, toPath)];
+    return found || null;
+  }
+
+  function syncMarkerDom() {
+    if (viewMode === 'briefing') {
+      var panelMarkers = panel ? panel.querySelectorAll('.marker-active') : [];
+      for (var i = 0; i < panelMarkers.length; i++) {
+        panelMarkers[i].classList.remove('marker-active');
+      }
+      var chip = briefingEl ? briefingEl.querySelector('.f12-kicker-chip') : null;
+      if (chip) chip.classList.add('marker-active');
+    } else {
+      var briefingMarkers = briefingEl ? briefingEl.querySelectorAll('.marker-active') : [];
+      for (var j = 0; j < briefingMarkers.length; j++) {
+        briefingMarkers[j].classList.remove('marker-active');
+      }
+      syncCardMarkerBadges();
+    }
+  }
+
+  function setViewMode(mode) {
+    viewMode = mode === 'atlas' ? 'atlas' : 'briefing';
+    if (appEl) appEl.setAttribute('data-view', viewMode);
+    if (viewBriefingBtn) viewBriefingBtn.setAttribute('aria-pressed', String(viewMode === 'briefing'));
+    if (viewAtlasBtn) viewAtlasBtn.setAttribute('aria-pressed', String(viewMode === 'atlas'));
+    var isAtlas = viewMode === 'atlas';
+    if (briefingEl) {
+      briefingEl.hidden = isAtlas;
+      if (isAtlas) briefingEl.setAttribute('inert', '');
+      else briefingEl.removeAttribute('inert');
+    }
+    if (atlasStageEl) {
+      atlasStageEl.hidden = !isAtlas;
+      if (!isAtlas) atlasStageEl.setAttribute('inert', '');
+      else atlasStageEl.removeAttribute('inert');
+    }
+    if (panel) {
+      panel.hidden = !isAtlas;
+      if (!isAtlas) panel.setAttribute('inert', '');
+      else panel.removeAttribute('inert');
+    }
+    if (isAtlas) {
+      resizeNow();
+      if (selectedEdge) {
+        if (selectedEdge.frame) flyToFrame(selectedEdge.frame);
+        else flyToNodes([selectedEdge.s, selectedEdge.t]);
+      } else if (selectedFamily) {
+        var activeFamV = resolveActiveFamilyView(selectedFamily);
+        if (activeFamV) flyToNodes(activeFamV.nodes);
+        else fitSheet();
+      } else {
+        fitSheet();
+      }
+      renderPanel();
+      requestDraw();
+    } else {
+      renderBriefingBoard();
+    }
+    syncMarkerDom();
+  }
+  if (viewBriefingBtn) {
+    viewBriefingBtn.addEventListener('click', function () { setViewMode('briefing'); });
+  }
+  if (viewAtlasBtn) {
+    viewAtlasBtn.addEventListener('click', function () { setViewMode('atlas'); });
+  }
+
+  function selectBriefingFamily(familyIdx, updateHash) {
+    if (!briefingData || !briefingData.families || !briefingData.families[familyIdx]) return;
+    var famEntry = briefingData.families[familyIdx];
+    briefingSelectedFamilyIdx = familyIdx;
+    briefingSelectedEdgeIdx = famEntry.edgeIndex;
+    briefingUseDefaultFeatured = Boolean(
+      briefingData.featured &&
+      (briefingData.featured.isFamily || briefingData.featured.kind === 'family') &&
+      briefingData.featured.familyIndex === familyIdx
+    );
+    selectedEdge = null;
+    selectedNode = null;
+    var famObj = families[familyIdx] || null;
+    var activeFamView = famObj ? resolveActiveFamilyView(famObj) : null;
+    if (!activeFamView && famObj) {
+      var visFamEdges = (famObj.edges || []).filter(isVisible);
+      activeFamView = {
+        id: famObj.d.id,
+        d: famObj.d,
+        family: famObj,
+        members: famObj.members || [],
+        nodes: famObj.nodes || [],
+        nodeSet: famObj.nodeSet || new Set(),
+        edges: visFamEdges,
+        edgeSet: new Set(visFamEdges),
+        undrawnPairs: famObj.undrawnPairs || [],
+        qualifyingPairs: famObj.d.qualifyingPairs,
+        possiblePairs: famObj.d.possiblePairs,
+        commitsTouchingTwoOrMore: famObj.d.commitsTouchingTwoOrMore,
+        commitsTouchingAll: famObj.d.commitsTouchingAll,
+        lastTogether: famObj.d.lastTogether,
+        evidence: famObj.d.evidence || [],
+        isSubset: false,
+        _isFallbackView: true
+      };
+    }
+    selectedFamily = activeFamView;
+    if (updateHash && famEntry.hash) {
+      try {
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', famEntry.hash);
+        }
+      } catch (_) {}
+    }
+    renderPanel();
+  }
+
+  function selectBriefingEdge(edgeObj, isDefault, updateHash) {
+    if (!edgeObj) return;
+    briefingSelectedEdgeIdx = edgeObj.idx;
+    briefingSelectedFamilyIdx = (isDefault && briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
+      ? briefingData.featured.familyIndex
+      : -1;
+    briefingUseDefaultFeatured = Boolean(isDefault);
+    selectedEdge = edgeObj;
+    selectedNode = null;
+    selectedFamily = null;
+    if (updateHash) {
+      var forwardFirst = edgeObj.d.confidence > edgeObj.d.reverseConfidence ||
+        (edgeObj.d.confidence === edgeObj.d.reverseConfidence && edgeObj.d.fromChanges <= edgeObj.d.toChanges);
+      var fromP = forwardFirst ? edgeObj.s.path : edgeObj.t.path;
+      var toP = forwardFirst ? edgeObj.t.path : edgeObj.s.path;
+      try {
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', makeFindingHash(fromP, toP));
+        }
+      } catch (_) {}
+    }
+    renderPanel();
+  }
+
+  function pointToSegDist(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-6) return Math.hypot(px - x1, py - y1);
+    var t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  }
+
+  function buildDynamicPlate(seedNodes, featuredEdgeIdxSet, leadEdgeObj, isMobile) {
+    var w = isMobile ? 340 : 760;
+    var h = isMobile ? 240 : 420;
+    var maxEgoNodes = isMobile ? 6 : 12;
+    var maxLabelLen = isMobile ? 20 : 28;
+    var padX = isMobile ? 48 : 88;
+    var padTop = isMobile ? 36 : 58;
+    var padBottom = isMobile ? 28 : 42;
+
+    var seedSet = Object.create(null);
+    seedNodes.forEach(function (sn) { seedSet[sn.i] = true; });
+
+    // Count connected component size via BFS
+    var compVisited = Object.create(null);
+    var bfsQ = seedNodes.slice();
+    bfsQ.forEach(function (sn) { compVisited[sn.i] = true; });
+    var qHead = 0;
+    while (qHead < bfsQ.length) {
+      var curr = bfsQ[qHead++];
+      curr.edges.forEach(function (ce) {
+        var nb = ce.s === curr ? ce.t : ce.s;
+        if (!compVisited[nb.i]) {
+          compVisited[nb.i] = true;
+          bfsQ.push(nb);
+        }
+      });
+    }
+    var fullComponentNodeCount = Object.keys(compVisited).length;
+
+    // Collect 1-hop neighbors ranked by ghost status & Wilson lower bound
+    var neighborMap = Object.create(null);
+    seedNodes.forEach(function (sn) {
+      sn.edges.forEach(function (ce) {
+        var other = ce.s === sn ? ce.t : ce.s;
+        if (seedSet[other.i]) return;
+        var wScore = (ce.d.relationship === 'ghost' ? 10 : 1) + ce.lowBound * 4 + (ce.d.shared || 0) * 0.05;
+        if (!neighborMap[other.i] || wScore > neighborMap[other.i].score) {
+          neighborMap[other.i] = { node: other, score: wScore };
+        }
+      });
+    });
+    var sortedNeighbors = Object.keys(neighborMap)
+      .map(function (k) { return neighborMap[k]; })
+      .sort(function (a, b) {
+        return b.score - a.score || a.node.path.localeCompare(b.node.path);
+      });
+    var chosenNodes = seedNodes.slice(0, maxEgoNodes);
+    for (var ni = 0; ni < sortedNeighbors.length && chosenNodes.length < maxEgoNodes; ni++) {
+      chosenNodes.push(sortedNeighbors[ni].node);
+    }
+
+    var chosenSet = Object.create(null);
+    chosenNodes.forEach(function (cn, idx) { chosenSet[cn.i] = idx; });
+
+    var cx = w * 0.5;
+    var cy = h * (isMobile ? 0.56 : 0.55);
+    var posX = new Array(chosenNodes.length);
+    var posY = new Array(chosenNodes.length);
+    var sCount = Math.min(seedNodes.length, chosenNodes.length);
+    if (sCount === 2) {
+      var span = isMobile ? 96 : 196;
+      posX[0] = cx - span * 0.5; posY[0] = cy;
+      posX[1] = cx + span * 0.5; posY[1] = cy;
+    } else {
+      var rx = isMobile ? 68 : 138;
+      var ry = isMobile ? 48 : 94;
+      for (var si = 0; si < sCount; si++) {
+        var sAng = -Math.PI / 2 + (2 * Math.PI * si) / Math.max(1, sCount);
+        posX[si] = cx + Math.cos(sAng) * rx;
+        posY[si] = cy + Math.sin(sAng) * ry;
+      }
+    }
+    var outerCount = chosenNodes.length - sCount;
+    for (var oi = 0; oi < outerCount; oi++) {
+      var oIdx = sCount + oi;
+      var oAng = -Math.PI * 0.35 + (2 * Math.PI * oi) / Math.max(1, outerCount);
+      posX[oIdx] = cx + Math.cos(oAng) * (isMobile ? 112 : 240);
+      posY[oIdx] = cy + Math.sin(oAng) * (isMobile ? 74 : 138);
+    }
+
+    // Collect internal edges
+    var subEdges = [];
+    edges.forEach(function (ce) {
+      var u = chosenSet[ce.s.i], v = chosenSet[ce.t.i];
+      if (u !== undefined && v !== undefined) {
+        subEdges.push({ ce: ce, u: u, v: v, isFeat: Boolean(featuredEdgeIdxSet[ce.idx]) });
+      }
+    });
+
+    // Reserve top-center balloon zone on desktop; on mobile keep compact
+    var balloonW = isMobile ? 256 : 310;
+    var balloonH = isMobile ? 28 : 38;
+    var balloonX = Math.round(cx - balloonW / 2);
+    var balloonY = isMobile ? 8 : 34;
+
+    // 50-step deterministic force relaxation
+    var idealDist = isMobile ? 86 : 156;
+    for (var step = 0; step < 50; step++) {
+      var cooling = 1 - step / 55;
+      var fx = new Array(chosenNodes.length).fill(0);
+      var fy = new Array(chosenNodes.length).fill(0);
+      for (var i = 0; i < chosenNodes.length; i++) {
+        for (var j = i + 1; j < chosenNodes.length; j++) {
+          var dx = posX[j] - posX[i];
+          var dy = posY[j] - posY[i];
+          var dist = Math.hypot(dx, dy) || 0.5;
+          var minSep = (i < sCount && j < sCount) ? idealDist * 1.12 : idealDist * 0.85;
+          if (dist < minSep * 1.4) {
+            var rep = ((minSep * 1.4 - dist) / dist) * 0.42 * cooling;
+            fx[i] -= dx * rep; fy[i] -= dy * rep;
+            fx[j] += dx * rep; fy[j] += dy * rep;
+          }
+        }
+      }
+      subEdges.forEach(function (se) {
+        var dx = posX[se.v] - posX[se.u];
+        var dy = posY[se.v] - posY[se.u];
+        var dist = Math.hypot(dx, dy) || 1;
+        var target = se.isFeat ? idealDist * 1.05 : idealDist * 0.95;
+        var pull = ((dist - target) / dist) * 0.14 * cooling;
+        fx[se.u] += dx * pull; fy[se.u] += dy * pull;
+        fx[se.v] -= dx * pull; fy[se.v] -= dy * pull;
+      });
+      for (var k = 0; k < chosenNodes.length; k++) {
+        var isSeedNode = k < sCount;
+        var damp = isSeedNode ? 0.35 : 0.85;
+        // Keep nodes out of balloon box
+        if (
+          posX[k] > balloonX - 24 &&
+          posX[k] < balloonX + balloonW + 24 &&
+          posY[k] < balloonY + balloonH + 26
+        ) {
+          fy[k] += 5.5 * cooling;
+        }
+        posX[k] = Math.max(padX, Math.min(w - padX, posX[k] + fx[k] * damp));
+        posY[k] = Math.max(padTop, Math.min(h - padBottom, posY[k] + fy[k] * damp));
+      }
+    }
+
+    // Compute Balloon target at midpoint of lead edge
+    var leadSIdx = chosenSet[leadEdgeObj.s.i] !== undefined ? chosenSet[leadEdgeObj.s.i] : 0;
+    var leadTIdx = chosenSet[leadEdgeObj.t.i] !== undefined ? chosenSet[leadEdgeObj.t.i] : Math.min(1, chosenNodes.length - 1);
+    var btX = Math.round((posX[leadSIdx] + posX[leadTIdx]) / 2);
+    var btY = Math.round((posY[leadSIdx] + posY[leadTIdx]) / 2);
+    balloonX = Math.max(12, Math.min(w - balloonW - 12, Math.round(btX - balloonW / 2)));
+    balloonY = Math.max(8, Math.min(btY - balloonH - (isMobile ? 16 : 24), isMobile ? 14 : 52));
+    var balloonBox = { x: balloonX, y: balloonY, w: balloonW, h: balloonH };
+
+    // Build short labels (distinguish endpoints if duplicate basenames)
+    var baseCounts = Object.create(null);
+    var rawBasenames = chosenNodes.map(function (cn) {
+      var parts = cn.safePath.split('/');
+      return parts[parts.length - 1] || cn.safePath;
+    });
+    rawBasenames.forEach(function (b) { baseCounts[b] = (baseCounts[b] || 0) + 1; });
+
+    var placedBoxes = [{ x: balloonBox.x - 4, y: balloonBox.y - 4, w: balloonBox.w + 8, h: balloonBox.h + 12 }];
+    var pNodes = [];
+    var candDirs = [
+      { key: 'S', dx: 0, dy: 1, align: 'center' },
+      { key: 'N', dx: 0, dy: -1, align: 'center' },
+      { key: 'E', dx: 1, dy: 0, align: 'left' },
+      { key: 'W', dx: -1, dy: 0, align: 'right' },
+      { key: 'SE', dx: 0.85, dy: 0.85, align: 'left' },
+      { key: 'SW', dx: -0.85, dy: 0.85, align: 'right' },
+      { key: 'NE', dx: 0.85, dy: -0.85, align: 'left' },
+      { key: 'NW', dx: -0.85, dy: -0.85, align: 'right' }
+    ];
+
+    chosenNodes.forEach(function (cn, idx) {
+      var isSeed = idx < sCount;
+      var r = isSeed ? (isMobile ? 7.5 : 9.2) : (isMobile ? 5.5 : 6.6);
+      var nx = Math.round(posX[idx]);
+      var ny = Math.round(posY[idx]);
+      var lblText = rawBasenames[idx];
+      if (baseCounts[lblText] > 1) {
+        var segs = cn.safePath.split('/').filter(Boolean);
+        if (segs.length >= 2) lblText = segs[segs.length - 2] + '/' + segs[segs.length - 1];
+      }
+      lblText = middleTruncate(lblText, maxLabelLen);
+      var charW = isMobile ? 7.1 : 7.5;
+      var tw = Math.max(40, Math.round(lblText.length * charW + 10));
+      var th = 18;
+
+      var bestCand = null;
+      var bestPenalty = Infinity;
+      candDirs.forEach(function (cd) {
+        var offset = r + 8;
+        var ax = Math.round(nx + cd.dx * offset);
+        var ay = Math.round(ny + cd.dy * (cd.dy === 0 ? 4 : offset + (cd.dy > 0 ? 8 : -2)));
+        var bx = cd.align === 'right' ? ax - tw + 4 : (cd.align === 'center' ? Math.round(ax - tw / 2) : ax - 4);
+        var by = ay - 13;
+        var pen = 0;
+        if (bx < 6) pen += (6 - bx) * 25;
+        if (by < 6) pen += (6 - by) * 25;
+        if (bx + tw > w - 6) pen += (bx + tw - (w - 6)) * 25;
+        if (by + th > h - 6) pen += (by + th - (h - 6)) * 25;
+
+        placedBoxes.forEach(function (ob) {
+          var ox = Math.max(0, Math.min(bx + tw, ob.x + ob.w) - Math.max(bx, ob.x));
+          var oy = Math.max(0, Math.min(by + th, ob.y + ob.h) - Math.max(by, ob.y));
+          if (ox > 0 && oy > 0) pen += ox * oy * 12 + 500;
+        });
+        for (var m = 0; m < chosenNodes.length; m++) {
+          var mx = posX[m], my = posY[m], mr = (m < sCount ? 9.5 : 6.8) + 4;
+          var nearX = Math.max(bx, Math.min(mx, bx + tw));
+          var nearY = Math.max(by, Math.min(my, by + th));
+          if (Math.hypot(mx - nearX, my - nearY) < mr) pen += 900;
+        }
+        var lcx = bx + tw / 2, lcy = by + th / 2;
+        subEdges.forEach(function (se) {
+          if (!se.isFeat) return;
+          var dSeg = pointToSegDist(lcx, lcy, posX[se.u], posY[se.u], posX[se.v], posY[se.v]);
+          if (dSeg < th * 0.75) pen += 320;
+        });
+        if (pen < bestPenalty) {
+          bestPenalty = pen;
+          bestCand = { x: bx, y: by, w: tw, h: th, anchorX: ax, anchorY: ay, textAlign: cd.align };
+        }
+      });
+
+      if (bestCand) placedBoxes.push(bestCand);
+      pNodes.push({
+        nodeIndex: cn.i,
+        path: cn.safePath,
+        shortLabel: lblText,
+        dir: cn.safeDir,
+        changes: cn.changes || 1,
+        x: nx,
+        y: ny,
+        r: r,
+        isFeaturedEndpoint: isSeed,
+        label: bestCand
+      });
+    });
+
+    var pEdges = subEdges.map(function (se) {
+      return {
+        edgeIndex: se.ce.idx,
+        sourceNodeIndex: se.ce.s.i,
+        targetNodeIndex: se.ce.t.i,
+        x1: Math.round(posX[se.u]),
+        y1: Math.round(posY[se.u]),
+        x2: Math.round(posX[se.v]),
+        y2: Math.round(posY[se.v]),
+        relationship: se.ce.d.relationship,
+        intervalLow: se.ce.lowBound,
+        strokeWidth: Number((1.6 + se.ce.lowBound * 3.2).toFixed(2)),
+        isFeatured: se.isFeat,
+        isLeadEdge: se.ce === leadEdgeObj
+      };
+    });
+
+    var forwardFirst = leadEdgeObj.d.confidence > leadEdgeObj.d.reverseConfidence ||
+      (leadEdgeObj.d.confidence === leadEdgeObj.d.reverseConfidence && leadEdgeObj.d.fromChanges <= leadEdgeObj.d.toChanges);
+    var denom = forwardFirst ? leadEdgeObj.d.fromChanges : leadEdgeObj.d.toChanges;
+    var relSuffix = leadEdgeObj.d.relationship === 'ghost' ? 'no import' : leadEdgeObj.d.relationship + ' link';
+
+    return {
+      width: w,
+      height: h,
+      nodes: pNodes,
+      edges: pEdges,
+      balloonTarget: { x: btX, y: btY },
+      balloonBox: balloonBox,
+      balloonText: leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix,
+      fullComponentNodeCount: fullComponentNodeCount
+    };
+  }
+
+  function renderPlateSvg(svgEl, plate, balloonText) {
+    var ns = 'http://www.w3.org/2000/svg';
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    var w = plate.width || 760, h = plate.height || 420;
+    svgEl.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+
+    var defs = document.createElementNS(ns, 'defs');
+    var grad = document.createElementNS(ns, 'linearGradient');
+    grad.setAttribute('id', 'ra17-plate-bg');
+    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+    grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+    [['0%', '#13304f'], ['60%', '#0e2540'], ['100%', '#09192c']].forEach(function (st) {
+      var stop = document.createElementNS(ns, 'stop');
+      stop.setAttribute('offset', st[0]);
+      stop.setAttribute('stop-color', st[1]);
+      grad.appendChild(stop);
+    });
+    defs.appendChild(grad);
+
+    var pat = document.createElementNS(ns, 'pattern');
+    pat.setAttribute('id', 'ra17-plate-grid');
+    pat.setAttribute('width', '32'); pat.setAttribute('height', '32');
+    pat.setAttribute('patternUnits', 'userSpaceOnUse');
+    var patPath = document.createElementNS(ns, 'path');
+    patPath.setAttribute('d', 'M 32 0 L 0 0 0 32');
+    patPath.setAttribute('fill', 'none');
+    patPath.setAttribute('stroke', '#173b61');
+    patPath.setAttribute('stroke-width', '1');
+    pat.appendChild(patPath);
+    defs.appendChild(pat);
+    svgEl.appendChild(defs);
+
+    var bg1 = document.createElementNS(ns, 'rect');
+    bg1.setAttribute('width', String(w)); bg1.setAttribute('height', String(h));
+    bg1.setAttribute('fill', 'url(#ra17-plate-bg)');
+    svgEl.appendChild(bg1);
+
+    var bg2 = document.createElementNS(ns, 'rect');
+    bg2.setAttribute('width', String(w)); bg2.setAttribute('height', String(h));
+    bg2.setAttribute('fill', 'url(#ra17-plate-grid)');
+    svgEl.appendChild(bg2);
+
+    (plate.edges || []).forEach(function (pe) {
+      var strokeW = String(pe.strokeWidth || 2.2);
+      if (pe.isFeatured) {
+        // Blueprint chalk halo (#fffef9) instead of #ffd60a stroke (--f-marker is never a stroke)
+        var halo = document.createElementNS(ns, 'line');
+        halo.setAttribute('x1', String(pe.x1)); halo.setAttribute('y1', String(pe.y1));
+        halo.setAttribute('x2', String(pe.x2)); halo.setAttribute('y2', String(pe.y2));
+        halo.setAttribute('stroke', '#fffef9');
+        halo.setAttribute('stroke-width', String(Number(strokeW) + 3.6));
+        halo.setAttribute('stroke-opacity', '0.28');
+        halo.setAttribute('stroke-linecap', 'round');
+        svgEl.appendChild(halo);
+      }
+      var line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', String(pe.x1)); line.setAttribute('y1', String(pe.y1));
+      line.setAttribute('x2', String(pe.x2)); line.setAttribute('y2', String(pe.y2));
+      var col = pe.relationship === 'ghost' ? '#ff4f9a' : (pe.relationship === 'unknown' ? '#e3b65b' : (pe.relationship === 'indirect' ? '#7fd1b0' : '#7eb3e0'));
+      line.setAttribute('stroke', col);
+      line.setAttribute('stroke-width', pe.isFeatured ? String(Number(strokeW) + 0.6) : strokeW);
+      if (pe.relationship === 'ghost') line.setAttribute('stroke-dasharray', '9 5');
+      else if (pe.relationship === 'unknown') line.setAttribute('stroke-dasharray', '2 5');
+      else if (pe.relationship === 'indirect') line.setAttribute('stroke-dasharray', '5 4');
+      line.setAttribute('stroke-linecap', 'round');
+      svgEl.appendChild(line);
+    });
+
+    var isCompactPlate = w <= 420;
+    (plate.nodes || []).forEach(function (pn) {
+      var g = document.createElementNS(ns, 'g');
+      var hue = hashHue(pn.dir || '.');
+      var fillCol = 'hsl(' + hue + ', 72%, 64%)';
+      var c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', String(pn.x)); c.setAttribute('cy', String(pn.y));
+      c.setAttribute('r', String(pn.r));
+      c.setAttribute('fill', fillCol);
+      c.setAttribute('stroke', '#fffef9');
+      c.setAttribute('stroke-width', pn.isFeaturedEndpoint ? '2.5' : '1.8');
+      g.appendChild(c);
+
+      var lbl = pn.label;
+      if (lbl) {
+        var pill = document.createElementNS(ns, 'rect');
+        pill.setAttribute('x', String(Math.round(lbl.x)));
+        pill.setAttribute('y', String(Math.round(lbl.y)));
+        pill.setAttribute('width', String(Math.round(lbl.w)));
+        pill.setAttribute('height', String(Math.round(lbl.h)));
+        pill.setAttribute('fill', 'rgba(9, 25, 44, 0.88)');
+        g.appendChild(pill);
+
+        var txt = document.createElementNS(ns, 'text');
+        txt.setAttribute('x', String(lbl.anchorX));
+        txt.setAttribute('y', String(lbl.anchorY));
+        var anchor = lbl.textAlign === 'right' ? 'end' : (lbl.textAlign === 'center' ? 'middle' : 'start');
+        txt.setAttribute('text-anchor', anchor);
+        txt.setAttribute('fill', '#fffef9');
+        txt.setAttribute('font-family', '"M PLUS 1 Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace');
+        txt.setAttribute('font-size', isCompactPlate ? '13' : (pn.isFeaturedEndpoint ? '13' : '12'));
+        txt.setAttribute('font-weight', pn.isFeaturedEndpoint ? '700' : '500');
+        txt.textContent = pn.shortLabel;
+        g.appendChild(txt);
+      }
+      svgEl.appendChild(g);
+    });
+
+    if (plate.balloonBox && balloonText) {
+      var bb = plate.balloonBox;
+      var shownBText = isCompactPlate ? middleTruncate(balloonText, 32) : balloonText;
+      var rawBw = bb.w || bb.width || 300;
+      var minBw = Math.round(shownBText.length * (isCompactPlate ? 6.9 : 7.7) + 28);
+      var bw = Math.min(w - 24, Math.max(rawBw, minBw));
+      var origCenter = (bb.x || 0) + rawBw / 2;
+      var bx = Math.max(12, Math.min(w - bw - 12, Math.round(origCenter - bw / 2)));
+      var by = bb.y, bh = bb.h || bb.height || 36;
+      var bt = plate.balloonTarget || { x: bx + bw / 2, y: by + bh + 28 };
+      var ax = bt.x, ay = bt.y;
+      var tailBaseX = Math.max(bx + 20, Math.min(bx + bw - 20, ax));
+      var tailBaseY = by + bh;
+
+      var bgShadow = document.createElementNS(ns, 'rect');
+      bgShadow.setAttribute('x', String(bx + 3)); bgShadow.setAttribute('y', String(by + 3));
+      bgShadow.setAttribute('width', String(bw)); bgShadow.setAttribute('height', String(bh));
+      bgShadow.setAttribute('fill', '#121212');
+      svgEl.appendChild(bgShadow);
+
+      var tail = document.createElementNS(ns, 'polygon');
+      tail.setAttribute('points', (tailBaseX - 6) + ',' + tailBaseY + ' ' + (tailBaseX + 6) + ',' + tailBaseY + ' ' + ax + ',' + (ay - 4));
+      tail.setAttribute('fill', '#fffef9');
+      tail.setAttribute('stroke', '#121212');
+      tail.setAttribute('stroke-width', '2');
+      svgEl.appendChild(tail);
+
+      var box = document.createElementNS(ns, 'rect');
+      box.setAttribute('x', String(bx)); box.setAttribute('y', String(by));
+      box.setAttribute('width', String(bw)); box.setAttribute('height', String(bh));
+      box.setAttribute('fill', '#fffef9');
+      box.setAttribute('stroke', '#121212');
+      box.setAttribute('stroke-width', '2.5');
+      svgEl.appendChild(box);
+
+      var pin = document.createElementNS(ns, 'circle');
+      pin.setAttribute('cx', String(ax)); pin.setAttribute('cy', String(ay));
+      pin.setAttribute('r', '4');
+      pin.setAttribute('fill', '#fffef9');
+      pin.setAttribute('stroke', '#121212');
+      pin.setAttribute('stroke-width', '1.8');
+      svgEl.appendChild(pin);
+
+      var bTxt = document.createElementNS(ns, 'text');
+      bTxt.setAttribute('x', String(bx + bw / 2));
+      bTxt.setAttribute('y', String(by + (isCompactPlate ? 18 : 23)));
+      bTxt.setAttribute('text-anchor', 'middle');
+      bTxt.setAttribute('fill', '#121212');
+      bTxt.setAttribute('font-family', '"M PLUS 1 Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace');
+      bTxt.setAttribute('font-size', isCompactPlate ? '12.5' : '12');
+      bTxt.setAttribute('font-weight', '700');
+      bTxt.textContent = shownBText;
+      svgEl.appendChild(bTxt);
+    }
+  }
+
+  function buildPairRankedRowFromEdge(edgeObj, findingId) {
+    var d = edgeObj.d;
+    var fFirst = d.confidence > d.reverseConfidence ||
+      (d.confidence === d.reverseConfidence && d.fromChanges <= d.toChanges);
+    var labels = distinguishingPaths(
+      fFirst ? edgeObj.s.safePath : edgeObj.t.safePath,
+      fFirst ? edgeObj.t.safePath : edgeObj.s.safePath
+    );
+    var denom = fFirst ? d.fromChanges : d.toChanges;
+    var confVal = fFirst ? d.confidence : d.reverseConfidence;
+    var iv = fFirst ? d.interval : d.reverseInterval;
+    var fPath = fFirst ? edgeObj.s.path : edgeObj.t.path;
+    var tPath = fFirst ? edgeObj.t.path : edgeObj.s.path;
+    return {
+      findingId: findingId,
+      kind: 'pair',
+      edgeIndex: edgeObj.idx,
+      title: labels[0] + ' \u2192 ' + labels[1],
+      fromPath: fPath,
+      toPath: tPath,
+      relationship: d.relationship,
+      shared: d.shared,
+      denom: denom,
+      ratioText: d.shared + '/' + denom,
+      pctText: d.weighted ? (pct(confVal) + ' weighted') : pct(confVal),
+      pointPct: Math.floor(confVal * 100 + 1e-9),
+      rangeLowPct: Math.floor(iv.low * 100 + 1e-9),
+      rangeHighPct: Math.ceil(iv.high * 100 - 1e-9),
+      lastTogether: d.lastTogether,
+      hash: makeFindingHash(fPath, tPath)
+    };
+  }
+
+  function renderBriefingBoard() {
+    if (!briefingEl || !briefingData) return;
+    var prevFocusDesc = null;
+    var activeEl = document.activeElement;
+    if (activeEl && briefingEl.contains(activeEl)) {
+      if (activeEl.id === 'toggle-all-findings') {
+        prevFocusDesc = { kind: 'toggle-all' };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-rank-row') && activeEl.getAttribute('data-finding-id')) {
+        prevFocusDesc = { kind: 'rank-row', findingId: activeEl.getAttribute('data-finding-id') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-sec-card') && activeEl.getAttribute('data-edge-idx')) {
+        prevFocusDesc = { kind: 'sec-card', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-family-pair-row') && activeEl.getAttribute('data-edge-idx')) {
+        prevFocusDesc = { kind: 'family-pair', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.id) {
+        prevFocusDesc = { kind: 'id', id: activeEl.id };
+      }
+    }
+    briefingEl.textContent = '';
+    var isMobileViewport = Boolean(window.innerWidth && window.innerWidth <= 640);
+
+    // 1. Compact Inline Stat Strip with accessible '?' popover buttons
+    var st = briefingData.stats;
+    var strip = el('div', 'f12-stat-strip');
+    var p1 = el('div', 'f12-stat-pill');
+    p1.appendChild(el('strong', '', String(st.ghostCount)));
+    p1.appendChild(el('span', '', 'GHOST WIRES'));
+    p1.appendChild(makeHelpBtn('help-ghost-wire', 'What is a ghost wire?'));
+    strip.appendChild(p1);
+
+    var p2 = el('div', 'f12-stat-pill');
+    p2.appendChild(el('strong', '', String(st.familyCount)));
+    p2.appendChild(el('span', '', 'FAMILIES'));
+    p2.appendChild(makeHelpBtn('help-family', 'What is a finding family?'));
+    strip.appendChild(p2);
+
+    var p3 = el('div', 'f12-stat-pill');
+    p3.appendChild(el('strong', '', String(st.unknownCount)));
+    var uncheckedLabel = st.totalUnchecked !== st.unknownCount
+      ? 'UNCHECKED (' + st.unknownCount + ' SHOWN OF ' + st.totalUnchecked + ')'
+      : 'UNCHECKED (' + st.totalUnchecked + ' TOTAL)';
+    p3.appendChild(el('span', '', uncheckedLabel));
+    p3.appendChild(makeHelpBtn('help-unchecked', 'What does Unchecked mean?'));
+    strip.appendChild(p3);
+
+    var p4 = el('div', 'f12-stat-pill');
+    p4.appendChild(el('strong', '', st.commitsAnalyzed.toLocaleString('en-US')));
+    p4.appendChild(el('span', '', 'COMMITS ANALYSED'));
+    strip.appendChild(p4);
+    briefingEl.appendChild(strip);
+
+    // 2. Empty state when no findings exist (includes context graph plate + dynamic threshold CLI suggestion)
+    if (!briefingData.featured || edges.length === 0) {
+      var emp = briefingData.emptyState;
+      var empPanel = el('article', 'f12-cut-panel');
+      empPanel.id = 'cut-c01';
+      empPanel.appendChild(el('span', 'f12-cut-label', 'C-01'));
+      var empKicker = el('div', 'f12-kicker-row');
+      empKicker.appendChild(el('span', 'f12-kicker-chip marker-active', 'C-01 / NO GHOST WIRES ABOVE THRESHOLD'));
+      empPanel.appendChild(empKicker);
+      empPanel.appendChild(el('h2', 'f12-headline', emp ? emp.headline : 'No co-changing file pairs passed current thresholds'));
+      empPanel.appendChild(el('p', 'f12-lede', emp ? emp.subhead : 'Try lowering --min-shared or --min-confidence.'));
+      if (emp && emp.plate && emp.plate.nodes && emp.plate.nodes.length > 0) {
+        var empPlateWrap = el('div', 'f12-plate-wrap');
+        var empSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        empSvg.setAttribute('id', 'featured-plate-svg');
+        empSvg.setAttribute('class', 'f12-plate-svg');
+        empSvg.setAttribute('role', 'img');
+        empSvg.setAttribute('aria-label', 'Analyzed files context plate');
+        renderPlateSvg(empSvg, emp.plate, '');
+        empPlateWrap.appendChild(empSvg);
+        var empFooter = el('div', 'f12-plate-footer');
+        empFooter.appendChild(el('span', 'f12-plate-meta', 'Context view: top ' + emp.plate.nodes.length + ' most frequently changed files in repository'));
+        empPlateWrap.appendChild(empFooter);
+        empPanel.appendChild(empPlateWrap);
+      }
+      if (emp && emp.suggestedCommand) {
+        var empCli = el('div', 'f12-cli-row');
+        empCli.appendChild(el('code', 'f12-cli-code', emp.suggestedCommand));
+        var empCopyBtn = el('button', 'f12-copy-btn', 'Copy CLI command');
+        empCopyBtn.type = 'button';
+        empCopyBtn.addEventListener('click', function () { copyText(emp.suggestedCommand, empCopyBtn, 'Copied'); });
+        empCli.appendChild(empCopyBtn);
+        empPanel.appendChild(empCli);
+      }
+      briefingEl.appendChild(empPanel);
+      renderAboutAnalysisSection(briefingEl);
+      return;
+    }
+
+    // Filter ranked findings by active relationship toggles and search query (supporting mixed-kind families)
+    var q = search && search.value ? search.value.trim().toLowerCase() : '';
+    var filteredRanked = [];
+    (briefingData.ranked || []).forEach(function (item) {
+      if (item.kind === 'family') {
+        var famEntryRef = (typeof item.familyIndex === 'number' && briefingData.families) ? briefingData.families[item.familyIndex] : null;
+        var memberIndices = item.edgeIndices || (famEntryRef && famEntryRef.edgeIndices) || [item.edgeIndex];
+        var visMemberIndices = memberIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+        if (visMemberIndices.length === 0) return;
+        if (visMemberIndices.length === 1) {
+          var singleRow = buildPairRankedRowFromEdge(edges[visMemberIndices[0]], item.findingId);
+          if (q) {
+            var sHay = (singleRow.title + ' ' + (singleRow.fromPath || '') + ' ' + (singleRow.toPath || '')).toLowerCase();
+            if (sHay.indexOf(q) < 0) return;
+          }
+          filteredRanked.push(singleRow);
+          return;
+        }
+        var leadVisEdge = edges[visMemberIndices[0]];
+        var hasVisGhost = visMemberIndices.some(function (ei) { return edges[ei].d.relationship === 'ghost'; });
+        var famRow = Object.assign({}, item, {
+          edgeIndex: leadVisEdge.idx,
+          relationship: hasVisGhost ? 'ghost' : leadVisEdge.d.relationship
+        });
+        if (leadVisEdge.idx !== item.edgeIndex) {
+          var leadPairRow = buildPairRankedRowFromEdge(leadVisEdge, item.findingId);
+          famRow.ratioText = leadPairRow.ratioText;
+          famRow.pctText = leadPairRow.pctText;
+          famRow.pointPct = leadPairRow.pointPct;
+          famRow.rangeLowPct = leadPairRow.rangeLowPct;
+          famRow.rangeHighPct = leadPairRow.rangeHighPct;
+        }
+        if (q) {
+          var fHay = (famRow.title + ' ' + (famEntryRef && famEntryRef.memberPaths ? famEntryRef.memberPaths.join(' ') : '')).toLowerCase();
+          if (fHay.indexOf(q) < 0) return;
+        }
+        filteredRanked.push(famRow);
+        return;
+      }
+      if (item.relationship && !visible[item.relationship]) return;
+      if (q) {
+        var hay = (item.title + ' ' + (item.fromPath || '') + ' ' + (item.toPath || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return;
+      }
+      filteredRanked.push(item);
+    });
+
+    // Resolve active finding: family or edge, respecting relationship filter toggles (including mixed families)
+    var activeFamilyEntry = (briefingSelectedFamilyIdx >= 0 && briefingData.families && briefingData.families[briefingSelectedFamilyIdx])
+      ? briefingData.families[briefingSelectedFamilyIdx]
+      : null;
+    var activeEdge = edges[briefingSelectedEdgeIdx] || edges[briefingData.featured.edgeIndex] || edges[0];
+    var familyFilteredToSubset = false;
+    if (activeFamilyEntry) {
+      var famIndices = activeFamilyEntry.edgeIndices || [activeFamilyEntry.edgeIndex];
+      var visFamIndices = famIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+      if (visFamIndices.length >= 2) {
+        activeEdge = edges[visFamIndices[0]] || activeEdge;
+        familyFilteredToSubset = visFamIndices.length < famIndices.length || activeEdge.idx !== activeFamilyEntry.edgeIndex;
+      } else if (visFamIndices.length === 1) {
+        activeFamilyEntry = null;
+        activeEdge = edges[visFamIndices[0]] || activeEdge;
+      } else {
+        activeFamilyEntry = null;
+      }
+    }
+    var currentRel = activeFamilyEntry
+      ? (activeEdge ? activeEdge.d.relationship : activeFamilyEntry.relationship)
+      : (activeEdge ? activeEdge.d.relationship : 'ghost');
+
+    // If current finding's relationship kind is hidden by filter toggles, promote top visible finding
+    if (currentRel && !visible[currentRel] && filteredRanked.length > 0) {
+      var topVis = filteredRanked[0];
+      if (topVis.kind === 'family' && typeof topVis.familyIndex === 'number' && briefingData.families && briefingData.families[topVis.familyIndex]) {
+        activeFamilyEntry = briefingData.families[topVis.familyIndex];
+        var promFamIndices = activeFamilyEntry.edgeIndices || [activeFamilyEntry.edgeIndex];
+        var visPromIndices = promFamIndices.filter(function (ei) { return edges[ei] && visible[edges[ei].d.relationship]; });
+        activeEdge = edges[visPromIndices[0] != null ? visPromIndices[0] : activeFamilyEntry.edgeIndex] || activeEdge;
+        familyFilteredToSubset = visPromIndices.length < promFamIndices.length || activeEdge.idx !== activeFamilyEntry.edgeIndex;
+      } else {
+        activeFamilyEntry = null;
+        var promEdge = edges[topVis.edgeIndex] || (topVis.fromPath && topVis.toPath ? edgeByPairKey[edgeKey(topVis.fromPath, topVis.toPath)] : null);
+        if (promEdge) activeEdge = promEdge;
+      }
+      currentRel = activeFamilyEntry
+        ? (activeEdge ? activeEdge.d.relationship : activeFamilyEntry.relationship)
+        : (activeEdge ? activeEdge.d.relationship : 'ghost');
+    }
+
+    var isDefaultFeatured = Boolean(
+      briefingUseDefaultFeatured &&
+      !familyFilteredToSubset &&
+      ((activeFamilyEntry && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && briefingData.featured.familyIndex === activeFamilyEntry.familyIndex) ||
+       (!activeFamilyEntry && !(briefingData.featured.isFamily || briefingData.featured.kind === 'family') && activeEdge && activeEdge.idx === briefingData.featured.edgeIndex)) &&
+      visible[activeEdge ? activeEdge.d.relationship : (briefingData.featured.relationship || 'ghost')]
+    );
+
+    // If all relationship toggles are off and nothing matches, show filter empty state in C-01
+    if (currentRel && !visible[currentRel] && filteredRanked.length === 0) {
+      var filterEmptyPanel = el('article', 'f12-cut-panel');
+      filterEmptyPanel.id = 'cut-c01';
+      filterEmptyPanel.appendChild(el('span', 'f12-cut-label', 'C-01'));
+      filterEmptyPanel.appendChild(el('h2', 'f12-headline', 'No findings match the active relationship filters'));
+      filterEmptyPanel.appendChild(el('p', 'f12-lede', 'Enable Ghost wires, Unchecked, Indirect imports, or Import links in the filter bar above to inspect findings.'));
+      briefingEl.appendChild(filterEmptyPanel);
+      renderAboutAnalysisSection(briefingEl);
+      return;
+    }
+
+    var featuredPayload = activeFamilyEntry || (isDefaultFeatured ? briefingData.featured : null);
+    var usePrebuiltLeadCopy = Boolean(featuredPayload && !familyFilteredToSubset);
+
+    // 3. Main 12-col Board Grid: Cut C-01 (Featured Finding + Plate) & Cut E-01 (Evidence)
+    var grid = el('div', 'f12-board-grid');
+    var cut01 = el('article', 'f12-cut-panel f12-cut-c01');
+    cut01.id = 'cut-c01';
+    cut01.appendChild(el('span', 'f12-cut-label', 'C-01'));
+
+    // Beat 01: What we found + Jump to evidence link
+    var beat01 = el('div', 'f12-beat-row');
+    beat01.appendChild(el('span', 'f12-beat-tag', '01 \u00b7 WHAT WE FOUND'));
+    var jumpEvBtn = el('button', 'f12-jump-btn', 'Inspect evidence \u2193');
+    jumpEvBtn.type = 'button';
+    jumpEvBtn.addEventListener('click', function () {
+      var evEl = document.getElementById('cut-c05');
+      if (evEl && typeof evEl.scrollIntoView === 'function') {
+        evEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      }
+    });
+    beat01.appendChild(jumpEvBtn);
+    cut01.appendChild(beat01);
+
+    var kickerRow = el('div', 'f12-kicker-row');
+    var kickerLeft = el('div', 'f12-kicker-left');
+    var activeRankItem = null;
+    if (briefingData.ranked) {
+      for (var ri = 0; ri < briefingData.ranked.length; ri++) {
+        var rItem = briefingData.ranked[ri];
+        if (activeFamilyEntry && rItem.kind === 'family' && rItem.familyIndex === activeFamilyEntry.familyIndex) {
+          activeRankItem = rItem; break;
+        }
+        if (!activeFamilyEntry && rItem.kind === 'pair' && rItem.edgeIndex === activeEdge.idx) {
+          activeRankItem = rItem; break;
+        }
+      }
+    }
+    var chipLabel = featuredPayload
+      ? featuredPayload.kickerChip
+      : ((activeRankItem ? activeRankItem.findingId : 'F-01') + ' \u00b7 SELECTED FINDING');
+    kickerLeft.appendChild(el('span', 'f12-kicker-chip' + (viewMode === 'briefing' ? ' marker-active' : ''), chipLabel));
+
+    var relUpper = activeEdge.d.relationship === 'ghost'
+      ? 'GHOST WIRE'
+      : (activeEdge.d.relationship === 'unknown' ? 'UNCHECKED LINK' : activeEdge.d.relationship.toUpperCase());
+    var tagLabel = featuredPayload
+      ? featuredPayload.kickerTag
+      : (relUpper + ' \u00b7 ' + activeEdge.d.shared + ' SHARED COMMITS');
+    kickerLeft.appendChild(el('span', 'f12-tag', tagLabel));
+    kickerRow.appendChild(kickerLeft);
+    var lastDateStr = featuredPayload ? featuredPayload.lastTogether : activeEdge.d.lastTogether;
+    kickerRow.appendChild(el('span', 'f12-last-date', 'Last together ' + lastDateStr));
+    cut01.appendChild(kickerRow);
+
+    var forwardFirst = activeEdge.d.confidence > activeEdge.d.reverseConfidence ||
+      (activeEdge.d.confidence === activeEdge.d.reverseConfidence && activeEdge.d.fromChanges <= activeEdge.d.toChanges);
+    var dynLabels = distinguishingPaths(
+      forwardFirst ? activeEdge.s.safePath : activeEdge.t.safePath,
+      forwardFirst ? activeEdge.t.safePath : activeEdge.s.safePath
+    );
+    var headlineText = featuredPayload
+      ? featuredPayload.headline
+      : (dynLabels[0] + ' and ' + dynLabels[1] + ' keep changing together');
+    var dynDenom = forwardFirst ? activeEdge.d.fromChanges : activeEdge.d.toChanges;
+    var dynConfVal = forwardFirst ? activeEdge.d.confidence : activeEdge.d.reverseConfidence;
+    var isWeightedEdge = Boolean(activeEdge.d.weighted);
+    var rawRateStr = pct(dynDenom > 0 ? activeEdge.d.shared / dynDenom : 0);
+    var dynPct = isWeightedEdge ? (pct(dynConfVal) + ' weighted') : pct(dynConfVal);
+    var dynIv = forwardFirst ? activeEdge.d.interval : activeEdge.d.reverseInterval;
+    var dynLow = Math.floor(dynIv.low * 100 + 1e-9);
+    var dynHigh = Math.ceil(dynIv.high * 100 - 1e-9);
+    var dynRateDetail = isWeightedEdge
+      ? (dynPct + ' (' + rawRateStr + ' raw), 95% confidence range ' + dynLow + '\u2013' + dynHigh + '%')
+      : (dynPct + ', 95% confidence range ' + dynLow + '\u2013' + dynHigh + '%');
+    var ledeText = usePrebuiltLeadCopy
+      ? featuredPayload.lede
+      : ((activeEdge.d.relationship === 'ghost'
+        ? 'No direct or one-step-removed import link was detected between these files in current code, yet '
+        : (activeEdge.d.relationship === 'unknown'
+          ? 'Import relationship was not statically verified for this file pair, yet '
+          : 'Connected via ' + activeEdge.d.relationship + ' relationship: ')) +
+        activeEdge.d.shared + ' of ' + dynDenom + ' commits to ' + dynLabels[0] +
+        ' also modified ' + dynLabels[1] + ' (' + dynRateDetail + ').');
+
+    var h2 = el('h2', 'f12-headline', headlineText);
+    h2.id = 'briefing-headline';
+    h2.tabIndex = -1;
+    cut01.appendChild(h2);
+    var ledeP = el('p', 'f12-lede', ledeText);
+    ledeP.id = 'briefing-lede';
+    cut01.appendChild(ledeP);
+
+    var plateWrap = el('div', 'f12-plate-wrap');
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('id', 'featured-plate-svg');
+    svg.setAttribute('class', 'f12-plate-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate');
+
+    var plateObj = null;
+    var bText = '';
+    if (usePrebuiltLeadCopy && !isMobileViewport) {
+      plateObj = featuredPayload.plate;
+      bText = featuredPayload.balloonText;
+    } else if (activeFamilyEntry) {
+      var famNodes = [];
+      var famEdgeSet = Object.create(null);
+      (activeFamilyEntry.memberPaths || []).forEach(function (mp) {
+        var fn = nodeByPath[mp];
+        if (fn) famNodes.push(fn);
+      });
+      edges.forEach(function (ce) {
+        if (visible[ce.d.relationship] &&
+            (activeFamilyEntry.memberPaths || []).indexOf(ce.s.path) >= 0 &&
+            (activeFamilyEntry.memberPaths || []).indexOf(ce.t.path) >= 0) {
+          famEdgeSet[ce.idx] = true;
+        }
+      });
+      if (famNodes.length < 2) famNodes = [activeEdge.s, activeEdge.t];
+      famEdgeSet[activeEdge.idx] = true;
+      plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, isMobileViewport);
+      bText = (!familyFilteredToSubset && activeFamilyEntry.balloonText) ? activeFamilyEntry.balloonText : plateObj.balloonText;
+    } else {
+      var pairSeedNodes = forwardFirst ? [activeEdge.s, activeEdge.t] : [activeEdge.t, activeEdge.s];
+      var pairFeatSet = Object.create(null);
+      pairFeatSet[activeEdge.idx] = true;
+      plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, isMobileViewport);
+      bText = usePrebuiltLeadCopy ? featuredPayload.balloonText : plateObj.balloonText;
+    }
+    renderPlateSvg(svg, plateObj, bText);
+    plateWrap.appendChild(svg);
+
+    var plateFooter = el('div', 'f12-plate-footer');
+    var plateLegend = el('div', 'f12-plate-legend');
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2501\u2501 Featured halo + link'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '- - Ghost wire (long dash)'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u00b7\u00b7\u00b7 Unchecked (dotted)'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2500\u2500 Import (solid)'));
+    plateFooter.appendChild(plateLegend);
+    var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
+    plateFooter.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)'));
+    plateWrap.appendChild(plateFooter);
+    cut01.appendChild(plateWrap);
+    grid.appendChild(cut01);
+
+    // Cut E-01: Evidence & Receipts (keeps id="cut-c05" for DOM selectors, displays E-01 · EVIDENCE)
+    var cut05 = el('aside', 'f12-cut-panel f12-cut-c05');
+    cut05.id = 'cut-c05';
+    cut05.appendChild(el('span', 'f12-cut-label', 'E-01 \u00b7 EVIDENCE'));
+
+    // Beat 02: What the history shows + Contextual '?' help buttons with visible labels
+    var beat02 = el('div', 'f12-beat-row');
+    beat02.appendChild(el('span', 'f12-beat-tag', '02 \u00b7 WHAT THE HISTORY SHOWS \u00b7 Historical co-change rate (not defect probability)'));
+    var evHelpWrap = el('div', 'f12-kicker-left');
+    evHelpWrap.appendChild(makeHelpBtn('help-directional-pct', 'Why do the two directional percentages differ?', '% asymmetry'));
+    evHelpWrap.appendChild(makeHelpBtn('help-confidence-range', 'What does the 95% confidence range mean?', '95% range'));
+    beat02.appendChild(evHelpWrap);
+    cut05.appendChild(beat02);
+
+    var evKicker = el('div', 'f12-kicker-row');
+    evKicker.appendChild(el('span', 'f12-tag', 'DIRECTIONAL CO-CHANGE & RECEIPTS'));
+    evKicker.appendChild(el('span', 'f12-last-date', 'Lead pair: ' + dynLabels[0] + ' \u2194 ' + dynLabels[1]));
+    cut05.appendChild(evKicker);
+
+    var dirGrid = el('div', 'f12-dir-grid');
+    if (usePrebuiltLeadCopy && featuredPayload.evidence) {
+      var evCopy = featuredPayload.evidence;
+      var pd = evCopy.primaryDirection;
+      var rd = evCopy.reverseDirection;
+      var box1 = el('div', 'f12-dir-box');
+      box1.setAttribute('data-edge-idx', String(activeEdge.idx));
+      box1.appendChild(el('div', 'f12-dir-pair', pd.fromLabel + ' \u2192 ' + pd.toLabel));
+      box1.appendChild(el('div', 'f12-dir-pct', pd.pctText));
+      box1.appendChild(el('div', 'f12-dir-sub', pd.detailText + ' (' + pd.lowerBoundText + ')'));
+      dirGrid.appendChild(box1);
+
+      var box2 = el('div', 'f12-dir-box');
+      box2.appendChild(el('div', 'f12-dir-pair', rd.fromLabel + ' \u2192 ' + rd.toLabel));
+      box2.appendChild(el('div', 'f12-dir-pct', rd.pctText));
+      box2.appendChild(el('div', 'f12-dir-sub', rd.detailText + ' (' + rd.lowerBoundText + ')'));
+      dirGrid.appendChild(box2);
+    } else {
+      var revDenom = forwardFirst ? activeEdge.d.toChanges : activeEdge.d.fromChanges;
+      var revConfVal = forwardFirst ? activeEdge.d.reverseConfidence : activeEdge.d.confidence;
+      var revRawRateStr = pct(revDenom > 0 ? activeEdge.d.shared / revDenom : 0);
+      var revPct = isWeightedEdge ? (pct(revConfVal) + ' weighted') : pct(revConfVal);
+      var revIv = forwardFirst ? activeEdge.d.reverseInterval : activeEdge.d.interval;
+      var revLow = Math.floor(revIv.low * 100 + 1e-9);
+      var revHigh = Math.ceil(revIv.high * 100 - 1e-9);
+
+      var dBox1 = el('div', 'f12-dir-box');
+      dBox1.setAttribute('data-edge-idx', String(activeEdge.idx));
+      dBox1.appendChild(el('div', 'f12-dir-pair', dynLabels[0] + ' \u2192 ' + dynLabels[1]));
+      dBox1.appendChild(el('div', 'f12-dir-pct', dynPct));
+      var dSub1 = activeEdge.d.shared + ' of ' + dynDenom + ' commits' +
+        (isWeightedEdge ? ' (' + rawRateStr + ' raw)' : '') +
+        ' \u00b7 95% range ' + dynLow + '\u2013' + dynHigh + '% (\u2265' + dynLow + '% CI)';
+      dBox1.appendChild(el('div', 'f12-dir-sub', dSub1));
+      dirGrid.appendChild(dBox1);
+
+      var dBox2 = el('div', 'f12-dir-box');
+      dBox2.appendChild(el('div', 'f12-dir-pair', dynLabels[1] + ' \u2192 ' + dynLabels[0]));
+      dBox2.appendChild(el('div', 'f12-dir-pct', revPct));
+      var dSub2 = activeEdge.d.shared + ' of ' + revDenom + ' commits' +
+        (isWeightedEdge ? ' (' + revRawRateStr + ' raw)' : '') +
+        ' \u00b7 95% range ' + revLow + '\u2013' + revHigh + '% (\u2265' + revLow + '% CI)';
+      dBox2.appendChild(el('div', 'f12-dir-sub', dSub2));
+      dirGrid.appendChild(dBox2);
+    }
+    cut05.appendChild(dirGrid);
+
+    var readingGuideObj = (usePrebuiltLeadCopy && featuredPayload.evidence && featuredPayload.evidence.readingGuide)
+      ? featuredPayload.evidence.readingGuide
+      : buildClientReadingGuide(activeEdge, forwardFirst, dynLabels, activeFamilyEntry);
+    cut05.appendChild(renderReadingFindingDisclosure(readingGuideObj, 'reading-this-finding'));
+
+    var metaStrip = el('div', 'f12-meta-strip');
+    metaStrip.appendChild(el('span', 'f12-meta-pill', 'Last together ' + lastDateStr));
+    if (featuredPayload && featuredPayload.evidence) {
+      var evMeta = featuredPayload.evidence;
+      if (evMeta.familySummary) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.familySummary.commitsTouchingTwoOrMore + ' family commits (2+ files) \u00b7 ' + evMeta.familySummary.commitsTouchingAll + ' touched all ' + evMeta.familySummary.members.length));
+      }
+      if (evMeta.ownerNotes && evMeta.ownerNotes.length > 0) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.ownerNotes[0]));
+      }
+      if (evMeta.originShareNote) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.originShareNote));
+      }
+    } else {
+      var leadN = forwardFirst ? activeEdge.s : activeEdge.t;
+      if (leadN.author) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', 'Top historical contributor: ' + leadN.author + ' (' + pct(leadN.share || 0) + ' of ' + dynLabels[0] + ' commits)'));
+      }
+    }
+    cut05.appendChild(metaStrip);
+
+    // Family pairs breakdown (when active finding is a family)
+    if (featuredPayload && featuredPayload.evidence && featuredPayload.evidence.familySummary && featuredPayload.evidence.familySummary.pairs && featuredPayload.evidence.familySummary.pairs.length > 0) {
+      var famSum = featuredPayload.evidence.familySummary;
+      var visFamPairs = famSum.pairs.filter(function (fp) {
+        var pe = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
+        return !pe || Boolean(visible[pe.d.relationship]);
+      });
+      if (visFamPairs.length > 0) {
+        var famBox = el('div', 'f12-family-pairs');
+        famBox.appendChild(el('div', 'f12-family-pairs-hdr', 'QUALIFYING FAMILY PAIRS (' + visFamPairs.length + ' OF ' + famSum.possiblePairs + ')'));
+        visFamPairs.forEach(function (fp) {
+          var fpBtn = el('button', 'f12-family-pair-row');
+          fpBtn.type = 'button';
+          fpBtn.appendChild(el('span', '', fp.shortFrom + ' \u2194 ' + fp.shortTo));
+          fpBtn.appendChild(el('span', '', fp.shared + ' shared \u00b7 ' + fp.pctText + ' (' + fp.lowerBoundText + ')'));
+          var matchingEdge = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
+          if (matchingEdge) {
+            fpBtn.setAttribute('data-edge-idx', String(matchingEdge.idx));
+            fpBtn.addEventListener('click', function () {
+              selectBriefingEdge(matchingEdge, false, true);
+            });
+          }
+          famBox.appendChild(fpBtn);
+        });
+        cut05.appendChild(famBox);
+      }
+    }
+
+    // Counterexamples
+    var cxData = activeEdge.d.counterexamples;
+    if (usePrebuiltLeadCopy && featuredPayload.evidence) {
+      var evCx = featuredPayload.evidence;
+      var totalStandalone = (evCx.fromOnlyTotal || 0) + (evCx.toOnlyTotal || 0);
+      if (totalStandalone > 0) {
+        var cxDet = el('details', 'f12-counterexamples');
+        cxDet.appendChild(el('summary', '', evCx.counterexamplesSummary + ' (' + evCx.primaryDirection.fromLabel + ') \u00b7 ' + evCx.reverseCounterexamplesSummary + ' (' + evCx.reverseDirection.fromLabel + ') \u2014 ' + plural(totalStandalone, 'counterexample commit')));
+        var cxItems = (evCx.fromOnly || []).concat(evCx.toOnly || []).slice(0, 4);
+        if (cxItems.length > 0) {
+          var cxUl = el('ul', 'f12-cx-list');
+          cxItems.forEach(function (item) {
+            cxUl.appendChild(el('li', '', item.hash.slice(0, 7) + ' \u00b7 ' + item.date + ' \u00b7 ' + sanitizeText(item.subject)));
+          });
+          cxDet.appendChild(cxUl);
+        }
+        cut05.appendChild(cxDet);
+      }
+    } else {
+      var fromStandalone = Math.max(0, dynDenom - activeEdge.d.shared);
+      var revDenom2 = forwardFirst ? activeEdge.d.toChanges : activeEdge.d.fromChanges;
+      var toStandalone = Math.max(0, revDenom2 - activeEdge.d.shared);
+      var totalCx = fromStandalone + toStandalone;
+      if (totalCx > 0) {
+        var cxDet2 = el('details', 'f12-counterexamples');
+        var fUnit = fromStandalone === 1 ? 'time' : 'times';
+        var tUnit = toStandalone === 1 ? 'time' : 'times';
+        cxDet2.appendChild(el('summary', '', 'Changed alone: ' + fromStandalone + ' ' + fUnit + ' (' + dynLabels[0] + ') \u00b7 Changed alone: ' + toStandalone + ' ' + tUnit + ' (' + dynLabels[1] + ') \u2014 ' + plural(totalCx, 'counterexample commit')));
+        if (cxData) {
+          var cxUl2 = el('ul', 'f12-cx-list');
+          (cxData.fromOnly || []).concat(cxData.toOnly || []).slice(0, 4).forEach(function (item) {
+            cxUl2.appendChild(el('li', '', item.hash.slice(0, 7) + ' \u00b7 ' + item.date + ' \u00b7 ' + sanitizeText(item.subject)));
+          });
+          cxDet2.appendChild(cxUl2);
+        }
+        cut05.appendChild(cxDet2);
+      }
+    }
+
+    // Supporting Commit Receipts
+    var rawReceipts = usePrebuiltLeadCopy && featuredPayload.evidence
+      ? (featuredPayload.evidence.receiptsShown || [])
+      : (activeEdge.d.evidence || []).slice(0, 3);
+    var receiptsTotal = usePrebuiltLeadCopy && featuredPayload.evidence
+      ? featuredPayload.evidence.receiptsTotal
+      : activeEdge.d.shared;
+    cut05.appendChild(el('div', 'f12-receipts-hdr', 'SUPPORTING COMMIT RECEIPTS (' + rawReceipts.length + ' OF ' + receiptsTotal + ')'));
+    var rList = el('ul', 'f12-receipts-list');
+    rawReceipts.forEach(function (r) {
+      var li = el('li', 'f12-receipt-row');
+      var shortH = r.hash ? r.hash.slice(0, 7) : '';
+      var hBtn = el('button', 'f12-receipt-hash', shortH);
+      hBtn.type = 'button';
+      hBtn.title = 'Copy commit hash';
+      hBtn.addEventListener('click', function () { copyText(r.hash || shortH, hBtn, 'Copied'); });
+      li.appendChild(hBtn);
+      li.appendChild(el('span', 'f12-receipt-subj', sanitizeText(r.subject)));
+      li.appendChild(el('span', 'f12-receipt-date', r.date));
+      rList.appendChild(li);
+    });
+    cut05.appendChild(rList);
+
+    // Beat 03: What to do next + CLI explain command + Copy finding button
+    var nextStepBox = el('div', 'f12-next-step');
+    nextStepBox.appendChild(el('strong', '', '03 \u00b7 WHAT TO DO NEXT'));
+    nextStepBox.appendChild(document.createTextNode('If you modify one of these files, inspect the companion file(s) and supporting commits above to decide whether a coordinated update is needed.'));
+    cut05.appendChild(nextStepBox);
+
+    var explainCmd = (usePrebuiltLeadCopy && featuredPayload.evidence)
+      ? featuredPayload.evidence.explainCommand
+      : (activeEdge.d.explainCommand || fallbackExplainCommand(activeEdge.s.path, activeEdge.t.path));
+    var cliRow = el('div', 'f12-cli-row');
+    cliRow.appendChild(el('code', 'f12-cli-code', sanitizeText(explainCmd)));
+    var copyCli = el('button', 'f12-copy-btn', 'Copy CLI command');
+    copyCli.type = 'button';
+    copyCli.addEventListener('click', function () { copyText(explainCmd, copyCli, 'Copied'); });
+    cliRow.appendChild(copyCli);
+    cut05.appendChild(cliRow);
+
+    var expBtn = el('button', 'btn-export', 'Copy finding for PR / discussion');
+    expBtn.type = 'button';
+    expBtn.addEventListener('click', function () {
+      copyText(formatFindingMarkdown(activeEdge), expBtn, 'Copied finding to clipboard');
+    });
+    cut05.appendChild(expBtn);
+    grid.appendChild(cut05);
+    briefingEl.appendChild(grid);
+
+    // 4. Secondary Investigation Cards (C-02, C-03, C-04) — filtered by visible relationship kinds
+    if (briefingData.secondaryCards && briefingData.secondaryCards.length > 0) {
+      var visibleSecondary = briefingData.secondaryCards.filter(function (sc) {
+        return !sc.relationship || Boolean(visible[sc.relationship]);
+      }).slice(0, 3);
+      if (visibleSecondary.length > 0) {
+        var secGrid = el('div', 'f12-secondary-grid');
+        visibleSecondary.forEach(function (sc, sIdx) {
+          var secEdge = edges[sc.edgeIndex];
+          var isSel = !activeFamilyEntry && !isDefaultFeatured && activeEdge && activeEdge.idx === sc.edgeIndex;
+          var card = el('button', 'f12-sec-card card interactive' + (isSel ? ' selected' : ''));
+          card.type = 'button';
+          card.setAttribute('data-edge-idx', String(sc.edgeIndex));
+          card.appendChild(el('span', 'f12-cut-label', 'C-0' + (sIdx + 2)));
+          var kRow = el('div', 'f12-kicker-row');
+          kRow.appendChild(el('span', 'f12-tag', sc.findingId + ' \u00b7 ' + sc.badge));
+          kRow.appendChild(el('span', 'f12-last-date', 'Last together ' + sc.lastTogether));
+          card.appendChild(kRow);
+          card.appendChild(el('div', 'f12-sec-pair', sc.pairLabel));
+          card.appendChild(el('div', 'f12-sec-sub', sc.detailText));
+
+          var ciRow = el('div', 'f12-ci-row');
+          ciRow.appendChild(el('span', 'f12-ci-pct', sc.headlinePct));
+          var track = el('div', 'f12-ci-track');
+          var fill = el('div', 'f12-ci-fill');
+          fill.style.left = sc.lowPct + '%';
+          fill.style.width = Math.max(2, sc.highPct - sc.lowPct) + '%';
+          track.appendChild(fill);
+          var tick = el('div', 'f12-ci-tick');
+          tick.style.left = 'calc(' + sc.pointPct + '% - 1px)';
+          track.appendChild(tick);
+          ciRow.appendChild(track);
+          ciRow.appendChild(el('span', 'f12-ci-bounds', sc.lowPct + '\u2013' + sc.highPct + '%'));
+          card.appendChild(ciRow);
+
+          card.appendChild(el('div', 'f12-sec-rev', sc.reverseLine));
+          if (sc.receiptHash) {
+            card.appendChild(el('div', 'f12-sec-receipt', sc.receiptHash + ' \u00b7 ' + sc.receiptDate + ' \u00b7 ' + sc.receiptSubject));
+          }
+          card.addEventListener('click', function () {
+            if (secEdge) selectBriefingEdge(secEdge, false, true);
+          });
+          secGrid.appendChild(card);
+        });
+        briefingEl.appendChild(secGrid);
+      }
+    }
+
+    // 5. Full-width Ranked Findings Table (filtered by search & kind toggles)
+    var rankedPanel = el('section', 'f12-ranked-panel');
+    rankedPanel.id = 'cut-ranked';
+    rankedPanel.appendChild(el('span', 'f12-cut-label', 'C-05 \u00b7 RANKED FINDINGS'));
+    var rHdr = el('div', 'f12-ranked-hdr');
+    var rLeft = el('div', 'f12-kicker-left');
+    rLeft.appendChild(el('h3', 'f12-ranked-title', 'RANKED FINDINGS (' + filteredRanked.length + ')'));
+    rLeft.appendChild(el('span', 'f12-tag', '45\u00b0 HALFTONE DOTS = 95% CONFIDENCE RANGE \u00b7 TICK = POINT ESTIMATE'));
+    rHdr.appendChild(rLeft);
+    rHdr.appendChild(el('span', 'f12-last-date', 'Ordered by overview priority & Wilson lower bound'));
+    rankedPanel.appendChild(rHdr);
+
+    var rListEl = el('div', 'f12-ranked-list');
+    rListEl.id = 'ranked-findings-list';
+    var shownRanked = briefingShowAllRanked ? filteredRanked : filteredRanked.slice(0, 10);
+    shownRanked.forEach(function (item) {
+      var isRowActive = (activeFamilyEntry && item.kind === 'family' && item.familyIndex === activeFamilyEntry.familyIndex) ||
+        (!activeFamilyEntry && item.kind === 'pair' && activeEdge && item.edgeIndex === activeEdge.idx);
+      var row = el('button', 'f12-rank-row' + (isRowActive ? ' active' : ''));
+      row.type = 'button';
+      row.setAttribute('data-finding-id', item.findingId);
+      row.appendChild(el('span', 'f12-rank-id', item.findingId));
+      row.appendChild(el('span', 'f12-rank-pair', item.title));
+      var rBadge = item.kind === 'family'
+        ? 'FAMILY'
+        : (item.relationship === 'ghost' ? 'GHOST WIRE' : (item.relationship === 'unknown' ? 'UNCHECKED' : item.relationship.toUpperCase()));
+      row.appendChild(el('span', 'f12-tag', rBadge));
+      row.appendChild(el('span', 'f12-rank-ratio', item.ratioText));
+
+      var track = el('div', 'f12-ci-track');
+      var fill = el('div', 'f12-ci-fill');
+      fill.style.left = item.rangeLowPct + '%';
+      fill.style.width = Math.max(2, item.rangeHighPct - item.rangeLowPct) + '%';
+      track.appendChild(fill);
+      var tick = el('div', 'f12-ci-tick');
+      tick.style.left = 'calc(' + item.pointPct + '% - 1px)';
+      track.appendChild(tick);
+      row.appendChild(track);
+
+      row.appendChild(el('span', 'f12-ci-bounds', item.rangeLowPct + '\u2013' + item.rangeHighPct + '%'));
+      row.appendChild(el('span', 'f12-last-date', item.lastTogether));
+      row.addEventListener('click', function () {
+        if (item.kind === 'family' && typeof item.familyIndex === 'number') {
+          selectBriefingFamily(item.familyIndex, true);
+          return;
+        }
+        var targetE = edges[item.edgeIndex] || (item.fromPath && item.toPath ? edgeByPairKey[edgeKey(item.fromPath, item.toPath)] : null);
+        if (targetE) selectBriefingEdge(targetE, false, true);
+      });
+      rListEl.appendChild(row);
+    });
+    rankedPanel.appendChild(rListEl);
+
+    if (filteredRanked.length > 10) {
+      var moreCount = filteredRanked.length - 10;
+      var toggleAllBtn = el(
+        'button',
+        'f12-toggle-all-btn',
+        briefingShowAllRanked
+          ? 'Show top 10 findings'
+          : 'Show all ' + filteredRanked.length + ' findings (' + moreCount + ' more)'
+      );
+      toggleAllBtn.id = 'toggle-all-findings';
+      toggleAllBtn.type = 'button';
+      toggleAllBtn.setAttribute('aria-expanded', String(briefingShowAllRanked));
+      toggleAllBtn.addEventListener('click', function () {
+        briefingShowAllRanked = !briefingShowAllRanked;
+        renderBriefingBoard();
+        syncMarkerDom();
+      });
+      rankedPanel.appendChild(toggleAllBtn);
+    }
+    briefingEl.appendChild(rankedPanel);
+    renderAboutAnalysisSection(briefingEl);
+
+    // Restore keyboard focus across full DOM rebuilds when triggered from inside briefingEl
+    if (prevFocusDesc) {
+      var nextFocusEl = null;
+      if (prevFocusDesc.kind === 'toggle-all') {
+        nextFocusEl = document.getElementById('toggle-all-findings');
+      } else if (prevFocusDesc.kind === 'rank-row') {
+        nextFocusEl = briefingEl.querySelector('.f12-rank-row[data-finding-id="' + prevFocusDesc.findingId + '"]');
+      } else if (prevFocusDesc.kind === 'sec-card') {
+        nextFocusEl = briefingEl.querySelector('.f12-sec-card[data-edge-idx="' + prevFocusDesc.edgeIdx + '"]');
+      } else if (prevFocusDesc.kind === 'family-pair') {
+        nextFocusEl = briefingEl.querySelector('.f12-family-pair-row[data-edge-idx="' + prevFocusDesc.edgeIdx + '"]')
+          || briefingEl.querySelector('.f12-rank-row.active');
+      } else if (prevFocusDesc.kind === 'id') {
+        nextFocusEl = document.getElementById(prevFocusDesc.id);
+      }
+      if (!nextFocusEl) {
+        nextFocusEl = briefingEl.querySelector('.f12-rank-row.active') || document.getElementById('briefing-headline');
+      }
+      if (nextFocusEl && typeof nextFocusEl.focus === 'function') {
+        try { nextFocusEl.focus({ preventScroll: true }); } catch (_) { nextFocusEl.focus(); }
+      }
+    }
+  }
+
+  if (window.location && window.location.hash) {
+    var hashEdge = resolveEdgeFromHash(window.location.hash);
+    if (hashEdge) {
+      ensureRelationshipVisible(hashEdge.d.relationship);
+      briefingSelectedEdgeIdx = hashEdge.idx;
+      briefingSelectedFamilyIdx = -1;
+      briefingUseDefaultFeatured = false;
+      selectedEdge = hashEdge;
+    }
+  }
+  window.addEventListener('hashchange', function () {
+    var he = resolveEdgeFromHash(window.location.hash);
+    if (he) {
+      ensureRelationshipVisible(he.d.relationship);
+      selectBriefingEdge(he, false, false);
+    }
+  });
+
+  var lastBriefingMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
+  window.addEventListener('resize', function () {
+    var nowMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
+    if (nowMobile !== lastBriefingMobile) {
+      lastBriefingMobile = nowMobile;
+      if (viewMode === 'briefing') {
+        renderBriefingBoard();
+        syncMarkerDom();
+      }
+    }
+  });
+
   function renderPanel() {
     panel.textContent = '';
     if (selectedNode) {
@@ -4764,6 +7101,8 @@ const RICH_CLIENT = String.raw`
     } else {
       renderOverview();
     }
+    renderBriefingBoard();
+    syncMarkerDom();
   }
 
   // ---- media & print listeners ---------------------------------------------

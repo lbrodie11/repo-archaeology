@@ -156,12 +156,28 @@ export const FRAME12 = {
     sheet: '0 1px 0 rgba(0, 0, 0, 0.05), 0 18px 40px -26px rgba(0, 0, 0, 0.5)',
     peg: 'inset 0 1px 2px rgba(0, 0, 0, 0.25)',
   },
+  /**
+   * Intentional cyanotype blueprint plate palette for RA-17 featured ego-network plates
+   * embedded inside the monochrome FRAME/12 sheet.
+   */
+  plate: {
+    bgTop: '#13304f',
+    bgMid: '#0e2540',
+    bgBottom: '#09192c',
+    grid: '#173b61',
+    ink: '#fffef9',
+    ghost: '#ff4f9a',
+    unknown: '#e3b65b',
+    indirect: '#7fd1b0',
+    direct: '#7eb3e0',
+  },
 } as const;
 
 export const FRAME12_ALLOWED_HEX = new Set<string>(
   [
     ...Object.values(FRAME12.light),
     ...Object.values(FRAME12.dark),
+    ...Object.values(FRAME12.plate),
   ]
     .filter((v) => v.startsWith('#'))
     .map((v) => v.toLowerCase()),
@@ -290,7 +306,7 @@ export function wcagContrastRatio(fg: string, bg: string): number {
  * normalization and terminal ANSI/OSC escaping remain independent.
  */
 export function sanitizeHtmlDisplayText(value: string): string {
-  return value.replace(
+  return String(value ?? '').replace(
     /[\u0000-\u001f\u007f-\u009f\u200b-\u200d\u2028\u2029\u2060\ufeff]|\p{Bidi_Control}/gu,
     (character) => {
       if (character === '\n') return '\\n';

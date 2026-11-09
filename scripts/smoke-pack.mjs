@@ -27,7 +27,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, '..');
 const SCHEMA_DIR = join(ROOT_DIR, 'schema');
 
-const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.(?:js|d\.ts)|schema\/.+\.schema\.json)$/;
+const ALLOWED_PACKED_FILE_RE = /^(?:package\.json|README\.md|LICENSE|dist\/.+\.(?:js|d\.ts)|assets\/fonts\/.+\.(?:woff2|txt)|schema\/.+\.schema\.json)$/;
 
 export function assertPackedFileList(files) {
   if (!Array.isArray(files) || files.length === 0) {
@@ -37,7 +37,7 @@ export function assertPackedFileList(files) {
   const unexpected = paths.filter((p) => !ALLOWED_PACKED_FILE_RE.test(p));
   if (unexpected.length > 0) {
     throw new Error(
-      `Tarball contains unexpected files outside dist/, schema/, README.md, LICENSE, package.json: ${unexpected.join(', ')}`,
+      `Tarball contains unexpected files outside dist/, assets/fonts/, schema/, README.md, LICENSE, package.json: ${unexpected.join(', ')}`,
     );
   }
   for (const requiredFile of ['package.json', 'README.md', 'LICENSE', 'dist/cli.js', 'schema/diff.schema.json', 'schema/backtest.schema.json']) {

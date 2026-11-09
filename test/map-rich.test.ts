@@ -505,6 +505,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
     try {
       // 1. Markdown export byte-identity between classic and rich on the same fixture
       const syn50 = generateSyntheticMapData(50, { repoName: 'ra16-browser-50' });
+      syn50.meta.root = '/Users/alice/secret-workspace/ra16-browser-50';
       const classicHtml = renderMapHtml(syn50, computeLayout(syn50, { style: 'classic' }), { style: 'classic' });
       const richHtml = renderMapHtml(syn50, computeLayout(syn50, { style: 'rich' }), { style: 'rich' });
 
@@ -588,6 +589,134 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         `Expected <= 1 DOM element with .marker-active on first render, got ${initialMarkerStats.domMarkers}`,
       );
 
+      // Verify RA-17 Briefing mode is active by default and renders C-01, E-01, featured plate SVG, help popovers, single <main>, and ranked findings
+      const briefingCheck = await page.evaluate(() => {
+        const appView = document.querySelector('.app')?.getAttribute('data-view');
+        const c01 = document.getElementById('cut-c01');
+        const c05 = document.getElementById('cut-c05');
+        const svg = document.getElementById('featured-plate-svg');
+        const ranked = document.getElementById('cut-ranked');
+        const hasC01 = Boolean(c01 && c01.getBoundingClientRect().height > 0);
+        const hasC05 = Boolean(c05 && c05.getBoundingClientRect().height > 0);
+        const hasPlateSvg = Boolean(svg && svg.getBoundingClientRect().width >= 400);
+        const hasRanked = Boolean(ranked && ranked.getBoundingClientRect().height > 0);
+        const svgGoldStrokes = document.querySelectorAll('#featured-plate-svg [stroke="#ffd60a"]').length;
+        const visibleMains = Array.from(document.querySelectorAll('main')).filter((m) => !m.hidden).length;
+        const e01Label = c05?.querySelector('.f12-cut-label')?.textContent ?? '';
+        const c05RankedLabel = ranked?.querySelector('.f12-cut-label')?.textContent ?? '';
+        const hasThreeBeats =
+          (c01?.textContent ?? '').includes('01 · WHAT WE FOUND') &&
+          (c05?.textContent ?? '').includes('02 · WHAT THE HISTORY SHOWS') &&
+          (c05?.textContent ?? '').includes('03 · WHAT TO DO NEXT');
+        const initialRows = document.querySelectorAll('.f12-rank-row').length;
+        const showAllBtn = document.getElementById('toggle-all-findings') as HTMLButtonElement | null;
+        if (showAllBtn) showAllBtn.click();
+        const expandedRows = document.querySelectorAll('.f12-rank-row').length;
+        const collapseBtn = document.getElementById('toggle-all-findings') as HTMLButtonElement | null;
+        if (collapseBtn) collapseBtn.click();
+        return {
+          appView,
+          hasC01,
+          hasC05,
+          hasPlateSvg,
+          hasRanked,
+          svgGoldStrokes,
+          visibleMains,
+          e01Label,
+          c05RankedLabel,
+          hasThreeBeats,
+          initialRows,
+          expandedRows,
+        };
+      });
+      assert.equal(briefingCheck.appView, 'briefing', 'Expected Briefing mode to be active by default');
+      assert.equal(briefingCheck.hasC01, true, 'Expected C-01 featured finding panel to render');
+      assert.equal(briefingCheck.hasC05, true, 'Expected E-01 evidence panel to render');
+      assert.equal(briefingCheck.hasPlateSvg, true, 'Expected featured blueprint plate SVG >= 500px wide');
+      assert.equal(briefingCheck.hasRanked, true, 'Expected C-05 ranked findings panel to render');
+      assert.equal(briefingCheck.svgGoldStrokes, 0, 'Expected 0 SVG elements with stroke="#ffd60a"');
+      assert.equal(briefingCheck.visibleMains, 1, 'Expected exactly 1 visible <main> landmark in Briefing mode');
+      assert.equal(briefingCheck.e01Label, 'E-01 · EVIDENCE', 'Expected evidence panel cut label to be E-01 · EVIDENCE');
+      assert.equal(briefingCheck.c05RankedLabel, 'C-05 · RANKED FINDINGS', 'Expected ranked findings cut label to be C-05 · RANKED FINDINGS');
+      assert.equal(briefingCheck.hasThreeBeats, true, 'Expected 3-beat plain-language guide (01, 02, 03)');
+      assert.equal(briefingCheck.initialRows, 10, 'Expected top 10 ranked findings visible initially');
+      assert.ok(briefingCheck.expandedRows > 10, 'Expected Show all N findings toggle to expand all findings');
+
+      // Verify contextual '?' help popover opens on click, 'Open in Field Guide' jumps to the glossary term, and Escape closes
+      await page.locator('button[popovertarget="help-ghost-wire"]').click();
+      await page.waitForTimeout(30);
+      const helpOpen = await page.evaluate(() => {
+        const pop = document.getElementById('help-ghost-wire')!;
+        return pop.getBoundingClientRect().height > 0 && (pop.textContent ?? '').toLowerCase().includes('ghost wire');
+      });
+      assert.equal(helpOpen, true, 'Expected #help-ghost-wire popover to open on ? button click');
+
+      // Click 'Open in Field Guide ▸' inside #help-ghost-wire and verify #field-guide-details + #glossary-ghost-wire open
+      await page.locator('#help-ghost-wire .f12-help-more-btn').click();
+      await page.waitForTimeout(30);
+      const fieldGuideCheck = await page.evaluate(() => {
+        const fg = document.getElementById('field-guide-details') as HTMLDetailsElement | null;
+        const gw = document.getElementById('glossary-ghost-wire') as HTMLDetailsElement | null;
+        const glossaryItems = document.querySelectorAll('#field-guide-details .f12-glossary-item[name="f12-glossary"]');
+        const readingEl = document.getElementById('reading-this-finding') as HTMLDetailsElement | null;
+        const readingSummaryText = readingEl?.querySelector('summary')?.textContent ?? '';
+        const readingOpenBeforeClick = Boolean(readingEl?.open);
+        readingEl?.querySelector('summary')?.click();
+        const readingOpenAfterClick = Boolean(readingEl?.open);
+        const dirHelpBtn = document.querySelector('#cut-c05 button[popovertarget="help-directional-pct"]') as HTMLButtonElement | null;
+        const ciHelpBtn = document.querySelector('#cut-c05 button[popovertarget="help-confidence-range"]') as HTMLButtonElement | null;
+        const aboutEl = document.getElementById('about-this-analysis');
+        const footerEl = document.querySelector('.f12-report-footer');
+        const rootPath = JSON.parse(document.getElementById('ra-data')!.textContent!).meta.root;
+        const visibleText = document.body.innerText || '';
+        return {
+          fgOpen: Boolean(fg?.open),
+          gwOpen: Boolean(gw?.open),
+          glossaryCount: glossaryItems.length,
+          readingSummaryText,
+          readingOpenBeforeClick,
+          readingOpenAfterClick,
+          readingText: readingEl?.textContent ?? '',
+          dirHelpText: dirHelpBtn?.textContent ?? '',
+          dirHelpAria: dirHelpBtn?.getAttribute('aria-label') ?? '',
+          ciHelpText: ciHelpBtn?.textContent ?? '',
+          ciHelpAria: ciHelpBtn?.getAttribute('aria-label') ?? '',
+          hasAbout: Boolean(aboutEl),
+          hasFooter: Boolean(footerEl && (footerEl.textContent ?? '').includes('Repo Archaeology')),
+          leaksRootInVisibleText: Boolean(rootPath && visibleText.includes(rootPath)),
+        };
+      });
+      assert.equal(fieldGuideCheck.fgOpen, true, 'Expected #field-guide-details to open when clicking Open in Field Guide');
+      assert.equal(fieldGuideCheck.gwOpen, true, 'Expected #glossary-ghost-wire to open when clicking Open in Field Guide');
+      assert.equal(fieldGuideCheck.glossaryCount, 12, 'Expected 12 native <details name="f12-glossary"> glossary items');
+      assert.equal(fieldGuideCheck.readingOpenBeforeClick, false, 'Expected #reading-this-finding to start collapsed with 1-line summary');
+      assert.ok(
+        fieldGuideCheck.readingSummaryText.includes('is historical co-change, not proof'),
+        `Expected #reading-this-finding <summary> to show 1-line interpretation, got: ${fieldGuideCheck.readingSummaryText}`,
+      );
+      assert.equal(fieldGuideCheck.readingOpenAfterClick, true, 'Expected #reading-this-finding to expand on summary click');
+      assert.ok(
+        fieldGuideCheck.readingText.includes('Does that mean') && fieldGuideCheck.readingText.includes('What should I inspect next?'),
+        'Expected #reading-this-finding to include worked 3-stage explanation',
+      );
+      assert.equal(fieldGuideCheck.dirHelpText, '% asymmetry ?', 'Expected E-01 directional help pill to show visible label');
+      assert.ok(
+        fieldGuideCheck.dirHelpAria.startsWith('% asymmetry ?'),
+        `Expected E-01 directional help pill aria-label to start with visible text (WCAG 2.5.3), got: ${fieldGuideCheck.dirHelpAria}`,
+      );
+      assert.equal(fieldGuideCheck.ciHelpText, '95% range ?', 'Expected E-01 Wilson CI help pill to show visible label');
+      assert.ok(
+        fieldGuideCheck.ciHelpAria.startsWith('95% range ?'),
+        `Expected E-01 Wilson CI help pill aria-label to start with visible text (WCAG 2.5.3), got: ${fieldGuideCheck.ciHelpAria}`,
+      );
+      assert.equal(fieldGuideCheck.hasAbout, true, 'Expected #about-this-analysis section in Briefing mode');
+      assert.equal(fieldGuideCheck.hasFooter, true, 'Expected subtle .f12-report-footer with tool attribution');
+      assert.equal(fieldGuideCheck.leaksRootInVisibleText, false, 'Visible report text must not leak local filesystem meta.root');
+
+      // Close Field Guide before continuing selection checks
+      await page.locator('#field-guide-details > summary').click();
+      await page.waitForTimeout(20);
+
       // Select a card and verify marker budget on selection (<= 1 relationship) + Markdown export parity
       await page.evaluate(() => {
         (window as any).__strokeLog = [];
@@ -599,11 +728,15 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       const selectedMarkerStats = await page.evaluate(() => {
         const strokes = (window as any).__strokeLog as Array<{ strokeStyle: string }>;
         const domMarkers = document.querySelectorAll('.marker-active').length;
-        return { domMarkers, strokesCount: strokes.length };
+        return { domMarkers, strokesCount: strokes.length, hash: window.location.hash };
       });
       assert.ok(
         selectedMarkerStats.domMarkers <= 1,
         `Expected <= 1 DOM element with .marker-active on selection, got ${selectedMarkerStats.domMarkers}`,
+      );
+      assert.ok(
+        selectedMarkerStats.hash.startsWith('#f='),
+        `Expected selecting a finding in Briefing mode to update URL hash (#f=...), got ${selectedMarkerStats.hash}`,
       );
 
       // Force one settled draw and verify 0 #ffd60a strokes and <= 1 #ffd60a chip fill in that draw pass
@@ -686,8 +819,81 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       await themeBtn.click();
       assert.equal(await themeBtn.textContent(), 'Theme: System');
 
-      // 8. Responsive: at 360x640, panel renders above canvas, no horizontal scroll, controls >= 24x24
+      // 8a. Responsive in Briefing mode at 360x640: C-01 above C-05, no horizontal scroll, controls >= 24x24, SVG effective font-size >= 11px
       await page.setViewportSize({ width: 360, height: 640 });
+      await page.waitForTimeout(80);
+      const briefingMobileCheck = await page.evaluate(() => {
+        const c01Rect = document.getElementById('cut-c01')!.getBoundingClientRect();
+        const c05Rect = document.getElementById('cut-c05')!.getBoundingClientRect();
+        const docScrollW = document.documentElement.scrollWidth;
+        const docClientW = document.documentElement.clientWidth;
+        const controls = Array.from(document.querySelectorAll('button, input'));
+        const tooSmall = controls
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && (r.width < 24 || r.height < 24);
+          })
+          .map((el) => el.id || el.className);
+        const svgEl = document.getElementById('featured-plate-svg')!;
+        const svgRect = svgEl.getBoundingClientRect();
+        const vbParts = (svgEl.getAttribute('viewBox') || '0 0 340 240').split(/\s+/).map(Number);
+        const vbW = vbParts[2] || 340;
+        const scale = svgRect.width / vbW;
+        const svgTexts = Array.from(svgEl.querySelectorAll('text'));
+        const minEffectiveSvgPx = svgTexts.reduce((min, t) => {
+          const rawFs = parseFloat(t.getAttribute('font-size') || '12');
+          return Math.min(min, rawFs * scale);
+        }, Infinity);
+        return {
+          c01Top: c01Rect.top,
+          c05Top: c05Rect.top,
+          docScrollW,
+          docClientW,
+          tooSmall,
+          minEffectiveSvgPx,
+        };
+      });
+      assert.ok(
+        briefingMobileCheck.c01Top < briefingMobileCheck.c05Top,
+        `Expected C-01 (${briefingMobileCheck.c01Top}) to stack above C-05 (${briefingMobileCheck.c05Top}) at 360x640`,
+      );
+      assert.ok(
+        briefingMobileCheck.docScrollW <= briefingMobileCheck.docClientW,
+        `Expected no horizontal overflow in Briefing mode at 360x640 (scrollWidth ${briefingMobileCheck.docScrollW} <= clientWidth ${briefingMobileCheck.docClientW})`,
+      );
+      assert.deepEqual(briefingMobileCheck.tooSmall, [], 'Expected all visible controls in Briefing mode at 360x640 to be >= 24x24 CSS px');
+      assert.ok(
+        briefingMobileCheck.minEffectiveSvgPx >= 11,
+        `Expected mobile plate SVG text effective font-size >= 11px at 360px viewport, got ${briefingMobileCheck.minEffectiveSvgPx.toFixed(2)}px`,
+      );
+
+      // 8a-320. Verify WCAG 1.4.10 Reflow at 320 CSS pixels width (both closed and open Field Guide)
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.waitForTimeout(60);
+      const reflow320Closed = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      }));
+      assert.ok(
+        reflow320Closed.scrollW <= reflow320Closed.clientW,
+        `Expected zero horizontal overflow at 320px viewport width (scrollWidth ${reflow320Closed.scrollW} <= clientWidth ${reflow320Closed.clientW})`,
+      );
+      await page.locator('#field-guide-details > summary').click();
+      await page.waitForTimeout(30);
+      const reflow320Open = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      }));
+      assert.ok(
+        reflow320Open.scrollW <= reflow320Open.clientW,
+        `Expected zero horizontal overflow at 320px viewport width with Field Guide open (scrollWidth ${reflow320Open.scrollW} <= clientWidth ${reflow320Open.clientW})`,
+      );
+      await page.locator('#field-guide-details > summary').click();
+      await page.setViewportSize({ width: 360, height: 640 });
+      await page.waitForTimeout(40);
+
+      // 8b. Switch to Atlas mode and verify at 360x640: panel renders above canvas, no horizontal scroll, controls >= 24x24
+      await page.locator('#view-atlas').click();
       await page.waitForTimeout(80);
       const responsiveCheck = await page.evaluate(() => {
         const panelRect = document.getElementById('panel')!.getBoundingClientRect();
@@ -746,21 +952,23 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
 
       await page.close();
 
-      // 5 & 10. Grammar (9/10 wider than 2/2; distinct swatches) & Sanitization (\u202e and \u200d neutralized)
+      // 5 & 10. Grammar (9/10 wider than 2/2; distinct swatches) & Sanitization (\u202e, \u200d, and shell-quoted fallback explainCommand)
       const gNodes: MapNode[] = [
         { path: 'src/a/\u202eevil\u200d1.ts', dir: 'src/a', changes: 10 },
         { path: 'src/b/file-2.ts', dir: 'src/b', changes: 10 },
         { path: 'src/c/file-3.ts', dir: 'src/c', changes: 2 },
         { path: 'src/d/file-4.ts', dir: 'src/d', changes: 2 },
-        { path: 'src/e/file-5.ts', dir: 'src/e', changes: 8 },
+        { path: "src/e/my dir/it's-5.ts", dir: 'src/e/my dir', changes: 8 },
         { path: 'src/f/file-6.ts', dir: 'src/f', changes: 8 },
       ];
+      const ghostWithoutExplain = makeEdge(4, 5, { relationship: 'ghost', shared: 5, fromChanges: 8 });
+      delete ghostWithoutExplain.explainCommand;
       const gEdges: MapEdge[] = [
         // 9 of 10 commits (point confidence 0.90, Wilson low ≈ 0.596)
         makeEdge(0, 1, { relationship: 'direct', shared: 9, fromChanges: 10, toChanges: 10 }),
         // 2 of 2 commits (point confidence 1.00, Wilson low ≈ 0.342)
         makeEdge(2, 3, { relationship: 'direct', shared: 2, fromChanges: 2, toChanges: 2 }),
-        makeEdge(4, 5, { relationship: 'ghost', shared: 5, fromChanges: 8 }),
+        ghostWithoutExplain,
         makeEdge(0, 4, { relationship: 'indirect', shared: 4, fromChanges: 8 }),
         makeEdge(1, 5, { relationship: 'unknown', shared: 2, fromChanges: 10 }),
         makeEdge(2, 4, { relationship: 'test', shared: 4, fromChanges: 8 }),
@@ -772,7 +980,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       await gPage.setContent(gHtml.replace('<head>', canvasSpyHead), { waitUntil: 'domcontentloaded' });
       await gPage.waitForTimeout(60);
 
-      // Enable 'unknown' toggle so all 5 relationship kinds are visible
+      // Enable 'unknown' toggle so all 5 relationship kinds are visible (and Unchecked appears in Ranked Findings)
       const unknownToggle = gPage.locator('#toggles .toggle', { hasText: 'Unchecked' });
       await unknownToggle.click();
       await gPage.waitForTimeout(40);
@@ -795,6 +1003,8 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         const appHtml = document.querySelector('.app')!.innerHTML;
         const bodyHasRawBidi =
           appHtml.includes('\u202e') || appHtml.includes('\u200d');
+        const cliCodeText = document.querySelector('.f12-cli-code')?.textContent ?? '';
+        const rankedText = document.getElementById('ranked-findings-list')?.textContent ?? '';
 
         // Compare Wilson lower bound width for 9/10 vs 2/2
         const parsed = JSON.parse(document.getElementById('ra-data')!.textContent!);
@@ -805,6 +1015,8 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
           swatches,
           hasRawBidi,
           bodyHasRawBidi,
+          cliCodeText,
+          rankedHasUnchecked: rankedText.includes('UNCHECKED'),
           low9of10: e9of10.interval.low,
           conf9of10: e9of10.confidence,
           low2of2: e2of2.interval.low,
@@ -813,6 +1025,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       });
 
       assert.equal(grammarAndSanitization.swatches.length, 5, 'Expected 5 relationship kind swatches');
+      assert.equal(grammarAndSanitization.rankedHasUnchecked, true, 'Expected Unchecked toggle to reveal UNCHECKED row in Ranked Findings');
       assert.ok(
         grammarAndSanitization.conf2of2 > grammarAndSanitization.conf9of10,
         '2/2 has higher point confidence than 9/10',
@@ -823,6 +1036,169 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       );
       assert.equal(grammarAndSanitization.hasRawBidi, false, 'Canvas labels must not contain raw bidi or ZWJ characters');
       assert.equal(grammarAndSanitization.bodyHasRawBidi, false, 'DOM/tooltips must not contain raw bidi or ZWJ characters');
+      assert.ok(
+        grammarAndSanitization.cliCodeText.includes("'src/e/my dir/it'\\''s-5.ts'"),
+        `Expected fallback explainCommand to shell-quote paths with spaces/single quotes, got: ${grammarAndSanitization.cliCodeText}`,
+      );
+
+      // Also verify classic map shell-quotes fallback explainCommand on paths with spaces and single quotes
+      const gClassicHtml = renderMapHtml(gData, computeLayout(gData, { style: 'classic' }), { style: 'classic' });
+      const gClassicPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await gClassicPage.setContent(gClassicHtml, { waitUntil: 'domcontentloaded' });
+      await gClassicPage.locator('.card.interactive').first().click();
+      const classicFallbackCmd = await gClassicPage.locator('.cli-box code').textContent();
+      assert.ok(
+        (classicFallbackCmd ?? '').includes("'src/e/my dir/it'\\''s-5.ts'"),
+        `Expected classic map fallbackExplainCommand to shell-quote paths with spaces and single quotes, got: ${classicFallbackCmd}`,
+      );
+      await gClassicPage.close();
+
+      // Verify:
+      // 1) clicking a non-default family row in Ranked Findings opens that specific family and preserves keyboard focus
+      // 2) Briefing <-> Atlas selection sync works in both directions
+      // 3) mixed-family filtering keeps a family when >= 2 member edges remain visible after toggling off Ghost wires
+      // 4) #f=<from>..<to> deep link to an Unchecked edge auto-enables the Unchecked filter
+      gData.families = [
+        {
+          id: 'src/adapter/*/serve-static',
+          label: 'serve-static.ts across src/adapter/*',
+          stem: 'serve-static',
+          fileName: 'serve-static.ts',
+          parentDir: 'src/adapter',
+          why: '3 parallel implementations',
+          members: [
+            { path: 'src/adapter/bun/serve-static.ts', dir: 'src/adapter/bun', variant: 'bun', changes: 10, connections: 2 },
+            { path: 'src/adapter/deno/serve-static.ts', dir: 'src/adapter/deno', variant: 'deno', changes: 10, connections: 2 },
+            { path: 'src/adapter/cf/serve-static.ts', dir: 'src/adapter/cf', variant: 'cf', changes: 10, connections: 2 },
+          ],
+          commitsTouchingTwoOrMore: 9,
+          commitsTouchingAll: 6,
+          lastTogether: '2026-05-01',
+          qualifyingPairs: 3,
+          possiblePairs: 3,
+          complete: true,
+          relationshipKinds: ['ghost', 'direct'],
+          peakScore: 2.5,
+          maxPairShared: 9,
+          evidence: [],
+          allMemberEvidence: [],
+          nodeIndices: [0, 1, 2],
+          edgeIndices: [0, 1, 2],
+          overviewPriority: 2,
+        },
+        {
+          id: 'src/router/*/router',
+          label: 'router.ts across src/router/*',
+          stem: 'router',
+          fileName: 'router.ts',
+          parentDir: 'src/router',
+          why: '3 parallel implementations',
+          members: [
+            { path: 'src/router/trie/router.ts', dir: 'src/router/trie', variant: 'trie', changes: 8, connections: 2 },
+            { path: 'src/router/reg/router.ts', dir: 'src/router/reg', variant: 'reg', changes: 8, connections: 2 },
+            { path: 'src/router/linear/router.ts', dir: 'src/router/linear', variant: 'linear', changes: 8, connections: 2 },
+          ],
+          commitsTouchingTwoOrMore: 6,
+          commitsTouchingAll: 4,
+          lastTogether: '2026-04-15',
+          qualifyingPairs: 3,
+          possiblePairs: 3,
+          complete: true,
+          relationshipKinds: ['ghost'],
+          peakScore: 1.8,
+          maxPairShared: 5,
+          evidence: [],
+          allMemberEvidence: [],
+          nodeIndices: [3, 4, 5],
+          edgeIndices: [2, 3],
+          overviewPriority: 2,
+        },
+      ];
+      const famHtml = renderMapHtml(gData, computeRichLayout(gData), { style: 'rich' });
+      await gPage.setContent(famHtml, { waitUntil: 'domcontentloaded' });
+      await gPage.waitForTimeout(40);
+
+      // 1) Focus and activate the non-default family row in Ranked Findings and verify focus is preserved on the rebuilt row
+      const routerRow = gPage.locator('#ranked-findings-list .f12-rank-row', { hasText: 'src/router/*' });
+      await routerRow.focus();
+      await routerRow.click();
+      await gPage.waitForTimeout(30);
+      const focusAndFamilyCheck = await gPage.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          activeClass: active?.className ?? '',
+          activeText: active?.textContent ?? '',
+        };
+      });
+      assert.equal(
+        focusAndFamilyCheck.headline,
+        '3 files across src/router/* keep changing together',
+        'Expected clicking non-default family row in Ranked Findings to open that specific family',
+      );
+      assert.ok(
+        focusAndFamilyCheck.activeClass.includes('f12-rank-row') && focusAndFamilyCheck.activeText.includes('src/router/*'),
+        `Expected keyboard focus to remain on the rebuilt .f12-rank-row for src/router/*, got: ${focusAndFamilyCheck.activeClass} (${focusAndFamilyCheck.activeText})`,
+      );
+
+      // 2) Switch to Atlas and verify the selected family is synchronized into the Atlas side panel
+      await gPage.locator('#view-atlas').click();
+      await gPage.waitForTimeout(30);
+      const atlasPanelText = await gPage.locator('#panel').textContent();
+      assert.ok(
+        (atlasPanelText ?? '').includes('router.ts across src/router/*'),
+        `Expected Briefing family selection to sync into Atlas side panel, got: ${atlasPanelText}`,
+      );
+
+      // Switch back to Briefing and test mixed-family filtering when Ghost wires is toggled off
+      await gPage.locator('#view-briefing').click();
+      await gPage.waitForTimeout(30);
+      await gPage.locator('#toggles .toggle[data-kind="ghost"]').click();
+      await gPage.waitForTimeout(30);
+      const mixedFamilyAfterGhostOff = await gPage.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#ranked-findings-list .f12-rank-row')).map((r) => r.textContent ?? '');
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          hasAdapterFamily: rows.some((t) => t.includes('src/adapter/*')),
+          hasRouterFamily: rows.some((t) => t.includes('src/router/*')),
+        };
+      });
+      assert.equal(
+        mixedFamilyAfterGhostOff.hasAdapterFamily,
+        true,
+        'Expected mixed family (2 direct edges + 1 ghost edge) to remain visible when Ghost wires is toggled off',
+      );
+      assert.equal(
+        mixedFamilyAfterGhostOff.hasRouterFamily,
+        false,
+        'Expected family with < 2 visible edges to be filtered out when Ghost wires is toggled off',
+      );
+
+      // 4) Navigate via #f=<from>..<to> to an Unchecked edge (while Unchecked is off) and verify it auto-enables Unchecked and renders in C-01
+      await gPage.evaluate(() => {
+        window.location.hash = '#f=src%2Fb%2Ffile-2.ts..src%2Ff%2Ffile-6.ts';
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      });
+      await gPage.waitForTimeout(40);
+      const uncheckedDeepLinkCheck = await gPage.evaluate(() => {
+        const unknownBtn = document.querySelector('#toggles .toggle[data-kind="unknown"]');
+        return {
+          headline: document.getElementById('briefing-headline')?.textContent ?? '',
+          unknownPressed: unknownBtn?.getAttribute('aria-pressed'),
+          unknownHasOffClass: unknownBtn?.classList.contains('off'),
+        };
+      });
+      assert.equal(
+        uncheckedDeepLinkCheck.unknownPressed,
+        'true',
+        'Expected #f= deep link to an unchecked edge to auto-enable the Unchecked filter toggle',
+      );
+      assert.equal(uncheckedDeepLinkCheck.unknownHasOffClass, false);
+      assert.equal(
+        uncheckedDeepLinkCheck.headline,
+        'file-2.ts and file-6.ts keep changing together',
+        'Expected #f= deep link to an unchecked edge to display that finding in C-01',
+      );
 
       await gPage.close();
     } finally {
