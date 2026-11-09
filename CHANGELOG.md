@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Briefing Plate Keyboard Access & `Back to family` ([`src/map/template.ts`](src/map/template.ts)):** Files on the Cut `C-01` blueprint plate are now focusable buttons (`role="button"`, `tabindex="0"`, `Inspect <path>` label) that select with `Enter`/`Space` and keep focus after the Briefing re-renders. After pivoting from a Finding Family to one of its pairs (via a plate file, wire, or family pair row), C-01 shows a `← Back to family (N files)` button (`#back-to-family-btn`). The plate footer and node tooltips now say files and wires can be clicked to inspect.
+
+### Changed
+- **Unnamed Contributor Concentration in Maps ([`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):** Map reports no longer spotlight an individual. The Briefing evidence pill (`formatOwnerNote` and its client-side fallback) now reads `One contributor made N% of <file> commits` instead of `Top historical contributor: <name> (N% …)`, and the classic and rich side panels show `One contributor: N% of commits` instead of `Top author: <name>`. Both appear only when one human contributor made `>= 40%` of a file's analyzed commits. The JSON/`#ra-data` contract (`nodes[].topAuthor`, `evidence[].author`) is unchanged.
+
+### Fixed
+- **Briefing Plate File & Wire Selection ([`src/map/template.ts`](src/map/template.ts)):** Clicking a file or wire on the `C-01` blueprint plate threw `TypeError: Cannot read properties of undefined (reading 'hiddenBridge')` and never changed the selection, because the plate passed a bare edge index to `selectBriefingEdge`. Clicks now select the pair and update the `#f=` deep link.
+- **Orphaned Files After Chord Pruning ([`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):** Pruning dense family plates could leave a file (e.g. `chart-color-picker.tsx`) on the plate with no visible wire and nothing to select; each such file now keeps its strongest (highest Wilson lower bound) connection.
+- **Balloon Covering a Lead File ([`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):** The speech balloon is anchored above the higher lead endpoint instead of the lead wire's midpoint, so a sloped lead wire no longer tucks a featured file under the callout.
+- **Clipped and Hidden Plate Labels ([`src/map/template.ts`](src/map/template.ts)):** Client-built plates keep every label inside the plate, try farther placements before overlapping another label, avoid the balloon pointer, prefer spots nearest their own file, and draw labels beneath the file dots so a later node can no longer paint over an earlier label. The compact (mobile) balloon shows up to 40 characters before truncating.
+
 ## [0.6.0] - 2026-11-09
 
 ### Added

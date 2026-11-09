@@ -549,7 +549,8 @@ export function formatCounterexamplesLine(aloneCount: number): string {
 }
 
 /**
- * Formats the contributor ownership note when `topAuthorShare >= 0.4`.
+ * Formats the contributor concentration note when `topAuthorShare >= 0.4`. The note never names the
+ * contributor: map reports are meant to be shared, and the share alone is the useful signal.
  */
 export function formatOwnerNote(
   node: Pick<MapNode, 'path' | 'topAuthor' | 'topAuthorShare'>,
@@ -558,10 +559,9 @@ export function formatOwnerNote(
   if (!node.topAuthor || typeof node.topAuthorShare !== 'number' || node.topAuthorShare < 0.4) {
     return null;
   }
-  const author = sanitizeHtmlDisplayText(node.topAuthor);
   const pct = Math.round(node.topAuthorShare * 100);
   const label = shortLabel ?? (posix.basename(sanitizeHtmlDisplayText(node.path)) || sanitizeHtmlDisplayText(node.path));
-  return `Top historical contributor: ${author} (${pct}% of ${label} commits)`;
+  return `One contributor made ${pct}% of ${label} commits`;
 }
 
 /**
@@ -1746,6 +1746,33 @@ export function computeFeaturedPlateLayout(
           return diff === 1 || diff === egoNodeIndices.length - 1;
         })
       : rawEgoEdgeIndices;
+  // Pruning must never strand a file on the plate with no visible wire: restore each
+  // orphaned node's strongest (highest Wilson lower bound) connection.
+  if (egoEdgeIndices !== rawEgoEdgeIndices) {
+    const keptDegree = new Map<number, number>();
+    for (const ei of egoEdgeIndices) {
+      const e = data.edges[ei]!;
+      keptDegree.set(e.source, (keptDegree.get(e.source) ?? 0) + 1);
+      keptDegree.set(e.target, (keptDegree.get(e.target) ?? 0) + 1);
+    }
+    const kept = new Set(egoEdgeIndices);
+    for (const ni of egoNodeIndices) {
+      if (keptDegree.get(ni)) continue;
+      let best = -1;
+      for (const ei of rawEgoEdgeIndices) {
+        const e = data.edges[ei]!;
+        if (e.source !== ni && e.target !== ni) continue;
+        if (best < 0 || e.interval.low > data.edges[best]!.interval.low) best = ei;
+      }
+      if (best >= 0 && !kept.has(best)) {
+        kept.add(best);
+        egoEdgeIndices.push(best);
+        const e = data.edges[best]!;
+        keptDegree.set(e.source, (keptDegree.get(e.source) ?? 0) + 1);
+        keptDegree.set(e.target, (keptDegree.get(e.target) ?? 0) + 1);
+      }
+    }
+  }
 
   const nCount = egoNodeIndices.length;
   const cx = width / 2;
@@ -2022,11 +2049,14 @@ export function computeFeaturedPlateLayout(
         }
       : null;
 
-  // Reserve a bounding box above the balloon target so node labels and nodes don't collide with the balloon
+  // Reserve a bounding box above the balloon target so node labels and nodes don't collide with the balloon.
+  // Anchor it above the higher lead endpoint (not the midpoint) so a sloped lead wire never tucks a
+  // featured file underneath the callout.
+  const balloonClearY = leadEdge ? Math.min(leadEdge.y1, leadEdge.y2) - 11 - 8 - 42 : 0;
   const balloonBox = balloonTarget
     ? {
         x: Math.round(Math.max(12, Math.min(width - 380, balloonTarget.x - 184)) * 10) / 10,
-        y: Math.round(Math.max(8, balloonTarget.y - 54) * 10) / 10,
+        y: Math.round(Math.max(8, Math.min(balloonTarget.y - 54, balloonClearY)) * 10) / 10,
         w: 368,
         h: 42,
       }
@@ -2100,8 +2130,12 @@ export function computeFeaturedPlateLayout(
           leadEdge !== null &&
           boxIntersectsSegment(fullCand, leadEdge.x1, leadEdge.y1, leadEdge.x2, leadEdge.y2);
 
-        // Check overlap with balloon callout box
-        const hitsBalloon = balloonBox !== null && boxesOverlap(fullCand, balloonBox, 4);
+        // Check overlap with balloon callout box and its pointer down to the lead wire
+        const hitsBalloon =
+          balloonBox !== null &&
+          (boxesOverlap(fullCand, balloonBox, 4) ||
+            (balloonTarget !== null &&
+              boxIntersectsSegment(fullCand, balloonTarget.x, balloonBox.y + balloonBox.h, balloonTarget.x, balloonTarget.y)));
 
         if (!outOfBounds && !hitsLabel && !hitsNode && !hitsFeaturedLine && !hitsBalloon) {
           chosen = fullCand;

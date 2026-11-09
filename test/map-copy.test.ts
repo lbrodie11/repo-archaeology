@@ -281,7 +281,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
 
     assert.equal(
       formatOwnerNote(data.nodes[0]!, 'tiny.ts'),
-      'Top historical contributor: Alice (75% of tiny.ts commits)',
+      'One contributor made 75% of tiny.ts commits',
     );
     // Below 0.4 threshold -> null
     assert.equal(formatOwnerNote(data.nodes[1]!, 'quick.ts'), null);
@@ -615,6 +615,87 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       edges.length,
       'Every clique edge is either drawn or counted as hidden',
     );
+  });
+
+  it('never strands a file without a wire when pruning, and keeps the balloon clear of both lead files', () => {
+    const nodes: MapNode[] = Array.from({ length: 8 }, (_, i) => ({
+      path: `src/pickers/p${i}-picker.tsx`,
+      dir: 'src/pickers',
+      changes: 12 + i,
+    }));
+    const pair = (source: number, target: number, shared: number, lead = false): MapEdge => ({
+      source,
+      target,
+      relationship: 'ghost',
+      why: 'test',
+      shared,
+      fromChanges: 12,
+      toChanges: 12,
+      confidence: shared / 12,
+      reverseConfidence: shared / 12,
+      interval: { low: shared / 24, high: Math.min(1, shared / 9) },
+      reverseInterval: { low: shared / 24, high: Math.min(1, shared / 9) },
+      score: lead ? 3 : shared / 10,
+      overviewPriority: lead ? 2 : 1,
+      weighted: false,
+      lastTogether: '2026-05-01',
+      crossesDirectories: false,
+      evidence: [],
+    });
+    // Lead pair 0-1, files 2-6 tied to both lead files and to their ring neighbours, and file 7
+    // reachable only through 3 and 4: neither a lead-incident nor a ring-perimeter chord.
+    const edges: MapEdge[] = [pair(0, 1, 9, true)];
+    for (let i = 2; i <= 6; i++) edges.push(pair(0, i, 6), pair(1, i, 6));
+    edges.push(pair(2, 3, 5), pair(3, 4, 5), pair(4, 5, 5), pair(5, 6, 5), pair(7, 3, 4), pair(7, 4, 5));
+    // Orphans can only arise on family plates, where every member is a seed (a pair plate only adds
+    // direct neighbours of the lead files, so every wire there touches a lead file)
+    const family: MapFamily = {
+      id: 'src/pickers/*-picker',
+      label: '*-picker.tsx in src/pickers',
+      stem: '*-picker',
+      fileName: '*-picker.tsx',
+      parentDir: 'src/pickers',
+      why: '8 files sharing the -picker suffix in src/pickers',
+      sameDirSuffix: true,
+      members: nodes.map((n, i) => ({ path: n.path, dir: n.dir, variant: `p${i}`, changes: n.changes, connections: 2 })),
+      commitsTouchingTwoOrMore: 12,
+      commitsTouchingAll: 2,
+      lastTogether: '2026-05-01',
+      qualifyingPairs: edges.length,
+      possiblePairs: 28,
+      complete: false,
+      relationshipKinds: ['ghost'],
+      peakScore: 3,
+      maxPairShared: 9,
+      evidence: [],
+      allMemberEvidence: [],
+      nodeIndices: nodes.map((_, i) => i),
+      edgeIndices: edges.map((_, i) => i),
+      overviewPriority: 2,
+    } as MapFamily;
+    const data = makeBaseData({ nodes, edges, families: [family] });
+    assert.equal(selectFeaturedFinding(data).kind, 'family', 'Fixture precondition: the family leads');
+    const plate = computeFeaturedPlateLayout(data, selectFeaturedFinding(data), {
+      width: 760,
+      height: 420,
+      visible: { ghost: true, direct: true, indirect: true, unknown: true },
+    });
+
+    assert.ok(plate.nodes.some((n) => n.nodeIndex === 7), 'Fixture precondition: file 7 is on the plate');
+    assert.ok(plate.hiddenContextEdges > 0, 'Fixture precondition: the plate prunes chords');
+    for (const n of plate.nodes) {
+      const wires = plate.edges.filter((e) => e.sourceNodeIndex === n.nodeIndex || e.targetNodeIndex === n.nodeIndex);
+      assert.ok(wires.length > 0, `${n.path} has no visible wire on the plate`);
+    }
+    const restored = plate.edges.find((e) => e.sourceNodeIndex === 7 || e.targetNodeIndex === 7)!;
+    assert.equal(data.edges[restored.edgeIndex]!.shared, 5, 'Restores the orphan’s strongest connection');
+    assert.equal(plate.edges.length + plate.hiddenContextEdges, edges.length);
+
+    const box = plate.balloonBox!;
+    for (const n of plate.nodes.filter((p) => p.isFeaturedEndpoint)) {
+      const inside = n.x + n.r > box.x && n.x - n.r < box.x + box.w && n.y + n.r > box.y && n.y - n.r < box.y + box.h;
+      assert.equal(inside, false, `Lead file ${n.path} at (${n.x}, ${n.y}) sits under the balloon ${JSON.stringify(box)}`);
+    }
   });
 
   it('distinguishes weighted vs raw percentages, attributes reverse counterexamples to the reverse file, and adapts empty-state threshold suggestions', () => {

@@ -846,6 +846,10 @@ const CLIENT = String.raw`
     return e;
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
+  // Contributor concentration without naming the person: map reports are meant to be shared
+  function contributorShareNote(author, share) {
+    return author && typeof share === 'number' && share >= 0.4 ? ' · One contributor: ' + pct(share) + ' of commits' : '';
+  }
   function formatCi(iv, raw) {
     return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
   }
@@ -2489,7 +2493,7 @@ const CLIENT = String.raw`
       boxHead.appendChild(link);
       boxHead.appendChild(el('span', 'family-variant-pill', m.variant));
       box.appendChild(boxHead);
-      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + (m.topAuthor ? ' · Top author: ' + m.topAuthor : '')));
+      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + contributorShareNote(m.topAuthor, m.topAuthorShare)));
       memberContainer.appendChild(box);
     });
     panel.appendChild(memberContainer);
@@ -2686,7 +2690,7 @@ const CLIENT = String.raw`
     linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
     boxAHead.appendChild(linkA);
     boxA.appendChild(boxAHead);
-    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : ''));
+    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + contributorShareNote(e.s.author, e.s.share));
     boxA.appendChild(subA);
     pairContainer.appendChild(boxA);
 
@@ -2703,7 +2707,7 @@ const CLIENT = String.raw`
     linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
     boxBHead.appendChild(linkB);
     boxB.appendChild(boxBHead);
-    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : ''));
+    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + contributorShareNote(e.t.author, e.t.share));
     boxB.appendChild(subB);
     pairContainer.appendChild(boxB);
 
@@ -3293,8 +3297,10 @@ canvas.pointing { cursor: pointer; }
 .f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
 .f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
 .f12-plate-svg.is-panning { cursor: grabbing; }
-.f12-plate-node { cursor: grab; }
+.f12-plate-node { cursor: pointer; }
 .f12-plate-node.is-dragging { cursor: grabbing; }
+.f12-plate-node:focus { outline: none; }
+.f12-plate-node:focus-visible .f12-plate-node-dot { stroke: #ffd60a; stroke-width: 3.5; }
 .f12-plate-edge-hit { cursor: pointer; }
 .f12-plate-balloon { pointer-events: none; }
 .f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11.5px/1.35 var(--f-font-mono); }
@@ -3607,6 +3613,10 @@ const RICH_CLIENT = String.raw`
     return e;
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
+  // Contributor concentration without naming the person: map reports are meant to be shared
+  function contributorShareNote(author, share) {
+    return author && typeof share === 'number' && share >= 0.4 ? ' · One contributor: ' + pct(share) + ' of commits' : '';
+  }
   function formatCi(iv, raw) {
     return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
   }
@@ -4861,6 +4871,7 @@ const RICH_CLIENT = String.raw`
   }
   function clearSelection() {
     selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
+    briefingReturnFamilyIdx = -1;
     briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
     briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
       ? briefingData.featured.familyIndex
@@ -5385,7 +5396,7 @@ const RICH_CLIENT = String.raw`
     linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
     boxAHead.appendChild(linkA);
     boxA.appendChild(boxAHead);
-    boxA.appendChild(el('div', 'pair-dir', 'Folder: ' + e.s.safeDir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : '')));
+    boxA.appendChild(el('div', 'pair-dir', 'Folder: ' + e.s.safeDir + ' · Changed in ' + plural(e.s.changes, 'commit') + contributorShareNote(e.s.author, e.s.share)));
     pairContainer.appendChild(boxA);
 
     var wire = el('div', 'pair-wire');
@@ -5401,7 +5412,7 @@ const RICH_CLIENT = String.raw`
     linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
     boxBHead.appendChild(linkB);
     boxB.appendChild(boxBHead);
-    boxB.appendChild(el('div', 'pair-dir', 'Folder: ' + e.t.safeDir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : '')));
+    boxB.appendChild(el('div', 'pair-dir', 'Folder: ' + e.t.safeDir + ' · Changed in ' + plural(e.t.changes, 'commit') + contributorShareNote(e.t.author, e.t.share)));
     pairContainer.appendChild(boxB);
     panel.appendChild(pairContainer);
 
@@ -5539,6 +5550,8 @@ const RICH_CLIENT = String.raw`
     ? briefingData.featured.familyIndex
     : -1;
   var briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+  // Family the reader pivoted out of (via a plate node, wire or family pair row), so C-01 can offer a way back
+  var briefingReturnFamilyIdx = -1;
 
   function makeHelpBtn(popoverId, ariaLabel, visibleLabel) {
     var btn = el('button', 'f12-help-btn' + (visibleLabel ? ' f12-help-pill' : ''), visibleLabel ? (visibleLabel + ' ?') : '?');
@@ -5837,6 +5850,7 @@ const RICH_CLIENT = String.raw`
   function selectBriefingFamily(familyIdx, updateHash) {
     if (!briefingData || !briefingData.families || !briefingData.families[familyIdx]) return;
     var famEntry = briefingData.families[familyIdx];
+    briefingReturnFamilyIdx = -1;
     briefingSelectedFamilyIdx = familyIdx;
     briefingSelectedEdgeIdx = famEntry.edgeIndex;
     briefingUseDefaultFeatured = Boolean(
@@ -5883,6 +5897,9 @@ const RICH_CLIENT = String.raw`
 
   function selectBriefingEdge(edgeObj, isDefault, updateHash) {
     if (!edgeObj) return;
+    briefingReturnFamilyIdx = isDefault
+      ? -1
+      : (briefingSelectedFamilyIdx >= 0 ? briefingSelectedFamilyIdx : briefingReturnFamilyIdx);
     briefingSelectedEdgeIdx = edgeObj.idx;
     briefingSelectedFamilyIdx = (isDefault && briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
       ? briefingData.featured.familyIndex
@@ -6043,6 +6060,24 @@ const RICH_CLIENT = String.raw`
           return diff === 1 || diff === chosenNodes.length - 1;
         })
       : rawSubEdges;
+    // Pruning must never strand a file with no visible wire: restore each orphan's strongest connection
+    if (subEdges !== rawSubEdges) {
+      var keptDeg = new Array(chosenNodes.length).fill(0);
+      subEdges.forEach(function (se) { keptDeg[se.u]++; keptDeg[se.v]++; });
+      for (var oni = 0; oni < chosenNodes.length; oni++) {
+        if (keptDeg[oni] > 0) continue;
+        var bestSe = null;
+        rawSubEdges.forEach(function (se) {
+          if (se.u !== oni && se.v !== oni) return;
+          if (!bestSe || se.ce.lowBound > bestSe.ce.lowBound) bestSe = se;
+        });
+        if (bestSe && subEdges.indexOf(bestSe) < 0) {
+          subEdges.push(bestSe);
+          keptDeg[bestSe.u]++;
+          keptDeg[bestSe.v]++;
+        }
+      }
+    }
     var hiddenContextEdges = Math.max(0, rawSubEdges.length - subEdges.length);
     var nodeDeg = new Array(chosenNodes.length).fill(0);
     subEdges.forEach(function (se) {
@@ -6112,7 +6147,9 @@ const RICH_CLIENT = String.raw`
     var btY = Math.round((posY[leadSIdx] + posY[leadTIdx]) / 2);
     balloonW = Math.max(balloonW, isMobile ? 268 : 340);
     balloonX = Math.max(12, Math.min(w - balloonW - 12, Math.round(btX - balloonW / 2)));
-    balloonY = Math.max(8, Math.min(btY - balloonH - (isMobile ? 16 : 24), isMobile ? 14 : 46));
+    // Anchor above the higher lead endpoint so a sloped lead wire never tucks a featured file under the callout
+    var leadTopY = Math.min(posY[leadSIdx], posY[leadTIdx]) - (isMobile ? 8 : 10);
+    balloonY = Math.max(8, Math.min(btY - balloonH - (isMobile ? 16 : 24), leadTopY - balloonH - (isMobile ? 8 : 10), isMobile ? 14 : 46));
     var balloonBox = { x: balloonX, y: balloonY, w: balloonW, h: balloonH };
     for (var bni = 0; bni < chosenNodes.length; bni++) {
       if (
@@ -6162,30 +6199,46 @@ const RICH_CLIENT = String.raw`
 
       var bestCand = null;
       var bestPenalty = Infinity;
-      candDirs.forEach(function (cd) {
-        var offset = r + 8;
+      var candidates = [];
+      [0, 14, 28, 42].forEach(function (extra) {
+        candDirs.forEach(function (cd) { candidates.push({ cd: cd, extra: extra }); });
+      });
+      candidates.forEach(function (cand) {
+        var cd = cand.cd;
+        var offset = r + 8 + cand.extra;
         var ax = Math.round(nx + cd.dx * offset);
         var ay = Math.round(ny + cd.dy * (cd.dy === 0 ? 4 : offset + (cd.dy > 0 ? 8 : -2)));
         var bx = cd.align === 'right' ? ax - tw + 4 : (cd.align === 'center' ? Math.round(ax - tw / 2) : ax - 4);
         var by = ay - 13;
-        var pen = 0;
-        if (bx < 6) pen += (6 - bx) * 25;
-        if (by < 6) pen += (6 - by) * 25;
-        if (bx + tw > w - 6) pen += (bx + tw - (w - 6)) * 25;
-        if (by + th > h - 6) pen += (by + th - (h - 6)) * 25;
+        // Keep every label fully inside the plate: slide the box (and its text anchor) back in bounds
+        var shiftX = Math.max(6 - bx, Math.min(0, (w - 6) - (bx + tw)));
+        var shiftY = Math.max(6 - by, Math.min(0, (h - 6) - (by + th)));
+        bx += shiftX; ax += shiftX;
+        by += shiftY; ay += shiftY;
+        var pen = (Math.abs(shiftX) + Math.abs(shiftY)) * 2 + cand.extra * 4;
 
         placedBoxes.forEach(function (ob) {
           var ox = Math.max(0, Math.min(bx + tw, ob.x + ob.w) - Math.max(bx, ob.x));
           var oy = Math.max(0, Math.min(by + th, ob.y + ob.h) - Math.max(by, ob.y));
-          if (ox > 0 && oy > 0) pen += ox * oy * 12 + 500;
+          if (ox > 0 && oy > 0) pen += ox * oy * 12 + 6000;
         });
         for (var m = 0; m < chosenNodes.length; m++) {
           var mx = posX[m], my = posY[m], mr = (m < sCount ? 9.5 : 6.8) + 4;
           var nearX = Math.max(bx, Math.min(mx, bx + tw));
           var nearY = Math.max(by, Math.min(my, by + th));
-          if (Math.hypot(mx - nearX, my - nearY) < mr) pen += 900;
+          if (Math.hypot(mx - nearX, my - nearY) < mr) pen += m < 2 ? 2400 : 900;
         }
+        // The balloon's pointer runs from the callout down to the lead wire midpoint; never cover it
+        if (btX > bx - 8 && btX < bx + tw + 8 && by < btY && by + th > balloonBox.y + balloonBox.h) pen += 700;
         var lcx = bx + tw / 2, lcy = by + th / 2;
+        // Keep each label visually attached to its own file: penalize spots nearer another node
+        var nearX0 = Math.max(bx, Math.min(nx, bx + tw)), nearY0 = Math.max(by, Math.min(ny, by + th));
+        var ownDist = Math.hypot(nx - nearX0, ny - nearY0);
+        for (var am = 0; am < chosenNodes.length; am++) {
+          if (am === idx) continue;
+          var anX = Math.max(bx, Math.min(posX[am], bx + tw)), anY = Math.max(by, Math.min(posY[am], by + th));
+          if (Math.hypot(posX[am] - anX, posY[am] - anY) + 2 < ownDist) pen += 260;
+        }
         subEdges.forEach(function (se) {
           if (!se.isFeat) return;
           var dSeg = pointToSegDist(lcx, lcy, posX[se.u], posY[se.u], posX[se.v], posY[se.v]);
@@ -6328,9 +6381,14 @@ const RICH_CLIENT = String.raw`
 
     var edgeLayer = document.createElementNS(ns, 'g');
     var nodeLayer = document.createElementNS(ns, 'g');
+    // Labels sit above the wires but below every node: a label may graze a dot, but it can never hide a
+    // clickable file, and a later node group can no longer paint its own pill over an earlier label
+    var labelLayer = document.createElementNS(ns, 'g');
+    labelLayer.setAttribute('class', 'f12-plate-labels');
     var balloonLayer = document.createElementNS(ns, 'g');
     balloonLayer.setAttribute('class', 'f12-plate-balloon');
     svgEl.appendChild(edgeLayer);
+    svgEl.appendChild(labelLayer);
     svgEl.appendChild(nodeLayer);
     svgEl.appendChild(balloonLayer);
 
@@ -6407,8 +6465,19 @@ const RICH_CLIENT = String.raw`
       g.setAttribute('data-plate-idx', String(pIdx));
 
       var titleEl = document.createElementNS(ns, 'title');
-      titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 drag to move';
+      titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 click to inspect \u00b7 drag to move';
       g.appendChild(titleEl);
+      if (plateOpts && typeof plateOpts.onSelectNode === 'function') {
+        g.setAttribute('tabindex', '0');
+        g.setAttribute('role', 'button');
+        g.setAttribute('aria-label', 'Inspect ' + (pn.path || pn.shortLabel || 'file'));
+        g.addEventListener('keydown', function (kev) {
+          if (kev.key === 'Enter' || kev.key === ' ' || kev.key === 'Spacebar') {
+            kev.preventDefault();
+            plateOpts.onSelectNode(pn.nodeIndex);
+          }
+        });
+      }
 
       var hitC = document.createElementNS(ns, 'circle');
       hitC.setAttribute('cx', String(pn.x)); hitC.setAttribute('cy', String(pn.y));
@@ -6421,6 +6490,7 @@ const RICH_CLIENT = String.raw`
       var c = document.createElementNS(ns, 'circle');
       c.setAttribute('cx', String(pn.x)); c.setAttribute('cy', String(pn.y));
       c.setAttribute('r', String(pn.r));
+      c.setAttribute('class', 'f12-plate-node-dot');
       c.setAttribute('fill', fillCol);
       c.setAttribute('stroke', '#fffef9');
       c.setAttribute('stroke-width', pn.isFeaturedEndpoint ? '2.5' : '1.8');
@@ -6428,15 +6498,20 @@ const RICH_CLIENT = String.raw`
 
       var pill = null;
       var txt = null;
+      var labelG = null;
       var lbl = pn.label;
       if (lbl) {
+        labelG = document.createElementNS(ns, 'g');
+        labelG.setAttribute('class', 'f12-plate-node-label');
+        labelG.setAttribute('data-node-idx', String(pn.nodeIndex));
+        labelG.setAttribute('aria-hidden', 'true');
         pill = document.createElementNS(ns, 'rect');
         pill.setAttribute('x', String(Math.round(lbl.x)));
         pill.setAttribute('y', String(Math.round(lbl.y)));
         pill.setAttribute('width', String(Math.round(lbl.w)));
         pill.setAttribute('height', String(Math.round(lbl.h)));
         pill.setAttribute('fill', 'rgba(9, 25, 44, 0.88)');
-        g.appendChild(pill);
+        labelG.appendChild(pill);
 
         txt = document.createElementNS(ns, 'text');
         txt.setAttribute('x', String(lbl.anchorX));
@@ -6448,10 +6523,11 @@ const RICH_CLIENT = String.raw`
         txt.setAttribute('font-size', isCompactPlate ? '13' : (pn.isFeaturedEndpoint ? '13.5' : '12.5'));
         txt.setAttribute('font-weight', pn.isFeaturedEndpoint ? '700' : '500');
         txt.textContent = pn.shortLabel;
-        g.appendChild(txt);
+        labelG.appendChild(txt);
+        labelLayer.appendChild(labelG);
       }
       nodeLayer.appendChild(g);
-      nodeRecords.push({ pn: pn, isPrimary: Boolean(primaryNodeIdxSet[pn.nodeIndex]), gEl: g, hitCircleEl: hitC, circleEl: c, pillEl: pill, txtEl: txt });
+      nodeRecords.push({ pn: pn, isPrimary: Boolean(primaryNodeIdxSet[pn.nodeIndex]), gEl: g, labelEl: labelG, hitCircleEl: hitC, circleEl: c, pillEl: pill, txtEl: txt });
     });
 
     function applyFocusPairFilter() {
@@ -6465,6 +6541,7 @@ const RICH_CLIENT = String.raw`
       nodeRecords.forEach(function (nr) {
         var hide = focusPair && !nr.isPrimary;
         nr.gEl.style.display = hide ? 'none' : '';
+        if (nr.labelEl) nr.labelEl.style.display = hide ? 'none' : '';
       });
     }
     svgEl._setFocusPairOnly = function (active) {
@@ -6476,7 +6553,7 @@ const RICH_CLIENT = String.raw`
     var balloonDom = null;
     if (plate.balloonBox && balloonText) {
       var bb = plate.balloonBox;
-      var shownBText = isCompactPlate ? middleTruncate(balloonText, 32) : balloonText;
+      var shownBText = isCompactPlate ? middleTruncate(balloonText, 40) : balloonText;
       var rawBw = bb.w || bb.width || 300;
       var minBw = Math.round(shownBText.length * (isCompactPlate ? 6.9 : 7.7) + 28);
       var bw = Math.min(w - 24, Math.max(rawBw, minBw));
@@ -6600,6 +6677,7 @@ const RICH_CLIENT = String.raw`
       plate._dirty = false;
       nodeRecords.forEach(function (nr) {
         if (nr.gEl.parentNode === nodeLayer) nodeLayer.appendChild(nr.gEl);
+        if (nr.labelEl && nr.labelEl.parentNode === labelLayer) labelLayer.appendChild(nr.labelEl);
       });
       syncPlateDom();
     }
@@ -6621,7 +6699,8 @@ const RICH_CLIENT = String.raw`
       var target = ev.target;
       var foundNodeRec = null;
       for (var ni = 0; ni < nodeRecords.length; ni++) {
-        if (nodeRecords[ni].gEl === target || nodeRecords[ni].gEl.contains(target)) {
+        if (nodeRecords[ni].gEl === target || nodeRecords[ni].gEl.contains(target) ||
+            (nodeRecords[ni].labelEl && nodeRecords[ni].labelEl.contains(target))) {
           foundNodeRec = nodeRecords[ni];
           break;
         }
@@ -6660,6 +6739,9 @@ const RICH_CLIENT = String.raw`
         foundNodeRec.gEl.classList.add('is-dragging');
         if (foundNodeRec.gEl.parentNode === nodeLayer) {
           nodeLayer.appendChild(foundNodeRec.gEl);
+        }
+        if (foundNodeRec.labelEl && foundNodeRec.labelEl.parentNode === labelLayer) {
+          labelLayer.appendChild(foundNodeRec.labelEl);
         }
       } else {
         plateDrag = {
@@ -6820,6 +6902,8 @@ const RICH_CLIENT = String.raw`
         prevFocusDesc = { kind: 'sec-card', edgeIdx: activeEl.getAttribute('data-edge-idx') };
       } else if (activeEl.classList && activeEl.classList.contains('f12-family-pair-row') && activeEl.getAttribute('data-edge-idx')) {
         prevFocusDesc = { kind: 'family-pair', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-plate-node')) {
+        prevFocusDesc = { kind: 'plate-node', nodeIdx: activeEl.getAttribute('data-node-idx') };
       } else if (activeEl.id) {
         prevFocusDesc = { kind: 'id', id: activeEl.id };
       }
@@ -7025,6 +7109,21 @@ const RICH_CLIENT = String.raw`
         evEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
       }
     });
+    var returnFamEntry = (!activeFamilyEntry && briefingReturnFamilyIdx >= 0 && briefingData.families)
+      ? briefingData.families[briefingReturnFamilyIdx]
+      : null;
+    if (returnFamEntry && (returnFamEntry.memberPaths || []).some(function (mp) { return mp === activeEdge.s.path || mp === activeEdge.t.path; })) {
+      var backFamIdx = briefingReturnFamilyIdx;
+      var backToFamBtn = el('button', 'f12-jump-btn', '\u2190 Back to family (' + (returnFamEntry.memberPaths || []).length + ' files)');
+      backToFamBtn.type = 'button';
+      backToFamBtn.id = 'back-to-family-btn';
+      backToFamBtn.addEventListener('click', function () {
+        selectBriefingFamily(backFamIdx, true);
+        var hl = document.getElementById('briefing-headline');
+        if (hl && typeof hl.focus === 'function') hl.focus();
+      });
+      beat01.appendChild(backToFamBtn);
+    }
     beat01.appendChild(jumpEvBtn);
     cut01.appendChild(beat01);
 
@@ -7101,8 +7200,8 @@ const RICH_CLIENT = String.raw`
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('id', 'featured-plate-svg');
     svg.setAttribute('class', 'f12-plate-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate');
+    svg.setAttribute('role', 'group');
+    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate: select a file to inspect its strongest connection');
 
     var plateObj = null;
     var bText = '';
@@ -7179,7 +7278,7 @@ const RICH_CLIENT = String.raw`
       onSelectEdge: function (edgeIdx) {
         if (typeof edgeIdx === 'number' && edges[edgeIdx]) {
           if (!activeFamilyEntry && edgeIdx === activeEdge.idx) return;
-          selectBriefingEdge(edgeIdx);
+          selectBriefingEdge(edges[edgeIdx], false, true);
         }
       },
       onSelectNode: function (nodeIdx) {
@@ -7199,7 +7298,7 @@ const RICH_CLIENT = String.raw`
         });
         var nextEdgeIdx = incident[0].edgeIndex;
         if (!activeFamilyEntry && nextEdgeIdx === activeEdge.idx) return;
-        selectBriefingEdge(nextEdgeIdx);
+        selectBriefingEdge(edges[nextEdgeIdx], false, true);
       }
     });
     plateWrap.appendChild(svg);
@@ -7217,7 +7316,7 @@ const RICH_CLIENT = String.raw`
       ? ' \u00b7 ' + hiddenEdgesCount + ' ' + (hiddenEdgesCount === 1 ? 'connection' : 'connections') + ' between context files hidden (see Atlas)'
       : '';
     var footerRight = el('div', 'f12-plate-footer-right');
-    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)' + hiddenEdgesNote + ' \u00b7 Drag files to move'));
+    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)' + hiddenEdgesNote + ' \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
     if (focusPairBtn) footerRight.appendChild(focusPairBtn);
     footerRight.appendChild(resetPlateBtn);
     plateFooter.appendChild(footerRight);
@@ -7323,8 +7422,8 @@ const RICH_CLIENT = String.raw`
       }
     } else {
       var leadN = forwardFirst ? activeEdge.s : activeEdge.t;
-      if (leadN.author) {
-        metaStrip.appendChild(el('span', 'f12-meta-pill', 'Top historical contributor: ' + leadN.author + ' (' + pct(leadN.share || 0) + ' of ' + dynLabels[0] + ' commits)'));
+      if (leadN.author && typeof leadN.share === 'number' && leadN.share >= 0.4) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', 'One contributor made ' + pct(leadN.share) + ' of ' + dynLabels[0] + ' commits'));
       }
     }
     cut05.appendChild(metaStrip);
@@ -7601,6 +7700,8 @@ const RICH_CLIENT = String.raw`
           || briefingEl.querySelector('.f12-rank-row.active');
       } else if (prevFocusDesc.kind === 'id') {
         nextFocusEl = document.getElementById(prevFocusDesc.id);
+      } else if (prevFocusDesc.kind === 'plate-node') {
+        nextFocusEl = briefingEl.querySelector('#featured-plate-svg .f12-plate-node[data-node-idx="' + prevFocusDesc.nodeIdx + '"]');
       }
       if (!nextFocusEl) {
         nextFocusEl = briefingEl.querySelector('.f12-rank-row.active') || document.getElementById('briefing-headline');
