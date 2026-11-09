@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { formatExplainCommand } from '../commands/explain.js';
 import type { MapData } from '../commands/map.js';
 import type { Relationship } from '../imports/classify.js';
+import {
+  GLOSSARY_TERMS,
+  buildAnalysisProvenance,
+  getGlossaryEntry,
+  type AnalysisProvenance,
+} from '../report/glossary.js';
 import { sanitizeHtmlDisplayText, type StyleMode } from '../style/frame12.js';
 import {
   KICKER_MOST_INTERESTING,
@@ -108,6 +114,7 @@ interface BriefingDataPayload {
   families: FamilyBriefingPayload[];
   secondaryCards: SecondaryCardBriefing[];
   ranked: RankedFindingItem[];
+  provenance: AnalysisProvenance;
   stats: {
     ghostCount: number;
     familyCount: number;
@@ -146,6 +153,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     nodesCount: data.nodes.length,
   };
 
+  const provenance = buildAnalysisProvenance(data);
   const featured = selectFeaturedFinding(data);
   if (featured.kind === 'empty') {
     const emptyCopy = formatEmptyStateCopy(data, {
@@ -167,6 +175,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
       families: [],
       secondaryCards: [],
       ranked: [],
+      provenance,
       stats,
     };
   }
@@ -351,6 +360,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     families: familiesPayload,
     secondaryCards,
     ranked,
+    provenance,
     stats,
   };
 }
@@ -447,11 +457,31 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   const safeRepoName = sanitizeHtmlDisplayText(data.repoName);
   const title = `REPO ARCHAEOLOGY / MAP — ${safeRepoName}`;
   const briefing = buildBriefingData(data);
+  const prov = briefing.provenance;
   const embeddedFontCss = getEmbeddedFontsCss();
   const layoutScript = layout !== null
     ? `\n<script type="application/json" id="ra-layout">${embedJson(layout)}</script>`
     : '';
   const briefingScript = `\n<script type="application/json" id="ra-briefing">${embedJson(briefing)}</script>`;
+  const glossaryHtml = GLOSSARY_TERMS.map(
+    (entry) =>
+      `<details class="f12-glossary-item" name="f12-glossary" id="glossary-${entry.id}"><summary>${escapeHtml(entry.term)}</summary><div class="f12-glossary-body"><p class="f12-glossary-sum">${escapeHtml(entry.summary)}</p><p>${escapeHtml(entry.detail)}</p></div></details>`,
+  ).join('\n              ');
+  const provenanceDlHtml = prov.items
+    .map(
+      (item) =>
+        `<div class="f12-prov-row"><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`,
+    )
+    .join('\n              ');
+  const provWarningsHtml =
+    prov.warnings.length > 0
+      ? `<div class="f12-prov-warnings">${prov.warnings.map((w) => `! ${escapeHtml(w)}`).join('<br>')}</div>`
+      : '';
+  const ghostEntry = getGlossaryEntry('ghost-wire');
+  const familyEntry = getGlossaryEntry('file-family');
+  const uncheckedEntry = getGlossaryEntry('unchecked-link');
+  const dirEntry = getGlossaryEntry('directional-cochange');
+  const wilsonEntry = getGlossaryEntry('wilson-interval');
   return `<!doctype html>
 <html lang="en" data-theme-mode="system">
 <head>
@@ -472,14 +502,41 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
         <h1>REPO ARCHAEOLOGY // INVESTIGATION BOARD</h1>
         <span class="repo-tag">${escapeHtml(safeRepoName)}</span>
         <span class="f12-evidence-pill">EVIDENCE · NOT PROOF</span>
-        <details class="f12-howto">
-          <summary>How to read this map ▸</summary>
-          <div class="f12-howto-pop">Co-change measures how often files are committed together in Git history. <strong>Ghost wires</strong> (pink long-dash) are file pairs that repeatedly change together with no direct or 2-hop static import link detected. Line width and 45° halftone bars show the conservative <strong>95% Wilson confidence interval</strong> (sample-size aware: 9/10 ranks above 2/2). Use <strong>Briefing</strong> for the narrative investigation board or switch to <strong>Atlas</strong> for the full contact-sheet network.</div>
+        <details class="f12-howto" id="field-guide-details">
+          <summary>Field Guide · How to read this map ▸</summary>
+          <div class="f12-howto-pop" role="region" aria-label="Repo Archaeology Field Guide">
+            <div class="f12-fg-head">
+              <span class="f12-fg-kicker">REPO ARCHAEOLOGY // FIELD GUIDE</span>
+              <button type="button" id="field-guide-close" class="f12-fg-close" aria-label="Close Field Guide">Close ✕</button>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">01 · START HERE</div>
+              <p class="f12-fg-intro">Repo Archaeology examines Git history to identify files that repeatedly change together. Select a finding, inspect its directional numbers and supporting commits, and decide whether the companion file deserves coordinated review. Historical co-change is a signal to investigate, not proof that a change is required.</p>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">02 · GLOSSARY (${GLOSSARY_TERMS.length} TERMS)</div>
+              <div class="f12-glossary-list">
+              ${glossaryHtml}
+              </div>
+            </div>
+            <div class="f12-fg-section">
+              <div class="f12-fg-sec-title">03 · ${escapeHtml(prov.title)}</div>
+              <p class="f12-fg-sub">${escapeHtml(prov.subtitle)}</p>
+              <dl class="f12-provenance-list">
+              ${provenanceDlHtml}
+              </dl>
+              ${provWarningsHtml}
+              <div class="f12-fg-footer">
+                <span>${escapeHtml(prov.footerText)}</span>
+                <a href="${escapeHtml(prov.githubUrl)}" target="_blank" rel="noopener noreferrer">View project on GitHub ↗</a>
+              </div>
+            </div>
+          </div>
         </details>
       </div>
       <div class="masthead-rule" aria-hidden="true"></div>
       <p id="summary" class="summary"></p>
-      ${data.meta.warnings && data.meta.warnings.length > 0 ? `<div class="banner-warning">${data.meta.warnings.map((w) => `! ${escapeHtml(sanitizeHtmlDisplayText(w))}`).join('<br>')}</div>` : ''}
+      ${prov.warnings.length > 0 ? `<div class="banner-warning">${prov.warnings.map((w) => `! ${escapeHtml(w)}`).join('<br>')}</div>` : ''}
     </div>
     <div class="controls">
       <label class="search"><span class="visually-hidden">Find a file</span>
@@ -509,24 +566,29 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   </main>
   <aside id="panel" class="panel" aria-live="polite" hidden inert></aside>
   <div id="help-ghost-wire" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is a Ghost Wire?">
-    <div class="f12-help-title">GHOST WIRE · DEFINITION</div>
-    <p>A <strong>ghost wire</strong> is a pair of files that repeatedly change in the same Git commits, but have <strong>no direct or 2-hop static import link</strong> in current code. It is historical evidence to investigate (such as duplicated logic, shared schema assumptions, or parallel adapters), not automatic proof of a bug.</p>
+    <div class="f12-help-title">${escapeHtml(ghostEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(ghostEntry.summary)}</strong> ${escapeHtml(ghostEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-ghost-wire">Open in Field Guide ▸</button>
   </div>
   <div id="help-family" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is a Finding Family?">
-    <div class="f12-help-title">FINDING FAMILY · DEFINITION</div>
-    <p>A <strong>finding family</strong> groups 3 or more sibling files with the same filename stem across parallel directories (for example, <code>src/adapter/*/serve-static.ts</code>) when multiple pairwise links pass co-change thresholds.</p>
+    <div class="f12-help-title">${escapeHtml(familyEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(familyEntry.summary)}</strong> ${escapeHtml(familyEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-file-family">Open in Field Guide ▸</button>
   </div>
   <div id="help-unchecked" class="f12-help-popover" popover="auto" role="dialog" aria-label="What are Unchecked Links?">
-    <div class="f12-help-title">UNCHECKED LINKS · DISPLAYED VS. TOTAL</div>
-    <p><strong>Unchecked</strong> relationships are co-changing file pairs whose static import relationship was not classified (for example, non-JS/TS files or pairs beyond the import classification cap). The large number shows how many unchecked links are included in the map's top edge budget; the <strong>TOTAL</strong> in parentheses is the full repository count.</p>
+    <div class="f12-help-title">${escapeHtml(uncheckedEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(uncheckedEntry.summary)}</strong> ${escapeHtml(uncheckedEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-unchecked-link">Open in Field Guide ▸</button>
   </div>
   <div id="help-directional-pct" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is Directional Co-Change Percentage?">
-    <div class="f12-help-title">DIRECTIONAL CO-CHANGE % · ASYMMETRY</div>
-    <p>Co-change is <strong>directional</strong>: <code>A → B</code> is <code>shared / changes(A)</code>, while <code>B → A</code> is <code>shared / changes(B)</code>. If <code>tiny.ts</code> changed 9 times and 7 of those commits also touched <code>hono.ts</code> (which changed 152 times), then <code>tiny.ts → hono.ts</code> is <strong>78%</strong> (7/9), while the reverse is <strong>5%</strong> (7/152). When recency/origin weighting is active, the weighted percentage is labeled explicitly alongside the raw commit ratio.</p>
+    <div class="f12-help-title">${escapeHtml(dirEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(dirEntry.summary)}</strong> ${escapeHtml(dirEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-directional-cochange">Open in Field Guide ▸</button>
   </div>
   <div id="help-confidence-range" class="f12-help-popover" popover="auto" role="dialog" aria-label="What is the 95% Wilson Confidence Range?">
-    <div class="f12-help-title">95% WILSON CONFIDENCE RANGE</div>
-    <p>Raw percentages from small samples can be misleading: <code>2 of 2 (100%)</code> has less historical evidence than <code>9 of 10 (90%)</code>. Repo Archaeology ranks findings and scales line widths using the conservative <strong>95% Wilson lower bound</strong> (<code>≥34% CI</code> for 2/2 vs. <code>≥60% CI</code> for 9/10). The 45° halftone bar spans the 95% range and the vertical tick marks the point estimate.</p>
+    <div class="f12-help-title">${escapeHtml(wilsonEntry.shortTitle)}</div>
+    <p><strong>${escapeHtml(wilsonEntry.summary)}</strong> ${escapeHtml(wilsonEntry.detail)}</p>
+    <button type="button" class="f12-help-more-btn" data-glossary-target="glossary-wilson-interval">Open in Field Guide ▸</button>
   </div>
 </div>
 <script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}${briefingScript}
@@ -3138,9 +3200,42 @@ canvas.pointing { cursor: pointer; }
 
 .f12-evidence-pill { display: inline-flex; align-items: center; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-marker); color: var(--f-marker-ink); font: 800 11px/1.3 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; }
 .f12-howto { position: relative; display: inline-block; }
-.f12-howto summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11.5px/1.3 var(--f-font-mono); }
-.f12-howto summary::-webkit-details-marker { display: none; }
-.f12-howto-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(440px, 88vw); padding: 12px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); font: 400 12.5px/1.5 var(--f-font-body); box-shadow: var(--f-shadow-sheet); }
+.f12-howto > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11.5px/1.3 var(--f-font-mono); }
+.f12-howto > summary::-webkit-details-marker { display: none; }
+.f12-howto-pop { position: fixed; top: 56px; right: 16px; left: auto; z-index: 60; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 72px); overflow-y: auto; padding: 14px 16px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); font: 400 12.5px/1.5 var(--f-font-body); box-shadow: var(--f-shadow-sheet); display: flex; flex-direction: column; gap: 12px; }
+.f12-fg-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--f-rule); }
+.f12-fg-kicker { font: 800 12px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink); }
+.f12-fg-close { min-height: 24px; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
+.f12-fg-close:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-fg-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.f12-fg-sec-title { font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink-2); }
+.f12-fg-intro, .f12-fg-sub { margin: 0; font: 400 12.5px/1.5 var(--f-font-body); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-fg-sub { color: var(--f-ink-2); font-size: 12px; }
+.f12-glossary-list { display: flex; flex-direction: column; gap: 4px; }
+.f12-glossary-item { border: 1px solid var(--f-rule); background: var(--f-sheet); min-width: 0; }
+.f12-glossary-item > summary { cursor: pointer; padding: 6px 8px; font: 700 12px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-glossary-item[open] > summary { border-bottom: 1px dashed var(--f-rule); background: var(--f-panel); }
+.f12-glossary-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; font: 400 12.5px/1.45 var(--f-font-body); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-glossary-body p { margin: 0; }
+.f12-glossary-sum { font-weight: 600; color: var(--f-ink); }
+.f12-provenance-list { margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.f12-prov-row { display: grid; grid-template-columns: minmax(120px, 165px) minmax(0, 1fr); gap: 4px 10px; padding: 5px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font-size: 12px; line-height: 1.4; }
+.f12-prov-row dt { font: 700 11px/1.35 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.03em; color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-prov-row dd { margin: 0; font: 500 12px/1.4 var(--f-font-mono); color: var(--f-ink); min-width: 0; overflow-wrap: anywhere; }
+.f12-prov-warnings { padding: 6px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); font: 600 11.5px/1.4 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-fg-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding-top: 6px; border-top: 1px dashed var(--f-rule); font: 500 11.5px/1.4 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-fg-footer a, .f12-report-footer a { color: var(--f-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.f12-help-more-btn { margin-top: 8px; padding: 4px 9px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); text-transform: uppercase; cursor: pointer; }
+.f12-help-more-btn:hover { background: var(--f-ink); color: var(--f-sheet); }
+.f12-reading-finding { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; min-width: 0; }
+.f12-reading-finding > summary { cursor: pointer; font: 800 11px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-reading-body { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--f-rule); padding-top: 7px; }
+.f12-reading-item { font: 400 12.5px/1.45 var(--f-font-body); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-reading-item strong { display: block; font: 700 11.5px/1.3 var(--f-font-mono); color: var(--f-ink); margin-bottom: 2px; }
+.f12-about-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-about-details > summary { cursor: pointer; font: 800 12px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-about-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.f12-report-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; padding-top: 8px; border-top: 1px dashed var(--f-rule); font: 500 11.5px/1.4 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
 .f12-mode-switch { display: inline-flex; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-sheet); }
 .f12-mode-btn { min-height: 28px; min-width: 28px; padding: 4px 12px; border: 0; background: var(--f-sheet); color: var(--f-ink); font: 800 12px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
 .f12-mode-btn + .f12-mode-btn { border-left: 1.5px solid var(--f-rule); }
@@ -3280,10 +3375,20 @@ canvas.pointing { cursor: pointer; }
   h1 { font-size: 16px; line-height: 1.15; }
   .masthead-rule, .summary { display: none; }
   .f12-stat-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-  .f12-stat-pill { padding: 4px 8px; gap: 6px; font-size: 10.5px; }
+  .f12-stat-pill { padding: 4px 8px; gap: 6px; font-size: 10.5px; min-width: 0; overflow-wrap: anywhere; }
   .f12-stat-pill strong { font-size: 14px; }
   .f12-plate-svg { aspect-ratio: 340 / 240; }
   .f12-cut-panel { padding: 14px 12px 12px; gap: 8px; }
+  .f12-howto { width: 100%; }
+  .f12-howto-pop { position: static; width: 100%; max-width: 100%; max-height: none; margin-top: 6px; padding: 10px; box-shadow: none; }
+  .f12-prov-row { grid-template-columns: 1fr; gap: 2px; }
+}
+
+@media (max-width: 400px) {
+  .bar { padding: 8px; }
+  .f12-briefing { padding: 8px; gap: 10px; }
+  .f12-stat-strip { grid-template-columns: 1fr; }
+  .f12-cli-code { flex-basis: 100%; }
 }
 
 @media print {
@@ -4553,6 +4658,13 @@ const RICH_CLIENT = String.raw`
 
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape') {
+      var fgDetails = document.getElementById('field-guide-details');
+      if (fgDetails && fgDetails.open) {
+        fgDetails.open = false;
+        var fgSum = fgDetails.querySelector('summary');
+        if (fgSum && typeof fgSum.focus === 'function') fgSum.focus();
+        return;
+      }
       var openPopovers = document.querySelectorAll('.f12-help-popover.\\:popover-open');
       if (openPopovers.length > 0) {
         for (var pi = 0; pi < openPopovers.length; pi++) {
@@ -5240,6 +5352,15 @@ const RICH_CLIENT = String.raw`
     grid.appendChild(card2);
     panel.appendChild(grid);
 
+    var atlasForwardFirst = e.d.confidence > e.d.reverseConfidence ||
+      (e.d.confidence === e.d.reverseConfidence && e.d.fromChanges <= e.d.toChanges);
+    var atlasLabels = distinguishingPaths(
+      atlasForwardFirst ? e.s.safePath : e.t.safePath,
+      atlasForwardFirst ? e.t.safePath : e.s.safePath
+    );
+    var atlasReadingGuide = buildClientReadingGuide(e, atlasForwardFirst, atlasLabels, null);
+    panel.appendChild(renderReadingFindingDisclosure(atlasReadingGuide, 'atlas-reading-finding'));
+
     var callout = el('div', 'callout ' + e.d.relationship);
     callout.appendChild(el('div', 'callout-title', 'Why it matters'));
     var p1 = el('p', '', 'These files have been updated together before. If you are making changes to one, consider reviewing both.');
@@ -5377,6 +5498,166 @@ const RICH_CLIENT = String.raw`
       openPops[i].classList.remove(':popover-open');
     }
   });
+
+  var fgDetailsEl = document.getElementById('field-guide-details');
+  var fgCloseBtn = document.getElementById('field-guide-close');
+  if (fgCloseBtn && fgDetailsEl) {
+    fgCloseBtn.addEventListener('click', function () {
+      fgDetailsEl.open = false;
+      var fgSum = fgDetailsEl.querySelector('summary');
+      if (fgSum && typeof fgSum.focus === 'function') fgSum.focus();
+    });
+  }
+  var moreGlossaryBtns = document.querySelectorAll('.f12-help-more-btn');
+  for (var mgi = 0; mgi < moreGlossaryBtns.length; mgi++) {
+    moreGlossaryBtns[mgi].addEventListener('click', function (ev) {
+      var btn = ev.currentTarget;
+      var targetId = btn ? btn.getAttribute('data-glossary-target') : null;
+      var openPops = document.querySelectorAll('.f12-help-popover');
+      for (var pi = 0; pi < openPops.length; pi++) {
+        openPops[pi].classList.remove(':popover-open');
+        try { if (typeof openPops[pi].hidePopover === 'function') openPops[pi].hidePopover(); } catch (_) {}
+      }
+      if (fgDetailsEl) {
+        fgDetailsEl.open = true;
+      }
+      if (targetId) {
+        var targetDet = document.getElementById(targetId);
+        if (targetDet) {
+          targetDet.open = true;
+          var sum = targetDet.querySelector('summary');
+          if (sum && typeof sum.focus === 'function') sum.focus();
+          if (typeof targetDet.scrollIntoView === 'function') {
+            targetDet.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
+          }
+        }
+      }
+    });
+  }
+
+  function buildClientReadingGuide(edgeObj, forwardFirst, dynLabels, activeFamilyEntry) {
+    var d = edgeObj.d;
+    var safeFrom = dynLabels[0];
+    var safeTo = dynLabels[1];
+    var fromChanges = forwardFirst ? d.fromChanges : d.toChanges;
+    var toChanges = forwardFirst ? d.toChanges : d.fromChanges;
+    var conf = forwardFirst ? d.confidence : d.reverseConfidence;
+    var revConf = forwardFirst ? d.reverseConfidence : d.confidence;
+    var iv = forwardFirst ? d.interval : d.reverseInterval;
+    var pctVal = Math.floor(conf * 100 + 1e-9);
+    var revPctVal = Math.floor(revConf * 100 + 1e-9);
+    var rawPctVal = fromChanges > 0 ? Math.floor((d.shared / fromChanges) * 100 + 1e-9) : 0;
+    var revRawPctVal = toChanges > 0 ? Math.floor((d.shared / toChanges) * 100 + 1e-9) : 0;
+    var lowPct = Math.floor(iv.low * 100 + 1e-9);
+    var highPct = Math.ceil(iv.high * 100 - 1e-9);
+    var isWeighted = Boolean(d.weighted);
+    var wPhrase = edgeWeightingLabel(d);
+    var familyPrefix = '';
+    if (activeFamilyEntry && activeFamilyEntry.evidence && activeFamilyEntry.evidence.familySummary) {
+      var fs = activeFamilyEntry.evidence.familySummary;
+      familyPrefix = 'Across this ' + fs.members.length + '-file family (' + fs.qualifyingPairs + ' of ' + fs.possiblePairs + ' pairs qualifying), the lead pair is ' + safeFrom + ' \u2192 ' + safeTo + '. ';
+    }
+    var whatItSaysLabel = isWeighted
+      ? 'What does ' + pctVal + '% weighted (' + rawPctVal + '% raw) mean?'
+      : 'What does ' + pctVal + '% mean?';
+    var whatItSays = isWeighted
+      ? familyPrefix + 'With ' + wPhrase + ' scoring active, ' + safeFrom + ' \u2192 ' + safeTo + ' scores ' + pctVal + '% weighted confidence across ' + d.shared + ' of ' + fromChanges + ' raw analyzed commits (' + rawPctVal + '% raw ratio; unweighted 95% Wilson range ' + lowPct + '\u2013' + highPct + '%). In the reverse direction (' + safeTo + ' \u2192 ' + safeFrom + '), the score is ' + revPctVal + '% weighted (' + d.shared + ' of ' + toChanges + ' raw commits, ' + revRawPctVal + '% raw).'
+      : familyPrefix + 'Of the ' + fromChanges + ' analyzed commits that changed ' + safeFrom + ', ' + d.shared + ' also changed ' + safeTo + ' (' + pctVal + '%, 95% Wilson confidence range ' + lowPct + '\u2013' + highPct + '%). In the reverse direction (' + safeTo + ' \u2192 ' + safeFrom + '), ' + d.shared + ' of ' + toChanges + ' commits moved together (' + revPctVal + '%).';
+    var whatItDoesNotSayLabel = 'Does that mean ' + safeTo + ' needs changing now?';
+    var relExp = '';
+    if (d.relationship === 'ghost') {
+      relExp = 'This history does not establish a ' + pctVal + '% probability of a bug, a missing edit, or a runtime dependency. No direct or 2-hop static import link was detected between ' + safeFrom + ' and ' + safeTo + ' in current code\u2014this is a historical signal to investigate, not proof that your current change requires updating ' + safeTo + '.';
+    } else if (d.relationship === 'unknown') {
+      relExp = 'Static import analysis could not verify whether ' + safeFrom + ' and ' + safeTo + ' import each other (for example, non-JS/TS files, dynamic specifiers, or pairs beyond the import classification cap). "Unchecked" means import status is unknown\u2014not that an import link is absent\u2014and does not prove ' + safeTo + ' needs an update now.';
+    } else if (d.relationship === 'indirect') {
+      relExp = 'These files are connected indirectly (1\u20132 hops through an intermediate module) in current code and have moved together historically, but that still does not guarantee every edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
+    } else if (d.relationship === 'test') {
+      relExp = 'This is a recognized test and implementation pair. Historical co-change shows they are usually updated together, though internal refactors to ' + safeFrom + ' may not always require test changes in ' + safeTo + '.';
+    } else {
+      relExp = 'These files have a direct import link in current code, but historical co-change still does not prove that every isolated edit to ' + safeFrom + ' requires modifying ' + safeTo + '.';
+    }
+    if (d.verdict) {
+      var vTag = d.verdict.kind === 'confirmed'
+        ? 'Recorded verdict (confirmed dependency): "' + sanitizeText(d.verdict.reason) + '".'
+        : 'Recorded verdict (expected / silenced relationship): "' + sanitizeText(d.verdict.reason) + '".';
+      relExp += ' ' + vTag;
+    }
+    var fromAlone = Math.max(0, fromChanges - d.shared);
+    var toAlone = Math.max(0, toChanges - d.shared);
+    var totalAlone = fromAlone + toAlone;
+    var whatToInspect = totalAlone > 0
+      ? 'Review the ' + d.shared + ' shared commit receipts below alongside the ' + totalAlone + ' counterexample commit' + (totalAlone === 1 ? '' : 's') + ' where ' + safeFrom + ' (' + fromAlone + ') or ' + safeTo + ' (' + toAlone + ') changed alone. Check whether the historical co-changes resemble your current edit.'
+      : 'Review the ' + d.shared + ' shared commit receipts below (neither file changed alone in the analyzed window) and run the CLI explain command to inspect the paired diff hunks.';
+    return {
+      heading: 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS',
+      whatItSaysLabel: whatItSaysLabel,
+      whatItSays: whatItSays,
+      whatItDoesNotSayLabel: whatItDoesNotSayLabel,
+      whatItDoesNotSay: relExp,
+      whatToInspectLabel: 'What should I inspect next?',
+      whatToInspect: whatToInspect
+    };
+  }
+
+  function renderReadingFindingDisclosure(guide, idAttr) {
+    var det = el('details', 'f12-reading-finding');
+    if (idAttr) det.id = idAttr;
+    det.open = true;
+    det.appendChild(el('summary', '', guide.heading || 'READING THIS FINDING \u00b7 EXPLAIN THESE NUMBERS'));
+    var body = el('div', 'f12-reading-body');
+    var row1 = el('div', 'f12-reading-item');
+    row1.appendChild(el('strong', '', guide.whatItSaysLabel));
+    row1.appendChild(document.createTextNode(guide.whatItSays));
+    body.appendChild(row1);
+    var row2 = el('div', 'f12-reading-item');
+    row2.appendChild(el('strong', '', guide.whatItDoesNotSayLabel));
+    row2.appendChild(document.createTextNode(guide.whatItDoesNotSay));
+    body.appendChild(row2);
+    var row3 = el('div', 'f12-reading-item');
+    row3.appendChild(el('strong', '', guide.whatToInspectLabel));
+    row3.appendChild(document.createTextNode(guide.whatToInspect));
+    body.appendChild(row3);
+    det.appendChild(body);
+    return det;
+  }
+
+  function renderAboutAnalysisSection(targetEl) {
+    if (!targetEl || !briefingData || !briefingData.provenance) return;
+    var prov = briefingData.provenance;
+    var sec = el('section', 'f12-about-panel');
+    sec.id = 'about-this-analysis';
+    sec.setAttribute('aria-label', 'About this analysis');
+    var det = el('details', 'f12-about-details');
+    det.id = 'about-analysis-details';
+    det.appendChild(el('summary', '', prov.title + ' \u25b8'));
+    var body = el('div', 'f12-about-body');
+    body.appendChild(el('p', 'f12-fg-sub', prov.subtitle));
+    var dl = el('dl', 'f12-provenance-list');
+    (prov.items || []).forEach(function (it) {
+      var row = el('div', 'f12-prov-row');
+      row.appendChild(el('dt', '', it.label));
+      row.appendChild(el('dd', '', it.value));
+      dl.appendChild(row);
+    });
+    body.appendChild(dl);
+    if (prov.warnings && prov.warnings.length > 0) {
+      var wBox = el('div', 'f12-prov-warnings');
+      wBox.textContent = prov.warnings.map(function (w) { return '! ' + w; }).join(' | ');
+      body.appendChild(wBox);
+    }
+    det.appendChild(body);
+    sec.appendChild(det);
+
+    var foot = el('footer', 'f12-report-footer');
+    foot.appendChild(el('span', '', prov.footerText));
+    var ghLink = el('a', '', 'View project on GitHub \u2197');
+    ghLink.href = prov.githubUrl || 'https://github.com/lbrodie11/repo-archaeology';
+    ghLink.target = '_blank';
+    ghLink.rel = 'noopener noreferrer';
+    foot.appendChild(ghLink);
+    sec.appendChild(foot);
+    targetEl.appendChild(sec);
+  }
 
   function encodeHashPart(p) {
     return encodeURIComponent(String(p || '')).replace(/\.\./g, '%2E%2E');
@@ -6015,6 +6296,7 @@ const RICH_CLIENT = String.raw`
         empPanel.appendChild(empCli);
       }
       briefingEl.appendChild(empPanel);
+      renderAboutAnalysisSection(briefingEl);
       return;
     }
 
@@ -6065,6 +6347,7 @@ const RICH_CLIENT = String.raw`
       filterEmptyPanel.appendChild(el('h2', 'f12-headline', 'No findings match the active relationship filters'));
       filterEmptyPanel.appendChild(el('p', 'f12-lede', 'Enable Ghost wires, Unchecked, Indirect imports, or Import links in the filter bar above to inspect findings.'));
       briefingEl.appendChild(filterEmptyPanel);
+      renderAboutAnalysisSection(briefingEl);
       return;
     }
 
@@ -6275,6 +6558,11 @@ const RICH_CLIENT = String.raw`
       dirGrid.appendChild(dBox2);
     }
     cut05.appendChild(dirGrid);
+
+    var readingGuideObj = (featuredPayload && featuredPayload.evidence && featuredPayload.evidence.readingGuide)
+      ? featuredPayload.evidence.readingGuide
+      : buildClientReadingGuide(activeEdge, forwardFirst, dynLabels, activeFamilyEntry);
+    cut05.appendChild(renderReadingFindingDisclosure(readingGuideObj, 'reading-this-finding'));
 
     var metaStrip = el('div', 'f12-meta-strip');
     metaStrip.appendChild(el('span', 'f12-meta-pill', 'Last together ' + lastDateStr));
@@ -6526,6 +6814,7 @@ const RICH_CLIENT = String.raw`
       rankedPanel.appendChild(toggleAllBtn);
     }
     briefingEl.appendChild(rankedPanel);
+    renderAboutAnalysisSection(briefingEl);
   }
 
   if (window.location && window.location.hash) {

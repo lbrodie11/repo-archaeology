@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { MapData, MapEdge, MapFamily, MapNode } from '../src/commands/map.js';
+import { DEFAULT_SETTINGS } from '../src/config.js';
+import { RELATIONSHIPS } from '../src/imports/classify.js';
 import { computeLayout } from '../src/map/layout.js';
 import { renderMapHtml } from '../src/map/template.js';
+import {
+  buildAnalysisProvenance,
+  formatReadingFindingGuide,
+  getGlossaryEntry,
+  GLOSSARY_TERMS,
+  redactFilesystemPaths,
+} from '../src/report/glossary.js';
 import {
   buildRankedFindings,
   computeFeaturedPlateLayout,
@@ -719,5 +728,145 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
         assert.equal(overlaps, false, `Label ${a.text} overlaps ${b.text}`);
       }
     }
+  });
+
+  it('maintains a single canonical glossary aligned with codebase constants, worked finding explanations, and path-free provenance', () => {
+    // 1. Glossary terms completeness & constant alignment
+    assert.equal(GLOSSARY_TERMS.length, 12);
+    const expectedIds = [
+      'ghost-wire',
+      'directional-cochange',
+      'wilson-interval',
+      'weighted-confidence',
+      'file-family',
+      'unchecked-link',
+      'heuristic-import',
+      'indirect-import',
+      'direct-test-links',
+      'counterexamples',
+      'commit-origin',
+      'verdicts',
+    ] as const;
+    for (const id of expectedIds) {
+      const entry = getGlossaryEntry(id);
+      assert.ok(entry.term.length > 0);
+      assert.ok(entry.shortTitle.length > 3);
+      assert.ok(entry.summary.length > 20);
+      assert.ok(entry.detail.length > 30);
+    }
+    // Check alignment with DEFAULT_SETTINGS and RELATIONSHIPS
+    const ghostEntry = getGlossaryEntry('ghost-wire');
+    assert.ok(ghostEntry.detail.includes(String(DEFAULT_SETTINGS.minShared)));
+    assert.ok(ghostEntry.detail.includes(String(Math.round(DEFAULT_SETTINGS.minConfidence * 100))));
+    for (const rel of ['ghost', 'unknown', 'indirect', 'direct', 'test'] as const) {
+      assert.ok(RELATIONSHIPS.includes(rel));
+    }
+
+    // 2. Worked finding guide (`formatReadingFindingGuide`): unweighted vs weighted, relationship kinds, verdict, family, sanitization
+    const base = makeBaseData();
+    const e0 = base.edges[0]!;
+    const unweightedGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 6,
+      fromChanges: 8,
+      toChanges: 10,
+      confidence: 0.75,
+      reverseConfidence: 0.6,
+      interval: { low: 0.35, high: 0.97 },
+      reverseInterval: e0.reverseInterval,
+      relationship: e0.relationship,
+    });
+    assert.equal(unweightedGuide.heading, 'READING THIS FINDING · EXPLAIN THESE NUMBERS');
+    assert.equal(unweightedGuide.whatItSaysLabel, 'What does 75% mean?');
+    assert.ok(unweightedGuide.whatItSays.includes('Of the 8 analyzed commits that changed tiny.ts, 6 also changed quick.ts (75%, 95% Wilson confidence range 35–97%)'));
+    assert.ok(unweightedGuide.whatItDoesNotSay.includes('does not establish a 75% probability of a bug'));
+    assert.ok(unweightedGuide.whatToInspect.includes('6 shared commit receipts'));
+    assert.ok(unweightedGuide.whatToInspect.includes('6 counterexample commits'));
+
+    const weightedGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 6,
+      fromChanges: 8,
+      toChanges: 10,
+      confidence: 0.84,
+      reverseConfidence: 0.6,
+      interval: { low: 0.35, high: 0.97 },
+      reverseInterval: e0.reverseInterval,
+      relationship: 'ghost',
+      weighted: true,
+      weighting: 'recency+origin',
+      verdict: {
+        kind: 'expected',
+        reason: 'Intentional preset parity\u202e',
+      },
+      isFamily: true,
+      familyMemberCount: 3,
+      familyQualifyingPairs: 3,
+      familyPossiblePairs: 3,
+    });
+    assert.equal(weightedGuide.whatItSaysLabel, 'What does 84% weighted (75% raw) mean?');
+    assert.ok(weightedGuide.whatItSays.includes('Across this 3-file family (3 of 3 pairs qualifying)'));
+    assert.ok(weightedGuide.whatItSays.includes('recency+origin-weighted scoring active'));
+    assert.ok(weightedGuide.whatItSays.includes('75% raw ratio; unweighted 95% Wilson range 35–97%'));
+    assert.ok(weightedGuide.whatItDoesNotSay.includes('Recorded verdict (expected / silenced relationship): "Intentional preset parity'));
+    assert.equal(weightedGuide.whatItDoesNotSay.includes('\u202e'), false);
+
+    const unknownGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: e0.shared,
+      fromChanges: e0.fromChanges,
+      toChanges: e0.toChanges,
+      confidence: e0.confidence,
+      reverseConfidence: e0.reverseConfidence,
+      interval: e0.interval,
+      reverseInterval: e0.reverseInterval,
+      relationship: 'unknown',
+    });
+    assert.ok(unknownGuide.whatItDoesNotSay.includes('Static import analysis could not verify'));
+
+    // 3. Provenance (`buildAnalysisProvenance`) & path redaction (`redactFilesystemPaths`)
+    const provenanceData = makeBaseData({
+      meta: {
+        ...base.meta,
+        root: '/Users/alice/private-corp/secret-monorepo',
+        head: { ref: 'main', sha: '14e0ee2abcdef1234567890' },
+        imports: {
+          scope: 'analyzed-files',
+          filesScanned: 42,
+          internalEdges: 88,
+          external: 15,
+          unresolved: 3,
+          dynamicLoads: 1,
+          unsupportedFiles: 4,
+          sourceUnavailable: 0,
+          heuristicEdges: 5,
+          unresolvedByReason: { 'alias-unmatched': 3 },
+        },
+        warnings: [
+          'Skipped unreadable config at /Users/alice/private-corp/secret-monorepo/tsconfig.json',
+          'Temp path C:\\Users\\alice\\AppData\\Local\\Temp\\repo issue',
+        ],
+      },
+    });
+    const prov = buildAnalysisProvenance(provenanceData, '0.4.0');
+    const serializedProv = JSON.stringify(prov);
+    assert.equal(
+      serializedProv.includes('/Users/alice'),
+      false,
+      'Provenance must never leak local absolute filesystem paths',
+    );
+    assert.equal(
+      serializedProv.includes('C:\\Users\\alice'),
+      false,
+      'Provenance must redact Windows filesystem paths in warnings',
+    );
+    assert.ok(serializedProv.includes('main @ 14e0ee2abcde'));
+    assert.ok(serializedProv.includes('5 heuristic'));
+    assert.ok(serializedProv.includes('3 unresolved specifiers'));
+    assert.ok(prov.footerText.includes('Repo Archaeology v0.4.0'));
+    assert.equal(redactFilesystemPaths('Failed at /var/folders/99/abc/T/repo'), 'Failed at <repo-path>');
   });
 });

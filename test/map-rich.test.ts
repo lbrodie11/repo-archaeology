@@ -505,6 +505,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
     try {
       // 1. Markdown export byte-identity between classic and rich on the same fixture
       const syn50 = generateSyntheticMapData(50, { repoName: 'ra16-browser-50' });
+      syn50.meta.root = '/Users/alice/secret-workspace/ra16-browser-50';
       const classicHtml = renderMapHtml(syn50, computeLayout(syn50, { style: 'classic' }), { style: 'classic' });
       const richHtml = renderMapHtml(syn50, computeLayout(syn50, { style: 'rich' }), { style: 'rich' });
 
@@ -641,7 +642,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       assert.equal(briefingCheck.initialRows, 10, 'Expected top 10 ranked findings visible initially');
       assert.ok(briefingCheck.expandedRows > 10, 'Expected Show all N findings toggle to expand all findings');
 
-      // Verify contextual '?' help popover opens on click and closes on Escape
+      // Verify contextual '?' help popover opens on click, 'Open in Field Guide' jumps to the glossary term, and Escape closes
       await page.locator('button[popovertarget="help-ghost-wire"]').click();
       await page.waitForTimeout(30);
       const helpOpen = await page.evaluate(() => {
@@ -649,13 +650,45 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         return pop.getBoundingClientRect().height > 0 && (pop.textContent ?? '').toLowerCase().includes('ghost wire');
       });
       assert.equal(helpOpen, true, 'Expected #help-ghost-wire popover to open on ? button click');
-      await page.keyboard.press('Escape');
+
+      // Click 'Open in Field Guide ▸' inside #help-ghost-wire and verify #field-guide-details + #glossary-ghost-wire open
+      await page.locator('#help-ghost-wire .f12-help-more-btn').click();
       await page.waitForTimeout(30);
-      const helpClosed = await page.evaluate(() => {
-        const pop = document.getElementById('help-ghost-wire')!;
-        return pop.getBoundingClientRect().height === 0;
+      const fieldGuideCheck = await page.evaluate(() => {
+        const fg = document.getElementById('field-guide-details') as HTMLDetailsElement | null;
+        const gw = document.getElementById('glossary-ghost-wire') as HTMLDetailsElement | null;
+        const glossaryItems = document.querySelectorAll('#field-guide-details .f12-glossary-item[name="f12-glossary"]');
+        const readingEl = document.getElementById('reading-this-finding') as HTMLDetailsElement | null;
+        const aboutEl = document.getElementById('about-this-analysis');
+        const footerEl = document.querySelector('.f12-report-footer');
+        const rootPath = JSON.parse(document.getElementById('ra-data')!.textContent!).meta.root;
+        const visibleText = document.body.innerText || '';
+        return {
+          fgOpen: Boolean(fg?.open),
+          gwOpen: Boolean(gw?.open),
+          glossaryCount: glossaryItems.length,
+          readingOpen: Boolean(readingEl?.open),
+          readingText: readingEl?.textContent ?? '',
+          hasAbout: Boolean(aboutEl),
+          hasFooter: Boolean(footerEl && (footerEl.textContent ?? '').includes('Repo Archaeology')),
+          leaksRootInVisibleText: Boolean(rootPath && visibleText.includes(rootPath)),
+        };
       });
-      assert.equal(helpClosed, true, 'Expected #help-ghost-wire popover to close on Escape');
+      assert.equal(fieldGuideCheck.fgOpen, true, 'Expected #field-guide-details to open when clicking Open in Field Guide');
+      assert.equal(fieldGuideCheck.gwOpen, true, 'Expected #glossary-ghost-wire to open when clicking Open in Field Guide');
+      assert.equal(fieldGuideCheck.glossaryCount, 12, 'Expected 12 native <details name="f12-glossary"> glossary items');
+      assert.equal(fieldGuideCheck.readingOpen, true, 'Expected #reading-this-finding worked explanation to be present and open');
+      assert.ok(
+        fieldGuideCheck.readingText.includes('Does that mean') && fieldGuideCheck.readingText.includes('What should I inspect next?'),
+        'Expected #reading-this-finding to include worked 3-stage explanation',
+      );
+      assert.equal(fieldGuideCheck.hasAbout, true, 'Expected #about-this-analysis section in Briefing mode');
+      assert.equal(fieldGuideCheck.hasFooter, true, 'Expected subtle .f12-report-footer with tool attribution');
+      assert.equal(fieldGuideCheck.leaksRootInVisibleText, false, 'Visible report text must not leak local filesystem meta.root');
+
+      // Close Field Guide before continuing selection checks
+      await page.locator('#field-guide-details > summary').click();
+      await page.waitForTimeout(20);
 
       // Select a card and verify marker budget on selection (<= 1 relationship) + Markdown export parity
       await page.evaluate(() => {
@@ -806,6 +839,31 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         briefingMobileCheck.minEffectiveSvgPx >= 11,
         `Expected mobile plate SVG text effective font-size >= 11px at 360px viewport, got ${briefingMobileCheck.minEffectiveSvgPx.toFixed(2)}px`,
       );
+
+      // 8a-320. Verify WCAG 1.4.10 Reflow at 320 CSS pixels width (both closed and open Field Guide)
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.waitForTimeout(60);
+      const reflow320Closed = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      }));
+      assert.ok(
+        reflow320Closed.scrollW <= reflow320Closed.clientW,
+        `Expected zero horizontal overflow at 320px viewport width (scrollWidth ${reflow320Closed.scrollW} <= clientWidth ${reflow320Closed.clientW})`,
+      );
+      await page.locator('#field-guide-details > summary').click();
+      await page.waitForTimeout(30);
+      const reflow320Open = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      }));
+      assert.ok(
+        reflow320Open.scrollW <= reflow320Open.clientW,
+        `Expected zero horizontal overflow at 320px viewport width with Field Guide open (scrollWidth ${reflow320Open.scrollW} <= clientWidth ${reflow320Open.clientW})`,
+      );
+      await page.locator('#field-guide-details > summary').click();
+      await page.setViewportSize({ width: 360, height: 640 });
+      await page.waitForTimeout(40);
 
       // 8b. Switch to Atlas mode and verify at 360x640: panel renders above canvas, no horizontal scroll, controls >= 24x24
       await page.locator('#view-atlas').click();

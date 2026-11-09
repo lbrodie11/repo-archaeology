@@ -10,6 +10,7 @@ import type {
 } from '../commands/map.js';
 import type { Relationship } from '../imports/classify.js';
 import type { OriginShare } from '../model/origin.js';
+import { formatReadingFindingGuide, type ReadingFindingGuide } from '../report/glossary.js';
 import type { RelationshipVerdictView } from '../report/views.js';
 import { sanitizeHtmlDisplayText } from '../style/frame12.js';
 import type { WilsonInterval } from '../util/stats.js';
@@ -138,6 +139,7 @@ export interface EvidencePanelCopy {
   explainCommand: string;
   howToReadSummary: string;
   howToReadBody: string;
+  readingGuide?: ReadingFindingGuide;
   familySummary?: {
     label: string;
     members: { path: string; variant: string; changes: number }[];
@@ -749,6 +751,27 @@ export function formatEvidencePanelCopy(
     explainCommand,
     howToReadSummary: HOW_TO_READ_SUMMARY,
     howToReadBody: HOW_TO_READ_BODY,
+    readingGuide: formatReadingFindingGuide({
+      fromLabel: dir.shortFrom,
+      toLabel: dir.shortTo,
+      shared: dir.shared,
+      fromChanges: dir.fromChanges,
+      toChanges: dir.toChanges,
+      confidence: dir.confidence,
+      reverseConfidence: dir.reverseConfidence,
+      interval: dir.interval,
+      reverseInterval: dir.reverseInterval,
+      relationship: edge.relationship,
+      weighted: edge.weighted,
+      weighting: edge.weighting,
+      verdict: edge.verdict,
+      isFamily: featured.kind === 'family',
+      familyMemberCount: featured.kind === 'family' ? featured.family.members.length : undefined,
+      familyQualifyingPairs:
+        featured.kind === 'family' ? featured.family.qualifyingPairs : undefined,
+      familyPossiblePairs:
+        featured.kind === 'family' ? featured.family.possiblePairs : undefined,
+    }),
     ...(featured.kind === 'family'
       ? {
           familySummary: {
