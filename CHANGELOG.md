@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **Scrolling the Page over the Briefing Plate Zoomed It ([`src/map/template.ts`](src/map/template.ts)):** A plain mouse wheel over the `C-01` plate was captured as zoom, so scrolling the page could zoom the plate, cut labels off at its edges and show `Reset plate`. A plain wheel now scrolls the page and briefly shows `Ctrl + scroll to zoom the plate` (`⌘` on macOS); `Ctrl`/`⌘` + wheel and trackpad pinch still zoom around the pointer.
+- **Headings in the Empty and Filtered-Out Briefing States ([`src/map/template.ts`](src/map/template.ts)):** The "No findings match the active relationship filters" and empty-state headings now carry the `briefing-headline` id and are focusable like every other C-01 headline, so keyboard focus has a target after a filter change.
+
 ## [0.7.0] - 2026-11-09
 
 ### Added
