@@ -30,6 +30,7 @@ import {
   type RankedFindingItem,
 } from './copy.js';
 import { computeLayout, computeRichLayout, type LayoutResult } from './layout.js';
+import { PLATE_LAYOUT_BROWSER_JS } from './plate-layout.browser.js';
 
 let cachedEmbeddedFontCss: string | null = null;
 
@@ -165,7 +166,6 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     });
     const emptyPlate = computeFeaturedPlateLayout(data, featured, {
       width: 760,
-      height: 360,
       visible: ALL_KINDS_VISIBLE,
     });
     return {
@@ -185,7 +185,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
 
   const ranked = buildRankedFindings(data, ALL_KINDS_VISIBLE);
   const evidence = formatEvidencePanelCopy(data, featured);
-  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 420 });
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760 });
   const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const leadEdgeIndex = featured.kind === 'family' ? featured.leadEdgeIndex : featured.edgeIndex;
   const balloonText = formatBalloonCallout(data, leadEdge);
@@ -231,7 +231,6 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     }
     const famPlate = computeFeaturedPlateLayout(data, famFeatured, {
       width: 760,
-      height: 420,
       visible: ALL_KINDS_VISIBLE,
     });
     const famHasGhost =
@@ -522,6 +521,7 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
             <div class="f12-fg-section">
               <div class="f12-fg-sec-title">01 · START HERE</div>
               <p class="f12-fg-intro">Repo Archaeology examines Git history to identify files that repeatedly change together. Select a finding, inspect its directional numbers and supporting commits, and decide whether the companion file deserves coordinated review. Historical co-change is a signal to investigate, not proof that a change is required.</p>
+              <p class="f12-fg-intro"><strong>Reading the blueprint plate:</strong> the selected pair sits on top. Files with a relationship to both of them sit in the middle, files related to only one sit on that file's side, and family files reached only through other files sit at the bottom. Position shows how a file connects to the pair, not how strong the relationship is: compare the percentages in the evidence panel for that. Dense plates hide some connections between context files and say how many; the Atlas shows all of them.</p>
             </div>
             <div class="f12-fg-section">
               <div class="f12-fg-sec-title">02 · GLOSSARY (${GLOSSARY_TERMS.length} TERMS)</div>
@@ -602,6 +602,7 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   </div>
 </div>
 <script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}${briefingScript}
+<script>${PLATE_LAYOUT_BROWSER_JS}</script>
 <script>${RICH_CLIENT}</script>
 </body>
 </html>
@@ -3295,7 +3296,7 @@ canvas.pointing { cursor: pointer; }
 .f12-lede { margin: 0; font: 400 15.5px/1.55 var(--f-font-body); color: var(--f-ink-2); max-width: 72ch; overflow-wrap: anywhere; }
 
 .f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
-.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
+.f12-plate-svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
 .f12-plate-svg.is-panning { cursor: grabbing; }
 .f12-plate-node { cursor: pointer; }
 .f12-plate-node.is-dragging { cursor: grabbing; }
@@ -3309,6 +3310,15 @@ canvas.pointing { cursor: pointer; }
 .f12-plate-reset-btn:hover, .f12-plate-reset-btn[aria-pressed="true"] { background: #173b61; }
 .f12-plate-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .f12-plate-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.f12-plate-key { flex-basis: 100%; margin: 0; color: #7eb3e0; font: 500 11.5px/1.45 var(--f-font-mono); }
+.f12-plate-caption { margin: 0; padding: 8px 12px; background: #fffef9; color: #121212; border-top: 2px solid #121212; font: 700 12.5px/1.4 var(--f-font-mono); }
+.f12-plate-more { padding: 8px 12px 10px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; }
+.f12-plate-more-hdr { margin: 0 0 6px; font: 700 11px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+.f12-plate-more-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.f12-plate-more-btn { display: flex; width: 100%; min-height: 44px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 10px; border: 1px solid #7eb3e0; background: #13304f; color: #fffef9; font: 600 12.5px/1.3 var(--f-font-mono); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.f12-plate-more-btn:hover { background: #173b61; }
+.f12-plate-more-btn:focus-visible { outline: 3px solid #ffd60a; outline-offset: 2px; }
+.f12-plate-more-rel { color: #7eb3e0; font-weight: 500; font-size: 11.5px; }
 
 .f12-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .f12-dir-box { border: 1px solid var(--f-ink-2); background: var(--f-sheet); padding: 10px; min-width: 0; }
@@ -3407,7 +3417,6 @@ canvas.pointing { cursor: pointer; }
   .f12-stat-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .f12-stat-pill { padding: 4px 8px; gap: 6px; font-size: 10.5px; min-width: 0; overflow-wrap: anywhere; }
   .f12-stat-pill strong { font-size: 14px; }
-  .f12-plate-svg { aspect-ratio: 340 / 240; }
   .f12-cut-panel { padding: 14px 12px 12px; gap: 8px; }
   .f12-howto { width: 100%; }
   .f12-howto-pop { position: static; width: 100%; max-width: 100%; max-height: none; margin-top: 6px; padding: 10px; box-shadow: none; }
@@ -5922,385 +5931,69 @@ const RICH_CLIENT = String.raw`
     renderPanel();
   }
 
-  function pointToSegDist(px, py, x1, y1, x2, y2) {
-    var dx = x2 - x1, dy = y2 - y1;
-    var lenSq = dx * dx + dy * dy;
-    if (lenSq < 1e-6) return Math.hypot(px - x1, py - y1);
-    var t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
-    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-  }
-
-  function buildDynamicPlate(seedNodes, featuredEdgeIdxSet, leadEdgeObj, isMobile) {
-    var w = isMobile ? 340 : 760;
-    var h = isMobile ? 240 : 420;
-    var maxEgoNodes = isMobile ? 6 : 12;
-    var maxLabelLen = isMobile ? 20 : 28;
-    var padX = isMobile ? 48 : 88;
-    var padTop = isMobile ? 36 : 58;
-    var padBottom = isMobile ? 28 : 42;
-
-    var seedSet = Object.create(null);
-    seedNodes.forEach(function (sn) { seedSet[sn.i] = true; });
-
-    // Count connected component size via BFS
-    var compVisited = Object.create(null);
-    var bfsQ = seedNodes.slice();
-    bfsQ.forEach(function (sn) { compVisited[sn.i] = true; });
-    var qHead = 0;
-    while (qHead < bfsQ.length) {
-      var curr = bfsQ[qHead++];
-      curr.edges.forEach(function (ce) {
-        var nb = ce.s === curr ? ce.t : ce.s;
-        if (!compVisited[nb.i]) {
-          compVisited[nb.i] = true;
-          bfsQ.push(nb);
-        }
-      });
-    }
-    var fullComponentNodeCount = Object.keys(compVisited).length;
-
-    // Collect 1-hop neighbors ranked by ghost status & Wilson lower bound
-    var neighborMap = Object.create(null);
-    seedNodes.forEach(function (sn) {
-      sn.edges.forEach(function (ce) {
-        var other = ce.s === sn ? ce.t : ce.s;
-        if (seedSet[other.i]) return;
-        var wScore = (ce.d.relationship === 'ghost' ? 10 : 1) + ce.lowBound * 4 + (ce.d.shared || 0) * 0.05;
-        if (!neighborMap[other.i] || wScore > neighborMap[other.i].score) {
-          neighborMap[other.i] = { node: other, score: wScore };
-        }
-      });
+  // Plates rebuilt after a click run the same engine as the report's first plate (src/map/plate-layout.ts,
+  // inlined as RAPlateLayout), so both follow identical layout rules and geometry guarantees.
+  function buildDynamicPlate(seedNodes, featuredEdgeIdxSet, leadEdgeObj, spec, previousPlate) {
+    var mode = spec.mode;
+    var plate = RAPlateLayout.computePlateLayout(data, {
+      seeds: seedNodes.map(function (n) { return n.i; }),
+      leadEdge: leadEdgeObj.idx,
+      featuredEdges: Object.keys(featuredEdgeIdxSet).map(Number)
+    }, {
+      mode: mode,
+      width: spec.width,
+      visible: visible,
+      previous: previousPlate && previousPlate.mode === mode
+        ? (previousPlate.nodes || []).map(function (pn) { return { nodeIndex: pn.nodeIndex, x: pn.x }; })
+        : undefined
     });
-    var sortedNeighbors = Object.keys(neighborMap)
-      .map(function (k) { return neighborMap[k]; })
-      .sort(function (a, b) {
-        return b.score - a.score || a.node.path.localeCompare(b.node.path);
-      });
-    var orderedSeeds = seedNodes.slice().sort(function (a, b) {
-      var aLead = a === leadEdgeObj.s ? 0 : (a === leadEdgeObj.t ? 1 : 2);
-      var bLead = b === leadEdgeObj.s ? 0 : (b === leadEdgeObj.t ? 1 : 2);
-      return aLead - bLead || a.path.localeCompare(b.path);
-    });
-    var chosenNodes = orderedSeeds.slice(0, maxEgoNodes);
-    for (var ni = 0; ni < sortedNeighbors.length && chosenNodes.length < maxEgoNodes; ni++) {
-      chosenNodes.push(sortedNeighbors[ni].node);
-    }
-
-    var chosenSet = Object.create(null);
-    chosenNodes.forEach(function (cn, idx) { chosenSet[cn.i] = idx; });
-
-    var cx = w * 0.5;
-    var cy = h * (isMobile ? 0.56 : 0.55);
-    var posX = new Array(chosenNodes.length);
-    var posY = new Array(chosenNodes.length);
-    var sCount = Math.min(orderedSeeds.length, chosenNodes.length);
-    var outerCount = chosenNodes.length - sCount;
-    if (sCount === 2) {
-      var span = isMobile ? (outerCount >= 5 ? 116 : 96) : (outerCount >= 5 ? 236 : 196);
-      var seedY = outerCount >= 5 ? (cy - (isMobile ? 22 : 36)) : cy;
-      posX[0] = cx - span * 0.5; posY[0] = seedY;
-      posX[1] = cx + span * 0.5; posY[1] = seedY;
-    } else if (sCount >= 5) {
-      var leadSpan = isMobile ? 104 : 212;
-      var leadY = cy - (isMobile ? 20 : 34);
-      posX[0] = cx - leadSpan * 0.5; posY[0] = leadY;
-      posX[1] = cx + leadSpan * 0.5; posY[1] = leadY;
-      var remSeeds = sCount - 2;
-      var rxLarge = isMobile ? 106 : 244;
-      var ryLarge = isMobile ? 72 : 136;
-      for (var rsi = 0; rsi < remSeeds; rsi++) {
-        var rAng = -0.14 * Math.PI + (1.28 * Math.PI * rsi) / Math.max(1, remSeeds - 1);
-        posX[2 + rsi] = cx + Math.cos(rAng) * rxLarge;
-        posY[2 + rsi] = cy + Math.sin(rAng) * ryLarge;
-      }
-    } else {
-      var rx = isMobile ? 76 : 168;
-      var ry = isMobile ? 54 : 104;
-      for (var si = 0; si < sCount; si++) {
-        var sAng = -Math.PI * 0.75 + (2 * Math.PI * si) / Math.max(1, sCount);
-        posX[si] = cx + Math.cos(sAng) * rx;
-        posY[si] = cy + Math.sin(sAng) * ry;
-      }
-    }
-    var outerAnchorX = new Array(chosenNodes.length);
-    var outerAnchorY = new Array(chosenNodes.length);
-    for (var ai = 0; ai < sCount; ai++) {
-      outerAnchorX[ai] = posX[ai];
-      outerAnchorY[ai] = posY[ai];
-    }
-    for (var oi = 0; oi < outerCount; oi++) {
-      var oIdx = sCount + oi;
-      var oAng = outerCount >= 4
-        ? (-0.14 * Math.PI + (1.28 * Math.PI * oi) / Math.max(1, outerCount - 1))
-        : (-Math.PI * 0.35 + (2 * Math.PI * oi) / Math.max(1, outerCount));
-      var ox = cx + Math.cos(oAng) * (isMobile ? 118 : 262);
-      var oy = cy + Math.sin(oAng) * (isMobile ? 78 : 146);
-      posX[oIdx] = ox;
-      posY[oIdx] = oy;
-      outerAnchorX[oIdx] = ox;
-      outerAnchorY[oIdx] = oy;
-    }
-
-    // Collect internal edges and per-node degree
-    var rawSubEdges = [];
-    edges.forEach(function (ce) {
-      var u = chosenSet[ce.s.i], v = chosenSet[ce.t.i];
-      if (u !== undefined && v !== undefined) {
-        rawSubEdges.push({ ce: ce, u: u, v: v, isFeat: Boolean(featuredEdgeIdxSet[ce.idx]) });
-      }
-    });
-    // Prune crossing non-incident chords on dense >=5-node cliques so the blueprint stays legible
-    var subEdges = (chosenNodes.length >= 5 && rawSubEdges.length > chosenNodes.length + 3)
-      ? rawSubEdges.filter(function (se) {
-          if (se.ce === leadEdgeObj) return true;
-          if (se.ce.s === leadEdgeObj.s || se.ce.s === leadEdgeObj.t || se.ce.t === leadEdgeObj.s || se.ce.t === leadEdgeObj.t) {
-            return true;
-          }
-          var diff = Math.abs(se.u - se.v);
-          return diff === 1 || diff === chosenNodes.length - 1;
-        })
-      : rawSubEdges;
-    // Pruning must never strand a file with no visible wire: restore each orphan's strongest connection
-    if (subEdges !== rawSubEdges) {
-      var keptDeg = new Array(chosenNodes.length).fill(0);
-      subEdges.forEach(function (se) { keptDeg[se.u]++; keptDeg[se.v]++; });
-      for (var oni = 0; oni < chosenNodes.length; oni++) {
-        if (keptDeg[oni] > 0) continue;
-        var bestSe = null;
-        rawSubEdges.forEach(function (se) {
-          if (se.u !== oni && se.v !== oni) return;
-          if (!bestSe || se.ce.lowBound > bestSe.ce.lowBound) bestSe = se;
-        });
-        if (bestSe && subEdges.indexOf(bestSe) < 0) {
-          subEdges.push(bestSe);
-          keptDeg[bestSe.u]++;
-          keptDeg[bestSe.v]++;
-        }
-      }
-    }
-    var hiddenContextEdges = Math.max(0, rawSubEdges.length - subEdges.length);
-    var nodeDeg = new Array(chosenNodes.length).fill(0);
-    subEdges.forEach(function (se) {
-      nodeDeg[se.u]++;
-      nodeDeg[se.v]++;
-    });
-
-    // Reserve top-center balloon zone on desktop; on mobile keep compact
-    var balloonW = isMobile ? 256 : 310;
-    var balloonH = isMobile ? 28 : 38;
-    var balloonX = Math.round(cx - balloonW / 2);
-    var balloonY = isMobile ? 8 : 34;
-
-    // 50-step deterministic force relaxation (degree-normalized so cliques never collapse inward)
-    var idealDist = isMobile ? 88 : 168;
-    for (var step = 0; step < 50; step++) {
-      var cooling = 1 - step / 55;
-      var fx = new Array(chosenNodes.length).fill(0);
-      var fy = new Array(chosenNodes.length).fill(0);
-      for (var i = 0; i < chosenNodes.length; i++) {
-        for (var j = i + 1; j < chosenNodes.length; j++) {
-          var dx = posX[j] - posX[i];
-          var dy = posY[j] - posY[i];
-          var dist = Math.hypot(dx, dy) || 0.5;
-          var minSep = (i < sCount && j < sCount) ? idealDist * 1.15 : idealDist * 0.92;
-          if (dist < minSep * 1.45) {
-            var rep = ((minSep * 1.45 - dist) / dist) * 0.46 * cooling;
-            fx[i] -= dx * rep; fy[i] -= dy * rep;
-            fx[j] += dx * rep; fy[j] += dy * rep;
-          }
-        }
-      }
-      subEdges.forEach(function (se) {
-        var dx = posX[se.v] - posX[se.u];
-        var dy = posY[se.v] - posY[se.u];
-        var dist = Math.hypot(dx, dy) || 1;
-        var target = se.isFeat ? idealDist * 1.08 : idealDist * 0.98;
-        var degNorm = Math.sqrt(Math.max(1, Math.max(nodeDeg[se.u] || 1, nodeDeg[se.v] || 1)));
-        var pull = ((dist - target) / dist) * (0.12 / degNorm) * cooling;
-        fx[se.u] += dx * pull; fy[se.u] += dy * pull;
-        fx[se.v] -= dx * pull; fy[se.v] -= dy * pull;
-      });
-      for (var k = 0; k < chosenNodes.length; k++) {
-        var isSeedNode = k < sCount;
-        var damp = isSeedNode ? 0.35 : 0.78;
-        if (!isSeedNode && outerAnchorX[k] !== undefined) {
-          fx[k] += (outerAnchorX[k] - posX[k]) * 0.14 * cooling;
-          fy[k] += (outerAnchorY[k] - posY[k]) * 0.14 * cooling;
-        }
-        // Keep nodes out of balloon box
-        if (
-          posX[k] > balloonX - 24 &&
-          posX[k] < balloonX + balloonW + 24 &&
-          posY[k] < balloonY + balloonH + 26
-        ) {
-          fy[k] += 5.5 * cooling;
-        }
-        posX[k] = Math.max(padX, Math.min(w - padX, posX[k] + fx[k] * damp));
-        posY[k] = Math.max(padTop, Math.min(h - padBottom, posY[k] + fy[k] * damp));
-      }
-    }
-
-    // Compute Balloon target at midpoint of lead edge
-    var leadSIdx = chosenSet[leadEdgeObj.s.i] !== undefined ? chosenSet[leadEdgeObj.s.i] : 0;
-    var leadTIdx = chosenSet[leadEdgeObj.t.i] !== undefined ? chosenSet[leadEdgeObj.t.i] : Math.min(1, chosenNodes.length - 1);
-    var btX = Math.round((posX[leadSIdx] + posX[leadTIdx]) / 2);
-    var btY = Math.round((posY[leadSIdx] + posY[leadTIdx]) / 2);
-    balloonW = Math.max(balloonW, isMobile ? 268 : 340);
-    balloonX = Math.max(12, Math.min(w - balloonW - 12, Math.round(btX - balloonW / 2)));
-    // Anchor above the higher lead endpoint so a sloped lead wire never tucks a featured file under the callout
-    var leadTopY = Math.min(posY[leadSIdx], posY[leadTIdx]) - (isMobile ? 8 : 10);
-    balloonY = Math.max(8, Math.min(btY - balloonH - (isMobile ? 16 : 24), leadTopY - balloonH - (isMobile ? 8 : 10), isMobile ? 14 : 46));
-    var balloonBox = { x: balloonX, y: balloonY, w: balloonW, h: balloonH };
-    for (var bni = 0; bni < chosenNodes.length; bni++) {
-      if (
-        posX[bni] > balloonBox.x - 42 &&
-        posX[bni] < balloonBox.x + balloonBox.w + 42 &&
-        posY[bni] < balloonBox.y + balloonBox.h + 22
-      ) {
-        posY[bni] = Math.min(h - padBottom, balloonBox.y + balloonBox.h + 24);
-      }
-    }
-
-    // Build short labels (distinguish endpoints if duplicate basenames)
-    var baseCounts = Object.create(null);
-    var rawBasenames = chosenNodes.map(function (cn) {
-      var parts = cn.safePath.split('/');
-      return parts[parts.length - 1] || cn.safePath;
-    });
-    rawBasenames.forEach(function (b) { baseCounts[b] = (baseCounts[b] || 0) + 1; });
-
-    var placedBoxes = [{ x: balloonBox.x - 4, y: balloonBox.y - 4, w: balloonBox.w + 8, h: balloonBox.h + 12 }];
-    var pNodes = [];
-    var candDirs = [
-      { key: 'S', dx: 0, dy: 1, align: 'center' },
-      { key: 'N', dx: 0, dy: -1, align: 'center' },
-      { key: 'E', dx: 1, dy: 0, align: 'left' },
-      { key: 'W', dx: -1, dy: 0, align: 'right' },
-      { key: 'SE', dx: 0.85, dy: 0.85, align: 'left' },
-      { key: 'SW', dx: -0.85, dy: 0.85, align: 'right' },
-      { key: 'NE', dx: 0.85, dy: -0.85, align: 'left' },
-      { key: 'NW', dx: -0.85, dy: -0.85, align: 'right' }
-    ];
-
-    chosenNodes.forEach(function (cn, idx) {
-      var isSeed = idx < sCount;
-      var r = isSeed ? (isMobile ? 7.5 : 9.2) : (isMobile ? 5.5 : 6.6);
-      var nx = Math.round(posX[idx]);
-      var ny = Math.round(posY[idx]);
-      var lblText = rawBasenames[idx];
-      if (baseCounts[lblText] > 1) {
-        var segs = cn.safePath.split('/').filter(Boolean);
-        if (segs.length >= 2) lblText = segs[segs.length - 2] + '/' + segs[segs.length - 1];
-      }
-      lblText = middleTruncate(lblText, maxLabelLen);
-      var charW = isMobile ? 7.1 : 7.5;
-      var tw = Math.max(40, Math.round(lblText.length * charW + 10));
-      var th = 18;
-
-      var bestCand = null;
-      var bestPenalty = Infinity;
-      var candidates = [];
-      [0, 14, 28, 42].forEach(function (extra) {
-        candDirs.forEach(function (cd) { candidates.push({ cd: cd, extra: extra }); });
-      });
-      candidates.forEach(function (cand) {
-        var cd = cand.cd;
-        var offset = r + 8 + cand.extra;
-        var ax = Math.round(nx + cd.dx * offset);
-        var ay = Math.round(ny + cd.dy * (cd.dy === 0 ? 4 : offset + (cd.dy > 0 ? 8 : -2)));
-        var bx = cd.align === 'right' ? ax - tw + 4 : (cd.align === 'center' ? Math.round(ax - tw / 2) : ax - 4);
-        var by = ay - 13;
-        // Keep every label fully inside the plate: slide the box (and its text anchor) back in bounds
-        var shiftX = Math.max(6 - bx, Math.min(0, (w - 6) - (bx + tw)));
-        var shiftY = Math.max(6 - by, Math.min(0, (h - 6) - (by + th)));
-        bx += shiftX; ax += shiftX;
-        by += shiftY; ay += shiftY;
-        var pen = (Math.abs(shiftX) + Math.abs(shiftY)) * 2 + cand.extra * 4;
-
-        placedBoxes.forEach(function (ob) {
-          var ox = Math.max(0, Math.min(bx + tw, ob.x + ob.w) - Math.max(bx, ob.x));
-          var oy = Math.max(0, Math.min(by + th, ob.y + ob.h) - Math.max(by, ob.y));
-          if (ox > 0 && oy > 0) pen += ox * oy * 12 + 6000;
-        });
-        for (var m = 0; m < chosenNodes.length; m++) {
-          var mx = posX[m], my = posY[m], mr = (m < sCount ? 9.5 : 6.8) + 4;
-          var nearX = Math.max(bx, Math.min(mx, bx + tw));
-          var nearY = Math.max(by, Math.min(my, by + th));
-          if (Math.hypot(mx - nearX, my - nearY) < mr) pen += m < 2 ? 2400 : 900;
-        }
-        // The balloon's pointer runs from the callout down to the lead wire midpoint; never cover it
-        if (btX > bx - 8 && btX < bx + tw + 8 && by < btY && by + th > balloonBox.y + balloonBox.h) pen += 700;
-        var lcx = bx + tw / 2, lcy = by + th / 2;
-        // Keep each label visually attached to its own file: penalize spots nearer another node
-        var nearX0 = Math.max(bx, Math.min(nx, bx + tw)), nearY0 = Math.max(by, Math.min(ny, by + th));
-        var ownDist = Math.hypot(nx - nearX0, ny - nearY0);
-        for (var am = 0; am < chosenNodes.length; am++) {
-          if (am === idx) continue;
-          var anX = Math.max(bx, Math.min(posX[am], bx + tw)), anY = Math.max(by, Math.min(posY[am], by + th));
-          if (Math.hypot(posX[am] - anX, posY[am] - anY) + 2 < ownDist) pen += 260;
-        }
-        subEdges.forEach(function (se) {
-          if (!se.isFeat) return;
-          var dSeg = pointToSegDist(lcx, lcy, posX[se.u], posY[se.u], posX[se.v], posY[se.v]);
-          if (dSeg < th * 0.75) pen += 320;
-        });
-        if (pen < bestPenalty) {
-          bestPenalty = pen;
-          bestCand = { x: bx, y: by, w: tw, h: th, anchorX: ax, anchorY: ay, textAlign: cd.align };
-        }
-      });
-
-      if (bestCand) placedBoxes.push(bestCand);
-      pNodes.push({
-        nodeIndex: cn.i,
-        path: cn.safePath,
-        shortLabel: lblText,
-        dir: cn.safeDir,
-        changes: cn.changes || 1,
-        x: nx,
-        y: ny,
-        r: r,
-        isFeaturedEndpoint: isSeed,
-        label: bestCand
-      });
-    });
-
-    var pEdges = subEdges.map(function (se) {
-      return {
-        edgeIndex: se.ce.idx,
-        sourceNodeIndex: se.ce.s.i,
-        targetNodeIndex: se.ce.t.i,
-        x1: Math.round(posX[se.u]),
-        y1: Math.round(posY[se.u]),
-        x2: Math.round(posX[se.v]),
-        y2: Math.round(posY[se.v]),
-        relationship: se.ce.d.relationship,
-        intervalLow: se.ce.lowBound,
-        strokeWidth: Number((1.6 + se.ce.lowBound * 3.2).toFixed(2)),
-        isFeatured: se.isFeat,
-        isLeadEdge: se.ce === leadEdgeObj
-      };
-    });
-
     var forwardFirst = leadEdgeObj.d.confidence > leadEdgeObj.d.reverseConfidence ||
       (leadEdgeObj.d.confidence === leadEdgeObj.d.reverseConfidence && leadEdgeObj.d.fromChanges <= leadEdgeObj.d.toChanges);
     var denom = forwardFirst ? leadEdgeObj.d.fromChanges : leadEdgeObj.d.toChanges;
     var relSuffix = leadEdgeObj.d.relationship === 'ghost' ? 'no import' : leadEdgeObj.d.relationship + ' link';
-
-    return {
-      width: w,
-      height: h,
-      nodes: pNodes,
-      edges: pEdges,
-      balloonTarget: { x: btX, y: btY },
-      balloonBox: balloonBox,
-      balloonText: leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix,
-      fullComponentNodeCount: fullComponentNodeCount,
-      hiddenContextEdges: hiddenContextEdges
-    };
+    plate.balloonText = leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix;
+    return plate;
   }
 
   var dynamicPlateCache = Object.create(null);
+  // The plate currently on screen, so the next plate can keep shared files where the reader saw them
+  var lastPlateObj = null;
+  // Plates are laid out for the width they are shown at (near 1:1), so labels keep their intended size:
+  // compact below the desktop minimum, otherwise desktop at the measured width (capped at 760).
+  var plateAreaWidth = null;
+  var renderedPlateSpec = null;
+  function plateSpecFor(isMobileViewport) {
+    var range = RAPlateLayout.PLATE_WIDTH;
+    var avail = plateAreaWidth || (isMobileViewport ? Math.max(0, (window.innerWidth || 0) - 48) : range.desktop.max);
+    if (avail < range.desktop.min) {
+      return { mode: 'compact', width: Math.max(range.compact.min, Math.min(range.compact.max, Math.floor(avail))) };
+    }
+    // Within 48px of full width the report's prebuilt 760px plate is used (it scales by at most ~6%)
+    var width = avail >= range.desktop.max - 48 ? range.desktop.max : Math.floor(avail);
+    return { mode: 'desktop', width: width };
+  }
+  // At most one automatic re-render per load or resize: the re-render can change page height, and with it a
+  // scrollbar and the measured width, which must not feed back into another re-render.
+  var plateResyncing = false;
+  function syncPlateWidth() {
+    var wrap = briefingEl ? briefingEl.querySelector('.f12-plate-wrap') : null;
+    if (!wrap || !wrap.clientWidth || !renderedPlateSpec) return;
+    plateAreaWidth = wrap.clientWidth;
+    if (plateResyncing) return;
+    var wanted = plateSpecFor(Boolean(window.innerWidth && window.innerWidth <= 640));
+    var changed = wanted.mode !== renderedPlateSpec.mode || Math.abs(wanted.width - renderedPlateSpec.width) >= 24;
+    if (!changed) return;
+    setTimeout(function () {
+      if (viewMode !== 'briefing') return;
+      plateResyncing = true;
+      try {
+        renderBriefingBoard();
+        syncMarkerDom();
+      } finally {
+        plateResyncing = false;
+      }
+    }, 0);
+  }
 
   function snapshotPlateInitialState(plate, w, h) {
     if (!plate || plate._initialNodes) return;
@@ -6336,6 +6029,7 @@ const RICH_CLIENT = String.raw`
     var ns = 'http://www.w3.org/2000/svg';
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
     var w = plate.width || 760, h = plate.height || 420;
+    svgEl.style.aspectRatio = w + ' / ' + h;
     snapshotPlateInitialState(plate, w, h);
     var vb = plate._viewBox || (plate._viewBox = { x: 0, y: 0, w: w, h: h });
     svgEl.setAttribute('viewBox', vb.x.toFixed(1) + ' ' + vb.y.toFixed(1) + ' ' + vb.w.toFixed(1) + ' ' + vb.h.toFixed(1));
@@ -6463,6 +6157,7 @@ const RICH_CLIENT = String.raw`
       g.setAttribute('class', 'f12-plate-node');
       g.setAttribute('data-node-idx', String(pn.nodeIndex));
       g.setAttribute('data-plate-idx', String(pIdx));
+      if (pn.group) g.setAttribute('data-group', pn.group);
 
       var titleEl = document.createElementNS(ns, 'title');
       titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 click to inspect \u00b7 drag to move';
@@ -6909,6 +6604,7 @@ const RICH_CLIENT = String.raw`
       }
     }
     briefingEl.textContent = '';
+    renderedPlateSpec = null;
     var isMobileViewport = Boolean(window.innerWidth && window.innerWidth <= 640);
 
     // 1. Compact Inline Stat Strip with accessible '?' popover buttons
@@ -6959,10 +6655,19 @@ const RICH_CLIENT = String.raw`
         empSvg.setAttribute('class', 'f12-plate-svg');
         empSvg.setAttribute('role', 'img');
         empSvg.setAttribute('aria-label', 'Analyzed files context plate');
-        renderPlateSvg(empSvg, emp.plate, '');
+        var empSpec = plateSpecFor(isMobileViewport);
+        var empPlate = empSpec.mode === 'desktop' && empSpec.width === RAPlateLayout.PLATE_WIDTH.desktop.max
+          ? emp.plate
+          : RAPlateLayout.computePlateLayout(data, {
+              seeds: emp.plate.nodes.map(function (pn) { return pn.nodeIndex; }),
+              leadEdge: null,
+              featuredEdges: []
+            }, { mode: empSpec.mode, width: empSpec.width });
+        renderPlateSvg(empSvg, empPlate, '');
+        renderedPlateSpec = empSpec;
         empPlateWrap.appendChild(empSvg);
         var empFooter = el('div', 'f12-plate-footer');
-        empFooter.appendChild(el('span', 'f12-plate-meta', 'Context view: top ' + emp.plate.nodes.length + ' most frequently changed files in repository'));
+        empFooter.appendChild(el('span', 'f12-plate-meta', 'Context view: top ' + empPlate.nodes.length + ' most frequently changed files in repository'));
         empPlateWrap.appendChild(empFooter);
         empPanel.appendChild(empPlateWrap);
       }
@@ -7206,8 +6911,9 @@ const RICH_CLIENT = String.raw`
     var plateObj = null;
     var bText = '';
     var visMaskKey = ['ghost', 'unknown', 'indirect', 'direct', 'test'].map(function (k) { return visible[k] ? '1' : '0'; }).join('');
-    var plateCacheKey = (activeFamilyEntry ? 'fam:' + activeFamilyEntry.familyIndex + ':' + activeEdge.idx : 'edge:' + activeEdge.idx) + ':' + (isMobileViewport ? 'm' : 'd') + ':' + visMaskKey;
-    if (usePrebuiltLeadCopy && !isMobileViewport) {
+    var plateSpec = plateSpecFor(isMobileViewport);
+    var plateCacheKey = (activeFamilyEntry ? 'fam:' + activeFamilyEntry.familyIndex + ':' + activeEdge.idx : 'edge:' + activeEdge.idx) + ':' + plateSpec.mode + plateSpec.width + ':' + visMaskKey;
+    if (usePrebuiltLeadCopy && plateSpec.mode === 'desktop' && plateSpec.width === RAPlateLayout.PLATE_WIDTH.desktop.max) {
       plateObj = featuredPayload.plate;
       bText = featuredPayload.balloonText;
     } else if (dynamicPlateCache[plateCacheKey]) {
@@ -7229,18 +6935,19 @@ const RICH_CLIENT = String.raw`
       });
       if (famNodes.length < 2) famNodes = [activeEdge.s, activeEdge.t];
       famEdgeSet[activeEdge.idx] = true;
-      plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, isMobileViewport);
+      plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, plateSpec, lastPlateObj);
       bText = (!familyFilteredToSubset && activeFamilyEntry.balloonText) ? activeFamilyEntry.balloonText : plateObj.balloonText;
       dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     } else {
       var pairSeedNodes = forwardFirst ? [activeEdge.s, activeEdge.t] : [activeEdge.t, activeEdge.s];
       var pairFeatSet = Object.create(null);
       pairFeatSet[activeEdge.idx] = true;
-      plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, isMobileViewport);
+      plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, plateSpec, lastPlateObj);
       bText = usePrebuiltLeadCopy ? featuredPayload.balloonText : plateObj.balloonText;
       dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     }
 
+    var isCompactPlateObj = plateObj.mode === 'compact';
     var resetPlateBtn = el('button', 'f12-plate-reset-btn', 'Reset plate');
     resetPlateBtn.type = 'button';
     resetPlateBtn.id = 'reset-plate-btn';
@@ -7271,7 +6978,29 @@ const RICH_CLIENT = String.raw`
       if (h2 && typeof h2.focus === 'function') h2.focus();
     });
 
-    renderPlateSvg(svg, plateObj, bText, {
+    // Selecting a file (on the plate or in the compact list) opens its strongest visible relationship,
+    // preferring one other than the pair already shown.
+    function selectPlateNode(nodeIdx) {
+      if (typeof nodeIdx !== 'number' || !nodes[nodeIdx]) return;
+      var candidates = (plateObj.edges || [])
+        .filter(function (pe) { return pe.sourceNodeIndex === nodeIdx || pe.targetNodeIndex === nodeIdx; })
+        .map(function (pe) { return edges[pe.edgeIndex]; });
+      if (candidates.length === 0) candidates = nodes[nodeIdx].edges.slice();
+      candidates = candidates.filter(function (ce) { return ce && visible[ce.d.relationship]; });
+      if (candidates.length === 0) return;
+      candidates.sort(function (ea, eb) {
+        var aDiff = ea.idx !== activeEdge.idx ? 1 : 0;
+        var bDiff = eb.idx !== activeEdge.idx ? 1 : 0;
+        var aGhost = ea.d.relationship === 'ghost' ? 1 : 0;
+        var bGhost = eb.d.relationship === 'ghost' ? 1 : 0;
+        return (bGhost - aGhost) || (bDiff - aDiff) || (eb.d.overviewPriority - ea.d.overviewPriority) || (eb.d.score - ea.d.score) || (ea.idx - eb.idx);
+      });
+      var next = candidates[0];
+      if (!activeFamilyEntry && next.idx === activeEdge.idx) return;
+      selectBriefingEdge(next, false, true);
+    }
+
+    renderPlateSvg(svg, plateObj, isCompactPlateObj ? '' : bText, {
       onDirtyChange: function (isDirty) {
         resetPlateBtn.hidden = !isDirty;
       },
@@ -7281,27 +7010,53 @@ const RICH_CLIENT = String.raw`
           selectBriefingEdge(edges[edgeIdx], false, true);
         }
       },
-      onSelectNode: function (nodeIdx) {
-        if (typeof nodeIdx !== 'number' || !plateObj.edges) return;
-        var incident = plateObj.edges.filter(function (pe) {
-          return (pe.sourceNodeIndex === nodeIdx || pe.targetNodeIndex === nodeIdx) &&
-                 edges[pe.edgeIndex] && visible[edges[pe.edgeIndex].d.relationship];
-        });
-        if (incident.length === 0) return;
-        incident.sort(function (a, b) {
-          var ea = edges[a.edgeIndex], eb = edges[b.edgeIndex];
-          var aDiff = a.edgeIndex !== activeEdge.idx ? 1 : 0;
-          var bDiff = b.edgeIndex !== activeEdge.idx ? 1 : 0;
-          var aGhost = ea.d.relationship === 'ghost' ? 1 : 0;
-          var bGhost = eb.d.relationship === 'ghost' ? 1 : 0;
-          return (bGhost - aGhost) || (bDiff - aDiff) || (eb.d.overviewPriority - ea.d.overviewPriority) || (eb.d.score - ea.d.score);
-        });
-        var nextEdgeIdx = incident[0].edgeIndex;
-        if (!activeFamilyEntry && nextEdgeIdx === activeEdge.idx) return;
-        selectBriefingEdge(edges[nextEdgeIdx], false, true);
-      }
+      onSelectNode: selectPlateNode
     });
     plateWrap.appendChild(svg);
+    lastPlateObj = plateObj;
+    renderedPlateSpec = plateSpec;
+
+    var focusNames = (plateObj.nodes || [])
+      .filter(function (pn) { return pn.group === 'focus'; })
+      .map(function (pn) { return pn.shortLabel; });
+    // On phones the callout moves under the plate and the remaining files become a selectable list
+    if (isCompactPlateObj) {
+      if (bText) {
+        var caption = el('p', 'f12-plate-caption', bText);
+        caption.id = 'plate-caption';
+        plateWrap.appendChild(caption);
+      }
+      var overflow = plateObj.overflow || [];
+      if (overflow.length > 0) {
+        var moreBox = el('div', 'f12-plate-more');
+        var moreHdr = el('h3', 'f12-plate-more-hdr', 'More related files (' + overflow.length + ')');
+        moreHdr.id = 'plate-more-hdr';
+        moreBox.appendChild(moreHdr);
+        var moreList = el('ul', 'f12-plate-more-list');
+        moreList.setAttribute('aria-labelledby', 'plate-more-hdr');
+        overflow.forEach(function (item) {
+          var li = el('li', '');
+          var btn = el('button', 'f12-plate-more-btn');
+          btn.type = 'button';
+          btn.setAttribute('data-node-idx', String(item.nodeIndex));
+          btn.title = item.path;
+          btn.appendChild(el('span', '', item.shortLabel));
+          var rel = item.group === 'shared'
+            ? 'Linked to both files'
+            : item.group === 'a-only'
+              ? 'Linked to ' + (focusNames[0] || 'the first file') + ' only'
+              : item.group === 'b-only'
+                ? 'Linked to ' + (focusNames[1] || 'the second file') + ' only'
+                : 'Linked through other files';
+          btn.appendChild(el('span', 'f12-plate-more-rel', rel));
+          btn.addEventListener('click', function () { selectPlateNode(item.nodeIndex); });
+          li.appendChild(btn);
+          moreList.appendChild(li);
+        });
+        moreBox.appendChild(moreList);
+        plateWrap.appendChild(moreBox);
+      }
+    }
 
     var plateFooter = el('div', 'f12-plate-footer');
     var plateLegend = el('div', 'f12-plate-legend');
@@ -7309,14 +7064,27 @@ const RICH_CLIENT = String.raw`
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '- - Ghost wire (long dash)'));
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u00b7\u00b7\u00b7 Unchecked (dotted)'));
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2500\u2500 Import (solid)'));
+    if (focusNames.length === 2) {
+      plateLegend.appendChild(el('p', 'f12-plate-key', isCompactPlateObj
+        ? 'Layout: the selected pair on top, the closest related files below, the rest listed under the plate.'
+        : 'Layout: the selected pair on top \u00b7 files linked to both in the middle \u00b7 files linked to only ' + focusNames[0] + ' on the left or only ' + focusNames[1] + ' on the right \u00b7 files reached through other files at the bottom.'));
+    }
     plateFooter.appendChild(plateLegend);
     var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
+    var drawnCount = plateObj.nodes ? plateObj.nodes.length : 0;
     var hiddenEdgesCount = plateObj.hiddenContextEdges || 0;
     var hiddenEdgesNote = hiddenEdgesCount > 0
       ? ' \u00b7 ' + hiddenEdgesCount + ' ' + (hiddenEdgesCount === 1 ? 'connection' : 'connections') + ' between context files hidden (see Atlas)'
       : '';
+    var disconnectedCount = (plateObj.disconnectedNodeIndices || []).length;
+    var disconnectedNote = disconnectedCount > 0
+      ? ' \u00b7 ' + disconnectedCount + ' finding ' + (disconnectedCount === 1 ? 'file has' : 'files have') + ' no visible connection with the current filters'
+      : '';
+    var countNote = isCompactPlateObj && (plateObj.overflow || []).length > 0
+      ? 'Showing ' + drawnCount + ' of ' + compTotal + ' files in component (' + plateObj.overflow.length + ' more listed above)'
+      : 'Ego network (' + drawnCount + ' of ' + compTotal + ' files in component)';
     var footerRight = el('div', 'f12-plate-footer-right');
-    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)' + hiddenEdgesNote + ' \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
+    footerRight.appendChild(el('span', 'f12-plate-meta', countNote + hiddenEdgesNote + disconnectedNote + ' \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
     if (focusPairBtn) footerRight.appendChild(focusPairBtn);
     footerRight.appendChild(resetPlateBtn);
     plateFooter.appendChild(footerRight);
@@ -7710,6 +7478,7 @@ const RICH_CLIENT = String.raw`
         try { nextFocusEl.focus({ preventScroll: true }); } catch (_) { nextFocusEl.focus(); }
       }
     }
+    syncPlateWidth();
   }
 
   if (window.location && window.location.hash) {
@@ -7731,6 +7500,7 @@ const RICH_CLIENT = String.raw`
   });
 
   var lastBriefingMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
+  var plateSyncTimer = null;
   window.addEventListener('resize', function () {
     var nowMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
     if (nowMobile !== lastBriefingMobile) {
@@ -7739,7 +7509,13 @@ const RICH_CLIENT = String.raw`
         renderBriefingBoard();
         syncMarkerDom();
       }
+      return;
     }
+    if (plateSyncTimer !== null) clearTimeout(plateSyncTimer);
+    plateSyncTimer = setTimeout(function () {
+      plateSyncTimer = null;
+      if (viewMode === 'briefing') syncPlateWidth();
+    }, 120);
   });
 
   function renderPanel() {

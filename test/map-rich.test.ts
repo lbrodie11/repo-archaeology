@@ -427,8 +427,9 @@ describe('RA-16 · 4, 5 & 6. Marker budget (static), Line grammar, and WCAG Cont
 
     // Extract client script (after #ra-data / #ra-layout)
     const scripts = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/g)).map((m) => m[1]!);
-    assert.equal(scripts.length, 1, 'Expected 1 executable client <script>');
-    const clientJs = scripts[0]!;
+    assert.equal(scripts.length, 2, 'Expected the shared plate layout engine and the client <script>');
+    assert.ok(scripts[0]!.startsWith('var RAPlateLayout = '), 'Expected the inlined plate layout engine first');
+    const clientJs = scripts.join('\n');
 
     const hexRegex = /#[0-9a-fA-F]{3,8}\b/g;
     for (const [sourceName, text] of [['CSS', css], ['Client JS', clientJs]] as const) {

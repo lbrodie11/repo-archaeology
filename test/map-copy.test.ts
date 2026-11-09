@@ -541,7 +541,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       }
       const data = makeBaseData({ nodes, edges, families: [] });
       const featured = selectFeaturedFinding(data);
-      const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 380 });
+      const plate = computeFeaturedPlateLayout(data, featured, { width: 760 });
 
       assert.equal(plate.nodes.length, Math.min(12, nodeCount));
       assert.equal(plate.truncatedToEgoCap, nodeCount > 12);
@@ -604,7 +604,6 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     const data = makeBaseData({ nodes, edges, families: [] });
     const plate = computeFeaturedPlateLayout(data, selectFeaturedFinding(data), {
       width: 760,
-      height: 380,
       visible: { ghost: true, direct: true, indirect: true, unknown: true },
     });
 
@@ -677,7 +676,6 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(selectFeaturedFinding(data).kind, 'family', 'Fixture precondition: the family leads');
     const plate = computeFeaturedPlateLayout(data, selectFeaturedFinding(data), {
       width: 760,
-      height: 420,
       visible: { ghost: true, direct: true, indirect: true, unknown: true },
     });
 

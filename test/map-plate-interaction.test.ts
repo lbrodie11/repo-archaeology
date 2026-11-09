@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { computeRichLayout } from '../src/map/layout.js';
+import { renderMapHtml } from '../src/map/template.js';
+import { generateSyntheticMapData } from './fixtures/map-synthetic.js';
 import { FixtureRepo } from './helpers.js';
 
 const require = createRequire(import.meta.url);
@@ -179,6 +182,52 @@ describe('Briefing blueprint plate interaction (map --style rich)', { skip: !pw 
       const footer = (await page.locator('.f12-plate-meta').textContent()) ?? '';
       assert.match(footer, /Click a file or wire to inspect/);
 
+      // The report's plate and the in-page engine agree exactly for the same input
+      const parity = await page.evaluate(() => {
+        const data = JSON.parse(document.getElementById('ra-data')!.textContent!);
+        const briefing = JSON.parse(document.getElementById('ra-briefing')!.textContent!);
+        const famIdx = briefing.featured.familyIndex as number;
+        const fam = data.families[famIdx];
+        const prebuilt = briefing.families[famIdx].plate;
+        const engine = (window as unknown as { RAPlateLayout: { computePlateLayout: Function } }).RAPlateLayout;
+        const recomputed = engine.computePlateLayout(
+          data,
+          { seeds: fam.nodeIndices, leadEdge: briefing.families[famIdx].edgeIndex, featuredEdges: fam.edgeIndices },
+          { mode: 'desktop', visible: { ghost: true, unknown: true, indirect: true, direct: true, test: true } },
+        );
+        return { same: JSON.stringify(recomputed) === JSON.stringify(prebuilt), nodes: prebuilt.nodes.length };
+      });
+      assert.equal(parity.same, true, 'Server-built and in-page plates must be identical for the same input');
+
+      // Rows follow the relationship to the pair: pair on top, then shared, one-sided, other
+      const groupRows = await page.evaluate(() => {
+        const rows: Record<string, number[]> = {};
+        for (const g of Array.from(document.querySelectorAll('#featured-plate-svg .f12-plate-node'))) {
+          const dot = g.querySelector('.f12-plate-node-dot')!;
+          (rows[g.getAttribute('data-group') ?? '?'] ??= []).push(Number(dot.getAttribute('cy')));
+        }
+        return rows;
+      });
+      const maxY = (k: string) => Math.max(...(groupRows[k] ?? [-Infinity]));
+      const minY = (k: string) => Math.min(...(groupRows[k] ?? [Infinity]));
+      assert.equal(groupRows['focus']?.length, 2);
+      assert.ok(maxY('focus') < minY('shared'), 'shared files sit below the pair');
+      assert.ok(maxY('shared') < Math.min(minY('a-only'), minY('b-only'), minY('other')), 'one-sided and other files sit below shared files');
+
+      // The hidden-connection disclosure matches what the plate actually omits
+      const disclosure = await page.evaluate(() => {
+        const data = JSON.parse(document.getElementById('ra-data')!.textContent!);
+        const drawn = new Set(
+          Array.from(document.querySelectorAll('#featured-plate-svg .f12-plate-node')).map((g) => Number(g.getAttribute('data-node-idx'))),
+        );
+        const between = data.edges.filter((e: { source: number; target: number }) => drawn.has(e.source) && drawn.has(e.target)).length;
+        const wires = document.querySelectorAll('#featured-plate-svg .f12-plate-edge-hit').length;
+        const text = document.querySelector('.f12-plate-meta')!.textContent ?? '';
+        const m = /(\d+) connections? between context files hidden/.exec(text);
+        return { omitted: between - wires, disclosed: m ? Number(m[1]) : 0 };
+      });
+      assert.equal(disclosure.disclosed, disclosure.omitted, 'Every omitted connection is disclosed, and only those');
+
       // 1) Clicking every file on the family plate pivots C-01 to one of that file's pairs
       for (const n of initial.nodes) {
         const dot = page.locator(`#featured-plate-svg .f12-plate-node[data-node-idx="${n.idx}"] .f12-plate-node-dot`);
@@ -263,19 +312,126 @@ describe('Briefing blueprint plate interaction (map --style rich)', { skip: !pw 
         );
       });
       assert.ok(hashes.length >= 20, `Expected a dense fixture, got ${hashes.length} relationships`);
-      for (const [width, strict] of [[1440, true], [390, false]] as const) {
+      const openHash = (hh: string) =>
+        page.evaluate((h: string) => {
+          location.hash = h;
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        }, hh);
+      for (const width of [1440, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         for (const h of hashes) {
-          await page.evaluate((hh: string) => {
-            location.hash = hh;
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
-          }, h);
+          await openHash(h);
           const m = (await page.evaluate(MEASURE_PLATE)) as PlateMeasure;
-          assert.deepEqual(plateProblems(m, { strict }), [], `Plate for ${decodeURIComponent(h)} at ${width}px`);
+          assert.deepEqual(plateProblems(m, { strict: true }), [], `Plate for ${decodeURIComponent(h)} at ${width}px`);
+          const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          assert.ok(overflowX <= 0, `No horizontal page scroll at ${width}px (overflow ${overflowX}px)`);
         }
       }
 
+      // Labels render at a readable size at every width: the plate is laid out for the width it is shown at
+      for (const width of [1440, 1280, 1024, 900, 800, 700, 641, 640, 390, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await openHash(hashes[2]!);
+        await page.waitForTimeout(30);
+        const sizes = await page.evaluate(() => {
+          const svg = document.getElementById('featured-plate-svg') as unknown as SVGSVGElement;
+          const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+          return Array.from(svg.querySelectorAll('.f12-plate-node-label text')).map((t) => Number(t.getAttribute('font-size')) * scale);
+        });
+        assert.ok(sizes.length > 0);
+        for (const px of sizes) assert.ok(px >= 11.5 && px <= 17, `Label renders at ${px.toFixed(1)}px at ${width}px wide`);
+      }
+
+      // 6) Phones: the pair plus the closest files, the callout under the plate, the rest as a list
+      await page.setViewportSize({ width: 390, height: 1000 });
+      await openHash(hashes[0]!);
+      const compact = (await page.evaluate(MEASURE_PLATE)) as PlateMeasure;
+      assert.ok(compact.nodes.length <= 4, `Compact plate draws at most 4 files, got ${compact.nodes.length}`);
+      assert.equal(compact.balloon, null, 'No speech balloon inside the compact plate');
+      assert.match((await page.locator('#plate-caption').textContent()) ?? '', /commits together/);
+      const moreButtons = page.locator('.f12-plate-more-btn');
+      assert.ok((await moreButtons.count()) > 0, 'Remaining files are listed under the plate');
+      const listed = (await moreButtons.first().locator('span').first().textContent()) ?? '';
+      const beforeList = (await headline()) ?? '';
+      await moreButtons.first().click();
+      const afterList = (await headline()) ?? '';
+      assert.notEqual(afterList, beforeList, 'Choosing a listed file selects one of its relationships');
+      assert.ok(afterList.includes(listed.split('/').pop()!), `Expected ${listed} in ${afterList}`);
+
+      // 7) Print with reduced motion still renders a static, readable plate
+      await page.emulateMedia({ media: 'print', reducedMotion: 'reduce' });
+      await openHash(hashes[1]!);
+      const printBox = await page.locator('#featured-plate-svg').boundingBox();
+      assert.ok(printBox && printBox.width > 100 && printBox.height > 60, 'Plate is visible when printing');
+      await page.emulateMedia({ media: 'screen', reducedMotion: 'no-preference' });
+
       assert.deepEqual(errors, [], 'Expected no page errors while interacting with the plate');
+
+      // 8) Touch: tapping a file selects it, exactly like a click
+      const touchContext = await browser.newContext({ viewport: { width: 390, height: 900 }, hasTouch: true, isMobile: true });
+      const touchPage = await touchContext.newPage();
+      const touchErrors: string[] = [];
+      touchPage.on('pageerror', (err: Error) => touchErrors.push(String(err)));
+      await touchPage.goto(url);
+      await touchPage.waitForSelector('#featured-plate-svg .f12-plate-node');
+      const touchBefore = (await touchPage.locator('#briefing-headline').textContent()) ?? '';
+      const target = touchPage.locator('#featured-plate-svg .f12-plate-node[data-group]:not([data-group="focus"]) .f12-plate-node-dot').first();
+      await target.tap({ force: true });
+      await touchPage.waitForTimeout(50);
+      assert.notEqual((await touchPage.locator('#briefing-headline').textContent()) ?? '', touchBefore, 'Tapping a file selects it');
+      assert.deepEqual(touchErrors, []);
+      await touchContext.close();
+
+      // 9) Width changes re-lay the plate once, never in a loop (scrollbars change width as height changes)
+      const loopPage = await browser.newPage({ viewport: { width: 1440, height: 700 } });
+      await loopPage.goto(url);
+      await loopPage.waitForSelector('#featured-plate-svg .f12-plate-node');
+      const countPlateRenders = async (width: number) => {
+        await loopPage.evaluate(() => {
+          const w = window as unknown as { __plateRenders: number; __plateObserver?: MutationObserver };
+          w.__plateRenders = 0;
+          w.__plateObserver?.disconnect();
+          w.__plateObserver = new MutationObserver((records) => {
+            for (const r of records) {
+              for (const n of Array.from(r.addedNodes)) {
+                if (n instanceof Element && (n.id === 'featured-plate-svg' || n.querySelector?.('#featured-plate-svg'))) w.__plateRenders++;
+              }
+            }
+          });
+          w.__plateObserver.observe(document.getElementById('briefing-view')!, { childList: true, subtree: true });
+        });
+        await loopPage.setViewportSize({ width, height: 700 });
+        await loopPage.waitForTimeout(700);
+        return loopPage.evaluate(() => (window as unknown as { __plateRenders: number }).__plateRenders);
+      };
+      for (const width of [1100, 1024, 980, 760, 700, 600, 1440]) {
+        const renders = await countPlateRenders(width);
+        assert.ok(renders <= 2, `Resizing to ${width}px rendered the plate ${renders} times`);
+      }
+      await loopPage.close();
+
+      // 10) The empty-state context plate is laid out for narrow screens too
+      const emptyData = generateSyntheticMapData(12, { repoName: 'plate-empty-state' });
+      emptyData.edges = emptyData.edges.map((e) => ({ ...e, relationship: 'direct' as const, overviewPriority: 0 }));
+      emptyData.families = [];
+      emptyData.counts = { ghost: 0, unknown: 0, indirect: 0, direct: emptyData.edges.length, test: 0 };
+      const emptyHtml = renderMapHtml(emptyData, computeRichLayout(emptyData), { style: 'rich' });
+      const emptyPage = await browser.newPage({ viewport: { width: 390, height: 900 } });
+      const emptyErrors: string[] = [];
+      emptyPage.on('pageerror', (err: Error) => emptyErrors.push(String(err)));
+      await emptyPage.setContent(emptyHtml, { waitUntil: 'domcontentloaded' });
+      await emptyPage.waitForSelector('#featured-plate-svg .f12-plate-node');
+      await emptyPage.waitForTimeout(100);
+      const emptySizes = await emptyPage.evaluate(() => {
+        const svg = document.getElementById('featured-plate-svg') as unknown as SVGSVGElement;
+        const scale = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+        return Array.from(svg.querySelectorAll('.f12-plate-node-label text')).map((t) => Number(t.getAttribute('font-size')) * scale);
+      });
+      assert.ok(emptySizes.length > 0, 'Empty-state context plate draws files');
+      assert.match((await emptyPage.locator('.f12-plate-meta').first().textContent()) ?? '', /^Context view:/);
+      for (const px of emptySizes) assert.ok(px >= 11.5 && px <= 17, `Empty-state label renders at ${px.toFixed(1)}px`);
+      assert.deepEqual(emptyErrors, []);
+      await emptyPage.close();
     } finally {
       await browser.close();
     }
