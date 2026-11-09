@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+
+> **Repo Archaeology v0.5.0 — Investigation Board & Field Guide**
+>
+> `repo-archaeology map --style rich` now opens as an interactive **Investigation Board** instead of a dense grid of miniature graphs. Start with the **Briefing** view to inspect your repository's strongest co-change finding, explore directional confidence and commit receipts, switch to **Atlas** for the full repository graph, and open the built-in **Field Guide** anytime for plain-English explanations of ghost wires, confidence intervals, and historical evidence.
+>
+> | Light Investigation Board (`--style rich`) | Dark Investigation Board (`--style rich`) |
+> |---|---|
+> | ![Repo Archaeology FRAME/12 rich Investigation Board (light)](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.5.0/docs/repo-archaeology-map-rich.png) | ![Repo Archaeology FRAME/12 rich Investigation Board (dark)](https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.5.0/docs/repo-archaeology-map-rich-dark.png) |
+
 ### Added
 - **FRAME/12 Investigation Board & Built-In Field Guide (`RA-17`, `--style rich` Briefing + Atlas + Field Guide, [`src/report/glossary.ts`](src/report/glossary.ts), [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts), [`scripts/design-concepts.mjs`](scripts/design-concepts.mjs)):**
   - Added pure copy, ranking, deep-link hash (`#f=<sourcePath>..<targetPath>`), and collision-free ego-network layout templates (`src/map/copy.ts`) for `map --style rich`, promoting the highest-priority finding family or pair to Cut `C-01` while keeping panel cut labels (`C-01`–`C-05`, `E-01`) distinct from finding IDs (`F-01`–`F-NN`).

@@ -114,7 +114,7 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       version: string;
       files: string[];
     };
-    assert.equal(pkg.version, '0.4.0');
+    assert.equal(pkg.version, '0.5.0');
     assert.equal(getToolVersion(), pkgVersion);
     assert.ok(pkg.files.includes('schema'), 'package.json files array must include "schema"');
   });

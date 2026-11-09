@@ -24,7 +24,7 @@ function readPackageVersion(): string {
   } catch {
     // Fallback if package.json cannot be read relative to runner
   }
-  return '0.4.0';
+  return '0.5.0';
 }
 
 export const PINNED_ACTION_PACKAGE = `repo-archaeology@${readPackageVersion()}`;
