@@ -5,11 +5,11 @@ import { getInvalidConfigStyle } from '../config.js';
 import type { Context } from '../context.js';
 import { fetchPairCommitPatches, type FilePatchEvidence } from '../git/patch.js';
 import { runGit } from '../git/run.js';
-import { parallelImplementation, type HiddenBridge, type Relationship } from '../imports/classify.js';
+import { type HiddenBridge, type Relationship } from '../imports/classify.js';
 import { computeLayout } from '../map/layout.js';
 import { renderMapHtml } from '../map/template.js';
 import type { WeightingMode } from '../model/cochange.js';
-import { buildFindingFamilies, type FindingFamilyView } from '../model/families.js';
+import { buildFindingFamilies, isEligibleFamilyPair, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
 import type { CommitOrigin, OriginShare } from '../model/origin.js';
 import { buildMeta, toView, type Meta, type RelationshipVerdictView, type RelationshipView } from '../report/views.js';
@@ -234,7 +234,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
       const fromPath = ctx.model.path(companion.from);
       const toPath = ctx.model.path(companion.to);
       let cachedView: RelationshipView | undefined;
-      if (parallelImplementation(fromPath, toPath) !== undefined) {
+      if (isEligibleFamilyPair(fromPath, toPath)) {
         cachedView = toView(ctx, companion, relationship, fromPath, toPath);
         familyCandidates.push(cachedView);
       }

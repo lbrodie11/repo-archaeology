@@ -159,6 +159,9 @@ type BuilderOptions = Pick<HistoryOptions, 'maxFilesPerCommit' | 'ignore' | 'ski
 /** Separates a path from the lifetime marker of an earlier, deleted file at that path. */
 const LIFETIME_SEPARATOR = '\u0000';
 
+/** Matches mechanical `git revert` commit subjects (`Revert "<subject>"` / `Revert '<subject>' (#123)`) so a change and its revert are not double-counted. */
+const REVERT_COMMIT_SUBJECT = /^\s*Revert\s+["'].+["'](?:\s*\(#\d+\))?\s*$/i;
+
 /** The path part of a file identity (identities of earlier, deleted files carry a suffix). */
 export function pathOf(identity: string): string {
   const cut = identity.indexOf(LIFETIME_SEPARATOR);
@@ -338,7 +341,7 @@ export class HistoryBuilder {
       this.excluded.push(entry);
       return;
     }
-    if (this.options.skipCommits?.test(commit.subject)) {
+    if (this.options.skipCommits?.test(commit.subject) || REVERT_COMMIT_SUBJECT.test(commit.subject)) {
       stats.subjectSkipped++;
       this.excluded.push(entry);
       return;

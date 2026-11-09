@@ -178,6 +178,8 @@ export interface ReadingFindingInput {
   familyMemberCount?: number;
   familyQualifyingPairs?: number;
   familyPossiblePairs?: number;
+  topAuthor?: string;
+  topAuthorShare?: number;
 }
 
 export interface ReadingFindingGuide {
@@ -258,6 +260,12 @@ export function formatReadingFindingGuide(input: ReadingFindingInput): ReadingFi
         ? `Recorded verdict (confirmed dependency): "${safeReason}".`
         : `Recorded verdict (expected / silenced relationship): "${safeReason}".`;
     relationshipExplanation = `${relationshipExplanation} ${verdictTag}`;
+  }
+
+  if (input.topAuthor && input.topAuthorShare !== undefined && input.topAuthorShare >= 0.6) {
+    const safeAuthor = sanitizeHtmlDisplayText(input.topAuthor);
+    const authorPct = Math.round(input.topAuthorShare * 100);
+    relationshipExplanation = `${relationshipExplanation} Most changes to ${safeFrom} were made by ${safeAuthor} (${authorPct}%), so this pattern may reflect one contributor's workflow habits rather than a strict code dependency.`;
   }
 
   const fromAlone = Math.max(0, input.fromChanges - input.shared);

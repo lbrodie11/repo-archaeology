@@ -999,5 +999,20 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(redactFilesystemPaths('Failed at /opt/hostedtoolcache/node/repo'), 'Failed at <repo-path>');
     assert.equal(redactFilesystemPaths('Failed at /workspaces/secret-project/src'), 'Failed at <repo-path>');
     assert.equal(redactFilesystemPaths('Failed at /Volumes/Macintosh_HD/project'), 'Failed at <repo-path>');
+
+    // 4. Plain-language directional asymmetry summary + single-contributor habit caveat
+    const asymPanel = formatEvidencePanelCopy(base, {
+      kind: 'pair',
+      edgeIndex: 0,
+      edge: e0,
+    });
+    assert.ok(
+      asymPanel.asymmetrySummary.includes('changes to') && asymPanel.asymmetrySummary.includes('involved'),
+      `Expected plain-language asymmetrySummary, got: ${asymPanel.asymmetrySummary}`,
+    );
+    assert.ok(
+      asymPanel.readingGuide?.whatItDoesNotSay.includes("one contributor's workflow habits"),
+      `Expected single-contributor caveat when topAuthorShare >= 0.6, got: ${asymPanel.readingGuide?.whatItDoesNotSay}`,
+    );
   });
 });

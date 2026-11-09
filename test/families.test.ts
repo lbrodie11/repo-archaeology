@@ -1157,4 +1157,30 @@ describe('Stage 2 Feature 2: Finding Families', () => {
     assert.equal(diffRes.families[0]!.possiblePairs, 3);
     assert.equal(diffRes.families[0]!.complete, true);
   });
+
+  it('19. groups >=3 same-directory hyphenated suffix siblings (e.g. *-picker.tsx) into a single Finding Family', async () => {
+    const r = createRepo();
+    for (let i = 1; i <= 4; i++) {
+      r.commit({
+        message: `sync customizer pickers ${i}`,
+        write: {
+          'apps/v4/components/accent-picker.tsx': `export const accent = ${i};\n`,
+          'apps/v4/components/menu-picker.tsx': `export const menu = ${i};\n`,
+          'apps/v4/components/font-picker.tsx': `export const font = ${i};\n`,
+          'apps/v4/components/picker.tsx': `export const picker = ${i};\n`,
+        },
+      });
+    }
+
+    const ctx = await loadContext(r.dir, { minShared: 3, minConfidence: 0.5 });
+    const scanRes = scan(ctx, scanOpts);
+    assert.equal(scanRes.families.length, 1, 'Expected same-directory *-picker.tsx clique to form 1 family');
+    const fam = scanRes.families[0]!;
+    assert.equal(fam.stem, '*-picker');
+    assert.equal(fam.fileName, '*-picker.tsx');
+    assert.equal(fam.label, '*-picker.tsx in apps/v4/components');
+    assert.equal(fam.members.length, 4);
+    assert.equal(fam.qualifyingPairs, 6);
+    assert.equal(fam.possiblePairs, 6);
+  });
 });

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Blueprint `Focus selected pair` Toggle & Chord Pruning (`#focus-pair-btn`, [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):**
+  - Added a `Focus selected pair` / `Show ego network` toggle button (`#focus-pair-btn`, `aria-pressed`) in the Cut `C-01` blueprint footer whenever the ego network contains more than 2 files, isolating the primary pair on demand.
+  - Pruned crossing non-incident neighbor-to-neighbor chords on dense `>= 5`-node cliques, dimmed background context wires (`stroke-opacity="0.38"`, `stroke-width="1.6"`), and rendered the primary connection last with a crisp `#fffef9` chalk halo (`stroke-opacity="0.45"`).
+- **Plain-Language Directional Asymmetry Summary & Single-Contributor Caveat ([`src/map/copy.ts`](src/map/copy.ts), [`src/report/glossary.ts`](src/report/glossary.ts), [`src/map/template.ts`](src/map/template.ts)):**
+  - Added `formatAsymmetrySummary` (`.f12-dir-asymmetry`) directly beneath the two directional boxes in `E-01 · EVIDENCE` explaining why `A → B` and `B → A` percentages differ in one sentence, and replaced `(≥X% CI)` jargon with `≥X% lower bound`.
+  - Added a single-contributor workflow habit note in `Reading this finding` whenever one author made `>= 60%` of the lead file's analyzed commits (`topAuthorShare >= 0.6`).
+- **Same-Directory Suffix Sibling Finding Families ([`src/model/families.ts`](src/model/families.ts), [`src/commands/scan.ts`](src/commands/scan.ts), [`src/commands/map.ts`](src/commands/map.ts), [`src/map/copy.ts`](src/map/copy.ts)):**
+  - Grouped `>= 3` files in the same directory sharing a descriptive hyphenated suffix (such as `accent-picker.tsx`, `menu-picker.tsx`, `font-picker.tsx`, `picker.tsx` → `*-picker.tsx`) and `>= 3` qualifying pairs into a single Finding Family instead of listing $\binom{n}{2}$ separate pairwise rows.
+
+### Fixed
+- **Mechanical `git revert` Commit Deduplication ([`src/model/history.ts`](src/model/history.ts)):** `HistoryBuilder` now skips mechanical `Revert "..."` commits (after rename tracking) so a commit and its revert are not double-counted as two separate co-change events.
+- **FRAME/12 Typography, Three-Tier Border Hierarchy & Board Alignment ([`src/map/template.ts`](src/map/template.ts)):** Increased reading sizes across `body` (`16px`), `.f12-lede` (`15.5px`), directional evidence, receipts, and ranked findings; established a 3-tier border hierarchy (`--f-rule` for primary storyboard panels, `--f-ink-2` for supporting evidence boxes, and `--f-grid` / left-accent for metadata pills and receipts); and set `.f12-board-grid { align-items: start; }` to eliminate the vertical stretch gap beneath `#cut-c01`.
+
 ## [0.5.1] - 2026-11-09
 
 ### Added

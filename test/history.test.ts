@@ -87,6 +87,25 @@ describe('history from real git repositories', () => {
     assert.equal(history.stats.subjectSkipped, 1);
   });
 
+  it('skips mechanical Revert "..." commits so a commit and its revert are not double-counted', async () => {
+    const r = repo();
+    r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'feat(create): update customizer (#10129)');
+    r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'Revert "feat(create): update customizer (#10129)"');
+    r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'feat(create): re-apply customizer');
+    const history = await loadHistory(r.dir, options);
+    assert.deepEqual(history.commits.map((c) => c.subject), [
+      'feat(create): re-apply customizer',
+      'feat(create): update customizer (#10129)',
+    ]);
+    assert.equal(history.stats.subjectSkipped, 1);
+    const model = new CoChangeModel(history.commits);
+    assert.equal(
+      model.pair(model.id('accent-picker.tsx')!, model.id('menu-picker.tsx')!)!.count,
+      2,
+      'Expected revert commit to be excluded from co-change count',
+    );
+  });
+
   it('handles spaces, unicode and newlines in file names', async () => {
     const r = repo();
     // Windows does not allow newlines in file names.
