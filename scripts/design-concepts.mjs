@@ -46,6 +46,7 @@ const {
   buildRankedFindings,
   computeFeaturedPlateLayout,
   formatBalloonCallout,
+  formatCounterexamplesLine,
   formatDirectionMetric,
   formatEmptyStateCopy,
   formatEvidencePanelCopy,
@@ -249,31 +250,6 @@ html, body {
   position: relative;
 }
 
-/* Registration peg holes at top of sheet */
-.f12-pegs {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 56px;
-  height: 10px;
-  margin-bottom: 4px;
-}
-.f12-peg {
-  background: var(--f-hole);
-  border: 1.5px solid var(--f-rule);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-.f12-peg.round {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-.f12-peg.slot {
-  width: 24px;
-  height: 7px;
-  border-radius: 4px;
-}
-
 /* Compact Masthead & Toolbar */
 .f12-masthead {
   display: flex;
@@ -283,7 +259,7 @@ html, body {
   gap: 8px 16px;
   padding-bottom: 7px;
   border-bottom: var(--f-stroke) solid var(--f-rule);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .f12-brand-row {
   display: flex;
@@ -318,6 +294,19 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
+}
+.f12-status-calm {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: var(--f-panel);
+  color: var(--f-ink);
+  border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 
 .f12-how-to-read {
@@ -395,6 +384,7 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .f12-seg-btn + .f12-seg-btn {
   border-left: 1.5px solid var(--f-rule);
@@ -405,18 +395,62 @@ html, body {
   color: var(--f-sheet);
 }
 
+/* Compact Inline Stat Strip (shared by Concept A & B) */
+.f12-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 5px 10px;
+  margin-bottom: 10px;
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-panel);
+}
+.f12-stat-strip-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.f12-stat-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-f-mono);
+  font-size: 11.5px;
+  color: var(--f-ink-2);
+}
+.f12-stat-inline strong {
+  font-family: var(--font-f-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--f-ink);
+  font-variant-numeric: tabular-nums;
+}
+.f12-stat-sep {
+  color: var(--f-grid);
+  font-weight: 700;
+}
+.f12-stat-window {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  color: var(--f-ink-2);
+}
+
 /* Panels & SVG Polygon Borders */
 .f12-panel {
   position: relative;
   background: var(--f-panel);
-  padding: 12px 14px;
+  padding: 10px 14px;
   min-width: 0;
 }
 .f12-panel.f12-slant-bottom {
-  padding-bottom: 20px;
+  padding-bottom: 18px;
 }
 .f12-panel.f12-slant-top {
-  padding-top: 20px;
+  padding-top: 18px;
 }
 .f12-panel-frame {
   position: absolute;
@@ -463,14 +497,14 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 6px;
+  gap: 6px 12px;
+  margin-bottom: 5px;
 }
 .f12-kicker-left {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .f12-kicker-chip {
   font-family: var(--font-f-mono);
@@ -482,6 +516,7 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 .f12-tag {
   font-family: var(--font-f-mono);
@@ -493,38 +528,45 @@ html, body {
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   color: var(--f-ink);
+  white-space: nowrap;
+}
+.f12-tag-weak {
+  border-style: dashed;
+  color: var(--f-ink-2);
 }
 .f12-last-date {
   font-family: var(--font-f-mono);
   font-size: 11.5px;
   font-weight: 700;
   color: var(--f-ink-2);
+  white-space: nowrap;
 }
 
 .f12-headline {
   font-family: var(--font-f-display);
   font-weight: 400;
-  font-size: clamp(20px, 2.05vw, 27px);
-  line-height: 1.12;
+  font-size: clamp(19px, 1.95vw, 25px);
+  line-height: 1.14;
   letter-spacing: 0.01em;
   margin: 0 0 4px;
   color: var(--f-ink);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.f12-headline code,
+.f12-headline code.f12-headline-path,
 .f12-mono-token {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 0.9em;
-  padding: 1px 6px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
+  font-size: 0.94em;
+  letter-spacing: -0.02em;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
 }
 .f12-subhead {
-  margin: 0 0 8px;
-  font-size: 13px;
-  line-height: 1.4;
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  line-height: 1.38;
   color: var(--f-ink-2);
   max-width: 95ch;
   overflow-wrap: anywhere;
@@ -533,56 +575,10 @@ html, body {
 .f12-subhead code {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--f-ink);
 }
 
-/* Big-number Metric strip (Concept A) */
-.f12-stat-band {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--f-gutter-pair);
-  margin-bottom: 10px;
-}
-.f12-stat-card {
-  position: relative;
-  border: 2px solid var(--f-rule);
-  background: var(--f-panel);
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-width: 0;
-}
-.f12-stat-card.f12-stat-featured::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 6px;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.25px,
-    transparent 1.25px,
-    transparent 5px
-  );
-  border-bottom: 1.5px solid var(--f-rule);
-}
-.f12-stat-card.f12-stat-featured {
-  padding-top: 11px;
-}
-.f12-m-label {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .f12-ink-sq {
   display: inline-flex;
   align-items: center;
@@ -594,20 +590,6 @@ html, body {
   border: 1.5px solid var(--f-rule);
   font-size: 11px;
   line-height: 1;
-}
-.f12-m-value {
-  font-family: var(--font-f-display);
-  font-size: 26px;
-  line-height: 1.06;
-  margin: 2px 0 1px;
-  color: var(--f-ink);
-  font-variant-numeric: tabular-nums;
-}
-.f12-m-note {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  color: var(--f-ink-2);
-  margin: 0;
 }
 
 /* Cyanotype Plate */
@@ -623,7 +605,7 @@ html, body {
 .f12-plate-canvas-box {
   position: relative;
   width: 100%;
-  height: 274px;
+  height: 266px;
 }
 .f12-plate-canvas {
   display: block;
@@ -635,7 +617,7 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 12px;
+  gap: 5px 12px;
   padding: 5px 10px;
   background: var(--plate-ground-deep);
   border-top: 1.5px solid rgba(159, 180, 204, 0.25);
@@ -647,14 +629,22 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .f12-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--plate-chalk);
   font-size: 11px;
+  white-space: nowrap;
+}
+.f12-dir-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid #fffef9;
+  display: inline-block;
 }
 
 /* Speech Balloon Callout on the Plate (ported from balloon.tsx) */
@@ -699,9 +689,47 @@ html, body {
   stroke-linejoin: miter;
 }
 .f12-peak-dot {
-  fill: var(--f-marker);
+  fill: #fffef9;
   stroke: #121212;
-  stroke-width: 2px;
+  stroke-width: 2.2px;
+}
+
+/* Family Pairwise Summary Table inside Evidence Panel */
+.f12-family-pairs-box {
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-sheet);
+  margin-bottom: 7px;
+}
+.f12-family-pairs-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--f-grid);
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink-2);
+}
+.f12-family-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
+}
+.f12-family-pair-row:last-child {
+  border-bottom: 0;
+}
+.f12-family-pair-row.is-lead {
+  background: rgba(18, 18, 18, 0.05);
+  font-weight: 700;
+}
+:root[data-theme="dark"] .f12-family-pair-row.is-lead {
+  background: rgba(241, 240, 234, 0.08);
 }
 
 /* Evidence Panel Inside / Beside Hero */
@@ -709,12 +737,12 @@ html, body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 .f12-dir-card {
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
-  padding: 7px 10px;
+  padding: 6px 9px;
 }
 .f12-dir-route {
   font-family: var(--font-f-mono);
@@ -726,12 +754,28 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.f12-dir-metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 2px;
+}
 .f12-dir-pct {
   font-family: var(--font-f-display);
-  font-size: 24px;
-  line-height: 1.08;
+  font-size: 21px;
+  line-height: 1.05;
   color: var(--f-ink);
-  margin: 0 0 2px;
+  margin: 0;
+}
+.f12-dir-lb {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink);
+  padding: 1px 5px;
+  border: 1px solid var(--f-rule);
+  background: var(--f-panel);
 }
 .f12-dir-detail {
   font-family: var(--font-f-mono);
@@ -740,36 +784,46 @@ html, body {
   margin: 0;
 }
 
-.f12-meta-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.f12-meta-pill {
+/* Plain Definition List for Evidence Metadata (no fake buttons) */
+.f12-evidence-dl {
+  margin: 0 0 7px;
+  padding: 4px 0;
+  border-top: 1px solid var(--f-grid);
+  border-bottom: 1px solid var(--f-grid);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
   font-family: var(--font-f-mono);
   font-size: 11px;
-  padding: 2px 7px;
-  border: 1px solid var(--f-rule);
-  background: var(--f-sheet);
+}
+.f12-evidence-dl dt {
+  color: var(--f-ink-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.f12-evidence-dl dd {
+  margin: 0;
   color: var(--f-ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .f12-cx-details {
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-  padding: 4px 8px;
-  margin-bottom: 8px;
+  padding: 3px 0;
+  margin-bottom: 6px;
   font-family: var(--font-f-mono);
   font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
 }
 .f12-cx-details summary {
   cursor: pointer;
   font-weight: 700;
-  color: var(--f-ink);
+  color: var(--f-ink-2);
 }
 .f12-cx-list {
-  margin: 6px 0 2px;
+  margin: 4px 0 2px;
   padding-left: 16px;
   color: var(--f-ink-2);
 }
@@ -779,20 +833,20 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .f12-receipts-title {
   font-family: var(--font-f-mono);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--f-ink-2);
   margin: 0;
 }
 .f12-receipt-list {
   list-style: none;
-  margin: 0 0 8px;
+  margin: 0 0 7px;
   padding: 0;
   border-top: 1.5px solid var(--f-rule);
 }
@@ -801,7 +855,7 @@ html, body {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 0;
+  padding: 3px 0;
   border-bottom: 1px solid var(--f-grid);
   font-size: 12px;
   min-width: 0;
@@ -836,7 +890,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   min-width: 0;
@@ -865,12 +919,12 @@ html, body {
   white-space: nowrap;
 }
 
-/* Tone Range Bars (ported from tone-bar-list.tsx) */
+/* Tone Range Bars with 45° Halftone Dots (ported from tone-bar-list.tsx) */
 .f12-range-track {
   position: relative;
   display: block;
   width: 100%;
-  height: 16px;
+  height: 15px;
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
 }
@@ -878,13 +932,11 @@ html, body {
   position: absolute;
   top: 0;
   bottom: 0;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.35px,
-    transparent 1.35px,
-    transparent 5px
-  );
+  background-image:
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px),
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px);
+  background-position: 0 0, 3px 3px;
+  background-size: 6px 6px;
   border-left: 1.5px solid var(--f-rule);
   border-right: 1.5px solid var(--f-rule);
 }
@@ -906,13 +958,16 @@ html, body {
 }
 .f12-ranked-row {
   display: grid;
-  grid-template-columns: 54px minmax(200px, 1.5fr) 120px 76px minmax(140px, 1.4fr) 92px;
+  grid-template-columns: 54px minmax(190px, 1.45fr) auto 76px minmax(140px, 1.35fr) 92px;
   align-items: center;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--f-grid);
   font-family: var(--font-f-mono);
   font-size: 12px;
+}
+.f12-ranked-row[hidden] {
+  display: none !important;
 }
 .f12-ranked-row.f12-ranked-active {
   background-image: repeating-linear-gradient(
@@ -932,6 +987,7 @@ html, body {
   border: 1.5px solid var(--f-rule);
   text-align: center;
   background: var(--f-sheet);
+  white-space: nowrap;
 }
 .f12-ranked-row.f12-ranked-active .f12-ranked-cut {
   background: var(--f-ink);
@@ -945,10 +1001,17 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.f12-ranked-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
 .f12-ranked-ratio {
   font-weight: 700;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-range-col {
   display: flex;
@@ -961,11 +1024,18 @@ html, body {
   min-width: 64px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-date {
   font-size: 11px;
   color: var(--f-ink-2);
   text-align: right;
+  white-space: nowrap;
+}
+.f12-ranked-more-bar {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
 }
 
 /* Concept A Layout */
@@ -973,14 +1043,14 @@ html, body {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   gap: var(--f-gutter-pair);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   align-items: stretch;
 }
 .concept-a-secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--f-gutter-pair);
-  margin-bottom: 42px;
+  margin-bottom: 36px;
 }
 
 /* Concept B Storyboard Layout */
@@ -1010,47 +1080,36 @@ html, body {
 .f12-pair > .f12-panel {
   flex: 1;
 }
-.concept-b-chip-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--f-grid);
-}
-.concept-b-stat-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 9px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-}
-.concept-b-stat-num {
-  font-family: var(--font-f-display);
-  font-size: 18px;
-  line-height: 1;
-  color: var(--f-ink);
-}
-.concept-b-stat-lbl {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-}
 
 /* Responsive Mobile (390px) */
 @media (max-width: 900px) {
   .f12-desk {
-    padding: 4px;
+    padding: 3px;
   }
   .f12-sheet {
-    padding: 6px 10px 16px;
+    padding: 5px 8px 14px;
   }
-  .f12-stat-band {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .f12-masthead {
+    gap: 5px 8px;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+  .f12-search-input {
+    width: 120px;
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+  .f12-seg-btn {
+    padding: 2px 6px;
+    min-height: 24px;
+    font-size: 11px;
+  }
+  .f12-stat-strip {
+    padding: 4px 8px;
+    margin-bottom: 8px;
+  }
+  .f12-stat-window {
+    display: none;
   }
   .concept-a-hero-grid,
   .concept-a-secondary-grid,
@@ -1060,18 +1119,44 @@ html, body {
     grid-template-columns: minmax(0, 1fr);
   }
   .f12-plate-canvas-box {
-    height: 260px !important;
+    height: 244px !important;
   }
   .f12-balloon {
     font-size: 11px;
     padding: 3px 7px;
   }
+  .f12-last-date,
+  .f12-kicker-left .f12-tag,
+  .f12-kicker-chip {
+    white-space: normal;
+  }
+  .f12-family-pair-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+  .f12-family-pair-row > span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .f12-family-pair-row > span:nth-child(3) {
+    grid-column: 1 / -1;
+    color: var(--f-ink-2);
+  }
   .f12-ranked-row {
     grid-template-columns: 48px minmax(0, 1fr) auto;
-    gap: 6px 8px;
+    gap: 5px 8px;
+  }
+  .f12-ranked-badges {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .f12-ranked-ratio {
+    grid-column: 1 / 2;
+    text-align: left;
   }
   .f12-ranked-range-col {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
+    min-width: 0;
   }
   .f12-ranked-date {
     display: none;
@@ -1083,18 +1168,38 @@ html, body {
 function renderSvgBorder(shape = 'rect') {
   const pts =
     shape === 'slant-bottom'
-      ? '0.35,0.35 99.65,0.35 99.65,93.2 0.35,99.65'
+      ? '0.35,0.35 99.65,0.35 99.65,94.0 0.35,99.65'
       : shape === 'slant-top'
-        ? '0.35,6.8 99.65,0.35 99.65,99.65 0.35,99.65'
+        ? '0.35,6.0 99.65,0.35 99.65,99.65 0.35,99.65'
         : '0.35,0.35 99.65,0.35 99.65,99.65 0.35,99.65';
   return `<svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="${pts}"></polygon></svg>`;
 }
 
+function renderHeadlineWithMonoPaths(headline, featured) {
+  let html = escapeHtml(headline);
+  const tokens = [];
+  if (featured.kind === 'family') {
+    const fam = formatFamilyHeadline(featured.family);
+    tokens.push(fam.dirsPattern);
+  } else if (featured.kind === 'pair') {
+    const dir = resolveStrongerDirection({ nodes: [], edges: [] }, featured.edge);
+    if (dir.shortFrom) tokens.push(dir.shortFrom);
+    if (dir.shortTo) tokens.push(dir.shortTo);
+  }
+  for (const tok of tokens) {
+    const esc = escapeHtml(tok);
+    if (esc && html.includes(esc)) {
+      html = html.replace(esc, `<code class="f12-headline-path">${esc}</code>`);
+    }
+  }
+  return html;
+}
+
 function renderBalloonHtml(calloutText, targetX, targetY, plateW, plateH) {
-  const pctLeft = Math.max(16, Math.min(84, (targetX / plateW) * 100));
+  const pctLeft = Math.max(18, Math.min(82, (targetX / plateW) * 100));
   const pctTop = Math.max(18, Math.min(82, (targetY / plateH) * 100));
   const svgW = 120;
-  const svgH = 26;
+  const svgH = 24;
   const tailX = svgW / 2;
   const px = svgW / 2;
   const py = svgH - 5;
@@ -1106,7 +1211,7 @@ function renderBalloonHtml(calloutText, targetX, targetY, plateW, plateH) {
     ${escapeHtml(calloutText)}
   </div>
   <svg width="${svgW}" height="${svgH}" class="f12-balloon-standalone-svg" aria-hidden="true">
-    <path class="f12-tail" d="M${tailX - 6},0 L${px},${py - 7} L${tailX + 6},0"></path>
+    <path class="f12-tail" d="M${tailX - 6},0 L${px},${py - 6} L${tailX + 6},0"></path>
     <circle class="f12-peak-dot" cx="${px}" cy="${py}" r="4"></circle>
   </svg>
 </div>`;
@@ -1124,24 +1229,24 @@ function renderToneRangeBar(lowPct, highPct, pointPct) {
 </span>`;
 }
 
-function renderMastheadHtml(data, activeConceptLabel) {
+function renderMastheadHtml(data, activeConceptLabel, options = {}) {
   const safeRepo = sanitizeHtmlDisplayText(data.repoName);
   const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
   const unknownCount = data.edges.filter((e) => e.relationship === 'unknown').length;
   const indirectCount = data.edges.filter((e) => e.relationship === 'indirect').length;
   const directCount = data.edges.filter((e) => e.relationship === 'direct').length;
+  const isEmptyState = Boolean(options.isEmptyState);
 
   return `
-<div class="f12-pegs" aria-hidden="true">
-  <span class="f12-peg round"></span>
-  <span class="f12-peg slot"></span>
-  <span class="f12-peg round"></span>
-</div>
 <header class="f12-masthead">
   <div class="f12-brand-row">
     <span class="f12-case-tag">REPO ARCHAEOLOGY // ${escapeHtml(activeConceptLabel)}</span>
     <span class="f12-repo-pill">${escapeHtml(safeRepo)}</span>
-    <span class="f12-status-kicker">${escapeHtml(STATUS_CHIP_EVIDENCE)}</span>
+    ${
+      isEmptyState
+        ? `<span class="f12-status-calm">CLEAN DIG · 0 GHOST WIRES</span>`
+        : `<span class="f12-status-kicker">${escapeHtml(STATUS_CHIP_EVIDENCE)}</span>`
+    }
     <details class="f12-how-to-read">
       <summary>${escapeHtml(HOW_TO_READ_SUMMARY)}</summary>
       <div class="f12-how-to-read-pop">${escapeHtml(HOW_TO_READ_BODY)}</div>
@@ -1164,42 +1269,115 @@ function renderMastheadHtml(data, activeConceptLabel) {
 </header>`;
 }
 
+function renderStatStripHtml(data) {
+  const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
+  const uncheckedShown = data.edges.filter((e) => e.relationship === 'unknown').length;
+  const uncheckedTotal = data.counts.unknown;
+  const familyCount = (data.families ?? []).length;
+  const commitsAnalyzed = data.meta.commitsAnalyzed;
+
+  return `
+<section class="f12-stat-strip" aria-label="Repository summary statistics">
+  <div class="f12-stat-strip-items">
+    <span class="f12-stat-inline"><span class="f12-ink-sq" aria-hidden="true">▲</span> <strong>${ghostCount}</strong> GHOST WIRES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>${familyCount}</strong> FINDING FAMILIES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>${uncheckedShown}</strong> UNCHECKED (${uncheckedTotal} TOTAL)</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>${commitsAnalyzed.toLocaleString('en-US')}</strong> COMMITS ANALYSED</span>
+  </div>
+  <span class="f12-stat-window">${escapeHtml(data.meta.oldestCommit ?? '')} → ${escapeHtml(data.meta.newestCommit ?? '')} · ${data.nodes.length} files</span>
+</section>`;
+}
+
+function hashHueJs(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return ((h % 360) + 360) % 360;
+}
+
+function renderPlateDirLegendHtml(plate, monochrome = false) {
+  const seen = new Set();
+  const dirs = [];
+  for (const n of plate.nodes) {
+    if (!seen.has(n.dir)) {
+      seen.add(n.dir);
+      dirs.push(n.dir);
+    }
+  }
+  return dirs
+    .slice(0, 4)
+    .map((dir) => {
+      const color = monochrome ? '#7eb3e0' : `hsl(${hashHueJs(dir)}, 64%, 66%)`;
+      const shortDir = dir.length > 22 ? `…/${dir.split('/').slice(-2).join('/')}` : dir;
+      return `<span class="f12-legend-item"><span class="f12-dir-dot" style="background:${color};"></span>${escapeHtml(shortDir)}</span>`;
+    })
+    .join('');
+}
+
 function renderEvidenceBodyHtml(evCopy) {
   const cxTotal = evCopy.fromOnlyTotal + evCopy.toOnlyTotal;
   const cxItems = [...evCopy.fromOnly, ...evCopy.toOnly].slice(0, 3);
+  const famPairs = evCopy.familySummary?.pairs ?? [];
 
   return `
+${
+  famPairs.length > 0
+    ? `<div class="f12-family-pairs-box" aria-label="Family pairwise links">
+        <div class="f12-family-pairs-hd">
+          <span>ALL ${famPairs.length} FAMILY PAIRS (${evCopy.familySummary.qualifyingPairs}/${evCopy.familySummary.possiblePairs} PASSED)</span>
+          <span>RAW · 95% CI</span>
+        </div>
+        ${famPairs
+          .map(
+            (p) => `
+          <div class="f12-family-pair-row${p.isLeadPair ? ' is-lead' : ''}">
+            <span>${escapeHtml(p.shortFrom)} ↔ ${escapeHtml(p.shortTo)}${p.isLeadPair ? ' (lead)' : ''}</span>
+            <span>${p.shared}/${p.fromChanges} (${escapeHtml(p.pctText)})</span>
+            <span>${escapeHtml(p.lowerBoundText)} (${escapeHtml(p.rangeText)})</span>
+          </div>`,
+          )
+          .join('')}
+      </div>`
+    : ''
+}
 <div class="f12-dir-grid">
   <div class="f12-dir-card">
     <p class="f12-dir-route" title="${escapeHtml(evCopy.primaryDirection.fromLabel)} → ${escapeHtml(evCopy.primaryDirection.toLabel)}">
       ${escapeHtml(evCopy.primaryDirection.fromLabel)} → ${escapeHtml(evCopy.primaryDirection.toLabel)}
     </p>
-    <p class="f12-dir-pct">${escapeHtml(evCopy.primaryDirection.pctText)}</p>
+    <div class="f12-dir-metric-row">
+      <p class="f12-dir-pct">${escapeHtml(evCopy.primaryDirection.pctText)}</p>
+      <span class="f12-dir-lb">${escapeHtml(evCopy.primaryDirection.lowerBoundText)}</span>
+    </div>
     <p class="f12-dir-detail">${escapeHtml(evCopy.primaryDirection.detailText)}</p>
   </div>
   <div class="f12-dir-card">
     <p class="f12-dir-route" title="${escapeHtml(evCopy.reverseDirection.fromLabel)} → ${escapeHtml(evCopy.reverseDirection.toLabel)}">
       ${escapeHtml(evCopy.reverseDirection.fromLabel)} → ${escapeHtml(evCopy.reverseDirection.toLabel)}
     </p>
-    <p class="f12-dir-pct">${escapeHtml(evCopy.reverseDirection.pctText)}</p>
+    <div class="f12-dir-metric-row">
+      <p class="f12-dir-pct">${escapeHtml(evCopy.reverseDirection.pctText)}</p>
+      <span class="f12-dir-lb">${escapeHtml(evCopy.reverseDirection.lowerBoundText)}</span>
+    </div>
     <p class="f12-dir-detail">${escapeHtml(evCopy.reverseDirection.detailText)}</p>
   </div>
 </div>
 
-<div class="f12-meta-pills">
-  <span class="f12-meta-pill"><strong>${escapeHtml(evCopy.lastTogetherText)}</strong></span>
+<dl class="f12-evidence-dl">
   ${
     evCopy.familySummary
-      ? `<span class="f12-meta-pill">${evCopy.familySummary.commitsTouchingTwoOrMore} family commits (2+ files) · ${evCopy.familySummary.commitsTouchingAll} touched all ${evCopy.familySummary.members.length}</span>`
+      ? `<dt>Family scope</dt><dd>${evCopy.familySummary.commitsTouchingTwoOrMore} supporting commits (2+ files) · ${evCopy.familySummary.commitsTouchingAll} touched all ${evCopy.familySummary.members.length}</dd>`
       : ''
   }
-  ${evCopy.ownerNotes[0] ? `<span class="f12-meta-pill">${escapeHtml(evCopy.ownerNotes[0])}</span>` : ''}
-  ${evCopy.originShareNote ? `<span class="f12-meta-pill">${escapeHtml(evCopy.originShareNote)}</span>` : ''}
-  ${evCopy.verdictNote ? `<span class="f12-meta-pill">${escapeHtml(evCopy.verdictNote)}</span>` : ''}
-</div>
+  ${evCopy.ownerNotes[0] ? `<dt>Attribution</dt><dd>${escapeHtml(evCopy.ownerNotes[0])}</dd>` : ''}
+  ${evCopy.originShareNote ? `<dt>History</dt><dd>${escapeHtml(evCopy.originShareNote)}</dd>` : ''}
+  ${evCopy.verdictNote ? `<dt>Verdict</dt><dd>${escapeHtml(evCopy.verdictNote)}</dd>` : ''}
+</dl>
 
 <details class="f12-cx-details">
-  <summary>${escapeHtml(evCopy.counterexamplesSummary)} (${escapeHtml(evCopy.primaryDirection.fromLabel)}) · ${escapeHtml(evCopy.reverseCounterexamplesSummary)} (${escapeHtml(evCopy.reverseDirection.fromLabel)}) — ${cxTotal} counterexample commits ▸</summary>
+  <summary>${escapeHtml(evCopy.counterexamplesSummary)} (${escapeHtml(evCopy.primaryDirection.fromLabel)}) · ${escapeHtml(evCopy.reverseCounterexamplesSummary)} (${escapeHtml(evCopy.reverseDirection.fromLabel)}) — ${cxTotal} counterexample ${cxTotal === 1 ? 'commit' : 'commits'} ▸</summary>
   <ul class="f12-cx-list">
     ${cxItems
       .map(
@@ -1211,7 +1389,7 @@ function renderEvidenceBodyHtml(evCopy) {
 </details>
 
 <div class="f12-receipts-hd">
-  <h3 class="f12-receipts-title">Supporting Commit Receipts (${evCopy.receiptsShown.length} of ${evCopy.receiptsTotal})</h3>
+  <h3 class="f12-receipts-title">Sample Commit Receipts (showing ${evCopy.receiptsShown.length} of ${evCopy.receiptsTotal} supporting commits)</h3>
 </div>
 <ul class="f12-receipt-list" aria-label="Supporting commit receipts">
   ${evCopy.receiptsShown
@@ -1232,39 +1410,35 @@ function renderEvidenceBodyHtml(evCopy) {
 </div>`;
 }
 
-function renderSecondaryFindingCard(data, item, cutLabel, shape = 'rect', extraReceipts = false) {
+function renderSecondaryFindingCard(data, item, panelCutLabel, shape = 'rect', extraReceipts = false) {
   const edge = data.edges[item.edgeIndex];
   const dir = resolveStrongerDirection(data, edge);
   const receipts = edge.evidence.slice(0, extraReceipts ? 2 : 1);
   return `
-<section class="f12-panel f12-${shape}" aria-label="${escapeHtml(cutLabel)} ${escapeHtml(item.title)}">
+<section class="f12-panel f12-${shape}" aria-label="${escapeHtml(panelCutLabel)} ${escapeHtml(item.findingId)} ${escapeHtml(item.title)}">
   ${renderSvgBorder(shape)}
-  <span class="f12-cut" aria-hidden="true">${escapeHtml(cutLabel)}</span>
+  <span class="f12-cut" aria-hidden="true">${escapeHtml(panelCutLabel)}</span>
   <div class="f12-panel-body">
     <div class="f12-kicker-row">
-      <span class="f12-tag">${item.kind === 'family' ? 'FINDING FAMILY' : 'GHOST WIRE'}</span>
+      <div class="f12-kicker-left">
+        <span class="f12-tag">${escapeHtml(item.findingId)}</span>
+        <span class="f12-tag">${item.kind === 'family' ? 'FINDING FAMILY' : 'GHOST WIRE'}</span>
+      </div>
       <span class="f12-last-date">Last together ${escapeHtml(item.lastTogether)}</span>
     </div>
     <h2 style="font-family: var(--font-f-mono); font-size: 14.5px; font-weight: 700; margin: 2px 0 4px; color: var(--f-ink); overflow-wrap: anywhere;">
       ${escapeHtml(item.title)}
     </h2>
-    <p style="font-family: var(--font-f-body); font-size: 12px; color: var(--f-ink-2); margin: 0 0 6px;">
-      ${escapeHtml(item.subtitle)}
-    </p>
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-      <span style="font-family: var(--font-f-display); font-size: 20px; line-height: 1;">${item.pointPct}%</span>
-      <div style="flex: 1;">
-        ${renderToneRangeBar(item.rangeLowPct, item.rangeHighPct, item.pointPct)}
-      </div>
-      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">${item.rangeLowPct}–${item.rangeHighPct}%</span>
+    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px;">
+      <span style="font-family: var(--font-f-display); font-size: 18px; line-height: 1.05; color: var(--f-ink);">${escapeHtml(item.ratioText)} commits · ≥${item.rangeLowPct}% CI</span>
+      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">${item.pointPct}% raw (${item.rangeLowPct}–${item.rangeHighPct}%)</span>
     </div>
-    ${
-      extraReceipts
-        ? `<div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 6px;">
-            Reverse (${escapeHtml(dir.shortTo)} → ${escapeHtml(dir.shortFrom)}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%) · Changed alone: ${dir.fromOnlyTotal + dir.toOnlyTotal} times
-          </div>`
-        : ''
-    }
+    <div style="margin-bottom: 6px;">
+      ${renderToneRangeBar(item.rangeLowPct, item.rangeHighPct, item.pointPct)}
+    </div>
+    <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 5px;">
+      Reverse (${escapeHtml(dir.shortTo)} → ${escapeHtml(dir.shortFrom)}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%) · ${escapeHtml(formatCounterexamplesLine(dir.fromOnlyTotal + dir.toOnlyTotal))}
+    </div>
     ${receipts
       .map(
         (r) =>
@@ -1277,34 +1451,38 @@ function renderSecondaryFindingCard(data, item, cutLabel, shape = 'rect', extraR
 </section>`;
 }
 
-function renderRankedListSection(rankedItems, cutLabel = 'C-05') {
-  const shown = rankedItems.slice(0, 14);
+function renderRankedListSection(rankedItems, panelCutLabel = 'C-05') {
+  const defaultVisibleCount = 15;
+  const hiddenCount = Math.max(0, rankedItems.length - defaultVisibleCount);
   return `
-<section class="f12-panel f12-rect" aria-label="${escapeHtml(cutLabel)} Ranked Findings">
+<section class="f12-panel f12-rect" aria-label="${escapeHtml(panelCutLabel)} Ranked Findings">
   ${renderSvgBorder('rect')}
-  <span class="f12-cut" aria-hidden="true">${escapeHtml(cutLabel)}</span>
+  <span class="f12-cut" aria-hidden="true">${escapeHtml(panelCutLabel)}</span>
   <div class="f12-panel-body">
     <div class="f12-kicker-row" style="margin-bottom: 10px;">
       <div class="f12-kicker-left">
         <h2 style="font-family: var(--font-f-display); font-size: 18px; margin: 0;">RANKED FINDINGS (${rankedItems.length})</h2>
-        <span class="f12-tag">45° SCREENTONE = 95% CONFIDENCE RANGE · TICK = POINT ESTIMATE</span>
+        <span class="f12-tag">45° HALFTONE DOTS = 95% CONFIDENCE RANGE · TICK = POINT ESTIMATE</span>
       </div>
-      <span class="f12-last-date">Ordered by overview priority &amp; Wilson lower bound</span>
+      <span class="f12-last-date">Ordered by overview priority &amp; 95% Wilson lower bound</span>
     </div>
-    <ul class="f12-ranked-list" role="list">
-      ${shown
+    <ul id="ranked-findings-list" class="f12-ranked-list" role="list">
+      ${rankedItems
         .map(
           (item, idx) => `
-        <li class="f12-ranked-row${idx === 0 ? ' f12-ranked-active' : ''}">
-          <span class="f12-ranked-cut">${escapeHtml(item.cutLabel)}</span>
+        <li class="f12-ranked-row${idx === 0 ? ' f12-ranked-active' : ''}"${idx >= defaultVisibleCount ? ' hidden data-extra-row="true"' : ''}>
+          <span class="f12-ranked-cut">${escapeHtml(item.findingId)}</span>
           <span class="f12-ranked-path" title="${escapeHtml(item.fromPath)} ⇢ ${escapeHtml(item.toPath)}">${escapeHtml(item.title)}</span>
-          <span class="f12-tag" style="justify-self: start;">${
-            item.kind === 'family'
-              ? 'FAMILY'
-              : item.relationship === 'ghost'
-                ? 'GHOST WIRE'
-                : item.relationship.toUpperCase()
-          }${item.weak ? ' · WEAK' : ''}</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">${
+              item.kind === 'family'
+                ? 'FAMILY'
+                : item.relationship === 'ghost'
+                  ? 'GHOST WIRE'
+                  : item.relationship.toUpperCase()
+            }</span>
+            ${item.weak ? '<span class="f12-tag f12-tag-weak">LOW CI</span>' : ''}
+          </span>
           <span class="f12-ranked-ratio">${escapeHtml(item.ratioText)}</span>
           <span class="f12-ranked-range-col">
             ${renderToneRangeBar(item.rangeLowPct, item.rangeHighPct, item.pointPct)}
@@ -1315,15 +1493,26 @@ function renderRankedListSection(rankedItems, cutLabel = 'C-05') {
         )
         .join('')}
     </ul>
+    ${
+      hiddenCount > 0
+        ? `<div class="f12-ranked-more-bar">
+            <button type="button" id="toggle-all-findings" class="f12-seg-btn" style="border: 1.5px solid var(--f-rule);" aria-expanded="false">
+              Show all ${rankedItems.length} findings (${hiddenCount} more)
+            </button>
+          </div>`
+        : ''
+    }
   </div>
 </section>`;
 }
 
-function buildPlateDrawScript(plateLayout) {
+function buildPlateDrawScript(plateLayout, options = {}) {
+  const monochrome = Boolean(options.monochrome);
   return `
 <script>
 (() => {
   const plate = ${JSON.stringify(plateLayout)};
+  const monochrome = ${JSON.stringify(monochrome)};
   const canvas = document.getElementById('featured-plate-canvas');
   if (!canvas) return;
 
@@ -1331,6 +1520,15 @@ function buildPlateDrawScript(plateLayout) {
     let h = 0;
     for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
     return ((h % 360) + 360) % 360;
+  }
+
+  function boxesOverlap(a, b, pad = 3) {
+    return (
+      a.x - pad < b.x + b.w &&
+      a.x + a.w + pad > b.x &&
+      a.y - pad < b.y + b.h &&
+      a.y + a.h + pad > b.y
+    );
   }
 
   function drawPlate() {
@@ -1375,26 +1573,33 @@ function buildPlateDrawScript(plateLayout) {
 
     const scaleX = w / plate.width;
     const scaleY = h / plate.height;
-    const nodeByIdx = new Map(plate.nodes.map((n) => [n.nodeIndex, n]));
 
-    // Draw edges (non-featured first, featured on top)
-    const orderedEdges = [...plate.edges].sort((a, b) => (a.isFeatured ? 1 : 0) - (b.isFeatured ? 1 : 0));
+    // Draw edges (non-lead first, lead edge on top with chalk-paper outer casing — never marker yellow)
+    const orderedEdges = [...plate.edges].sort((a, b) => (a.isLeadEdge ? 1 : 0) - (b.isLeadEdge ? 1 : 0));
     for (const e of orderedEdges) {
       const x1 = e.x1 * scaleX;
       const y1 = e.y1 * scaleY;
       const x2 = e.x2 * scaleX;
       const y2 = e.y2 * scaleY;
 
-      if (e.isFeatured) {
-        // Marker yellow casing under the featured relationship line
+      if (e.isLeadEdge && !monochrome) {
+        // High-contrast chalk-paper outer casing + blueprint inner moat under the lead ghost wire
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = '#ffd60a';
-        ctx.lineWidth = e.strokeWidth + 4.5;
+        ctx.strokeStyle = 'rgba(255, 254, 249, 0.92)';
+        ctx.lineWidth = e.strokeWidth + 5;
         ctx.lineCap = 'round';
         ctx.setLineDash([]);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
+        ctx.lineWidth = e.strokeWidth + 2.2;
+        ctx.lineCap = 'round';
         ctx.stroke();
         ctx.restore();
       }
@@ -1403,7 +1608,7 @@ function buildPlateDrawScript(plateLayout) {
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.lineWidth = e.isFeatured ? e.strokeWidth + 0.8 : e.strokeWidth;
+      ctx.lineWidth = e.isLeadEdge ? e.strokeWidth + 1.1 : e.isFeatured ? e.strokeWidth + 0.4 : e.strokeWidth;
       ctx.lineCap = 'round';
 
       if (e.relationship === 'ghost') {
@@ -1423,7 +1628,8 @@ function buildPlateDrawScript(plateLayout) {
       ctx.restore();
     }
 
-    // Draw nodes with directory hue fill and paper-colored outline
+    // Draw nodes with directory hue fill (or calm blueprint chalk in empty state) and paper-colored outline
+    const renderedNodes = [];
     for (const n of plate.nodes) {
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
@@ -1431,77 +1637,158 @@ function buildPlateDrawScript(plateLayout) {
       ctx.save();
       ctx.beginPath();
       ctx.arc(nx, ny, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'hsl(' + hue + ', 64%, 66%)';
+      ctx.fillStyle = monochrome ? '#7eb3e0' : 'hsl(' + hue + ', 64%, 66%)';
       ctx.fill();
       ctx.lineWidth = n.isFeaturedEndpoint ? 2.5 : 1.8;
       ctx.strokeStyle = '#fffef9';
       ctx.stroke();
       ctx.restore();
+      renderedNodes.push({ nodeIndex: n.nodeIndex, text: n.label.text, x: nx, y: ny, r: n.r, isFeaturedEndpoint: n.isFeaturedEndpoint });
     }
 
-    // Draw collision-free node labels with 3px halo stroke at >= 12px mono
+    // Draw collision-free node labels with 3.5px halo stroke at >= 12px mono.
+    // On narrow mobile screens (< 480px), label featured endpoints by default and only place neighbor labels that fit with zero overlap.
     ctx.save();
-    ctx.font = '700 12.5px "M PLUS 1 Code", ui-monospace, monospace';
+    const isNarrow = w < 480;
+    ctx.font = (isNarrow ? '700 11.5px ' : '700 12.5px ') + '"M PLUS 1 Code", ui-monospace, monospace';
     ctx.lineJoin = 'round';
-    const placedMobileBoxes = [];
+
+    const obstacles = renderedNodes.map((rn) => ({
+      nodeIndex: rn.nodeIndex,
+      x: rn.x - rn.r - 6,
+      y: rn.y - rn.r - 6,
+      w: (rn.r + 6) * 2,
+      h: (rn.r + 6) * 2,
+    }));
     const balloonEl = document.querySelector('.f12-balloon');
+    let balloonRectLocal = null;
     if (balloonEl) {
       const cRect = canvas.getBoundingClientRect();
       const bRect = balloonEl.getBoundingClientRect();
       if (cRect.width > 0 && bRect.width > 0) {
-        placedMobileBoxes.push({
+        balloonRectLocal = {
           x: bRect.left - cRect.left - 4,
           y: bRect.top - cRect.top - 4,
           w: bRect.width + 8,
           h: bRect.height + 22,
-        });
+        };
+        obstacles.push(balloonRectLocal);
       }
     }
+
+    const renderedLabels = [];
+    const pad = 6;
+    const textH = 15;
+
     for (const n of plate.nodes) {
+      if (isNarrow && !n.isFeaturedEndpoint) continue;
       const lbl = n.label;
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
-      const textW = ctx.measureText(lbl.text).width;
-      const textH = 15;
-      let ax = lbl.anchorX * scaleX;
-      let ay = lbl.anchorY * scaleY;
-      let align = lbl.textAlign;
+      const textW = Math.ceil(ctx.measureText(lbl.text).width);
 
-      let left = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      const pad = 8;
-      if (left < pad || left + textW > w - pad) {
-        // Re-anchor centered above or below the node on narrow viewports so it never clips the canvas border
-        align = 'center';
-        ax = Math.max(pad + textW / 2, Math.min(w - pad - textW / 2, nx));
-        const candYs = [ny + n.r + 15, ny + n.r + 31, ny - n.r - 8, ny - n.r - 24, ny + n.r + 47];
-        ay = candYs[0];
-        for (const cy of candYs) {
-          if (cy < 16 || cy > h - 6) continue;
-          const cBox = { x: ax - textW / 2, y: cy - 12, w: textW, h: textH };
-          const hit = placedMobileBoxes.some(
-            (b) =>
-              cBox.x < b.x + b.w + 4 &&
-              cBox.x + cBox.w + 4 > b.x &&
-              cBox.y < b.y + b.h + 2 &&
-              cBox.y + cBox.h + 2 > b.y,
-          );
-          if (!hit) {
-            ay = cy;
-            break;
-          }
+      // Build candidate boxes around (nx, ny)
+      const prefAx = lbl.anchorX * scaleX;
+      const prefAy = lbl.anchorY * scaleY;
+      const prefAlign = lbl.textAlign;
+      const prefLeft = prefAlign === 'center' ? prefAx - textW / 2 : prefAlign === 'right' ? prefAx - textW : prefAx;
+
+      const leftFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.78));
+      const rightFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.22));
+      const centerClampedX = Math.max(pad, Math.min(w - pad - textW, nx - textW / 2));
+
+      const makeCand = (leftX, baselineY) => ({
+        ax: leftX,
+        ay: baselineY,
+        align: 'left',
+        x: leftX,
+        y: baselineY - 12,
+        w: textW,
+        h: textH,
+      });
+
+      const candidates = [];
+      if (!isNarrow) {
+        candidates.push({
+          ax: prefAx,
+          ay: prefAy,
+          align: prefAlign,
+          x: prefLeft,
+          y: prefAy - 12,
+          w: textW,
+          h: textH,
+        });
+      }
+
+      // Row offsets below and above the node
+      for (const dy of [n.r + 16, n.r + 32, n.r + 48, -n.r - 8, -n.r - 24]) {
+        const by = ny + dy;
+        if (isNarrow && nx < w * 0.45) {
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+        } else if (isNarrow && nx > w * 0.55) {
+          candidates.push(makeCand(rightFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(Math.max(pad, nx - textW), by));
+        } else {
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(rightFlankX, by));
         }
       }
-      const finalLeft = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      placedMobileBoxes.push({ x: finalLeft, y: ay - 12, w: textW, h: textH });
+      // E & W candidates
+      candidates.push(makeCand(nx + n.r + 8, ny + 4));
+      candidates.push(makeCand(nx - n.r - 8 - textW, ny + 4));
 
-      ctx.textAlign = align;
+      let chosen = null;
+      let bestFallback = null;
+      for (const c of candidates) {
+        if (c.x < pad || c.x + c.w > w - pad || c.y < pad || c.y + c.h > h - pad) {
+          continue;
+        }
+        const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+        const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+        if (!hitsObstacle && !hitsLabel) {
+          chosen = c;
+          break;
+        }
+        const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+        const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+        if (!bestFallback || pen < bestFallback.pen) {
+          bestFallback = { c, pen };
+        }
+      }
+
+      if (!chosen) {
+        // Scan a deterministic grid of positions to guarantee a zero-overlap slot if one exists
+        for (let gy = pad + 14; gy <= h - pad; gy += 14) {
+          for (let gx = pad; gx <= w - pad - textW; gx += 16) {
+            const c = makeCand(gx, gy);
+            const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+            const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+            const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+            const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+            if (!bestFallback || pen < bestFallback.pen) {
+              bestFallback = { c, pen };
+            }
+          }
+        }
+        chosen = bestFallback ? bestFallback.c : makeCand(centerClampedX, Math.min(h - pad, ny + n.r + 16));
+      }
+
+      renderedLabels.push({ nodeIndex: n.nodeIndex, text: lbl.text, x: chosen.x, y: chosen.y, w: chosen.w, h: chosen.h });
+      ctx.textAlign = chosen.align;
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
-      ctx.strokeText(lbl.text, ax, ay);
+      ctx.strokeText(lbl.text, chosen.ax, chosen.ay);
       ctx.fillStyle = '#fffef9';
-      ctx.fillText(lbl.text, ax, ay);
+      ctx.fillText(lbl.text, chosen.ax, chosen.ay);
     }
     ctx.restore();
+
+    window.__raPlateRenderedNodes = renderedNodes;
+    window.__raPlateRenderedLabels = renderedLabels;
+    window.__raPlateBalloonBox = balloonRectLocal;
   }
 
   drawPlate();
@@ -1517,6 +1804,22 @@ function buildPlateDrawScript(plateLayout) {
       drawPlate();
     });
   }
+  const moreBtn = document.getElementById('toggle-all-findings');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', () => {
+      const expanded = moreBtn.getAttribute('aria-expanded') === 'true';
+      const next = !expanded;
+      moreBtn.setAttribute('aria-expanded', String(next));
+      const rows = document.querySelectorAll('#ranked-findings-list [data-extra-row="true"]');
+      rows.forEach((r) => {
+        if (next) r.removeAttribute('hidden');
+        else r.setAttribute('hidden', '');
+      });
+      moreBtn.textContent = next
+        ? 'Collapse to top 15 findings'
+        : 'Show all ' + document.querySelectorAll('#ranked-findings-list .f12-ranked-row').length + ' findings (' + rows.length + ' more)';
+    });
+  }
 })();
 </script>`;
 }
@@ -1526,19 +1829,12 @@ function renderConceptAHtml(data, fontsCss, oflComment) {
   if (featured.kind === 'empty') {
     throw new Error('Expected non-empty featured finding for Concept A on Hono');
   }
-  const evCopy = formatEvidencePanelCopy(data, featured, 'C-01');
-  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 274 });
+  const evCopy = formatEvidencePanelCopy(data, featured, 'F-01');
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 266 });
   const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const balloonText = formatBalloonCallout(data, leadEdge);
   const ranked = buildRankedFindings(data);
   const secondary = ranked.slice(1, 4);
-
-  const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
-  const uncheckedShown = data.edges.filter((e) => e.relationship === 'unknown').length;
-  const uncheckedTotal = data.counts.unknown;
-  const familyCount = (data.families ?? []).length;
-  const commitsAnalyzed = data.meta.commitsAnalyzed;
-
   const ariaPlate = `${evCopy.headline}. ${evCopy.subhead}`;
 
   return `<!doctype html>
@@ -1556,30 +1852,7 @@ ${oflComment}
 <div class="f12-desk">
   <main class="f12-sheet">
     ${renderMastheadHtml(data, 'CONCEPT A · INVESTIGATION BOARD')}
-
-    <!-- Top Masthead Big-Number Stat Band -->
-    <section class="f12-stat-band" aria-label="Repository summary statistics">
-      <div class="f12-stat-card f12-stat-featured">
-        <h2 class="f12-m-label"><span class="f12-ink-sq" aria-hidden="true">▲</span> GHOST WIRES</h2>
-        <p class="f12-m-value">${ghostCount}</p>
-        <p class="f12-m-note">co-changing pairs with no import link</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">FINDING FAMILIES</h2>
-        <p class="f12-m-value">${familyCount}</p>
-        <p class="f12-m-note">parallel implementation groups (3+ files)</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">UNCHECKED LINKS</h2>
-        <p class="f12-m-value">${uncheckedShown}</p>
-        <p class="f12-m-note">${uncheckedTotal} total in repo · ${data.edges.length} links drawn</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">COMMITS ANALYSED</h2>
-        <p class="f12-m-value">${commitsAnalyzed.toLocaleString('en-US')}</p>
-        <p class="f12-m-note">${escapeHtml(data.meta.oldestCommit ?? '')} to ${escapeHtml(data.meta.newestCommit ?? '')} · ${data.nodes.length} files</p>
-      </div>
-    </section>
+    ${renderStatStripHtml(data)}
 
     <!-- C-01 Featured Investigation Hero + Slanted-Bottom Evidence Panel -->
     <div class="concept-a-hero-grid">
@@ -1598,7 +1871,7 @@ ${oflComment}
             </div>
             <span class="f12-last-date">${escapeHtml(evCopy.lastTogetherText)}</span>
           </div>
-          <h1 class="f12-headline">${escapeHtml(evCopy.headline)}</h1>
+          <h1 class="f12-headline">${renderHeadlineWithMonoPaths(evCopy.headline, featured)}</h1>
           <p class="f12-subhead">${escapeHtml(evCopy.subhead)}</p>
 
           <div class="f12-plate-wrap">
@@ -1619,21 +1892,18 @@ ${oflComment}
             <div class="f12-plate-footer">
               <div class="f12-plate-legend">
                 <span class="f12-legend-item">
-                  <svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" stroke="#ffd60a" stroke-width="5"/><line x1="0" y1="4" x2="24" y2="4" stroke="#ff4f9a" stroke-width="2.2" stroke-dasharray="6 4"/></svg>
-                  Featured ghost wire
+                  <svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" stroke="#fffef9" stroke-width="5"/><line x1="0" y1="4" x2="24" y2="4" stroke="#0e2540" stroke-width="3"/><line x1="0" y1="4" x2="24" y2="4" stroke="#ff4f9a" stroke-width="2.2" stroke-dasharray="6 4"/></svg>
+                  Lead pair
                 </span>
                 <span class="f12-legend-item">
-                  <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="6 4"/></svg>
-                  Ghost wire (long dash)
+                  <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="6 4"/></svg>
+                  Ghost wire
                 </span>
                 <span class="f12-legend-item">
-                  <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke="#8fa6c0" stroke-width="2" stroke-dasharray="2 4"/></svg>
-                  Unchecked (dotted)
+                  <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="rgba(232,238,245,0.75)" stroke-width="2"/></svg>
+                  Import
                 </span>
-                <span class="f12-legend-item">
-                  <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke="rgba(232,238,245,0.75)" stroke-width="2"/></svg>
-                  Import (solid)
-                </span>
+                ${renderPlateDirLegendHtml(plate)}
               </div>
               <span>Ego network (${plate.nodes.length} of ${plate.fullComponentNodeCount} files in component)</span>
             </div>
@@ -1641,7 +1911,7 @@ ${oflComment}
         </div>
       </section>
 
-      <section class="f12-panel f12-slant-bottom" aria-label="Supporting evidence for C-01">
+      <section class="f12-panel f12-slant-bottom" aria-label="Supporting evidence for F-01">
         ${renderSvgBorder('slant-bottom')}
         <span class="f12-cut" aria-hidden="true">EVIDENCE</span>
         <div class="f12-panel-body">
@@ -1654,14 +1924,14 @@ ${oflComment}
       </section>
     </div>
 
-    <!-- Secondary Findings (C-02, C-03, C-04) -->
+    <!-- Secondary Findings (Panels C-02, C-03, C-04 showing Findings F-02, F-03, F-04) -->
     <div class="concept-a-secondary-grid">
       ${secondary
-        .map((item, idx) => renderSecondaryFindingCard(data, item, `C-0${idx + 2}`, 'rect'))
+        .map((item, idx) => renderSecondaryFindingCard(data, item, `C-0${idx + 2}`, 'rect', false))
         .join('')}
     </div>
 
-    <!-- Ranked List (C-05) -->
+    <!-- Ranked List (Panel C-05 showing Findings F-01..F-78) -->
     ${renderRankedListSection(ranked, 'C-05')}
   </main>
 </div>
@@ -1675,18 +1945,13 @@ function renderConceptBHtml(data, fontsCss, oflComment) {
   if (featured.kind === 'empty') {
     throw new Error('Expected non-empty featured finding for Concept B on Hono');
   }
-  const evCopy = formatEvidencePanelCopy(data, featured, 'C-01');
-  const plate = computeFeaturedPlateLayout(data, featured, { width: 520, height: 274 });
+  const evCopy = formatEvidencePanelCopy(data, featured, 'F-01');
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 266 });
   const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const balloonText = formatBalloonCallout(data, leadEdge);
   const ranked = buildRankedFindings(data);
   const secondFinding = ranked[1];
   const thirdFinding = ranked[2];
-
-  const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
-  const uncheckedShown = data.edges.filter((e) => e.relationship === 'unknown').length;
-  const familyCount = (data.families ?? []).length;
-  const commitsAnalyzed = data.meta.commitsAnalyzed;
   const ariaPlate = `${evCopy.headline}. ${evCopy.subhead}`;
 
   return `<!doctype html>
@@ -1704,6 +1969,7 @@ ${oflComment}
 <div class="f12-desk">
   <main class="f12-sheet">
     ${renderMastheadHtml(data, 'CONCEPT B · STORYBOARD')}
+    ${renderStatStripHtml(data)}
 
     <!-- Asymmetric Comic Page Top: Tall C-01 Hero (8 cols) + Slanted C-02/C-03 Pair (4 cols) -->
     <div class="concept-b-top-grid">
@@ -1711,27 +1977,6 @@ ${oflComment}
         ${renderSvgBorder('rect')}
         <span class="f12-cut" aria-hidden="true">C-01</span>
         <div class="f12-panel-body">
-          <!-- Stats inside the hero panel as metric chips -->
-          <div class="concept-b-chip-strip" aria-label="Repository metrics">
-            <div class="concept-b-stat-chip">
-              <span class="f12-ink-sq" aria-hidden="true">▲</span>
-              <span class="concept-b-stat-num">${ghostCount}</span>
-              <span class="concept-b-stat-lbl">GHOST WIRES</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">${familyCount}</span>
-              <span class="concept-b-stat-lbl">FAMILIES</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">${uncheckedShown}</span>
-              <span class="concept-b-stat-lbl">UNCHECKED (${data.counts.unknown} TOTAL)</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">${commitsAnalyzed.toLocaleString('en-US')}</span>
-              <span class="concept-b-stat-lbl">COMMITS ANALYSED</span>
-            </div>
-          </div>
-
           <div class="f12-kicker-row">
             <div class="f12-kicker-left">
               <span class="f12-kicker-chip">${escapeHtml(evCopy.kicker)}</span>
@@ -1743,12 +1988,12 @@ ${oflComment}
             </div>
             <span class="f12-last-date">${escapeHtml(evCopy.lastTogetherText)}</span>
           </div>
-          <h1 class="f12-headline">${escapeHtml(evCopy.headline)}</h1>
+          <h1 class="f12-headline">${renderHeadlineWithMonoPaths(evCopy.headline, featured)}</h1>
           <p class="f12-subhead">${escapeHtml(evCopy.subhead)}</p>
 
           <div class="concept-b-hero-split">
             <div class="f12-plate-wrap">
-              <div class="f12-plate-canvas-box" style="height: 274px;">
+              <div class="f12-plate-canvas-box" style="height: 266px;">
                 <canvas id="featured-plate-canvas" class="f12-plate-canvas" role="img" aria-label="${escapeHtml(ariaPlate)}"></canvas>
                 ${
                   plate.balloonTarget
@@ -1765,8 +2010,8 @@ ${oflComment}
               <div class="f12-plate-footer">
                 <div class="f12-plate-legend">
                   <span class="f12-legend-item">
-                    <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="#ffd60a" stroke-width="5"/><line x1="0" y1="4" x2="20" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
-                    Featured
+                    <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="#fffef9" stroke-width="5"/><line x1="0" y1="4" x2="20" y2="4" stroke="#0e2540" stroke-width="3"/><line x1="0" y1="4" x2="20" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
+                    Lead
                   </span>
                   <span class="f12-legend-item">
                     <svg width="18" height="8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
@@ -1841,30 +2086,8 @@ ${oflComment}
 <body>
 <div class="f12-desk">
   <main class="f12-sheet">
-    ${renderMastheadHtml(emptyData, 'EMPTY STATE · NO GHOST WIRES')}
-
-    <section class="f12-stat-band" aria-label="Repository summary statistics">
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">GHOST WIRES</h2>
-        <p class="f12-m-value">0</p>
-        <p class="f12-m-note">none above configured thresholds</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">IMPORT LINKS</h2>
-        <p class="f12-m-value">${importEdges.length}</p>
-        <p class="f12-m-note">co-changing files explained by imports</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">MIN THRESHOLDS</h2>
-        <p class="f12-m-value">≥${emptyCopy.minShared} · ${emptyCopy.minConfidencePct}%</p>
-        <p class="f12-m-note">shared commits &amp; directional confidence</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">COMMITS ANALYSED</h2>
-        <p class="f12-m-value">${emptyCopy.commits.toLocaleString('en-US')}</p>
-        <p class="f12-m-note">${escapeHtml(emptyData.meta.oldestCommit ?? '')} to ${escapeHtml(emptyData.meta.newestCommit ?? '')}</p>
-      </div>
-    </section>
+    ${renderMastheadHtml(emptyData, 'EMPTY STATE · NO GHOST WIRES', { isEmptyState: true })}
+    ${renderStatStripHtml(emptyData)}
 
     <section class="f12-panel f12-rect" aria-label="C-01 Empty state and strongest import cluster">
       ${renderSvgBorder('rect')}
@@ -1872,8 +2095,8 @@ ${oflComment}
       <div class="f12-panel-body">
         <div class="f12-kicker-row">
           <div class="f12-kicker-left">
-            <span class="f12-tag">C-01 / CLEAN DIG · ZERO GHOST WIRES</span>
-            <span class="f12-tag">CONTEXT: STRONGEST IMPORT CLUSTER</span>
+            <span class="f12-tag">CLEAN DIG · ZERO GHOST WIRES</span>
+            <span class="f12-tag">CONTEXT: STRONGEST IMPORT CLUSTER (${plate.nodes.length} FILES)</span>
           </div>
           <span class="f12-last-date">Latest commit ${escapeHtml(emptyData.meta.newestCommit ?? '')}</span>
         </div>
@@ -1890,6 +2113,10 @@ ${oflComment}
           <div class="f12-plate-footer">
             <div class="f12-plate-legend">
               <span class="f12-legend-item">
+                <span class="f12-dir-dot" style="background:#7eb3e0;"></span>
+                Import cluster node
+              </span>
+              <span class="f12-legend-item">
                 <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke="rgba(232,238,245,0.75)" stroke-width="2"/></svg>
                 Direct import link (solid)
               </span>
@@ -1905,7 +2132,7 @@ ${oflComment}
     </section>
   </main>
 </div>
-${buildPlateDrawScript(plate)}
+${buildPlateDrawScript(plate, { monochrome: true })}
 </body>
 </html>`;
 }

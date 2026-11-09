@@ -588,6 +588,41 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         `Expected <= 1 DOM element with .marker-active on first render, got ${initialMarkerStats.domMarkers}`,
       );
 
+      // Verify RA-17 Briefing mode is active by default and renders C-01, C-05, featured plate SVG, and ranked findings
+      const briefingCheck = await page.evaluate(() => {
+        const appView = document.querySelector('.app')?.getAttribute('data-view');
+        const c01 = document.getElementById('cut-c01');
+        const c05 = document.getElementById('cut-c05');
+        const svg = document.getElementById('featured-plate-svg');
+        const ranked = document.getElementById('cut-ranked');
+        const hasC01 = Boolean(c01 && c01.getBoundingClientRect().height > 0);
+        const hasC05 = Boolean(c05 && c05.getBoundingClientRect().height > 0);
+        const hasPlateSvg = Boolean(svg && svg.getBoundingClientRect().width >= 400);
+        const hasRanked = Boolean(ranked && ranked.getBoundingClientRect().height > 0);
+        const initialRows = document.querySelectorAll('.f12-rank-row').length;
+        const showAllBtn = document.getElementById('toggle-all-findings') as HTMLButtonElement | null;
+        if (showAllBtn) showAllBtn.click();
+        const expandedRows = document.querySelectorAll('.f12-rank-row').length;
+        const collapseBtn = document.getElementById('toggle-all-findings') as HTMLButtonElement | null;
+        if (collapseBtn) collapseBtn.click();
+        return {
+          appView,
+          hasC01,
+          hasC05,
+          hasPlateSvg,
+          hasRanked,
+          initialRows,
+          expandedRows,
+        };
+      });
+      assert.equal(briefingCheck.appView, 'briefing', 'Expected Briefing mode to be active by default');
+      assert.equal(briefingCheck.hasC01, true, 'Expected C-01 featured finding panel to render');
+      assert.equal(briefingCheck.hasC05, true, 'Expected C-05 evidence panel to render');
+      assert.equal(briefingCheck.hasPlateSvg, true, 'Expected featured blueprint plate SVG >= 500px wide');
+      assert.equal(briefingCheck.hasRanked, true, 'Expected C-06 ranked findings panel to render');
+      assert.equal(briefingCheck.initialRows, 10, 'Expected top 10 ranked findings visible initially');
+      assert.ok(briefingCheck.expandedRows > 10, 'Expected Show all N findings toggle to expand all findings');
+
       // Select a card and verify marker budget on selection (<= 1 relationship) + Markdown export parity
       await page.evaluate(() => {
         (window as any).__strokeLog = [];
@@ -599,11 +634,15 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       const selectedMarkerStats = await page.evaluate(() => {
         const strokes = (window as any).__strokeLog as Array<{ strokeStyle: string }>;
         const domMarkers = document.querySelectorAll('.marker-active').length;
-        return { domMarkers, strokesCount: strokes.length };
+        return { domMarkers, strokesCount: strokes.length, hash: window.location.hash };
       });
       assert.ok(
         selectedMarkerStats.domMarkers <= 1,
         `Expected <= 1 DOM element with .marker-active on selection, got ${selectedMarkerStats.domMarkers}`,
+      );
+      assert.ok(
+        selectedMarkerStats.hash.startsWith('#f='),
+        `Expected selecting a finding in Briefing mode to update URL hash (#f=...), got ${selectedMarkerStats.hash}`,
       );
 
       // Force one settled draw and verify 0 #ffd60a strokes and <= 1 #ffd60a chip fill in that draw pass
@@ -686,8 +725,41 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       await themeBtn.click();
       assert.equal(await themeBtn.textContent(), 'Theme: System');
 
-      // 8. Responsive: at 360x640, panel renders above canvas, no horizontal scroll, controls >= 24x24
+      // 8a. Responsive in Briefing mode at 360x640: C-01 above C-05, no horizontal scroll, controls >= 24x24
       await page.setViewportSize({ width: 360, height: 640 });
+      await page.waitForTimeout(80);
+      const briefingMobileCheck = await page.evaluate(() => {
+        const c01Rect = document.getElementById('cut-c01')!.getBoundingClientRect();
+        const c05Rect = document.getElementById('cut-c05')!.getBoundingClientRect();
+        const docScrollW = document.documentElement.scrollWidth;
+        const docClientW = document.documentElement.clientWidth;
+        const controls = Array.from(document.querySelectorAll('button, input'));
+        const tooSmall = controls
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && (r.width < 24 || r.height < 24);
+          })
+          .map((el) => el.id || el.className);
+        return {
+          c01Top: c01Rect.top,
+          c05Top: c05Rect.top,
+          docScrollW,
+          docClientW,
+          tooSmall,
+        };
+      });
+      assert.ok(
+        briefingMobileCheck.c01Top < briefingMobileCheck.c05Top,
+        `Expected C-01 (${briefingMobileCheck.c01Top}) to stack above C-05 (${briefingMobileCheck.c05Top}) at 360x640`,
+      );
+      assert.ok(
+        briefingMobileCheck.docScrollW <= briefingMobileCheck.docClientW,
+        `Expected no horizontal overflow in Briefing mode at 360x640 (scrollWidth ${briefingMobileCheck.docScrollW} <= clientWidth ${briefingMobileCheck.docClientW})`,
+      );
+      assert.deepEqual(briefingMobileCheck.tooSmall, [], 'Expected all visible controls in Briefing mode at 360x640 to be >= 24x24 CSS px');
+
+      // 8b. Switch to Atlas mode and verify at 360x640: panel renders above canvas, no horizontal scroll, controls >= 24x24
+      await page.locator('#view-atlas').click();
       await page.waitForTimeout(80);
       const responsiveCheck = await page.evaluate(() => {
         const panelRect = document.getElementById('panel')!.getBoundingClientRect();
@@ -746,21 +818,23 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
 
       await page.close();
 
-      // 5 & 10. Grammar (9/10 wider than 2/2; distinct swatches) & Sanitization (\u202e and \u200d neutralized)
+      // 5 & 10. Grammar (9/10 wider than 2/2; distinct swatches) & Sanitization (\u202e, \u200d, and shell-quoted fallback explainCommand)
       const gNodes: MapNode[] = [
         { path: 'src/a/\u202eevil\u200d1.ts', dir: 'src/a', changes: 10 },
         { path: 'src/b/file-2.ts', dir: 'src/b', changes: 10 },
         { path: 'src/c/file-3.ts', dir: 'src/c', changes: 2 },
         { path: 'src/d/file-4.ts', dir: 'src/d', changes: 2 },
-        { path: 'src/e/file-5.ts', dir: 'src/e', changes: 8 },
+        { path: "src/e/my dir/it's-5.ts", dir: 'src/e/my dir', changes: 8 },
         { path: 'src/f/file-6.ts', dir: 'src/f', changes: 8 },
       ];
+      const ghostWithoutExplain = makeEdge(4, 5, { relationship: 'ghost', shared: 5, fromChanges: 8 });
+      delete ghostWithoutExplain.explainCommand;
       const gEdges: MapEdge[] = [
         // 9 of 10 commits (point confidence 0.90, Wilson low ≈ 0.596)
         makeEdge(0, 1, { relationship: 'direct', shared: 9, fromChanges: 10, toChanges: 10 }),
         // 2 of 2 commits (point confidence 1.00, Wilson low ≈ 0.342)
         makeEdge(2, 3, { relationship: 'direct', shared: 2, fromChanges: 2, toChanges: 2 }),
-        makeEdge(4, 5, { relationship: 'ghost', shared: 5, fromChanges: 8 }),
+        ghostWithoutExplain,
         makeEdge(0, 4, { relationship: 'indirect', shared: 4, fromChanges: 8 }),
         makeEdge(1, 5, { relationship: 'unknown', shared: 2, fromChanges: 10 }),
         makeEdge(2, 4, { relationship: 'test', shared: 4, fromChanges: 8 }),
@@ -795,6 +869,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         const appHtml = document.querySelector('.app')!.innerHTML;
         const bodyHasRawBidi =
           appHtml.includes('\u202e') || appHtml.includes('\u200d');
+        const cliCodeText = document.querySelector('.f12-cli-code')?.textContent ?? '';
 
         // Compare Wilson lower bound width for 9/10 vs 2/2
         const parsed = JSON.parse(document.getElementById('ra-data')!.textContent!);
@@ -805,6 +880,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
           swatches,
           hasRawBidi,
           bodyHasRawBidi,
+          cliCodeText,
           low9of10: e9of10.interval.low,
           conf9of10: e9of10.confidence,
           low2of2: e2of2.interval.low,
@@ -823,6 +899,10 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       );
       assert.equal(grammarAndSanitization.hasRawBidi, false, 'Canvas labels must not contain raw bidi or ZWJ characters');
       assert.equal(grammarAndSanitization.bodyHasRawBidi, false, 'DOM/tooltips must not contain raw bidi or ZWJ characters');
+      assert.ok(
+        grammarAndSanitization.cliCodeText.includes("'src/e/my dir/it'\\''s-5.ts'"),
+        `Expected fallback explainCommand to shell-quote paths with spaces/single quotes, got: ${grammarAndSanitization.cliCodeText}`,
+      );
 
       await gPage.close();
     } finally {

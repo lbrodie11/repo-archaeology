@@ -1,9 +1,223 @@
+import { formatExplainCommand } from '../commands/explain.js';
 import type { MapData } from '../commands/map.js';
 import { sanitizeHtmlDisplayText, type StyleMode } from '../style/frame12.js';
+import {
+  KICKER_MOST_INTERESTING,
+  buildRankedFindings,
+  computeFeaturedPlateLayout,
+  formatBalloonCallout,
+  formatCounterexamplesLine,
+  formatDirectionMetric,
+  formatEmptyStateCopy,
+  formatEvidencePanelCopy,
+  formatFindingHash,
+  resolveStrongerDirection,
+  selectFeaturedFinding,
+  type EmptyStateCopy,
+  type EvidencePanelCopy,
+  type FeaturedPlateLayout,
+  type RankedFindingItem,
+} from './copy.js';
 import { computeLayout, computeRichLayout, type LayoutResult } from './layout.js';
 
 export interface RenderMapOptions {
   style?: StyleMode;
+}
+
+interface SecondaryCardBriefing {
+  cutId: string;
+  findingId: string;
+  edgeIndex: number;
+  badge: string;
+  pairLabel: string;
+  headlinePct: string;
+  detailText: string;
+  lowPct: number;
+  highPct: number;
+  pointPct: number;
+  reverseLine: string;
+  lastTogether: string;
+  receiptHash: string;
+  receiptDate: string;
+  receiptSubject: string;
+  hash: string;
+}
+
+interface BriefingDataPayload {
+  emptyState: (EmptyStateCopy & { suggestedCommand: string }) | null;
+  featured: {
+    kind: 'family' | 'pair';
+    edgeIndex: number;
+    familyId?: string;
+    kickerChip: string;
+    kickerTag: string;
+    lastTogether: string;
+    headline: string;
+    lede: string;
+    plate: FeaturedPlateLayout;
+    balloonText: string;
+    evidence: EvidencePanelCopy;
+    hash: string;
+  } | null;
+  secondaryCards: SecondaryCardBriefing[];
+  ranked: RankedFindingItem[];
+  stats: {
+    ghostCount: number;
+    familyCount: number;
+    unknownCount: number;
+    totalUnchecked: number;
+    edgesCount: number;
+    commitsAnalyzed: number;
+    oldestCommit: string;
+    newestCommit: string;
+    nodesCount: number;
+  };
+}
+
+function buildBriefingData(data: MapData): BriefingDataPayload {
+  const ghostCount = data.edges.filter((e) => e.relationship === 'ghost').length;
+  const familyCount = (data.families ?? []).length;
+  const unknownCount = data.edges.filter((e) => e.relationship === 'unknown').length;
+  const totalUnchecked = unknownCount;
+  const stats = {
+    ghostCount,
+    familyCount,
+    unknownCount,
+    totalUnchecked,
+    edgesCount: data.edges.length,
+    commitsAnalyzed: data.meta.commitsAnalyzed,
+    oldestCommit: data.meta.oldestCommit ?? '',
+    newestCommit: data.meta.newestCommit ?? '',
+    nodesCount: data.nodes.length,
+  };
+
+  const featured = selectFeaturedFinding(data);
+  if (featured.kind === 'empty') {
+    const emptyCopy = formatEmptyStateCopy(data, {
+      nodeCount: featured.contextClusterNodeIndices.length,
+      edgeCount: featured.contextClusterEdgeIndices.length,
+    });
+    return {
+      emptyState: {
+        ...emptyCopy,
+        suggestedCommand: 'npx repo-archaeology map --style rich --min-shared 2 --min-confidence 0.25',
+      },
+      featured: null,
+      secondaryCards: [],
+      ranked: [],
+      stats,
+    };
+  }
+
+  const evidence = formatEvidencePanelCopy(data, featured);
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 440 });
+  const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
+  const leadEdgeIndex = featured.kind === 'family' ? featured.leadEdgeIndex : featured.edgeIndex;
+  const balloonText = formatBalloonCallout(data, leadEdge);
+  const ranked = buildRankedFindings(data);
+  const leadDir = resolveStrongerDirection(data, leadEdge);
+  const featuredHash = formatFindingHash(leadDir.fromNode.path, leadDir.toNode.path);
+  const kickerTag =
+    featured.kind === 'family'
+      ? `FAMILY · ${featured.family.members.length} FILES · ${featured.family.qualifyingPairs}/${featured.family.possiblePairs} PAIRS`
+      : `${leadEdge.relationship === 'ghost' ? 'GHOST WIRE' : leadEdge.relationship.toUpperCase()} · ${leadEdge.shared} SHARED COMMITS`;
+  const lastTogether =
+    featured.kind === 'family' ? featured.family.lastTogether : leadEdge.lastTogether;
+
+  const excludedPaths = new Set<string>();
+  if (featured.kind === 'family') {
+    for (const m of featured.family.members) excludedPaths.add(m.path);
+  }
+  const candidateSecondary = data.edges
+    .map((e, idx) => ({ e, idx }))
+    .filter(({ e, idx }) => {
+      if (idx === leadEdgeIndex) return false;
+      const sPath = data.nodes[e.source]?.path ?? '';
+      const tPath = data.nodes[e.target]?.path ?? '';
+      if (excludedPaths.size > 0 && excludedPaths.has(sPath) && excludedPaths.has(tPath)) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const aGhost = a.e.relationship === 'ghost' ? 1 : 0;
+      const bGhost = b.e.relationship === 'ghost' ? 1 : 0;
+      if (bGhost !== aGhost) return bGhost - aGhost;
+      if (b.e.overviewPriority !== a.e.overviewPriority) return b.e.overviewPriority - a.e.overviewPriority;
+      const aLow = Math.max(a.e.interval.low, a.e.reverseInterval.low);
+      const bLow = Math.max(b.e.interval.low, b.e.reverseInterval.low);
+      if (bLow !== aLow) return bLow - aLow;
+      return b.e.shared - a.e.shared;
+    })
+    .slice(0, 3);
+
+  const secondaryCards: SecondaryCardBriefing[] = candidateSecondary.map(({ e, idx }, cardIdx) => {
+    const dir = resolveStrongerDirection(data, e);
+    const fwd = formatDirectionMetric(
+      dir.shortFrom,
+      dir.shortTo,
+      dir.shared,
+      dir.fromChanges,
+      dir.confidence,
+      dir.interval,
+    );
+    const rev = formatDirectionMetric(
+      dir.shortTo,
+      dir.shortFrom,
+      dir.shared,
+      dir.toChanges,
+      dir.reverseConfidence,
+      dir.reverseInterval,
+    );
+    const standalonePart = formatCounterexamplesLine(dir.fromOnlyTotal);
+    const hash = formatFindingHash(dir.fromNode.path, dir.toNode.path);
+    const rankMatch = ranked.find((r) => r.edgeIndex === idx);
+    const ev0 = e.evidence?.[0];
+    return {
+      cutId: `C-0${cardIdx + 2}`,
+      findingId: rankMatch?.findingId ?? `F-0${cardIdx + 2}`,
+      edgeIndex: idx,
+      badge: e.relationship === 'ghost' ? 'GHOST WIRE' : e.relationship.toUpperCase(),
+      pairLabel: `${dir.shortFrom} → ${dir.shortTo}`,
+      headlinePct: fwd.pctText,
+      detailText: `${fwd.detailText} (${fwd.lowerBoundText})`,
+      lowPct: fwd.rangeLowPct,
+      highPct: fwd.rangeHighPct,
+      pointPct: fwd.pctValue,
+      reverseLine: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${rev.pctText}) · ${standalonePart}`,
+      lastTogether: e.lastTogether,
+      receiptHash: ev0 ? ev0.hash.slice(0, 7) : '',
+      receiptDate: ev0 ? ev0.date : '',
+      receiptSubject: ev0 ? sanitizeHtmlDisplayText(ev0.subject) : '',
+      hash,
+    };
+  });
+
+  // Ensure explainCommand uses formatExplainCommand when missing
+  if (!evidence.explainCommand) {
+    evidence.explainCommand = formatExplainCommand(leadDir.fromNode.path, leadDir.toNode.path);
+  }
+
+  return {
+    emptyState: null,
+    featured: {
+      kind: featured.kind,
+      edgeIndex: leadEdgeIndex,
+      ...(featured.kind === 'family' ? { familyId: featured.family.id } : {}),
+      kickerChip: KICKER_MOST_INTERESTING,
+      kickerTag,
+      lastTogether,
+      headline: evidence.headline,
+      lede: evidence.subhead,
+      plate,
+      balloonText,
+      evidence,
+      hash: featuredHash,
+    },
+    secondaryCards,
+    ranked,
+    stats,
+  };
 }
 
 /**
@@ -97,9 +311,11 @@ export function renderMapHtml(
 function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   const safeRepoName = sanitizeHtmlDisplayText(data.repoName);
   const title = `REPO ARCHAEOLOGY / MAP — ${safeRepoName}`;
+  const briefing = buildBriefingData(data);
   const layoutScript = layout !== null
     ? `\n<script type="application/json" id="ra-layout">${embedJson(layout)}</script>`
     : '';
+  const briefingScript = `\n<script type="application/json" id="ra-briefing">${embedJson(briefing)}</script>`;
   return `<!doctype html>
 <html lang="en" data-theme-mode="system">
 <head>
@@ -112,12 +328,17 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
 </head>
 <body>
 <span id="fc-probe" class="fc-probe" hidden aria-hidden="true"></span>
-<div class="app">
+<div class="app" data-view="briefing">
   <header class="bar">
     <div class="heading">
       <div class="masthead-row">
-        <h1>REPO ARCHAEOLOGY / MAP</h1>
+        <h1>REPO ARCHAEOLOGY // INVESTIGATION BOARD</h1>
         <span class="repo-tag">${escapeHtml(safeRepoName)}</span>
+        <span class="f12-evidence-pill">EVIDENCE · NOT PROOF</span>
+        <details class="f12-howto">
+          <summary>How to read this map ▸</summary>
+          <div class="f12-howto-pop">Co-change measures how often files are committed together in Git history. <strong>Ghost wires</strong> (pink long-dash) are file pairs that repeatedly change together with no direct or 2-hop static import link detected. Line width and 45° halftone bars show the conservative <strong>95% Wilson confidence interval</strong> (sample-size aware: 9/10 ranks above 2/2). Use <strong>Briefing</strong> for the narrative investigation board or switch to <strong>Atlas</strong> for the full contact-sheet network.</div>
+        </details>
       </div>
       <div class="masthead-rule" aria-hidden="true"></div>
       <p id="summary" class="summary"></p>
@@ -127,10 +348,15 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
       <label class="search"><span class="visually-hidden">Find a file</span>
         <input id="search" type="search" placeholder="Find a file  ( / )" autocomplete="off" spellcheck="false">
       </label>
+      <div class="f12-mode-switch" role="group" aria-label="Map view mode">
+        <button id="view-briefing" class="f12-mode-btn" type="button" aria-pressed="true" title="Narrative investigation board (B)">Briefing</button>
+        <button id="view-atlas" class="f12-mode-btn" type="button" aria-pressed="false" title="Contact-sheet network atlas (A)">Atlas</button>
+      </div>
       <button id="theme-toggle" class="map-btn theme-btn" type="button" data-theme-mode="system" title="Cycle theme: System, Light, Dark">Theme: System</button>
       <div id="toggles" class="toggles" role="group" aria-label="Relationship types"></div>
     </div>
   </header>
+  <section id="briefing-view" class="f12-briefing" aria-label="Investigation board briefing"></section>
   <main class="stage">
     <canvas id="map" role="img" aria-label="Contact-sheet dig map of files that change together. The panel lists the same relationships as text."></canvas>
     <img id="print-map-img" class="print-map-img" alt="Contact-sheet map of files that change together" hidden>
@@ -146,7 +372,7 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   </main>
   <aside id="panel" class="panel" aria-live="polite"></aside>
 </div>
-<script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}
+<script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}${briefingScript}
 <script>${RICH_CLIENT}</script>
 </body>
 </html>
@@ -1627,6 +1853,16 @@ const CLIENT = String.raw`
       .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
   }
 
+  function shellQuoteArg(arg) {
+    var s = String(arg == null ? '' : arg);
+    if (/^[A-Za-z0-9_./-]+$/.test(s) && s.charAt(0) !== '-') return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+
+  function fallbackExplainCommand(a, b) {
+    return 'npx repo-archaeology explain ' + shellQuoteArg(a) + ' ' + shellQuoteArg(b);
+  }
+
   function mdCode(text) {
     var q = String.fromCharCode(96);
     var s = defuseMentions(text).replace(/[\r\n]+/g, ' ');
@@ -1668,7 +1904,7 @@ const CLIENT = String.raw`
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
@@ -2410,7 +2646,7 @@ const CLIENT = String.raw`
     }
 
     // Copyable CLI explain command + privacy note
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     var cliBox = el('div', 'cli-box');
     var cliHead = el('div', 'cli-box-head');
     cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
@@ -2737,14 +2973,112 @@ canvas.pointing { cursor: pointer; }
 .legend-item { display: inline-flex; align-items: center; gap: var(--f-gutter-pair); font: 12px/1.3 var(--f-font-mono); color: var(--f-ink-2); }
 .legend-dot { width: 10px; height: 10px; border: 1.5px solid var(--f-rule); }
 
+/* RA-17 Investigation Board (Briefing Mode) */
+.app[data-view="briefing"] { display: flex; flex-direction: column; height: auto; min-height: 100vh; max-width: 1440px; width: 100%; margin: 0 auto; overflow-x: hidden; }
+.app[data-view="briefing"] > .stage, .app[data-view="briefing"] > .panel { display: none !important; }
+.app[data-view="atlas"] > .f12-briefing { display: none !important; }
+
+.f12-evidence-pill { display: inline-flex; align-items: center; padding: 2px 8px; border: 1.5px solid var(--f-rule); background: var(--f-marker); color: var(--f-marker-ink); font: 800 11px/1.3 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; }
+.f12-howto { position: relative; display: inline-block; }
+.f12-howto summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11.5px/1.3 var(--f-font-mono); }
+.f12-howto summary::-webkit-details-marker { display: none; }
+.f12-howto-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(440px, 88vw); padding: 12px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); font: 400 12.5px/1.5 var(--f-font-body); box-shadow: var(--f-shadow-sheet); }
+.f12-mode-switch { display: inline-flex; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-sheet); }
+.f12-mode-btn { min-height: 28px; min-width: 28px; padding: 4px 12px; border: 0; background: var(--f-sheet); color: var(--f-ink); font: 800 12px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+.f12-mode-btn + .f12-mode-btn { border-left: 1.5px solid var(--f-rule); }
+.f12-mode-btn[aria-pressed="true"] { background: var(--f-ink); color: var(--f-sheet); }
+
+.f12-briefing { display: flex; flex-direction: column; gap: var(--f-gutter-scene); padding: var(--f-gutter-scene) var(--f-gutter-change) var(--f-gutter-change); background: var(--f-sheet); min-width: 0; }
+.f12-stat-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.f12-stat-pill { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; border: 1.5px solid var(--f-rule); background: var(--f-panel); font: 700 11.5px/1.2 var(--f-font-mono); color: var(--f-ink-2); }
+.f12-stat-pill strong { font: 900 17px/1 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+
+.f12-board-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--f-gutter-scene); align-items: stretch; }
+.f12-cut-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-cut-c01 { grid-column: span 7; }
+.f12-cut-c05 { grid-column: span 5; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), 0 100%); padding-bottom: 22px; }
+.f12-cut-label { position: absolute; top: -10px; left: 12px; padding: 1px 6px; background: var(--f-sheet); border: 1.5px solid var(--f-rule); font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.06em; color: var(--f-ink); text-transform: uppercase; }
+
+.f12-kicker-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.f12-kicker-left { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.f12-kicker-chip { display: inline-flex; align-items: center; padding: 3px 8px; background: var(--f-marker); color: var(--f-marker-ink); border: 1.5px solid var(--f-rule); font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+.f12-tag { display: inline-flex; align-items: center; padding: 2px 7px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 700 11px/1.2 var(--f-font-mono); letter-spacing: 0.03em; text-transform: uppercase; }
+.f12-last-date { font: 600 11.5px/1.2 var(--f-font-mono); color: var(--f-ink-2); }
+.f12-headline { margin: 2px 0 0; font: 900 clamp(22px, 2.4vw, 30px)/1.1 var(--f-font-display); letter-spacing: -0.01em; color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-lede { margin: 0; font: 400 14px/1.5 var(--f-font-body); color: var(--f-ink-2); max-width: 72ch; overflow-wrap: anywhere; }
+
+.f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
+.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 440; }
+.f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11px/1.3 var(--f-font-mono); }
+.f12-plate-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.f12-plate-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.f12-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.f12-dir-box { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 10px; min-width: 0; }
+.f12-dir-pair { font: 700 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; margin-bottom: 4px; }
+.f12-dir-pct { font: 900 26px/1.05 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+.f12-dir-sub { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); margin-top: 3px; overflow-wrap: anywhere; }
+
+.f12-meta-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.f12-meta-pill { display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font: 600 11.5px/1.3 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+
+.f12-family-pairs { border: 1.5px solid var(--f-rule); background: var(--f-sheet); padding: 8px 10px; }
+.f12-family-pairs-hdr { font: 800 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
+.f12-family-pair-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 6px; border: 0; border-top: 1px dashed var(--f-grid); background: transparent; text-align: left; cursor: pointer; font: 600 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); }
+.f12-family-pair-row:first-of-type { border-top: 0; }
+.f12-family-pair-row:hover { background: var(--f-panel); }
+
+.f12-counterexamples { border: 1.5px dashed var(--f-rule); background: var(--f-sheet); padding: 7px 10px; font: 600 11.5px/1.4 var(--f-font-mono); color: var(--f-ink); }
+.f12-counterexamples summary { cursor: pointer; overflow-wrap: anywhere; }
+.f12-cx-list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-weight: 500; color: var(--f-ink-2); }
+
+.f12-receipts-hdr { font: 800 11px/1.2 var(--f-font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-ink-2); margin-top: 2px; }
+.f12-receipts-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.f12-receipt-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 8px; border: 1px solid var(--f-rule); background: var(--f-sheet); font: 500 12px/1.35 var(--f-font-body); }
+.f12-receipt-hash { padding: 2px 6px; border: 1px solid var(--f-rule); background: var(--f-panel); font: 700 11.5px/1.2 var(--f-font-mono); color: var(--f-ink); cursor: pointer; }
+.f12-receipt-subj { min-width: 0; overflow-wrap: anywhere; color: var(--f-ink); }
+.f12-receipt-date { font: 600 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); white-space: nowrap; }
+
+.f12-cli-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); margin-top: auto; }
+.f12-cli-code { flex: 1 1 200px; min-width: 0; font: 600 11.5px/1.35 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-copy-btn { padding: 4px 10px; border: 1.5px solid var(--f-rule); background: var(--f-ink); color: var(--f-sheet); font: 800 11px/1.2 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+
+.f12-secondary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--f-gutter-scene); }
+.f12-sec-card { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 16px 14px 14px; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); color: var(--f-ink); cursor: pointer; }
+.f12-sec-card:hover { background: var(--f-sheet); }
+.f12-sec-card.selected { background-image: radial-gradient(circle, var(--f-tone) 0.65px, transparent 0.65px); background-size: 12px 12px; }
+.f12-sec-pair { font: 800 14px/1.3 var(--f-font-mono); color: var(--f-ink); overflow-wrap: anywhere; }
+.f12-sec-sub { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-ci-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; margin: 2px 0; }
+.f12-ci-pct { font: 900 20px/1 var(--f-font-display); color: var(--f-ink); font-variant-numeric: tabular-nums; }
+.f12-ci-track { position: relative; height: 14px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); overflow: hidden; }
+.f12-ci-fill { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--f-rule); border-right: 1px solid var(--f-rule); background-image: repeating-linear-gradient(-45deg, var(--f-tone) 0, var(--f-tone) 2px, transparent 2px, transparent 5px); opacity: 0.72; }
+.f12-ci-tick { position: absolute; top: -1px; bottom: -1px; width: 2.5px; background: var(--f-ink); }
+.f12-ci-bounds { font: 700 11px/1.2 var(--f-font-mono); color: var(--f-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.f12-sec-rev { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); overflow-wrap: anywhere; }
+.f12-sec-receipt { font: 500 11.5px/1.35 var(--f-font-mono); color: var(--f-ink-2); padding-top: 4px; border-top: 1px dashed var(--f-grid); overflow-wrap: anywhere; }
+
+.f12-ranked-panel { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: var(--f-panel); padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.f12-ranked-hdr { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.f12-ranked-title { margin: 0; font: 900 18px/1.15 var(--f-font-display); text-transform: uppercase; letter-spacing: 0.02em; color: var(--f-ink); }
+.f12-ranked-list { display: flex; flex-direction: column; gap: 6px; }
+.f12-rank-row { display: grid; grid-template-columns: auto minmax(0, 1.5fr) auto auto minmax(120px, 1.2fr) auto auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px 10px; border: 1.5px solid var(--f-rule); background: var(--f-sheet); color: var(--f-ink); cursor: pointer; font: 600 12px/1.3 var(--f-font-mono); }
+.f12-rank-row:hover { background: var(--f-panel); }
+.f12-rank-row.active { border-width: var(--f-stroke-ink); background-image: repeating-linear-gradient(-45deg, var(--f-grid) 0, var(--f-grid) 2px, transparent 2px, transparent 6px); }
+.f12-rank-id { padding: 2px 6px; border: 1.5px solid var(--f-rule); background: var(--f-panel); font: 800 11px/1.2 var(--f-font-mono); color: var(--f-ink); }
+.f12-rank-row.active .f12-rank-id { background: var(--f-ink); color: var(--f-sheet); }
+.f12-rank-pair { min-width: 0; overflow-wrap: anywhere; font-weight: 700; color: var(--f-ink); }
+.f12-rank-ratio { font-variant-numeric: tabular-nums; color: var(--f-ink); }
+.f12-toggle-all-btn { width: 100%; padding: 8px 12px; border: 1.5px dashed var(--f-rule); background: var(--f-sheet); color: var(--f-ink); font: 800 11.5px/1.3 var(--f-font-mono); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-align: center; }
+
 @media (forced-colors: active) {
-  html, body, .app, .bar, .panel, .card, .pair-box, .cli-box, .map-btn, .toggle, .tab-btn, .badge, .cut-chip, .cut-section-label {
+  html, body, .app, .bar, .panel, .card, .pair-box, .cli-box, .map-btn, .toggle, .tab-btn, .badge, .cut-chip, .cut-section-label, .f12-cut-panel, .f12-sec-card, .f12-ranked-panel, .f12-rank-row {
     forced-color-adjust: auto;
     background-color: Canvas;
     color: CanvasText;
     border-color: CanvasText;
   }
-  .badge.marker-active, .card.selected {
+  .badge.marker-active, .card.selected, .f12-kicker-chip.marker-active {
     background-color: Highlight;
     color: HighlightText;
     border-color: Highlight;
@@ -2753,14 +3087,20 @@ canvas.pointing { cursor: pointer; }
 
 @media (max-width: 960px) {
   html, body { height: auto; overflow-x: hidden; }
-  .app { display: flex; flex-direction: column; height: auto; min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
+  .app, .app[data-view="briefing"], .app[data-view="atlas"] { display: flex; flex-direction: column; height: auto; min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
   .bar { order: 1; padding: var(--f-gutter-pair); }
+  .f12-briefing { order: 2; padding: var(--f-gutter-pair); }
   .panel { order: 2; border-left: 0; border-bottom: var(--f-stroke-ink) solid var(--f-rule); padding: var(--f-gutter-pair); overflow-y: visible; }
   .stage { order: 3; height: 70vh; min-height: 360px; width: 100%; }
   canvas { touch-action: pan-y; }
   .search input { width: 100%; }
   .controls, .search { width: 100%; }
-  .cochange-grid { grid-template-columns: 1fr; }
+  .cochange-grid, .f12-dir-grid, .f12-secondary-grid { grid-template-columns: 1fr; }
+  .f12-board-grid { display: flex; flex-direction: column; }
+  .f12-cut-c05 { clip-path: none; padding-bottom: 16px; }
+  .f12-kicker-left .f12-tag, .f12-kicker-chip, .f12-last-date, .f12-ci-bounds { white-space: normal; }
+  .f12-rank-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .f12-rank-row .f12-tag, .f12-rank-row .f12-ci-track, .f12-rank-row .f12-last-date { display: none; }
 }
 
 @media print {
@@ -4021,10 +4361,16 @@ const RICH_CLIENT = String.raw`
       }
     }
     if (ev.key === '/' && document.activeElement !== search) { ev.preventDefault(); search.focus(); }
+    var tag = document.activeElement && document.activeElement.tagName ? document.activeElement.tagName.toLowerCase() : '';
+    if (tag !== 'input' && tag !== 'textarea' && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+      if (ev.key === 'b' || ev.key === 'B') setViewMode('briefing');
+      if (ev.key === 'a' || ev.key === 'A') setViewMode('atlas');
+    }
   });
   search.addEventListener('input', function () {
     var q = search.value.trim().toLowerCase();
     matches = q ? nodes.filter(function (n) { return n.safePath.toLowerCase().indexOf(q) >= 0; }) : null;
+    if (typeof renderBriefingBoard === 'function') renderBriefingBoard();
     requestDraw();
   });
   search.addEventListener('keydown', function (ev) {
@@ -4165,6 +4511,16 @@ const RICH_CLIENT = String.raw`
       .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
   }
 
+  function shellQuoteArg(arg) {
+    var s = String(arg == null ? '' : arg);
+    if (/^[A-Za-z0-9_./-]+$/.test(s) && s.charAt(0) !== '-') return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+
+  function fallbackExplainCommand(a, b) {
+    return 'npx repo-archaeology explain ' + shellQuoteArg(a) + ' ' + shellQuoteArg(b);
+  }
+
   function mdCode(text) {
     var q = String.fromCharCode(96);
     var s = defuseMentions(text).replace(/[\r\n]+/g, ' ');
@@ -4224,7 +4580,7 @@ const RICH_CLIENT = String.raw`
         lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
       });
     }
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
     return lines.filter(function (l) { return l !== undefined; }).join('\n');
   }
@@ -4703,7 +5059,7 @@ const RICH_CLIENT = String.raw`
       panel.appendChild(details);
     }
 
-    var cliCmd = e.d.explainCommand || ('npx repo-archaeology explain ' + e.s.path + ' ' + e.t.path);
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
     var cliBox = el('div', 'cli-box');
     var cliHead = el('div', 'cli-box-head');
     cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
@@ -4753,6 +5109,796 @@ const RICH_CLIENT = String.raw`
     }
   }
 
+  // ---- RA-17 Investigation Board (Briefing Mode) ---------------------------
+  var appEl = document.querySelector('.app');
+  var briefingEl = document.getElementById('briefing-view');
+  var viewBriefingBtn = document.getElementById('view-briefing');
+  var viewAtlasBtn = document.getElementById('view-atlas');
+  var briefingScriptEl = document.getElementById('ra-briefing');
+  var briefingData = null;
+  if (briefingScriptEl && briefingScriptEl.textContent) {
+    try { briefingData = JSON.parse(briefingScriptEl.textContent); } catch (_) { briefingData = null; }
+  }
+  var viewMode = 'briefing';
+  var briefingShowAllRanked = false;
+  var briefingSelectedEdgeIdx = briefingData && briefingData.featured ? briefingData.featured.edgeIndex : (edges[0] ? 0 : -1);
+  var briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+
+  function encodeHashPart(p) {
+    return encodeURIComponent(String(p || '')).replace(/\.\./g, '%2E%2E');
+  }
+  function makeFindingHash(a, b) {
+    return '#f=' + encodeHashPart(a) + '..' + encodeHashPart(b);
+  }
+  function resolveEdgeFromHash(hashStr) {
+    var trimmed = String(hashStr || '').replace(/^#/, '');
+    if (trimmed.indexOf('f=') !== 0) return null;
+    var payload = trimmed.slice(2);
+    var sep = payload.indexOf('..');
+    if (sep <= 0 || sep >= payload.length - 2) return null;
+    var fromPath = '', toPath = '';
+    try {
+      fromPath = decodeURIComponent(payload.slice(0, sep));
+      toPath = decodeURIComponent(payload.slice(sep + 2));
+    } catch (_) {
+      return null;
+    }
+    var found = edgeByPairKey[edgeKey(fromPath, toPath)];
+    return found || null;
+  }
+
+  function syncMarkerDom() {
+    if (viewMode === 'briefing') {
+      var panelMarkers = panel ? panel.querySelectorAll('.marker-active') : [];
+      for (var i = 0; i < panelMarkers.length; i++) {
+        panelMarkers[i].classList.remove('marker-active');
+      }
+      var chip = briefingEl ? briefingEl.querySelector('.f12-kicker-chip') : null;
+      if (chip) chip.classList.add('marker-active');
+    } else {
+      var briefingMarkers = briefingEl ? briefingEl.querySelectorAll('.marker-active') : [];
+      for (var j = 0; j < briefingMarkers.length; j++) {
+        briefingMarkers[j].classList.remove('marker-active');
+      }
+      syncCardMarkerBadges();
+    }
+  }
+
+  function setViewMode(mode) {
+    viewMode = mode === 'atlas' ? 'atlas' : 'briefing';
+    if (appEl) appEl.setAttribute('data-view', viewMode);
+    if (viewBriefingBtn) viewBriefingBtn.setAttribute('aria-pressed', String(viewMode === 'briefing'));
+    if (viewAtlasBtn) viewAtlasBtn.setAttribute('aria-pressed', String(viewMode === 'atlas'));
+    if (viewMode === 'atlas') {
+      resizeNow();
+      fitSheet();
+      renderPanel();
+      requestDraw();
+    } else {
+      renderBriefingBoard();
+    }
+    syncMarkerDom();
+  }
+  if (viewBriefingBtn) {
+    viewBriefingBtn.addEventListener('click', function () { setViewMode('briefing'); });
+  }
+  if (viewAtlasBtn) {
+    viewAtlasBtn.addEventListener('click', function () { setViewMode('atlas'); });
+  }
+
+  function selectBriefingEdge(edgeObj, isDefault, updateHash) {
+    if (!edgeObj) return;
+    briefingSelectedEdgeIdx = edgeObj.idx;
+    briefingUseDefaultFeatured = Boolean(isDefault);
+    selectedEdge = edgeObj;
+    selectedNode = null;
+    selectedFamily = null;
+    if (updateHash) {
+      var forwardFirst = edgeObj.d.confidence > edgeObj.d.reverseConfidence ||
+        (edgeObj.d.confidence === edgeObj.d.reverseConfidence && edgeObj.d.fromChanges <= edgeObj.d.toChanges);
+      var fromP = forwardFirst ? edgeObj.s.path : edgeObj.t.path;
+      var toP = forwardFirst ? edgeObj.t.path : edgeObj.s.path;
+      try {
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', makeFindingHash(fromP, toP));
+        }
+      } catch (_) {}
+    }
+    renderBriefingBoard();
+    syncMarkerDom();
+  }
+
+  function buildDynamicPlateForEdge(edgeObj) {
+    var w = 760, h = 440;
+    var forwardFirst = edgeObj.d.confidence > edgeObj.d.reverseConfidence ||
+      (edgeObj.d.confidence === edgeObj.d.reverseConfidence && edgeObj.d.fromChanges <= edgeObj.d.toChanges);
+    var nA = forwardFirst ? edgeObj.s : edgeObj.t;
+    var nB = forwardFirst ? edgeObj.t : edgeObj.s;
+    var labels = distinguishingPaths(nA.safePath, nB.safePath);
+    function makeNodeBox(nodeIdx, pathStr, shortLbl, dirStr, x, y, r, isSeed, align, dx, dy) {
+      var tw = Math.max(44, Math.round(shortLbl.length * 7.6 + 12));
+      var ax = x + dx;
+      var ay = y + dy;
+      var bx = align === 'right' ? ax - tw + 4 : (align === 'center' ? Math.round(ax - tw / 2) : ax - 4);
+      return {
+        nodeIndex: nodeIdx,
+        path: pathStr,
+        shortLabel: shortLbl,
+        dir: dirStr,
+        changes: 1,
+        x: x,
+        y: y,
+        r: r,
+        isFeaturedEndpoint: isSeed,
+        label: { x: bx, y: ay - 13, w: tw, h: 18, anchorX: ax, anchorY: ay, textAlign: align }
+      };
+    }
+    var pNodes = [
+      makeNodeBox(nA.i, nA.safePath, middleTruncate(labels[0], 26), nA.safeDir, 258, 224, 9.5, true, 'right', -14, 4),
+      makeNodeBox(nB.i, nB.safePath, middleTruncate(labels[1], 26), nB.safeDir, 502, 224, 9.5, true, 'left', 14, 4)
+    ];
+    var seedSet = Object.create(null);
+    seedSet[nA.i] = true; seedSet[nB.i] = true;
+    var nbrs = [];
+    [nA, nB].forEach(function (sn) {
+      sn.edges.forEach(function (ce) {
+        var other = ce.s === sn ? ce.t : ce.s;
+        if (!seedSet[other.i] && nbrs.indexOf(other) < 0) nbrs.push(other);
+      });
+    });
+    nbrs = nbrs.slice(0, 6);
+    var arcAngles = [-0.28, 0.25, 0.72, 1.35, 2.05, 2.55];
+    nbrs.forEach(function (nb, idx) {
+      var ang = arcAngles[idx % arcAngles.length];
+      var nx = Math.max(90, Math.min(w - 90, Math.round(380 + Math.cos(ang) * 235)));
+      var ny = Math.max(60, Math.min(h - 46, Math.round(234 + Math.sin(ang) * 140)));
+      var align = Math.cos(ang) > 0.2 ? 'left' : (Math.cos(ang) < -0.2 ? 'right' : 'center');
+      var dx = align === 'left' ? 12 : (align === 'right' ? -12 : 0);
+      var dy = align === 'center' ? (Math.sin(ang) >= 0 ? 20 : -14) : 4;
+      pNodes.push(makeNodeBox(nb.i, nb.safePath, getNodeLabel(nb), nb.safeDir, nx, ny, 6.5, false, align, dx, dy));
+    });
+    var plateSet = Object.create(null);
+    pNodes.forEach(function (pn) { plateSet[pn.nodeIndex] = pn; });
+    var pEdges = [];
+    edges.forEach(function (ce) {
+      var sNode = plateSet[ce.s.i], tNode = plateSet[ce.t.i];
+      if (sNode && tNode) {
+        pEdges.push({
+          edgeIndex: ce.idx,
+          sourceNodeIndex: ce.s.i,
+          targetNodeIndex: ce.t.i,
+          x1: sNode.x,
+          y1: sNode.y,
+          x2: tNode.x,
+          y2: tNode.y,
+          relationship: ce.d.relationship,
+          intervalLow: ce.lowBound,
+          strokeWidth: Number((1.6 + ce.lowBound * 3.2).toFixed(2)),
+          isFeatured: ce === edgeObj,
+          isLeadEdge: ce === edgeObj
+        });
+      }
+    });
+    var denom = forwardFirst ? edgeObj.d.fromChanges : edgeObj.d.toChanges;
+    var relSuffix = edgeObj.d.relationship === 'ghost' ? 'no import detected' : edgeObj.d.relationship + ' link';
+    return {
+      width: w,
+      height: h,
+      nodes: pNodes,
+      edges: pEdges,
+      balloonTarget: { x: 380, y: 224 },
+      balloonBox: { x: 170, y: 96, w: 420, h: 38 },
+      balloonText: edgeObj.d.shared + ' of ' + denom + ' commits together · ' + relSuffix,
+      fullComponentNodeCount: pNodes.length
+    };
+  }
+
+  function renderPlateSvg(svgEl, plate, balloonText) {
+    var ns = 'http://www.w3.org/2000/svg';
+    while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+    var w = plate.width || 760, h = plate.height || 440;
+    svgEl.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+
+    var defs = document.createElementNS(ns, 'defs');
+    var grad = document.createElementNS(ns, 'linearGradient');
+    grad.setAttribute('id', 'ra17-plate-bg');
+    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+    grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+    [['0%', '#13304f'], ['60%', '#0e2540'], ['100%', '#09192c']].forEach(function (st) {
+      var stop = document.createElementNS(ns, 'stop');
+      stop.setAttribute('offset', st[0]);
+      stop.setAttribute('stop-color', st[1]);
+      grad.appendChild(stop);
+    });
+    defs.appendChild(grad);
+
+    var pat = document.createElementNS(ns, 'pattern');
+    pat.setAttribute('id', 'ra17-plate-grid');
+    pat.setAttribute('width', '32'); pat.setAttribute('height', '32');
+    pat.setAttribute('patternUnits', 'userSpaceOnUse');
+    var patPath = document.createElementNS(ns, 'path');
+    patPath.setAttribute('d', 'M 32 0 L 0 0 0 32');
+    patPath.setAttribute('fill', 'none');
+    patPath.setAttribute('stroke', '#173b61');
+    patPath.setAttribute('stroke-width', '1');
+    pat.appendChild(patPath);
+    defs.appendChild(pat);
+    svgEl.appendChild(defs);
+
+    var bg1 = document.createElementNS(ns, 'rect');
+    bg1.setAttribute('width', String(w)); bg1.setAttribute('height', String(h));
+    bg1.setAttribute('fill', 'url(#ra17-plate-bg)');
+    svgEl.appendChild(bg1);
+
+    var bg2 = document.createElementNS(ns, 'rect');
+    bg2.setAttribute('width', String(w)); bg2.setAttribute('height', String(h));
+    bg2.setAttribute('fill', 'url(#ra17-plate-grid)');
+    svgEl.appendChild(bg2);
+
+    (plate.edges || []).forEach(function (pe) {
+      var strokeW = String(pe.strokeWidth || 2.2);
+      if (pe.isFeatured && pe.relationship === 'ghost') {
+        var glow = document.createElementNS(ns, 'line');
+        glow.setAttribute('x1', String(pe.x1)); glow.setAttribute('y1', String(pe.y1));
+        glow.setAttribute('x2', String(pe.x2)); glow.setAttribute('y2', String(pe.y2));
+        glow.setAttribute('stroke', '#ffd60a');
+        glow.setAttribute('stroke-width', String(Number(strokeW) + 3.2));
+        glow.setAttribute('stroke-opacity', '0.88');
+        glow.setAttribute('stroke-linecap', 'round');
+        svgEl.appendChild(glow);
+      }
+      var line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', String(pe.x1)); line.setAttribute('y1', String(pe.y1));
+      line.setAttribute('x2', String(pe.x2)); line.setAttribute('y2', String(pe.y2));
+      var col = pe.relationship === 'ghost' ? '#ff4f9a' : (pe.relationship === 'unknown' ? '#e3b65b' : (pe.relationship === 'indirect' ? '#7fd1b0' : '#7eb3e0'));
+      line.setAttribute('stroke', col);
+      line.setAttribute('stroke-width', strokeW);
+      if (pe.relationship === 'ghost') line.setAttribute('stroke-dasharray', '9 5');
+      else if (pe.relationship === 'unknown') line.setAttribute('stroke-dasharray', '2 5');
+      else if (pe.relationship === 'indirect') line.setAttribute('stroke-dasharray', '5 4');
+      line.setAttribute('stroke-linecap', 'round');
+      svgEl.appendChild(line);
+    });
+
+    (plate.nodes || []).forEach(function (pn) {
+      var g = document.createElementNS(ns, 'g');
+      var hue = hashHue(pn.dir || '.');
+      var fillCol = 'hsl(' + hue + ', 72%, 64%)';
+      var c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', String(pn.x)); c.setAttribute('cy', String(pn.y));
+      c.setAttribute('r', String(pn.r));
+      c.setAttribute('fill', fillCol);
+      c.setAttribute('stroke', '#fffef9');
+      c.setAttribute('stroke-width', pn.isFeaturedEndpoint ? '2.5' : '1.8');
+      g.appendChild(c);
+
+      var lbl = pn.label;
+      if (lbl) {
+        var pill = document.createElementNS(ns, 'rect');
+        pill.setAttribute('x', String(Math.round(lbl.x)));
+        pill.setAttribute('y', String(Math.round(lbl.y)));
+        pill.setAttribute('width', String(Math.round(lbl.w)));
+        pill.setAttribute('height', String(Math.round(lbl.h)));
+        pill.setAttribute('fill', 'rgba(9, 25, 44, 0.88)');
+        g.appendChild(pill);
+
+        var txt = document.createElementNS(ns, 'text');
+        txt.setAttribute('x', String(lbl.anchorX));
+        txt.setAttribute('y', String(lbl.anchorY));
+        var anchor = lbl.textAlign === 'right' ? 'end' : (lbl.textAlign === 'center' ? 'middle' : 'start');
+        txt.setAttribute('text-anchor', anchor);
+        txt.setAttribute('fill', '#fffef9');
+        txt.setAttribute('font-family', 'ui-monospace, "SF Mono", Menlo, Consolas, monospace');
+        txt.setAttribute('font-size', pn.isFeaturedEndpoint ? '13' : '12');
+        txt.setAttribute('font-weight', pn.isFeaturedEndpoint ? '700' : '600');
+        txt.textContent = pn.shortLabel;
+        g.appendChild(txt);
+      }
+      svgEl.appendChild(g);
+    });
+
+    if (plate.balloonBox && balloonText) {
+      var bb = plate.balloonBox;
+      var bx = bb.x, by = bb.y, bw = bb.w || bb.width || 300, bh = bb.h || bb.height || 36;
+      var bt = plate.balloonTarget || { x: bx + bw / 2, y: by + bh + 28 };
+      var ax = bt.x, ay = bt.y;
+      var tailBaseX = Math.max(bx + 24, Math.min(bx + bw - 24, ax));
+      var tailBaseY = by + bh;
+
+      var bgShadow = document.createElementNS(ns, 'rect');
+      bgShadow.setAttribute('x', String(bx + 3)); bgShadow.setAttribute('y', String(by + 3));
+      bgShadow.setAttribute('width', String(bw)); bgShadow.setAttribute('height', String(bh));
+      bgShadow.setAttribute('fill', '#121212');
+      svgEl.appendChild(bgShadow);
+
+      var tail = document.createElementNS(ns, 'polygon');
+      tail.setAttribute('points', (tailBaseX - 7) + ',' + tailBaseY + ' ' + (tailBaseX + 7) + ',' + tailBaseY + ' ' + ax + ',' + (ay - 5));
+      tail.setAttribute('fill', '#fffef9');
+      tail.setAttribute('stroke', '#121212');
+      tail.setAttribute('stroke-width', '2');
+      svgEl.appendChild(tail);
+
+      var box = document.createElementNS(ns, 'rect');
+      box.setAttribute('x', String(bx)); box.setAttribute('y', String(by));
+      box.setAttribute('width', String(bw)); box.setAttribute('height', String(bh));
+      box.setAttribute('fill', '#fffef9');
+      box.setAttribute('stroke', '#121212');
+      box.setAttribute('stroke-width', '2.5');
+      svgEl.appendChild(box);
+
+      var pin = document.createElementNS(ns, 'circle');
+      pin.setAttribute('cx', String(ax)); pin.setAttribute('cy', String(ay));
+      pin.setAttribute('r', '4.5');
+      pin.setAttribute('fill', '#ffd60a');
+      pin.setAttribute('stroke', '#121212');
+      pin.setAttribute('stroke-width', '1.8');
+      svgEl.appendChild(pin);
+
+      var bTxt = document.createElementNS(ns, 'text');
+      bTxt.setAttribute('x', String(bx + bw / 2));
+      bTxt.setAttribute('y', String(by + 23));
+      bTxt.setAttribute('text-anchor', 'middle');
+      bTxt.setAttribute('fill', '#121212');
+      bTxt.setAttribute('font-family', 'ui-monospace, "SF Mono", Menlo, Consolas, monospace');
+      bTxt.setAttribute('font-size', '12');
+      bTxt.setAttribute('font-weight', '800');
+      bTxt.textContent = balloonText;
+      svgEl.appendChild(bTxt);
+    }
+  }
+
+  function renderBriefingBoard() {
+    if (!briefingEl || !briefingData) return;
+    briefingEl.textContent = '';
+
+    // 1. Compact Inline Stat Strip
+    var st = briefingData.stats;
+    var strip = el('div', 'f12-stat-strip');
+    var p1 = el('div', 'f12-stat-pill');
+    p1.appendChild(el('strong', '', String(st.ghostCount)));
+    p1.appendChild(el('span', '', 'GHOST WIRES'));
+    strip.appendChild(p1);
+
+    var p2 = el('div', 'f12-stat-pill');
+    p2.appendChild(el('strong', '', String(st.familyCount)));
+    p2.appendChild(el('span', '', 'FAMILIES'));
+    strip.appendChild(p2);
+
+    var p3 = el('div', 'f12-stat-pill');
+    p3.appendChild(el('strong', '', String(st.unknownCount)));
+    p3.appendChild(el('span', '', 'UNCHECKED (' + st.totalUnchecked + ' TOTAL)'));
+    strip.appendChild(p3);
+
+    var p4 = el('div', 'f12-stat-pill');
+    p4.appendChild(el('strong', '', st.commitsAnalyzed.toLocaleString('en-US')));
+    p4.appendChild(el('span', '', 'COMMITS ANALYSED'));
+    strip.appendChild(p4);
+    briefingEl.appendChild(strip);
+
+    // 2. Empty state when no findings exist
+    if (!briefingData.featured || edges.length === 0) {
+      var emp = briefingData.emptyState;
+      var empPanel = el('article', 'f12-cut-panel');
+      empPanel.appendChild(el('span', 'f12-cut-label', 'C-01'));
+      var empKicker = el('div', 'f12-kicker-row');
+      empKicker.appendChild(el('span', 'f12-kicker-chip marker-active', 'C-01 / NO GHOST WIRES ABOVE THRESHOLD'));
+      empPanel.appendChild(empKicker);
+      empPanel.appendChild(el('h2', 'f12-headline', emp ? emp.headline : 'No co-changing file pairs passed current thresholds'));
+      empPanel.appendChild(el('p', 'f12-lede', emp ? emp.subhead : 'Try lowering --min-shared or --min-confidence.'));
+      if (emp && emp.suggestedCommand) {
+        var empCli = el('div', 'f12-cli-row');
+        empCli.appendChild(el('code', 'f12-cli-code', emp.suggestedCommand));
+        var empCopyBtn = el('button', 'f12-copy-btn', 'Copy CLI command');
+        empCopyBtn.type = 'button';
+        empCopyBtn.addEventListener('click', function () { copyText(emp.suggestedCommand, empCopyBtn, 'Copied'); });
+        empCli.appendChild(empCopyBtn);
+        empPanel.appendChild(empCli);
+      }
+      briefingEl.appendChild(empPanel);
+      return;
+    }
+
+    var activeEdge = edges[briefingSelectedEdgeIdx] || edges[briefingData.featured.edgeIndex] || edges[0];
+    var useDefault = briefingUseDefaultFeatured && activeEdge && activeEdge.idx === briefingData.featured.edgeIndex;
+
+    // 3. Main 12-col Board Grid: Cut C-01 (Featured Finding + Plate) & Cut C-05 (Evidence)
+    var grid = el('div', 'f12-board-grid');
+    var cut01 = el('article', 'f12-cut-panel f12-cut-c01');
+    cut01.id = 'cut-c01';
+    cut01.appendChild(el('span', 'f12-cut-label', 'C-01'));
+
+    var kickerRow = el('div', 'f12-kicker-row');
+    var kickerLeft = el('div', 'f12-kicker-left');
+    var activeRankItem = null;
+    if (briefingData.ranked) {
+      for (var ri = 0; ri < briefingData.ranked.length; ri++) {
+        var rItem = briefingData.ranked[ri];
+        if (useDefault && ri === 0) { activeRankItem = rItem; break; }
+        if (!useDefault && rItem.edgeIndex === activeEdge.idx) {
+          activeRankItem = rItem; break;
+        }
+      }
+    }
+    var chipLabel = useDefault
+      ? briefingData.featured.kickerChip
+      : ((activeRankItem ? activeRankItem.findingId : 'F-01') + ' · SELECTED FINDING');
+    kickerLeft.appendChild(el('span', 'f12-kicker-chip' + (viewMode === 'briefing' ? ' marker-active' : ''), chipLabel));
+
+    var tagLabel = useDefault
+      ? briefingData.featured.kickerTag
+      : ((activeEdge.d.relationship === 'ghost' ? 'GHOST WIRE' : activeEdge.d.relationship.toUpperCase()) + ' · ' + activeEdge.d.shared + ' SHARED COMMITS');
+    kickerLeft.appendChild(el('span', 'f12-tag', tagLabel));
+    kickerRow.appendChild(kickerLeft);
+    var lastDateStr = useDefault ? briefingData.featured.lastTogether : activeEdge.d.lastTogether;
+    kickerRow.appendChild(el('span', 'f12-last-date', 'Last together ' + lastDateStr));
+    cut01.appendChild(kickerRow);
+
+    var forwardFirst = activeEdge.d.confidence > activeEdge.d.reverseConfidence ||
+      (activeEdge.d.confidence === activeEdge.d.reverseConfidence && activeEdge.d.fromChanges <= activeEdge.d.toChanges);
+    var dynLabels = distinguishingPaths(
+      forwardFirst ? activeEdge.s.safePath : activeEdge.t.safePath,
+      forwardFirst ? activeEdge.t.safePath : activeEdge.s.safePath
+    );
+    var headlineText = useDefault
+      ? briefingData.featured.headline
+      : (dynLabels[0] + ' and ' + dynLabels[1] + ' keep changing together');
+    var dynDenom = forwardFirst ? activeEdge.d.fromChanges : activeEdge.d.toChanges;
+    var dynPct = pct(forwardFirst ? activeEdge.d.confidence : activeEdge.d.reverseConfidence);
+    var dynIv = forwardFirst ? activeEdge.d.interval : activeEdge.d.reverseInterval;
+    var dynLow = Math.floor(dynIv.low * 100 + 1e-9);
+    var dynHigh = Math.ceil(dynIv.high * 100 - 1e-9);
+    var ledeText = useDefault
+      ? briefingData.featured.lede
+      : ((activeEdge.d.relationship === 'ghost'
+        ? 'No direct or 2-hop import link was detected between these files in current code, yet '
+        : 'Connected via ' + activeEdge.d.relationship + ' relationship: ') +
+        activeEdge.d.shared + ' of ' + dynDenom + ' commits to ' + dynLabels[0] +
+        ' also modified ' + dynLabels[1] + ' (' + dynPct + ', 95% confidence range ' + dynLow + '\u2013' + dynHigh + '%).');
+
+    var h2 = el('h2', 'f12-headline', headlineText);
+    h2.id = 'briefing-headline';
+    cut01.appendChild(h2);
+    var ledeP = el('p', 'f12-lede', ledeText);
+    ledeP.id = 'briefing-lede';
+    cut01.appendChild(ledeP);
+
+    var plateWrap = el('div', 'f12-plate-wrap');
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('id', 'featured-plate-svg');
+    svg.setAttribute('class', 'f12-plate-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate');
+    var plateObj = useDefault ? briefingData.featured.plate : buildDynamicPlateForEdge(activeEdge);
+    var bText = useDefault ? briefingData.featured.balloonText : plateObj.balloonText;
+    renderPlateSvg(svg, plateObj, bText);
+    plateWrap.appendChild(svg);
+
+    var plateFooter = el('div', 'f12-plate-footer');
+    var plateLegend = el('div', 'f12-plate-legend');
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '━━ Featured ghost wire'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '- - Ghost wire (long dash)'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '··· Unchecked (dotted)'));
+    plateLegend.appendChild(el('span', 'f12-plate-legend-item', '── Import (solid)'));
+    plateFooter.appendChild(plateLegend);
+    var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
+    plateFooter.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)'));
+    plateWrap.appendChild(plateFooter);
+    cut01.appendChild(plateWrap);
+    grid.appendChild(cut01);
+
+    // Cut C-05: Evidence & Receipts
+    var cut05 = el('aside', 'f12-cut-panel f12-cut-c05');
+    cut05.id = 'cut-c05';
+    cut05.appendChild(el('span', 'f12-cut-label', 'C-05 · EVIDENCE'));
+
+    var evKicker = el('div', 'f12-kicker-row');
+    evKicker.appendChild(el('span', 'f12-tag', 'DIRECTIONAL CO-CHANGE & RECEIPTS'));
+    evKicker.appendChild(el('span', 'f12-last-date', 'Lead pair: ' + dynLabels[0] + ' ↔ ' + dynLabels[1]));
+    cut05.appendChild(evKicker);
+
+    var dirGrid = el('div', 'f12-dir-grid');
+    if (useDefault && briefingData.featured.evidence) {
+      var evCopy = briefingData.featured.evidence;
+      var pd = evCopy.primaryDirection;
+      var rd = evCopy.reverseDirection;
+      var box1 = el('div', 'f12-dir-box');
+      box1.setAttribute('data-edge-idx', String(activeEdge.idx));
+      box1.appendChild(el('div', 'f12-dir-pair', pd.fromLabel + ' → ' + pd.toLabel));
+      box1.appendChild(el('div', 'f12-dir-pct', pd.pctText));
+      box1.appendChild(el('div', 'f12-dir-sub', pd.detailText + ' (' + pd.lowerBoundText + ')'));
+      dirGrid.appendChild(box1);
+
+      var box2 = el('div', 'f12-dir-box');
+      box2.appendChild(el('div', 'f12-dir-pair', rd.fromLabel + ' → ' + rd.toLabel));
+      box2.appendChild(el('div', 'f12-dir-pct', rd.pctText));
+      box2.appendChild(el('div', 'f12-dir-sub', rd.detailText + ' (' + rd.lowerBoundText + ')'));
+      dirGrid.appendChild(box2);
+    } else {
+      var revDenom = forwardFirst ? activeEdge.d.toChanges : activeEdge.d.fromChanges;
+      var revPct = pct(forwardFirst ? activeEdge.d.reverseConfidence : activeEdge.d.confidence);
+      var revIv = forwardFirst ? activeEdge.d.reverseInterval : activeEdge.d.interval;
+      var revLow = Math.floor(revIv.low * 100 + 1e-9);
+      var revHigh = Math.ceil(revIv.high * 100 - 1e-9);
+
+      var dBox1 = el('div', 'f12-dir-box');
+      dBox1.setAttribute('data-edge-idx', String(activeEdge.idx));
+      dBox1.appendChild(el('div', 'f12-dir-pair', dynLabels[0] + ' → ' + dynLabels[1]));
+      dBox1.appendChild(el('div', 'f12-dir-pct', dynPct));
+      dBox1.appendChild(el('div', 'f12-dir-sub', activeEdge.d.shared + ' of ' + dynDenom + ' commits · 95% range ' + dynLow + '\u2013' + dynHigh + '% (\u2265' + dynLow + '% CI)'));
+      dirGrid.appendChild(dBox1);
+
+      var dBox2 = el('div', 'f12-dir-box');
+      dBox2.appendChild(el('div', 'f12-dir-pair', dynLabels[1] + ' → ' + dynLabels[0]));
+      dBox2.appendChild(el('div', 'f12-dir-pct', revPct));
+      dBox2.appendChild(el('div', 'f12-dir-sub', activeEdge.d.shared + ' of ' + revDenom + ' commits · 95% range ' + revLow + '\u2013' + revHigh + '% (\u2265' + revLow + '% CI)'));
+      dirGrid.appendChild(dBox2);
+    }
+    cut05.appendChild(dirGrid);
+
+    var metaStrip = el('div', 'f12-meta-strip');
+    metaStrip.appendChild(el('span', 'f12-meta-pill', 'Last together ' + lastDateStr));
+    if (useDefault && briefingData.featured.evidence) {
+      var evMeta = briefingData.featured.evidence;
+      if (evMeta.familySummary) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.familySummary.commitsTouchingTwoOrMore + ' family commits (2+ files) · ' + evMeta.familySummary.commitsTouchingAll + ' touched all ' + evMeta.familySummary.members.length));
+      }
+      if (evMeta.ownerNotes && evMeta.ownerNotes.length > 0) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.ownerNotes[0]));
+      }
+      if (evMeta.originShareNote) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', evMeta.originShareNote));
+      }
+    } else {
+      var leadN = forwardFirst ? activeEdge.s : activeEdge.t;
+      if (leadN.author) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', 'Top historical contributor: ' + leadN.author + ' (' + pct(leadN.share || 0) + ' of ' + dynLabels[0] + ' commits)'));
+      }
+    }
+    cut05.appendChild(metaStrip);
+
+    // Family pairs breakdown (when featured finding is a family)
+    if (useDefault && briefingData.featured.evidence && briefingData.featured.evidence.familySummary && briefingData.featured.evidence.familySummary.pairs && briefingData.featured.evidence.familySummary.pairs.length > 0) {
+      var famSum = briefingData.featured.evidence.familySummary;
+      var famBox = el('div', 'f12-family-pairs');
+      famBox.appendChild(el('div', 'f12-family-pairs-hdr', 'QUALIFYING FAMILY PAIRS (' + famSum.qualifyingPairs + ' OF ' + famSum.possiblePairs + ')'));
+      famSum.pairs.forEach(function (fp) {
+        var fpBtn = el('button', 'f12-family-pair-row');
+        fpBtn.type = 'button';
+        fpBtn.appendChild(el('span', '', fp.shortFrom + ' ↔ ' + fp.shortTo));
+        fpBtn.appendChild(el('span', '', fp.shared + ' shared · ' + fp.pctText + ' (' + fp.lowerBoundText + ')'));
+        var matchingEdge = edges[fp.edgeIndex] || edgeByPairKey[edgeKey(fp.fromPath, fp.toPath)];
+        if (matchingEdge) {
+          fpBtn.addEventListener('click', function () {
+            selectBriefingEdge(matchingEdge, false, true);
+          });
+        }
+        famBox.appendChild(fpBtn);
+      });
+      cut05.appendChild(famBox);
+    }
+
+    // Counterexamples
+    var cxData = activeEdge.d.counterexamples;
+    if (useDefault && briefingData.featured.evidence) {
+      var evCx = briefingData.featured.evidence;
+      var totalStandalone = (evCx.fromOnlyTotal || 0) + (evCx.toOnlyTotal || 0);
+      if (totalStandalone > 0) {
+        var cxDet = el('details', 'f12-counterexamples');
+        cxDet.appendChild(el('summary', '', evCx.counterexamplesSummary + ' (' + evCx.primaryDirection.fromLabel + ') · ' + evCx.reverseCounterexamplesSummary + ' (' + evCx.reverseDirection.fromLabel + ') — ' + plural(totalStandalone, 'counterexample commit')));
+        var cxItems = (evCx.fromOnly || []).concat(evCx.toOnly || []).slice(0, 4);
+        if (cxItems.length > 0) {
+          var cxUl = el('ul', 'f12-cx-list');
+          cxItems.forEach(function (item) {
+            cxUl.appendChild(el('li', '', item.hash.slice(0, 7) + ' · ' + item.date + ' · ' + sanitizeText(item.subject)));
+          });
+          cxDet.appendChild(cxUl);
+        }
+        cut05.appendChild(cxDet);
+      }
+    } else {
+      var fromStandalone = Math.max(0, dynDenom - activeEdge.d.shared);
+      var revDenom2 = forwardFirst ? activeEdge.d.toChanges : activeEdge.d.fromChanges;
+      var toStandalone = Math.max(0, revDenom2 - activeEdge.d.shared);
+      var totalCx = fromStandalone + toStandalone;
+      if (totalCx > 0) {
+        var cxDet2 = el('details', 'f12-counterexamples');
+        var fUnit = fromStandalone === 1 ? 'time' : 'times';
+        var tUnit = toStandalone === 1 ? 'time' : 'times';
+        cxDet2.appendChild(el('summary', '', 'Changed alone: ' + fromStandalone + ' ' + fUnit + ' (' + dynLabels[0] + ') · Changed alone: ' + toStandalone + ' ' + tUnit + ' (' + dynLabels[1] + ') — ' + plural(totalCx, 'counterexample commit')));
+        if (cxData) {
+          var cxUl2 = el('ul', 'f12-cx-list');
+          (cxData.fromOnly || []).concat(cxData.toOnly || []).slice(0, 4).forEach(function (item) {
+            cxUl2.appendChild(el('li', '', item.hash.slice(0, 7) + ' · ' + item.date + ' · ' + sanitizeText(item.subject)));
+          });
+          cxDet2.appendChild(cxUl2);
+        }
+        cut05.appendChild(cxDet2);
+      }
+    }
+
+    // Supporting Commit Receipts
+    var rawReceipts = useDefault && briefingData.featured.evidence
+      ? (briefingData.featured.evidence.receiptsShown || [])
+      : (activeEdge.d.evidence || []).slice(0, 3);
+    var receiptsTotal = useDefault && briefingData.featured.evidence
+      ? briefingData.featured.evidence.receiptsTotal
+      : activeEdge.d.shared;
+    cut05.appendChild(el('div', 'f12-receipts-hdr', 'SUPPORTING COMMIT RECEIPTS (' + rawReceipts.length + ' OF ' + receiptsTotal + ')'));
+    var rList = el('ul', 'f12-receipts-list');
+    rawReceipts.forEach(function (r) {
+      var li = el('li', 'f12-receipt-row');
+      var shortH = r.hash ? r.hash.slice(0, 7) : '';
+      var hBtn = el('button', 'f12-receipt-hash', shortH);
+      hBtn.type = 'button';
+      hBtn.title = 'Copy commit hash';
+      hBtn.addEventListener('click', function () { copyText(r.hash || shortH, hBtn, 'Copied'); });
+      li.appendChild(hBtn);
+      li.appendChild(el('span', 'f12-receipt-subj', sanitizeText(r.subject)));
+      li.appendChild(el('span', 'f12-receipt-date', r.date));
+      rList.appendChild(li);
+    });
+    cut05.appendChild(rList);
+
+    // CLI explain command + Copy finding button
+    var explainCmd = (useDefault && briefingData.featured.evidence)
+      ? briefingData.featured.evidence.explainCommand
+      : (activeEdge.d.explainCommand || fallbackExplainCommand(activeEdge.s.path, activeEdge.t.path));
+    var cliRow = el('div', 'f12-cli-row');
+    cliRow.appendChild(el('code', 'f12-cli-code', sanitizeText(explainCmd)));
+    var copyCli = el('button', 'f12-copy-btn', 'Copy CLI command');
+    copyCli.type = 'button';
+    copyCli.addEventListener('click', function () { copyText(explainCmd, copyCli, 'Copied'); });
+    cliRow.appendChild(copyCli);
+    cut05.appendChild(cliRow);
+
+    var expBtn = el('button', 'btn-export', 'Copy finding for PR / discussion');
+    expBtn.type = 'button';
+    expBtn.addEventListener('click', function () {
+      copyText(formatFindingMarkdown(activeEdge), expBtn, 'Copied finding to clipboard');
+    });
+    cut05.appendChild(expBtn);
+    grid.appendChild(cut05);
+    briefingEl.appendChild(grid);
+
+    // 4. Secondary Investigation Cards (C-02, C-03, C-04)
+    if (briefingData.secondaryCards && briefingData.secondaryCards.length > 0) {
+      var secGrid = el('div', 'f12-secondary-grid');
+      briefingData.secondaryCards.forEach(function (sc) {
+        var secEdge = edges[sc.edgeIndex];
+        var isSel = !useDefault && activeEdge && activeEdge.idx === sc.edgeIndex;
+        var card = el('button', 'f12-sec-card card interactive' + (isSel ? ' selected' : ''));
+        card.type = 'button';
+        card.appendChild(el('span', 'f12-cut-label', sc.cutId));
+        var kRow = el('div', 'f12-kicker-row');
+        kRow.appendChild(el('span', 'f12-tag', sc.findingId + ' · ' + sc.badge));
+        kRow.appendChild(el('span', 'f12-last-date', 'Last together ' + sc.lastTogether));
+        card.appendChild(kRow);
+        card.appendChild(el('div', 'f12-sec-pair', sc.pairLabel));
+        card.appendChild(el('div', 'f12-sec-sub', sc.detailText));
+
+        var ciRow = el('div', 'f12-ci-row');
+        ciRow.appendChild(el('span', 'f12-ci-pct', sc.headlinePct));
+        var track = el('div', 'f12-ci-track');
+        var fill = el('div', 'f12-ci-fill');
+        fill.style.left = sc.lowPct + '%';
+        fill.style.width = Math.max(2, sc.highPct - sc.lowPct) + '%';
+        track.appendChild(fill);
+        var tick = el('div', 'f12-ci-tick');
+        tick.style.left = 'calc(' + sc.pointPct + '% - 1px)';
+        track.appendChild(tick);
+        ciRow.appendChild(track);
+        ciRow.appendChild(el('span', 'f12-ci-bounds', sc.lowPct + '\u2013' + sc.highPct + '%'));
+        card.appendChild(ciRow);
+
+        card.appendChild(el('div', 'f12-sec-rev', sc.reverseLine));
+        if (sc.receiptHash) {
+          card.appendChild(el('div', 'f12-sec-receipt', sc.receiptHash + ' · ' + sc.receiptDate + ' · ' + sc.receiptSubject));
+        }
+        card.addEventListener('click', function () {
+          if (secEdge) selectBriefingEdge(secEdge, false, true);
+        });
+        secGrid.appendChild(card);
+      });
+      briefingEl.appendChild(secGrid);
+    }
+
+    // 5. Full-width Ranked Findings Table (filtered by search & kind toggles)
+    var q = search && search.value ? search.value.trim().toLowerCase() : '';
+    var filteredRanked = (briefingData.ranked || []).filter(function (item) {
+      if (item.relationship && !visible[item.relationship]) return false;
+      if (q) {
+        var hay = (item.title + ' ' + (item.fromPath || '') + ' ' + (item.toPath || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+
+    var rankedPanel = el('section', 'f12-ranked-panel');
+    rankedPanel.id = 'cut-ranked';
+    rankedPanel.appendChild(el('span', 'f12-cut-label', 'C-06 · INDEX'));
+    var rHdr = el('div', 'f12-ranked-hdr');
+    var rLeft = el('div', 'f12-kicker-left');
+    rLeft.appendChild(el('h3', 'f12-ranked-title', 'RANKED FINDINGS (' + filteredRanked.length + ')'));
+    rLeft.appendChild(el('span', 'f12-tag', '45° HALFTONE DOTS = 95% CONFIDENCE RANGE · TICK = POINT ESTIMATE'));
+    rHdr.appendChild(rLeft);
+    rHdr.appendChild(el('span', 'f12-last-date', 'Ordered by overview priority & Wilson lower bound'));
+    rankedPanel.appendChild(rHdr);
+
+    var rListEl = el('div', 'f12-ranked-list');
+    rListEl.id = 'ranked-findings-list';
+    var shownRanked = briefingShowAllRanked ? filteredRanked : filteredRanked.slice(0, 10);
+    shownRanked.forEach(function (item, idx) {
+      var isRowActive = (useDefault && idx === 0 && !q) ||
+        (!useDefault && activeEdge && item.edgeIndex === activeEdge.idx);
+      var row = el('button', 'f12-rank-row' + (isRowActive ? ' active' : ''));
+      row.type = 'button';
+      row.setAttribute('data-finding-id', item.findingId);
+      row.appendChild(el('span', 'f12-rank-id', item.findingId));
+      row.appendChild(el('span', 'f12-rank-pair', item.title));
+      var rBadge = item.kind === 'family' ? 'FAMILY' : (item.relationship === 'ghost' ? 'GHOST WIRE' : item.relationship.toUpperCase());
+      row.appendChild(el('span', 'f12-tag', rBadge));
+      row.appendChild(el('span', 'f12-rank-ratio', item.ratioText));
+
+      var track = el('div', 'f12-ci-track');
+      var fill = el('div', 'f12-ci-fill');
+      fill.style.left = item.rangeLowPct + '%';
+      fill.style.width = Math.max(2, item.rangeHighPct - item.rangeLowPct) + '%';
+      track.appendChild(fill);
+      var tick = el('div', 'f12-ci-tick');
+      tick.style.left = 'calc(' + item.pointPct + '% - 1px)';
+      track.appendChild(tick);
+      row.appendChild(track);
+
+      row.appendChild(el('span', 'f12-ci-bounds', item.rangeLowPct + '\u2013' + item.rangeHighPct + '%'));
+      row.appendChild(el('span', 'f12-last-date', item.lastTogether));
+      row.addEventListener('click', function () {
+        if (item.kind === 'family') {
+          var defEdge = edges[briefingData.featured.edgeIndex];
+          if (defEdge) selectBriefingEdge(defEdge, true, true);
+          return;
+        }
+        var targetE = edges[item.edgeIndex] || (item.fromPath && item.toPath ? edgeByPairKey[edgeKey(item.fromPath, item.toPath)] : null);
+        if (targetE) selectBriefingEdge(targetE, false, true);
+      });
+      rListEl.appendChild(row);
+    });
+    rankedPanel.appendChild(rListEl);
+
+    if (filteredRanked.length > 10) {
+      var moreCount = filteredRanked.length - 10;
+      var toggleAllBtn = el(
+        'button',
+        'f12-toggle-all-btn',
+        briefingShowAllRanked
+          ? 'Show top 10 findings'
+          : 'Show all ' + filteredRanked.length + ' findings (' + moreCount + ' more)'
+      );
+      toggleAllBtn.id = 'toggle-all-findings';
+      toggleAllBtn.type = 'button';
+      toggleAllBtn.setAttribute('aria-expanded', String(briefingShowAllRanked));
+      toggleAllBtn.addEventListener('click', function () {
+        briefingShowAllRanked = !briefingShowAllRanked;
+        renderBriefingBoard();
+        syncMarkerDom();
+      });
+      rankedPanel.appendChild(toggleAllBtn);
+    }
+    briefingEl.appendChild(rankedPanel);
+  }
+
+  if (window.location && window.location.hash) {
+    var hashEdge = resolveEdgeFromHash(window.location.hash);
+    if (hashEdge) {
+      briefingSelectedEdgeIdx = hashEdge.idx;
+      briefingUseDefaultFeatured = false;
+      selectedEdge = hashEdge;
+    }
+  }
+  window.addEventListener('hashchange', function () {
+    var he = resolveEdgeFromHash(window.location.hash);
+    if (he) selectBriefingEdge(he, false, false);
+  });
+
   function renderPanel() {
     panel.textContent = '';
     if (selectedNode) {
@@ -4764,6 +5910,8 @@ const RICH_CLIENT = String.raw`
     } else {
       renderOverview();
     }
+    renderBriefingBoard();
+    syncMarkerDom();
   }
 
   // ---- media & print listeners ---------------------------------------------

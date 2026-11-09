@@ -1,6 +1,6 @@
 # Map Hallway Test Protocol (`--style classic` vs `--style rich`)
 
-This protocol evaluates whether the opt-in FRAME/12 contact-sheet layout (`repo-archaeology map --style rich`) improves comprehension, speed, and calibration of historical uncertainty compared with the default global force-directed graph (`repo-archaeology map --style classic`) before considering changing the default style.
+This protocol evaluates whether the opt-in FRAME/12 Investigation Board + Contact-Sheet Atlas (`repo-archaeology map --style rich`, featuring the default **Briefing** Investigation Board and the **Atlas** Contact Sheet toggle) improves comprehension, speed, and calibration of historical uncertainty compared with the default global force-directed graph (`repo-archaeology map --style classic`) before considering changing the default style.
 
 ## Participants & Setup
 

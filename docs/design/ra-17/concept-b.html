@@ -173,31 +173,6 @@ html, body {
   position: relative;
 }
 
-/* Registration peg holes at top of sheet */
-.f12-pegs {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 56px;
-  height: 10px;
-  margin-bottom: 4px;
-}
-.f12-peg {
-  background: var(--f-hole);
-  border: 1.5px solid var(--f-rule);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-.f12-peg.round {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-.f12-peg.slot {
-  width: 24px;
-  height: 7px;
-  border-radius: 4px;
-}
-
 /* Compact Masthead & Toolbar */
 .f12-masthead {
   display: flex;
@@ -207,7 +182,7 @@ html, body {
   gap: 8px 16px;
   padding-bottom: 7px;
   border-bottom: var(--f-stroke) solid var(--f-rule);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .f12-brand-row {
   display: flex;
@@ -242,6 +217,19 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
+}
+.f12-status-calm {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: var(--f-panel);
+  color: var(--f-ink);
+  border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 
 .f12-how-to-read {
@@ -319,6 +307,7 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .f12-seg-btn + .f12-seg-btn {
   border-left: 1.5px solid var(--f-rule);
@@ -329,18 +318,62 @@ html, body {
   color: var(--f-sheet);
 }
 
+/* Compact Inline Stat Strip (shared by Concept A & B) */
+.f12-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 5px 10px;
+  margin-bottom: 10px;
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-panel);
+}
+.f12-stat-strip-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.f12-stat-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-f-mono);
+  font-size: 11.5px;
+  color: var(--f-ink-2);
+}
+.f12-stat-inline strong {
+  font-family: var(--font-f-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--f-ink);
+  font-variant-numeric: tabular-nums;
+}
+.f12-stat-sep {
+  color: var(--f-grid);
+  font-weight: 700;
+}
+.f12-stat-window {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  color: var(--f-ink-2);
+}
+
 /* Panels & SVG Polygon Borders */
 .f12-panel {
   position: relative;
   background: var(--f-panel);
-  padding: 12px 14px;
+  padding: 10px 14px;
   min-width: 0;
 }
 .f12-panel.f12-slant-bottom {
-  padding-bottom: 20px;
+  padding-bottom: 18px;
 }
 .f12-panel.f12-slant-top {
-  padding-top: 20px;
+  padding-top: 18px;
 }
 .f12-panel-frame {
   position: absolute;
@@ -387,14 +420,14 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 6px;
+  gap: 6px 12px;
+  margin-bottom: 5px;
 }
 .f12-kicker-left {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .f12-kicker-chip {
   font-family: var(--font-f-mono);
@@ -406,6 +439,7 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 .f12-tag {
   font-family: var(--font-f-mono);
@@ -417,38 +451,45 @@ html, body {
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   color: var(--f-ink);
+  white-space: nowrap;
+}
+.f12-tag-weak {
+  border-style: dashed;
+  color: var(--f-ink-2);
 }
 .f12-last-date {
   font-family: var(--font-f-mono);
   font-size: 11.5px;
   font-weight: 700;
   color: var(--f-ink-2);
+  white-space: nowrap;
 }
 
 .f12-headline {
   font-family: var(--font-f-display);
   font-weight: 400;
-  font-size: clamp(20px, 2.05vw, 27px);
-  line-height: 1.12;
+  font-size: clamp(19px, 1.95vw, 25px);
+  line-height: 1.14;
   letter-spacing: 0.01em;
   margin: 0 0 4px;
   color: var(--f-ink);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.f12-headline code,
+.f12-headline code.f12-headline-path,
 .f12-mono-token {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 0.9em;
-  padding: 1px 6px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
+  font-size: 0.94em;
+  letter-spacing: -0.02em;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
 }
 .f12-subhead {
-  margin: 0 0 8px;
-  font-size: 13px;
-  line-height: 1.4;
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  line-height: 1.38;
   color: var(--f-ink-2);
   max-width: 95ch;
   overflow-wrap: anywhere;
@@ -457,56 +498,10 @@ html, body {
 .f12-subhead code {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--f-ink);
 }
 
-/* Big-number Metric strip (Concept A) */
-.f12-stat-band {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--f-gutter-pair);
-  margin-bottom: 10px;
-}
-.f12-stat-card {
-  position: relative;
-  border: 2px solid var(--f-rule);
-  background: var(--f-panel);
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-width: 0;
-}
-.f12-stat-card.f12-stat-featured::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 6px;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.25px,
-    transparent 1.25px,
-    transparent 5px
-  );
-  border-bottom: 1.5px solid var(--f-rule);
-}
-.f12-stat-card.f12-stat-featured {
-  padding-top: 11px;
-}
-.f12-m-label {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .f12-ink-sq {
   display: inline-flex;
   align-items: center;
@@ -518,20 +513,6 @@ html, body {
   border: 1.5px solid var(--f-rule);
   font-size: 11px;
   line-height: 1;
-}
-.f12-m-value {
-  font-family: var(--font-f-display);
-  font-size: 26px;
-  line-height: 1.06;
-  margin: 2px 0 1px;
-  color: var(--f-ink);
-  font-variant-numeric: tabular-nums;
-}
-.f12-m-note {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  color: var(--f-ink-2);
-  margin: 0;
 }
 
 /* Cyanotype Plate */
@@ -547,7 +528,7 @@ html, body {
 .f12-plate-canvas-box {
   position: relative;
   width: 100%;
-  height: 274px;
+  height: 266px;
 }
 .f12-plate-canvas {
   display: block;
@@ -559,7 +540,7 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 12px;
+  gap: 5px 12px;
   padding: 5px 10px;
   background: var(--plate-ground-deep);
   border-top: 1.5px solid rgba(159, 180, 204, 0.25);
@@ -571,14 +552,22 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .f12-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--plate-chalk);
   font-size: 11px;
+  white-space: nowrap;
+}
+.f12-dir-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid #fffef9;
+  display: inline-block;
 }
 
 /* Speech Balloon Callout on the Plate (ported from balloon.tsx) */
@@ -623,9 +612,47 @@ html, body {
   stroke-linejoin: miter;
 }
 .f12-peak-dot {
-  fill: var(--f-marker);
+  fill: #fffef9;
   stroke: #121212;
-  stroke-width: 2px;
+  stroke-width: 2.2px;
+}
+
+/* Family Pairwise Summary Table inside Evidence Panel */
+.f12-family-pairs-box {
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-sheet);
+  margin-bottom: 7px;
+}
+.f12-family-pairs-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--f-grid);
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink-2);
+}
+.f12-family-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
+}
+.f12-family-pair-row:last-child {
+  border-bottom: 0;
+}
+.f12-family-pair-row.is-lead {
+  background: rgba(18, 18, 18, 0.05);
+  font-weight: 700;
+}
+:root[data-theme="dark"] .f12-family-pair-row.is-lead {
+  background: rgba(241, 240, 234, 0.08);
 }
 
 /* Evidence Panel Inside / Beside Hero */
@@ -633,12 +660,12 @@ html, body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 .f12-dir-card {
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
-  padding: 7px 10px;
+  padding: 6px 9px;
 }
 .f12-dir-route {
   font-family: var(--font-f-mono);
@@ -650,12 +677,28 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.f12-dir-metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 2px;
+}
 .f12-dir-pct {
   font-family: var(--font-f-display);
-  font-size: 24px;
-  line-height: 1.08;
+  font-size: 21px;
+  line-height: 1.05;
   color: var(--f-ink);
-  margin: 0 0 2px;
+  margin: 0;
+}
+.f12-dir-lb {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink);
+  padding: 1px 5px;
+  border: 1px solid var(--f-rule);
+  background: var(--f-panel);
 }
 .f12-dir-detail {
   font-family: var(--font-f-mono);
@@ -664,36 +707,46 @@ html, body {
   margin: 0;
 }
 
-.f12-meta-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.f12-meta-pill {
+/* Plain Definition List for Evidence Metadata (no fake buttons) */
+.f12-evidence-dl {
+  margin: 0 0 7px;
+  padding: 4px 0;
+  border-top: 1px solid var(--f-grid);
+  border-bottom: 1px solid var(--f-grid);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
   font-family: var(--font-f-mono);
   font-size: 11px;
-  padding: 2px 7px;
-  border: 1px solid var(--f-rule);
-  background: var(--f-sheet);
+}
+.f12-evidence-dl dt {
+  color: var(--f-ink-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.f12-evidence-dl dd {
+  margin: 0;
   color: var(--f-ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .f12-cx-details {
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-  padding: 4px 8px;
-  margin-bottom: 8px;
+  padding: 3px 0;
+  margin-bottom: 6px;
   font-family: var(--font-f-mono);
   font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
 }
 .f12-cx-details summary {
   cursor: pointer;
   font-weight: 700;
-  color: var(--f-ink);
+  color: var(--f-ink-2);
 }
 .f12-cx-list {
-  margin: 6px 0 2px;
+  margin: 4px 0 2px;
   padding-left: 16px;
   color: var(--f-ink-2);
 }
@@ -703,20 +756,20 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .f12-receipts-title {
   font-family: var(--font-f-mono);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--f-ink-2);
   margin: 0;
 }
 .f12-receipt-list {
   list-style: none;
-  margin: 0 0 8px;
+  margin: 0 0 7px;
   padding: 0;
   border-top: 1.5px solid var(--f-rule);
 }
@@ -725,7 +778,7 @@ html, body {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 0;
+  padding: 3px 0;
   border-bottom: 1px solid var(--f-grid);
   font-size: 12px;
   min-width: 0;
@@ -760,7 +813,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   min-width: 0;
@@ -789,12 +842,12 @@ html, body {
   white-space: nowrap;
 }
 
-/* Tone Range Bars (ported from tone-bar-list.tsx) */
+/* Tone Range Bars with 45° Halftone Dots (ported from tone-bar-list.tsx) */
 .f12-range-track {
   position: relative;
   display: block;
   width: 100%;
-  height: 16px;
+  height: 15px;
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
 }
@@ -802,13 +855,11 @@ html, body {
   position: absolute;
   top: 0;
   bottom: 0;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.35px,
-    transparent 1.35px,
-    transparent 5px
-  );
+  background-image:
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px),
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px);
+  background-position: 0 0, 3px 3px;
+  background-size: 6px 6px;
   border-left: 1.5px solid var(--f-rule);
   border-right: 1.5px solid var(--f-rule);
 }
@@ -830,13 +881,16 @@ html, body {
 }
 .f12-ranked-row {
   display: grid;
-  grid-template-columns: 54px minmax(200px, 1.5fr) 120px 76px minmax(140px, 1.4fr) 92px;
+  grid-template-columns: 54px minmax(190px, 1.45fr) auto 76px minmax(140px, 1.35fr) 92px;
   align-items: center;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--f-grid);
   font-family: var(--font-f-mono);
   font-size: 12px;
+}
+.f12-ranked-row[hidden] {
+  display: none !important;
 }
 .f12-ranked-row.f12-ranked-active {
   background-image: repeating-linear-gradient(
@@ -856,6 +910,7 @@ html, body {
   border: 1.5px solid var(--f-rule);
   text-align: center;
   background: var(--f-sheet);
+  white-space: nowrap;
 }
 .f12-ranked-row.f12-ranked-active .f12-ranked-cut {
   background: var(--f-ink);
@@ -869,10 +924,17 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.f12-ranked-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
 .f12-ranked-ratio {
   font-weight: 700;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-range-col {
   display: flex;
@@ -885,11 +947,18 @@ html, body {
   min-width: 64px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-date {
   font-size: 11px;
   color: var(--f-ink-2);
   text-align: right;
+  white-space: nowrap;
+}
+.f12-ranked-more-bar {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
 }
 
 /* Concept A Layout */
@@ -897,14 +966,14 @@ html, body {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   gap: var(--f-gutter-pair);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   align-items: stretch;
 }
 .concept-a-secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--f-gutter-pair);
-  margin-bottom: 42px;
+  margin-bottom: 36px;
 }
 
 /* Concept B Storyboard Layout */
@@ -934,47 +1003,36 @@ html, body {
 .f12-pair > .f12-panel {
   flex: 1;
 }
-.concept-b-chip-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--f-grid);
-}
-.concept-b-stat-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 9px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-}
-.concept-b-stat-num {
-  font-family: var(--font-f-display);
-  font-size: 18px;
-  line-height: 1;
-  color: var(--f-ink);
-}
-.concept-b-stat-lbl {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-}
 
 /* Responsive Mobile (390px) */
 @media (max-width: 900px) {
   .f12-desk {
-    padding: 4px;
+    padding: 3px;
   }
   .f12-sheet {
-    padding: 6px 10px 16px;
+    padding: 5px 8px 14px;
   }
-  .f12-stat-band {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .f12-masthead {
+    gap: 5px 8px;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+  .f12-search-input {
+    width: 120px;
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+  .f12-seg-btn {
+    padding: 2px 6px;
+    min-height: 24px;
+    font-size: 11px;
+  }
+  .f12-stat-strip {
+    padding: 4px 8px;
+    margin-bottom: 8px;
+  }
+  .f12-stat-window {
+    display: none;
   }
   .concept-a-hero-grid,
   .concept-a-secondary-grid,
@@ -984,18 +1042,44 @@ html, body {
     grid-template-columns: minmax(0, 1fr);
   }
   .f12-plate-canvas-box {
-    height: 260px !important;
+    height: 244px !important;
   }
   .f12-balloon {
     font-size: 11px;
     padding: 3px 7px;
   }
+  .f12-last-date,
+  .f12-kicker-left .f12-tag,
+  .f12-kicker-chip {
+    white-space: normal;
+  }
+  .f12-family-pair-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+  .f12-family-pair-row > span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .f12-family-pair-row > span:nth-child(3) {
+    grid-column: 1 / -1;
+    color: var(--f-ink-2);
+  }
   .f12-ranked-row {
     grid-template-columns: 48px minmax(0, 1fr) auto;
-    gap: 6px 8px;
+    gap: 5px 8px;
+  }
+  .f12-ranked-badges {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .f12-ranked-ratio {
+    grid-column: 1 / 2;
+    text-align: left;
   }
   .f12-ranked-range-col {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
+    min-width: 0;
   }
   .f12-ranked-date {
     display: none;
@@ -1007,11 +1091,6 @@ html, body {
 <div class="f12-desk">
   <main class="f12-sheet">
     
-<div class="f12-pegs" aria-hidden="true">
-  <span class="f12-peg round"></span>
-  <span class="f12-peg slot"></span>
-  <span class="f12-peg round"></span>
-</div>
 <header class="f12-masthead">
   <div class="f12-brand-row">
     <span class="f12-case-tag">REPO ARCHAEOLOGY // CONCEPT B · STORYBOARD</span>
@@ -1019,7 +1098,7 @@ html, body {
     <span class="f12-status-kicker">EVIDENCE · NOT PROOF</span>
     <details class="f12-how-to-read">
       <summary>How to read this map ▸</summary>
-      <div class="f12-how-to-read-pop">Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or supported indirect import in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the Wilson lower bound with recency and commit-origin weights when configured.</div>
+      <div class="f12-how-to-read-pop">Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or 2-hop import link detected in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the 95% Wilson lower bound with recency and commit-origin weights when configured.</div>
     </details>
   </div>
   <div class="f12-toolbar" role="toolbar" aria-label="Map controls">
@@ -1037,6 +1116,19 @@ html, body {
     <button type="button" id="theme-toggle" class="f12-seg-btn" style="border: 1.5px solid var(--f-rule);">Theme</button>
   </div>
 </header>
+    
+<section class="f12-stat-strip" aria-label="Repository summary statistics">
+  <div class="f12-stat-strip-items">
+    <span class="f12-stat-inline"><span class="f12-ink-sq" aria-hidden="true">▲</span> <strong>21</strong> GHOST WIRES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>3</strong> FINDING FAMILIES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>15</strong> UNCHECKED (56 TOTAL)</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>2,757</strong> COMMITS ANALYSED</span>
+  </div>
+  <span class="f12-stat-window">2021-12-14 → 2026-10-16 · 107 files</span>
+</section>
 
     <!-- Asymmetric Comic Page Top: Tall C-01 Hero (8 cols) + Slanted C-02/C-03 Pair (4 cols) -->
     <div class="concept-b-top-grid">
@@ -1044,58 +1136,37 @@ html, body {
         <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,0.35 99.65,0.35 99.65,99.65 0.35,99.65"></polygon></svg>
         <span class="f12-cut" aria-hidden="true">C-01</span>
         <div class="f12-panel-body">
-          <!-- Stats inside the hero panel as metric chips -->
-          <div class="concept-b-chip-strip" aria-label="Repository metrics">
-            <div class="concept-b-stat-chip">
-              <span class="f12-ink-sq" aria-hidden="true">▲</span>
-              <span class="concept-b-stat-num">21</span>
-              <span class="concept-b-stat-lbl">GHOST WIRES</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">3</span>
-              <span class="concept-b-stat-lbl">FAMILIES</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">15</span>
-              <span class="concept-b-stat-lbl">UNCHECKED (56 TOTAL)</span>
-            </div>
-            <div class="concept-b-stat-chip">
-              <span class="concept-b-stat-num">2,757</span>
-              <span class="concept-b-stat-lbl">COMMITS ANALYSED</span>
-            </div>
-          </div>
-
           <div class="f12-kicker-row">
             <div class="f12-kicker-left">
-              <span class="f12-kicker-chip">C-01 / MOST INTERESTING FINDING</span>
+              <span class="f12-kicker-chip">F-01 · MOST INTERESTING FINDING</span>
               <span class="f12-tag">FAMILY · 3 FILES · 3/3 PAIRS</span>
             </div>
             <span class="f12-last-date">Last together 2026-05-16</span>
           </div>
-          <h1 class="f12-headline">3 files across src/adapter/* keep changing together</h1>
-          <p class="f12-subhead">No import connects these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3).</p>
+          <h1 class="f12-headline">3 files across <code class="f12-headline-path">src/adapter/*</code> keep changing together</h1>
+          <p class="f12-subhead">No direct or 2-hop import link was detected between these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3).</p>
 
           <div class="concept-b-hero-split">
             <div class="f12-plate-wrap">
-              <div class="f12-plate-canvas-box" style="height: 274px;">
-                <canvas id="featured-plate-canvas" class="f12-plate-canvas" role="img" aria-label="3 files across src/adapter/* keep changing together. No import connects these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3)."></canvas>
+              <div class="f12-plate-canvas-box" style="height: 266px;">
+                <canvas id="featured-plate-canvas" class="f12-plate-canvas" role="img" aria-label="3 files across src/adapter/* keep changing together. No direct or 2-hop import link was detected between these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3)."></canvas>
                 
-<div class="f12-balloon-standalone" style="left: 51.02%; top: 42.04%;">
+<div class="f12-balloon-standalone" style="left: 49.83%; top: 40.00%;">
   <div class="f12-balloon">
     <span class="f12-balloon-gap" aria-hidden="true" style="left: calc(50% - 5px);"></span>
-    12 of 20 commits together · no import
+    12 of 20 commits together · no import detected
   </div>
-  <svg width="120" height="26" class="f12-balloon-standalone-svg" aria-hidden="true">
-    <path class="f12-tail" d="M54,0 L60,14 L66,0"></path>
-    <circle class="f12-peak-dot" cx="60" cy="21" r="4"></circle>
+  <svg width="120" height="24" class="f12-balloon-standalone-svg" aria-hidden="true">
+    <path class="f12-tail" d="M54,0 L60,13 L66,0"></path>
+    <circle class="f12-peak-dot" cx="60" cy="19" r="4"></circle>
   </svg>
 </div>
               </div>
               <div class="f12-plate-footer">
                 <div class="f12-plate-legend">
                   <span class="f12-legend-item">
-                    <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="#ffd60a" stroke-width="5"/><line x1="0" y1="4" x2="20" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
-                    Featured
+                    <svg width="20" height="8" aria-hidden="true"><line x1="0" y1="4" x2="20" y2="4" stroke="#fffef9" stroke-width="5"/><line x1="0" y1="4" x2="20" y2="4" stroke="#0e2540" stroke-width="3"/><line x1="0" y1="4" x2="20" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
+                    Lead
                   </span>
                   <span class="f12-legend-item">
                     <svg width="18" height="8" aria-hidden="true"><line x1="0" y1="4" x2="18" y2="4" stroke="#ff4f9a" stroke-width="2" stroke-dasharray="5 3"/></svg>
@@ -1112,30 +1183,57 @@ html, body {
 
             <div class="concept-b-hero-evidence">
               
+<div class="f12-family-pairs-box" aria-label="Family pairwise links">
+        <div class="f12-family-pairs-hd">
+          <span>ALL 3 FAMILY PAIRS (3/3 PASSED)</span>
+          <span>RAW · 95% CI</span>
+        </div>
+        
+          <div class="f12-family-pair-row is-lead">
+            <span>bun/serve-static.ts ↔ deno/serve-static.ts (lead)</span>
+            <span>12/20 (60%)</span>
+            <span>≥39% CI (39–78%)</span>
+          </div>
+          <div class="f12-family-pair-row">
+            <span>bun/serve-static.ts ↔ cloudflare-workers/serve-static.ts</span>
+            <span>11/20 (55%)</span>
+            <span>≥34% CI (34–74%)</span>
+          </div>
+          <div class="f12-family-pair-row">
+            <span>deno/serve-static.ts ↔ cloudflare-workers/serve-static.ts</span>
+            <span>11/24 (46%)</span>
+            <span>≥28% CI (28–65%)</span>
+          </div>
+      </div>
 <div class="f12-dir-grid">
   <div class="f12-dir-card">
     <p class="f12-dir-route" title="bun/serve-static.ts → deno/serve-static.ts">
       bun/serve-static.ts → deno/serve-static.ts
     </p>
-    <p class="f12-dir-pct">60%</p>
+    <div class="f12-dir-metric-row">
+      <p class="f12-dir-pct">60%</p>
+      <span class="f12-dir-lb">≥39% CI</span>
+    </div>
     <p class="f12-dir-detail">12 of 20 commits · 95% range 39–78%</p>
   </div>
   <div class="f12-dir-card">
     <p class="f12-dir-route" title="deno/serve-static.ts → bun/serve-static.ts">
       deno/serve-static.ts → bun/serve-static.ts
     </p>
-    <p class="f12-dir-pct">50%</p>
+    <div class="f12-dir-metric-row">
+      <p class="f12-dir-pct">50%</p>
+      <span class="f12-dir-lb">≥31% CI</span>
+    </div>
     <p class="f12-dir-detail">12 of 24 commits · 95% range 31–69%</p>
   </div>
 </div>
 
-<div class="f12-meta-pills">
-  <span class="f12-meta-pill"><strong>Last together 2026-05-16</strong></span>
-  <span class="f12-meta-pill">16 family commits (2+ files) · 9 touched all 3</span>
-  <span class="f12-meta-pill">Usually changed by Yusuke Wada (75% of bun/serve-static.ts)</span>
-  <span class="f12-meta-pill">Commit origin: 100% human (0% agent or bot)</span>
+<dl class="f12-evidence-dl">
+  <dt>Family scope</dt><dd>16 supporting commits (2+ files) · 9 touched all 3</dd>
+  <dt>Attribution</dt><dd>Top historical contributor: Yusuke Wada (75% of bun/serve-static.ts commits)</dd>
+  <dt>History</dt><dd>Commit origin: 100% human (0% agent or bot)</dd>
   
-</div>
+</dl>
 
 <details class="f12-cx-details">
   <summary>Changed alone: 8 times (bun/serve-static.ts) · Changed alone: 12 times (deno/serve-static.ts) — 20 counterexample commits ▸</summary>
@@ -1145,7 +1243,7 @@ html, body {
 </details>
 
 <div class="f12-receipts-hd">
-  <h3 class="f12-receipts-title">Supporting Commit Receipts (3 of 3)</h3>
+  <h3 class="f12-receipts-title">Sample Commit Receipts (showing 3 of 16 supporting commits)</h3>
 </div>
 <ul class="f12-receipt-list" aria-label="Supporting commit receipts">
   
@@ -1178,34 +1276,34 @@ html, body {
       <!-- Slanted C-02 / C-03 PanelPair -->
       <div class="f12-pair" aria-label="Next findings C-02 and C-03">
         
-<section class="f12-panel f12-slant-bottom" aria-label="C-02 tiny.ts ⇢ quick.ts">
-  <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,0.35 99.65,0.35 99.65,93.2 0.35,99.65"></polygon></svg>
+<section class="f12-panel f12-slant-bottom" aria-label="C-02 F-02 tiny.ts ⇢ quick.ts">
+  <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,0.35 99.65,0.35 99.65,94.0 0.35,99.65"></polygon></svg>
   <span class="f12-cut" aria-hidden="true">C-02</span>
   <div class="f12-panel-body">
     <div class="f12-kicker-row">
-      <span class="f12-tag">GHOST WIRE</span>
+      <div class="f12-kicker-left">
+        <span class="f12-tag">F-02</span>
+        <span class="f12-tag">GHOST WIRE</span>
+      </div>
       <span class="f12-last-date">Last together 2024-05-29</span>
     </div>
     <h2 style="font-family: var(--font-f-mono); font-size: 14.5px; font-weight: 700; margin: 2px 0 4px; color: var(--f-ink); overflow-wrap: anywhere;">
       tiny.ts ⇢ quick.ts
     </h2>
-    <p style="font-family: var(--font-f-body); font-size: 12px; color: var(--f-ink-2); margin: 0 0 6px;">
-      9 of 9 commits (100%) · 95% range 70–100%
-    </p>
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-      <span style="font-family: var(--font-f-display); font-size: 20px; line-height: 1;">100%</span>
-      <div style="flex: 1;">
-        
+    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px;">
+      <span style="font-family: var(--font-f-display); font-size: 18px; line-height: 1.05; color: var(--f-ink);">9/9 commits · ≥70% CI</span>
+      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">100% raw (70–100%)</span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      
 <span class="f12-range-track" aria-hidden="true">
   <span class="f12-range-fill" style="left: 70%; width: 30%;"></span>
   <span class="f12-range-tick" style="left: 100%;"></span>
 </span>
-      </div>
-      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">70–100%</span>
     </div>
-    <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 6px;">
-            Reverse (quick.ts → tiny.ts): 9 of 10 (90%) · Changed alone: 1 times
-          </div>
+    <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 5px;">
+      Reverse (quick.ts → tiny.ts): 9 of 10 (90%) · Changed alone: 1 time
+    </div>
     <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); border-top: 1px solid var(--f-grid); padding-top: 4px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             <code>16f7393</code> · 2024-05-29 · fix(types): allow blank env (#2834)
           </div><div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); border-top: 1px solid var(--f-grid); padding-top: 4px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -1214,34 +1312,34 @@ html, body {
   </div>
 </section>
         
-<section class="f12-panel f12-slant-top" aria-label="C-03 stream.ts ⇢ sse.ts">
-  <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,6.8 99.65,0.35 99.65,99.65 0.35,99.65"></polygon></svg>
+<section class="f12-panel f12-slant-top" aria-label="C-03 F-03 stream.ts ⇢ sse.ts">
+  <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,6.0 99.65,0.35 99.65,99.65 0.35,99.65"></polygon></svg>
   <span class="f12-cut" aria-hidden="true">C-03</span>
   <div class="f12-panel-body">
     <div class="f12-kicker-row">
-      <span class="f12-tag">GHOST WIRE</span>
+      <div class="f12-kicker-left">
+        <span class="f12-tag">F-03</span>
+        <span class="f12-tag">GHOST WIRE</span>
+      </div>
       <span class="f12-last-date">Last together 2025-01-27</span>
     </div>
     <h2 style="font-family: var(--font-f-mono); font-size: 14.5px; font-weight: 700; margin: 2px 0 4px; color: var(--f-ink); overflow-wrap: anywhere;">
       stream.ts ⇢ sse.ts
     </h2>
-    <p style="font-family: var(--font-f-body); font-size: 12px; color: var(--f-ink-2); margin: 0 0 6px;">
-      7 of 8 commits (88%) · 95% range 53–98%
-    </p>
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-      <span style="font-family: var(--font-f-display); font-size: 20px; line-height: 1;">88%</span>
-      <div style="flex: 1;">
-        
+    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px;">
+      <span style="font-family: var(--font-f-display); font-size: 18px; line-height: 1.05; color: var(--f-ink);">7/8 commits · ≥53% CI</span>
+      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">88% raw (53–98%)</span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      
 <span class="f12-range-track" aria-hidden="true">
   <span class="f12-range-fill" style="left: 53%; width: 45%;"></span>
   <span class="f12-range-tick" style="left: 88%;"></span>
 </span>
-      </div>
-      <span style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2);">53–98%</span>
     </div>
-    <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 6px;">
-            Reverse (sse.ts → stream.ts): 7 of 18 (39%) · Changed alone: 12 times
-          </div>
+    <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); margin-bottom: 5px;">
+      Reverse (sse.ts → stream.ts): 7 of 18 (39%) · Changed alone: 12 times
+    </div>
     <div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); border-top: 1px solid var(--f-grid); padding-top: 4px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             <code>d72aa4b</code> · 2025-01-27 · refactor(helper/streaming): Avoid attaching AbortSignal on newer versions of Bun (#3859)
           </div><div style="font-family: var(--font-f-mono); font-size: 11px; color: var(--f-ink-2); border-top: 1px solid var(--f-grid); padding-top: 4px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
@@ -1261,16 +1359,19 @@ html, body {
     <div class="f12-kicker-row" style="margin-bottom: 10px;">
       <div class="f12-kicker-left">
         <h2 style="font-family: var(--font-f-display); font-size: 18px; margin: 0;">RANKED FINDINGS (78)</h2>
-        <span class="f12-tag">45° SCREENTONE = 95% CONFIDENCE RANGE · TICK = POINT ESTIMATE</span>
+        <span class="f12-tag">45° HALFTONE DOTS = 95% CONFIDENCE RANGE · TICK = POINT ESTIMATE</span>
       </div>
-      <span class="f12-last-date">Ordered by overview priority &amp; Wilson lower bound</span>
+      <span class="f12-last-date">Ordered by overview priority &amp; 95% Wilson lower bound</span>
     </div>
-    <ul class="f12-ranked-list" role="list">
+    <ul id="ranked-findings-list" class="f12-ranked-list" role="list">
       
         <li class="f12-ranked-row f12-ranked-active">
-          <span class="f12-ranked-cut">C-01</span>
+          <span class="f12-ranked-cut">F-01</span>
           <span class="f12-ranked-path" title="src/adapter/bun/serve-static.ts ⇢ src/adapter/deno/serve-static.ts">serve-static.ts across src/adapter/*</span>
-          <span class="f12-tag" style="justify-self: start;">FAMILY</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">FAMILY</span>
+            
+          </span>
           <span class="f12-ranked-ratio">12/20</span>
           <span class="f12-ranked-range-col">
             
@@ -1283,9 +1384,12 @@ html, body {
           <span class="f12-ranked-date">2026-05-16</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-02</span>
+          <span class="f12-ranked-cut">F-02</span>
           <span class="f12-ranked-path" title="src/preset/tiny.ts ⇢ src/preset/quick.ts">tiny.ts ⇢ quick.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">9/9</span>
           <span class="f12-ranked-range-col">
             
@@ -1298,9 +1402,12 @@ html, body {
           <span class="f12-ranked-date">2024-05-29</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-03</span>
+          <span class="f12-ranked-cut">F-03</span>
           <span class="f12-ranked-path" title="src/helper/streaming/stream.ts ⇢ src/helper/streaming/sse.ts">stream.ts ⇢ sse.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">7/8</span>
           <span class="f12-ranked-range-col">
             
@@ -1313,9 +1420,12 @@ html, body {
           <span class="f12-ranked-date">2025-01-27</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-04</span>
+          <span class="f12-ranked-cut">F-04</span>
           <span class="f12-ranked-path" title="src/preset/tiny.ts ⇢ src/hono.ts">tiny.ts ⇢ hono.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">7/9</span>
           <span class="f12-ranked-range-col">
             
@@ -1328,9 +1438,12 @@ html, body {
           <span class="f12-ranked-date">2024-05-29</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-05</span>
+          <span class="f12-ranked-cut">F-05</span>
           <span class="f12-ranked-path" title="src/adapter/deno/ssg.ts ⇢ src/adapter/bun/ssg.ts">deno/ssg.ts ⇢ bun/ssg.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">3/3</span>
           <span class="f12-ranked-range-col">
             
@@ -1343,9 +1456,12 @@ html, body {
           <span class="f12-ranked-date">2024-01-19</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-06</span>
+          <span class="f12-ranked-cut">F-06</span>
           <span class="f12-ranked-path" title="src/preset/quick.ts ⇢ src/hono.ts">quick.ts ⇢ hono.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">7/10</span>
           <span class="f12-ranked-range-col">
             
@@ -1358,9 +1474,12 @@ html, body {
           <span class="f12-ranked-date">2024-05-29</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-07</span>
+          <span class="f12-ranked-cut">F-07</span>
           <span class="f12-ranked-path" title="src/router/smart-router/router.ts ⇢ src/router/reg-exp-router/router.ts">router.ts across src/router/*</span>
-          <span class="f12-tag" style="justify-self: start;">FAMILY</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">FAMILY</span>
+            
+          </span>
           <span class="f12-ranked-ratio">4/5</span>
           <span class="f12-ranked-range-col">
             
@@ -1373,9 +1492,12 @@ html, body {
           <span class="f12-ranked-date">2026-08-17</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-08</span>
+          <span class="f12-ranked-cut">F-08</span>
           <span class="f12-ranked-path" title="src/adapter/deno/deno.d.ts ⇢ src/adapter/deno/websocket.ts">deno.d.ts ⇢ websocket.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">3/4</span>
           <span class="f12-ranked-range-col">
             
@@ -1388,9 +1510,12 @@ html, body {
           <span class="f12-ranked-date">2024-10-30</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-09</span>
+          <span class="f12-ranked-cut">F-09</span>
           <span class="f12-ranked-path" title="src/adapter/deno/index.ts ⇢ src/adapter/bun/index.ts">deno/index.ts ⇢ bun/index.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            
+          </span>
           <span class="f12-ranked-ratio">3/4</span>
           <span class="f12-ranked-range-col">
             
@@ -1403,9 +1528,12 @@ html, body {
           <span class="f12-ranked-date">2024-05-22</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-10</span>
+          <span class="f12-ranked-cut">F-10</span>
           <span class="f12-ranked-path" title="src/adapter/cloudflare-workers/websocket.ts ⇢ src/adapter/deno/websocket.ts">websocket.ts across src/adapter/*</span>
-          <span class="f12-tag" style="justify-self: start;">FAMILY · WEAK</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">FAMILY</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
           <span class="f12-ranked-ratio">4/7</span>
           <span class="f12-ranked-range-col">
             
@@ -1418,9 +1546,12 @@ html, body {
           <span class="f12-ranked-date">2024-10-25</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-11</span>
+          <span class="f12-ranked-cut">F-11</span>
           <span class="f12-ranked-path" title="src/middleware/powered-by/index.ts ⇢ src/hono.ts">index.ts ⇢ hono.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE · WEAK</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
           <span class="f12-ranked-ratio">4/7</span>
           <span class="f12-ranked-range-col">
             
@@ -1433,9 +1564,12 @@ html, body {
           <span class="f12-ranked-date">2022-04-20</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-12</span>
+          <span class="f12-ranked-cut">F-12</span>
           <span class="f12-ranked-path" title="src/middleware/jwk/jwk.ts ⇢ src/middleware/jwt/jwt.ts">jwk.ts ⇢ jwt.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE · WEAK</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
           <span class="f12-ranked-ratio">4/8</span>
           <span class="f12-ranked-range-col">
             
@@ -1448,9 +1582,12 @@ html, body {
           <span class="f12-ranked-date">2026-08-03</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-13</span>
+          <span class="f12-ranked-cut">F-13</span>
           <span class="f12-ranked-path" title="src/utils/filepath.ts ⇢ src/adapter/deno/serve-static.ts">filepath.ts ⇢ serve-static.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE · WEAK</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
           <span class="f12-ranked-ratio">4/8</span>
           <span class="f12-ranked-range-col">
             
@@ -1463,9 +1600,12 @@ html, body {
           <span class="f12-ranked-date">2024-09-24</span>
         </li>
         <li class="f12-ranked-row">
-          <span class="f12-ranked-cut">C-14</span>
+          <span class="f12-ranked-cut">F-14</span>
           <span class="f12-ranked-path" title="src/adapter/bun/conninfo.ts ⇢ src/adapter/bun/websocket.ts">conninfo.ts ⇢ websocket.ts</span>
-          <span class="f12-tag" style="justify-self: start;">GHOST WIRE · WEAK</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
           <span class="f12-ranked-ratio">3/6</span>
           <span class="f12-ranked-range-col">
             
@@ -1477,7 +1617,1164 @@ html, body {
           </span>
           <span class="f12-ranked-date">2026-09-28</span>
         </li>
+        <li class="f12-ranked-row">
+          <span class="f12-ranked-cut">F-15</span>
+          <span class="f12-ranked-path" title="src/middleware/powered-by/index.ts ⇢ src/index.ts">powered-by/index.ts ⇢ src/index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">GHOST WIRE</span>
+            <span class="f12-tag f12-tag-weak">LOW CI</span>
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2022-04-20</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-16</span>
+          <span class="f12-ranked-path" title="src/jsx/dom/css.ts ⇢ src/helper/css/index.ts">css.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 38%; width: 58%;"></span>
+  <span class="f12-range-tick" style="left: 80%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">38–96%</span>
+          </span>
+          <span class="f12-ranked-date">2026-04-04</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-17</span>
+          <span class="f12-ranked-path" title="src/jsx/dom/css.ts ⇢ src/helper/css/common.ts">css.ts ⇢ common.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 23%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">23–88%</span>
+          </span>
+          <span class="f12-ranked-date">2026-04-04</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-18</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/types.ts ⇢ src/utils/jwt/jwt.ts">types.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">15/17</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 66%; width: 31%;"></span>
+  <span class="f12-range-tick" style="left: 88%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">66–97%</span>
+          </span>
+          <span class="f12-ranked-date">2026-01-22</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-19</span>
+          <span class="f12-ranked-path" title="src/adapter/bun/server.ts ⇢ src/adapter/bun/conninfo.ts">server.ts ⇢ conninfo.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 51%; width: 49%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">51–100%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-28</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-20</span>
+          <span class="f12-ranked-path" title="src/middleware/timing/index.ts ⇢ src/middleware/timing/timing.ts">index.ts ⇢ timing.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/6</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 53%;"></span>
+  <span class="f12-range-tick" style="left: 83%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–97%</span>
+          </span>
+          <span class="f12-ranked-date">2025-12-13</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-21</span>
+          <span class="f12-ranked-path" title="src/router/reg-exp-router/trie.ts ⇢ src/router/reg-exp-router/node.ts">trie.ts ⇢ node.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">8/11</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 43%; width: 47%;"></span>
+  <span class="f12-range-tick" style="left: 73%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">43–90%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-20</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-22</span>
+          <span class="f12-ranked-path" title="src/jsx/components.ts ⇢ src/jsx/streaming.ts">components.ts ⇢ streaming.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">9/13</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 42%; width: 45%;"></span>
+  <span class="f12-range-tick" style="left: 69%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">42–87%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-20</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-23</span>
+          <span class="f12-ranked-path" title="src/middleware/secure-headers/index.ts ⇢ src/middleware/secure-headers/secure-headers.ts">index.ts ⇢ secure-headers.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">7/8</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 53%; width: 45%;"></span>
+  <span class="f12-range-tick" style="left: 88%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">53–98%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-22</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-24</span>
+          <span class="f12-ranked-path" title="src/router/reg-exp-router/node.ts ⇢ src/router/reg-exp-router/router.ts">node.ts ⇢ router.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">11/14</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 52%; width: 40%;"></span>
+  <span class="f12-range-tick" style="left: 79%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">52–92%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-20</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-25</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/index.ts ⇢ src/utils/jwt/jwt.ts">index.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 51%; width: 49%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">51–100%</span>
+          </span>
+          <span class="f12-ranked-date">2025-08-07</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-26</span>
+          <span class="f12-ranked-path" title="benchmarks/routers/src/hono.mts ⇢ benchmarks/routers/src/bench.mts">hono.mts ⇢ bench.mts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 51%; width: 49%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">51–100%</span>
+          </span>
+          <span class="f12-ranked-date">2025-07-28</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-27</span>
+          <span class="f12-ranked-path" title="src/adapter/aws-lambda/index.ts ⇢ src/adapter/aws-lambda/handler.ts">index.ts ⇢ handler.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">8/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 49%; width: 45%;"></span>
+  <span class="f12-range-tick" style="left: 80%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">49–94%</span>
+          </span>
+          <span class="f12-ranked-date">2025-08-07</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-28</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/jwa.ts ⇢ src/utils/jwt/jwt.ts">jwa.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/3</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–100%</span>
+          </span>
+          <span class="f12-ranked-date">2026-01-13</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-29</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/jwa.ts ⇢ src/utils/jwt/types.ts">jwa.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/3</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–100%</span>
+          </span>
+          <span class="f12-ranked-date">2026-01-13</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-30</span>
+          <span class="f12-ranked-path" title="src/validator/index.ts ⇢ src/validator/validator.ts">index.ts ⇢ validator.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/3</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–100%</span>
+          </span>
+          <span class="f12-ranked-date">2025-12-18</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-31</span>
+          <span class="f12-ranked-path" title="src/helper/ssg/middleware.ts ⇢ src/helper/ssg/ssg.ts">middleware.ts ⇢ ssg.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/3</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–100%</span>
+          </span>
+          <span class="f12-ranked-date">2025-07-04</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-32</span>
+          <span class="f12-ranked-path" title="src/adapter/deno/ssg.ts ⇢ src/helper/ssg/index.ts">ssg.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/3</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 44%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 100%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">44–100%</span>
+          </span>
+          <span class="f12-ranked-date">2024-01-19</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-33</span>
+          <span class="f12-ranked-path" title="src/router/reg-exp-router/trie.ts ⇢ src/router/reg-exp-router/router.ts">trie.ts ⇢ router.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">8/11</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 43%; width: 47%;"></span>
+  <span class="f12-range-tick" style="left: 73%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">43–90%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-20</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-34</span>
+          <span class="f12-ranked-path" title="src/middleware/jwt/index.ts ⇢ src/middleware/jwt/jwt.ts">index.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">16/26</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 43%; width: 35%;"></span>
+  <span class="f12-range-tick" style="left: 62%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">43–78%</span>
+          </span>
+          <span class="f12-ranked-date">2025-08-07</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-35</span>
+          <span class="f12-ranked-path" title="src/adapter/aws-lambda/types.ts ⇢ src/adapter/aws-lambda/handler.ts">types.ts ⇢ handler.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 38%; width: 58%;"></span>
+  <span class="f12-range-tick" style="left: 80%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">38–96%</span>
+          </span>
+          <span class="f12-ranked-date">2025-11-14</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-36</span>
+          <span class="f12-ranked-path" title="src/adapter/lambda-edge/index.ts ⇢ src/adapter/lambda-edge/handler.ts">index.ts ⇢ handler.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 38%; width: 58%;"></span>
+  <span class="f12-range-tick" style="left: 80%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">38–96%</span>
+          </span>
+          <span class="f12-ranked-date">2023-08-15</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-37</span>
+          <span class="f12-ranked-path" title="src/compose.ts ⇢ src/hono.ts">compose.ts ⇢ hono.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">24/49</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 36%; width: 27%;"></span>
+  <span class="f12-range-tick" style="left: 49%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">36–63%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-29</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-38</span>
+          <span class="f12-ranked-path" title="src/jsx/dom/index.ts ⇢ src/jsx/index.ts">dom/index.ts ⇢ jsx/index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">7/11</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 35%; width: 50%;"></span>
+  <span class="f12-range-tick" style="left: 64%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">35–85%</span>
+          </span>
+          <span class="f12-ranked-date">2024-06-12</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-39</span>
+          <span class="f12-ranked-path" title="src/helper/html/index.ts ⇢ src/utils/html.ts">index.ts ⇢ html.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">8/14</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 33%; width: 46%;"></span>
+  <span class="f12-range-tick" style="left: 57%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">33–79%</span>
+          </span>
+          <span class="f12-ranked-date">2024-02-03</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-40</span>
+          <span class="f12-ranked-path" title="src/middleware/etag/digest.ts ⇢ src/middleware/etag/index.ts">digest.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">6/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 31%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">31–83%</span>
+          </span>
+          <span class="f12-ranked-date">2025-08-22</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-41</span>
+          <span class="f12-ranked-path" title="src/router.ts ⇢ src/router/reg-exp-router/router.ts">src/router.ts ⇢ reg-exp-router/router.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">6/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 31%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">31–83%</span>
+          </span>
+          <span class="f12-ranked-date">2023-12-01</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-42</span>
+          <span class="f12-ranked-path" title="src/router/trie-router/router.ts ⇢ src/router/trie-router/node.ts">router.ts ⇢ node.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/8</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 31%; width: 55%;"></span>
+  <span class="f12-range-tick" style="left: 63%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">31–86%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-17</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-43</span>
+          <span class="f12-ranked-path" title="src/client/index.ts ⇢ src/client/types.ts">index.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/8</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 31%; width: 55%;"></span>
+  <span class="f12-range-tick" style="left: 63%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">31–86%</span>
+          </span>
+          <span class="f12-ranked-date">2026-03-23</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-44</span>
+          <span class="f12-ranked-path" title="src/middleware/jwk/jwk.ts ⇢ src/utils/jwt/jwt.ts">jwk.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/8</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 31%; width: 55%;"></span>
+  <span class="f12-range-tick" style="left: 63%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">31–86%</span>
+          </span>
+          <span class="f12-ranked-date">2026-01-13</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-45</span>
+          <span class="f12-ranked-path" title="src/adapter/bun/server.ts ⇢ src/adapter/bun/websocket.ts">server.ts ⇢ websocket.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 30%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 75%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">30–95%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-28</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-46</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/index.ts ⇢ src/middleware/jwt/index.ts">utils/jwt/index.ts ⇢ middleware/jwt/index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 30%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 75%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">30–95%</span>
+          </span>
+          <span class="f12-ranked-date">2025-08-07</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-47</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/index.ts ⇢ src/utils/jwt/types.ts">index.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 30%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 75%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">30–95%</span>
+          </span>
+          <span class="f12-ranked-date">2025-02-06</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-48</span>
+          <span class="f12-ranked-path" title="src/adapter/bun/ssg.ts ⇢ src/helper/ssg/index.ts">ssg.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/4</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 30%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 75%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">30–95%</span>
+          </span>
+          <span class="f12-ranked-date">2024-01-19</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-49</span>
+          <span class="f12-ranked-path" title="src/client/client.ts ⇢ src/client/types.ts">client.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">19/45</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 29%; width: 28%;"></span>
+  <span class="f12-range-tick" style="left: 42%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">29–57%</span>
+          </span>
+          <span class="f12-ranked-date">2026-02-19</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-50</span>
+          <span class="f12-ranked-path" title="src/jsx/dom/index.ts ⇢ src/jsx/hooks/index.ts">dom/index.ts ⇢ hooks/index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">6/11</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 28%; width: 51%;"></span>
+  <span class="f12-range-tick" style="left: 55%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">28–79%</span>
+          </span>
+          <span class="f12-ranked-date">2024-06-12</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-51</span>
+          <span class="f12-ranked-path" title="src/helper/dev/index.ts ⇢ src/hono-base.ts">index.ts ⇢ hono-base.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/9</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 27%; width: 54%;"></span>
+  <span class="f12-range-tick" style="left: 56%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">27–81%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-30</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-52</span>
+          <span class="f12-ranked-path" title="src/preset/tiny.ts ⇢ src/hono-base.ts">tiny.ts ⇢ hono-base.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/9</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 27%; width: 54%;"></span>
+  <span class="f12-range-tick" style="left: 56%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">27–81%</span>
+          </span>
+          <span class="f12-ranked-date">2023-10-16</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-53</span>
+          <span class="f12-ranked-path" title="src/utils/types.ts ⇢ src/context.ts">types.ts ⇢ context.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">12/29</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 26%; width: 33%;"></span>
+  <span class="f12-range-tick" style="left: 41%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">26–59%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-08</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-54</span>
+          <span class="f12-ranked-path" title="src/utils/http-status.ts ⇢ src/context.ts">http-status.ts ⇢ context.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 25%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 57%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">25–84%</span>
+          </span>
+          <span class="f12-ranked-date">2024-12-25</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-55</span>
+          <span class="f12-ranked-path" title="src/adapter/cloudflare-workers/websocket.ts ⇢ src/helper/websocket/index.ts">websocket.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 25%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 57%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">25–84%</span>
+          </span>
+          <span class="f12-ranked-date">2024-11-03</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-56</span>
+          <span class="f12-ranked-path" title="src/jsx/dom/jsx-dev-runtime.ts ⇢ src/jsx/dom/render.ts">jsx-dev-runtime.ts ⇢ render.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 25%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 57%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">25–84%</span>
+          </span>
+          <span class="f12-ranked-date">2024-08-19</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-57</span>
+          <span class="f12-ranked-path" title="src/router.ts ⇢ src/hono.ts">router.ts ⇢ hono.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 24%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">24–76%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-29</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-58</span>
+          <span class="f12-ranked-path" title="src/preset/quick.ts ⇢ src/hono-base.ts">quick.ts ⇢ hono-base.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 24%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">24–76%</span>
+          </span>
+          <span class="f12-ranked-date">2023-10-16</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-59</span>
+          <span class="f12-ranked-path" title="src/adapter/cloudflare-pages/index.ts ⇢ src/adapter/cloudflare-pages/handler.ts">index.ts ⇢ handler.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 23%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">23–88%</span>
+          </span>
+          <span class="f12-ranked-date">2024-06-29</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-60</span>
+          <span class="f12-ranked-path" title="src/adapter/aws-lambda/types.ts ⇢ src/adapter/aws-lambda/index.ts">types.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 23%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">23–88%</span>
+          </span>
+          <span class="f12-ranked-date">2024-06-02</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-61</span>
+          <span class="f12-ranked-path" title="src/router/smart-router/router.ts ⇢ src/router.ts">smart-router/router.ts ⇢ src/router.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/5</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 23%; width: 65%;"></span>
+  <span class="f12-range-tick" style="left: 60%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">23–88%</span>
+          </span>
+          <span class="f12-ranked-date">2023-12-01</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-62</span>
+          <span class="f12-ranked-path" title="src/adapter/deno/websocket.ts ⇢ src/helper/websocket/index.ts">websocket.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/8</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 22%; width: 56%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">22–78%</span>
+          </span>
+          <span class="f12-ranked-date">2024-10-25</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-63</span>
+          <span class="f12-ranked-path" title="src/adapter/cloudflare-workers/utils.ts ⇢ src/adapter/cloudflare-workers/serve-static.ts">utils.ts ⇢ serve-static.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">6/14</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 21%; width: 46%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">21–67%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-23</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-64</span>
+          <span class="f12-ranked-path" title="src/http-exception.ts ⇢ src/context.ts">http-exception.ts ⇢ context.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">5/12</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 49%;"></span>
+  <span class="f12-range-tick" style="left: 42%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–68%</span>
+          </span>
+          <span class="f12-ranked-date">2024-12-25</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-65</span>
+          <span class="f12-ranked-path" title="src/helper/ssg/utils.ts ⇢ src/helper/ssg/ssg.ts">utils.ts ⇢ ssg.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/9</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 54%;"></span>
+  <span class="f12-range-tick" style="left: 44%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–73%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-26</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-66</span>
+          <span class="f12-ranked-path" title="src/preset/tiny.ts ⇢ src/types.ts">tiny.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/9</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 54%;"></span>
+  <span class="f12-range-tick" style="left: 44%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–73%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-29</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-67</span>
+          <span class="f12-ranked-path" title="src/adapter/bun/conninfo.ts ⇢ src/adapter/bun/index.ts">conninfo.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/6</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 62%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–81%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-28</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-68</span>
+          <span class="f12-ranked-path" title="src/helper/css/common.ts ⇢ src/helper/css/index.ts">common.ts ⇢ index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/6</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 62%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–81%</span>
+          </span>
+          <span class="f12-ranked-date">2026-06-23</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-69</span>
+          <span class="f12-ranked-path" title="src/jsx/jsx-runtime.ts ⇢ src/jsx/jsx-dev-runtime.ts">jsx-runtime.ts ⇢ jsx-dev-runtime.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/6</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 19%; width: 62%;"></span>
+  <span class="f12-range-tick" style="left: 50%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">19–81%</span>
+          </span>
+          <span class="f12-ranked-date">2023-11-08</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-70</span>
+          <span class="f12-ranked-path" title="src/router.ts ⇢ src/hono-base.ts">router.ts ⇢ hono-base.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 17%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 40%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">17–69%</span>
+          </span>
+          <span class="f12-ranked-date">2026-08-03</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-71</span>
+          <span class="f12-ranked-path" title="src/helper/css/index.ts ⇢ src/utils/html.ts">index.ts ⇢ html.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 17%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 40%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">17–69%</span>
+          </span>
+          <span class="f12-ranked-date">2024-11-24</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-72</span>
+          <span class="f12-ranked-path" title="src/preset/quick.ts ⇢ src/types.ts">quick.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 17%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 40%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">17–69%</span>
+          </span>
+          <span class="f12-ranked-date">2024-05-29</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-73</span>
+          <span class="f12-ranked-path" title="src/helper/css/index.ts ⇢ src/jsx/index.ts">css/index.ts ⇢ jsx/index.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">INDIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">4/10</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 17%; width: 52%;"></span>
+  <span class="f12-range-tick" style="left: 40%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">17–69%</span>
+          </span>
+          <span class="f12-ranked-date">2024-01-23</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-74</span>
+          <span class="f12-ranked-path" title="src/jsx/intrinsic-element/components.ts ⇢ src/jsx/base.ts">components.ts ⇢ base.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2026-09-04</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-75</span>
+          <span class="f12-ranked-path" title="src/middleware/ip-restriction/index.ts ⇢ src/utils/ipaddr.ts">index.ts ⇢ ipaddr.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2026-05-19</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-76</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/jws.ts ⇢ src/utils/jwt/jwt.ts">jws.ts ⇢ jwt.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2025-02-06</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-77</span>
+          <span class="f12-ranked-path" title="src/utils/jwt/jws.ts ⇢ src/utils/jwt/types.ts">jws.ts ⇢ types.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2025-02-06</span>
+        </li>
+        <li class="f12-ranked-row" hidden data-extra-row="true">
+          <span class="f12-ranked-cut">F-78</span>
+          <span class="f12-ranked-path" title="src/adapter/cloudflare-workers/serve-static-module.ts ⇢ src/adapter/cloudflare-workers/serve-static.ts">serve-static-module.ts ⇢ serve-static.ts</span>
+          <span class="f12-ranked-badges">
+            <span class="f12-tag">DIRECT</span>
+            
+          </span>
+          <span class="f12-ranked-ratio">3/7</span>
+          <span class="f12-ranked-range-col">
+            
+<span class="f12-range-track" aria-hidden="true">
+  <span class="f12-range-fill" style="left: 16%; width: 59%;"></span>
+  <span class="f12-range-tick" style="left: 43%;"></span>
+</span>
+            <span class="f12-ranked-ci-label">16–75%</span>
+          </span>
+          <span class="f12-ranked-date">2024-01-16</span>
+        </li>
     </ul>
+    <div class="f12-ranked-more-bar">
+            <button type="button" id="toggle-all-findings" class="f12-seg-btn" style="border: 1.5px solid var(--f-rule);" aria-expanded="false">
+              Show all 78 findings (63 more)
+            </button>
+          </div>
   </div>
 </section>
   </main>
@@ -1485,7 +2782,8 @@ html, body {
 
 <script>
 (() => {
-  const plate = {"width":520,"height":274,"nodes":[{"nodeIndex":50,"path":"src/adapter/bun/serve-static.ts","shortLabel":"bun/serve-static.ts","dir":"src/adapter/bun","changes":20,"x":196.5,"y":110.5,"r":8,"isFeaturedEndpoint":true,"label":{"nodeIndex":50,"text":"bun/serve-static.ts","fullPath":"src/adapter/bun/serve-static.ts","position":"W","x":24.5,"y":101.5,"w":155,"h":18,"anchorX":179.5,"anchorY":115.5,"textAlign":"right"}},{"nodeIndex":51,"path":"src/adapter/deno/serve-static.ts","shortLabel":"deno/serve-static.ts","dir":"src/adapter/deno","changes":24,"x":334.1,"y":119.9,"r":8.4,"isFeaturedEndpoint":true,"label":{"nodeIndex":51,"text":"deno/serve-static.ts","fullPath":"src/adapter/deno/serve-static.ts","position":"E","x":351.5,"y":110.9,"w":162,"h":18,"anchorX":351.5,"anchorY":124.9,"textAlign":"left"}},{"nodeIndex":61,"path":"src/adapter/cloudflare-workers/serve-static.ts","shortLabel":"cloudflare-workers/serve-static.ts","dir":"src/adapter/cloudflare-workers","changes":27,"x":259,"y":224.4,"r":8.6,"isFeaturedEndpoint":true,"label":{"nodeIndex":61,"text":"cloudflare-workers/serve-static.ts","fullPath":"src/adapter/cloudflare-workers/serve-static.ts","position":"S","x":124.5,"y":240,"w":269,"h":18,"anchorX":259,"anchorY":253.7,"textAlign":"center"}},{"nodeIndex":92,"path":"src/utils/filepath.ts","shortLabel":"filepath.ts","dir":"src/utils","changes":8,"x":244.4,"y":80.3,"r":6.6,"isFeaturedEndpoint":false,"label":{"nodeIndex":92,"text":"filepath.ts","fullPath":"src/utils/filepath.ts","position":"N","x":197.4,"y":32.7,"w":94,"h":18,"anchorX":244.4,"anchorY":46.4,"textAlign":"center"}},{"nodeIndex":93,"path":"src/adapter/cloudflare-workers/utils.ts","shortLabel":"utils.ts","dir":"src/adapter/cloudflare-workers","changes":14,"x":365.1,"y":177.3,"r":7.4,"isFeaturedEndpoint":false,"label":{"nodeIndex":93,"text":"utils.ts","fullPath":"src/adapter/cloudflare-workers/utils.ts","position":"E","x":381.5,"y":168.3,"w":71,"h":18,"anchorX":381.5,"anchorY":182.3,"textAlign":"left"}},{"nodeIndex":105,"path":"src/adapter/cloudflare-workers/serve-static-module.ts","shortLabel":"serve-static-module.ts","dir":"src/adapter/cloudflare-workers","changes":7,"x":158.7,"y":180,"r":6.4,"isFeaturedEndpoint":false,"label":{"nodeIndex":105,"text":"serve-static-module.ts","fullPath":"src/adapter/cloudflare-workers/serve-static-module.ts","position":"S","x":69.7,"y":193.4,"w":178,"h":18,"anchorX":158.7,"anchorY":207.1,"textAlign":"center"}}],"edges":[{"edgeIndex":37,"sourceNodeIndex":50,"targetNodeIndex":51,"x1":196.5,"y1":110.5,"x2":334.1,"y2":119.9,"relationship":"ghost","intervalLow":0.3865,"strokeWidth":2.5,"isFeatured":true,"isLeadEdge":true},{"edgeIndex":44,"sourceNodeIndex":50,"targetNodeIndex":61,"x1":196.5,"y1":110.5,"x2":259,"y2":224.4,"relationship":"ghost","intervalLow":0.342,"strokeWidth":2.4,"isFeatured":true,"isLeadEdge":false},{"edgeIndex":59,"sourceNodeIndex":51,"targetNodeIndex":61,"x1":334.1,"y1":119.9,"x2":259,"y2":224.4,"relationship":"ghost","intervalLow":0.2789,"strokeWidth":2.2,"isFeatured":true,"isLeadEdge":false},{"edgeIndex":78,"sourceNodeIndex":92,"targetNodeIndex":51,"x1":244.4,"y1":80.3,"x2":334.1,"y2":119.9,"relationship":"ghost","intervalLow":0.2152,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":79,"sourceNodeIndex":93,"targetNodeIndex":61,"x1":365.1,"y1":177.3,"x2":259,"y2":224.4,"relationship":"direct","intervalLow":0.2138,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":97,"sourceNodeIndex":105,"targetNodeIndex":61,"x1":158.7,"y1":180,"x2":259,"y2":224.4,"relationship":"direct","intervalLow":0.1582,"strokeWidth":1.8,"isFeatured":false,"isLeadEdge":false}],"leadEdge":{"edgeIndex":37,"sourceNodeIndex":50,"targetNodeIndex":51,"x1":196.5,"y1":110.5,"x2":334.1,"y2":119.9,"relationship":"ghost","intervalLow":0.3865,"strokeWidth":2.5,"isFeatured":true,"isLeadEdge":true},"balloonTarget":{"x":265.3,"y":115.2},"fullComponentNodeCount":6,"truncatedToEgoCap":false};
+  const plate = {"width":760,"height":266,"nodes":[{"nodeIndex":50,"path":"src/adapter/bun/serve-static.ts","shortLabel":"bun/serve-static.ts","dir":"src/adapter/bun","changes":20,"x":266,"y":106.2,"r":8,"isFeaturedEndpoint":true,"label":{"nodeIndex":50,"text":"bun/serve-static.ts","fullPath":"src/adapter/bun/serve-static.ts","position":"W","x":94,"y":97.2,"w":155,"h":18,"anchorX":249,"anchorY":111.2,"textAlign":"right"}},{"nodeIndex":51,"path":"src/adapter/deno/serve-static.ts","shortLabel":"deno/serve-static.ts","dir":"src/adapter/deno","changes":24,"x":491.4,"y":106.5,"r":8.4,"isFeaturedEndpoint":true,"label":{"nodeIndex":51,"text":"deno/serve-static.ts","fullPath":"src/adapter/deno/serve-static.ts","position":"E","x":508.8,"y":97.5,"w":162,"h":18,"anchorX":508.8,"anchorY":111.5,"textAlign":"left"}},{"nodeIndex":61,"path":"src/adapter/cloudflare-workers/serve-static.ts","shortLabel":"cloudflare-workers/serve-static.ts","dir":"src/adapter/cloudflare-workers","changes":27,"x":371.2,"y":208.7,"r":8.6,"isFeaturedEndpoint":true,"label":{"nodeIndex":61,"text":"cloudflare-workers/serve-static.ts","fullPath":"src/adapter/cloudflare-workers/serve-static.ts","position":"S","x":236.7,"y":224.3,"w":269,"h":18,"anchorX":371.2,"anchorY":238,"textAlign":"center"}},{"nodeIndex":92,"path":"src/utils/filepath.ts","shortLabel":"filepath.ts","dir":"src/utils","changes":8,"x":595.1,"y":135.1,"r":6.6,"isFeaturedEndpoint":false,"label":{"nodeIndex":92,"text":"filepath.ts","fullPath":"src/utils/filepath.ts","position":"E","x":610.7,"y":126.1,"w":94,"h":18,"anchorX":610.7,"anchorY":140.1,"textAlign":"left"}},{"nodeIndex":93,"path":"src/adapter/cloudflare-workers/utils.ts","shortLabel":"utils.ts","dir":"src/adapter/cloudflare-workers","changes":14,"x":478.4,"y":205.5,"r":7.4,"isFeaturedEndpoint":false,"label":{"nodeIndex":93,"text":"utils.ts","fullPath":"src/adapter/cloudflare-workers/utils.ts","position":"E","x":494.8,"y":196.5,"w":71,"h":18,"anchorX":494.8,"anchorY":210.5,"textAlign":"left"}},{"nodeIndex":105,"path":"src/adapter/cloudflare-workers/serve-static-module.ts","shortLabel":"serve-static-module.ts","dir":"src/adapter/cloudflare-workers","changes":7,"x":194.7,"y":164.5,"r":6.4,"isFeaturedEndpoint":false,"label":{"nodeIndex":105,"text":"serve-static-module.ts","fullPath":"src/adapter/cloudflare-workers/serve-static-module.ts","position":"S","x":105.7,"y":177.9,"w":178,"h":18,"anchorX":194.7,"anchorY":191.6,"textAlign":"center"}}],"edges":[{"edgeIndex":37,"sourceNodeIndex":50,"targetNodeIndex":51,"x1":266,"y1":106.2,"x2":491.4,"y2":106.5,"relationship":"ghost","intervalLow":0.3865,"strokeWidth":2.5,"isFeatured":true,"isLeadEdge":true},{"edgeIndex":44,"sourceNodeIndex":50,"targetNodeIndex":61,"x1":266,"y1":106.2,"x2":371.2,"y2":208.7,"relationship":"ghost","intervalLow":0.342,"strokeWidth":2.4,"isFeatured":true,"isLeadEdge":false},{"edgeIndex":59,"sourceNodeIndex":51,"targetNodeIndex":61,"x1":491.4,"y1":106.5,"x2":371.2,"y2":208.7,"relationship":"ghost","intervalLow":0.2789,"strokeWidth":2.2,"isFeatured":true,"isLeadEdge":false},{"edgeIndex":78,"sourceNodeIndex":92,"targetNodeIndex":51,"x1":595.1,"y1":135.1,"x2":491.4,"y2":106.5,"relationship":"ghost","intervalLow":0.2152,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":79,"sourceNodeIndex":93,"targetNodeIndex":61,"x1":478.4,"y1":205.5,"x2":371.2,"y2":208.7,"relationship":"direct","intervalLow":0.2138,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":97,"sourceNodeIndex":105,"targetNodeIndex":61,"x1":194.7,"y1":164.5,"x2":371.2,"y2":208.7,"relationship":"direct","intervalLow":0.1582,"strokeWidth":1.8,"isFeatured":false,"isLeadEdge":false}],"leadEdge":{"edgeIndex":37,"sourceNodeIndex":50,"targetNodeIndex":51,"x1":266,"y1":106.2,"x2":491.4,"y2":106.5,"relationship":"ghost","intervalLow":0.3865,"strokeWidth":2.5,"isFeatured":true,"isLeadEdge":true},"balloonTarget":{"x":378.7,"y":106.4},"balloonBox":{"x":240.7,"y":52.4,"w":276,"h":40},"fullComponentNodeCount":6,"truncatedToEgoCap":false};
+  const monochrome = false;
   const canvas = document.getElementById('featured-plate-canvas');
   if (!canvas) return;
 
@@ -1493,6 +2791,15 @@ html, body {
     let h = 0;
     for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
     return ((h % 360) + 360) % 360;
+  }
+
+  function boxesOverlap(a, b, pad = 3) {
+    return (
+      a.x - pad < b.x + b.w &&
+      a.x + a.w + pad > b.x &&
+      a.y - pad < b.y + b.h &&
+      a.y + a.h + pad > b.y
+    );
   }
 
   function drawPlate() {
@@ -1537,26 +2844,33 @@ html, body {
 
     const scaleX = w / plate.width;
     const scaleY = h / plate.height;
-    const nodeByIdx = new Map(plate.nodes.map((n) => [n.nodeIndex, n]));
 
-    // Draw edges (non-featured first, featured on top)
-    const orderedEdges = [...plate.edges].sort((a, b) => (a.isFeatured ? 1 : 0) - (b.isFeatured ? 1 : 0));
+    // Draw edges (non-lead first, lead edge on top with chalk-paper outer casing — never marker yellow)
+    const orderedEdges = [...plate.edges].sort((a, b) => (a.isLeadEdge ? 1 : 0) - (b.isLeadEdge ? 1 : 0));
     for (const e of orderedEdges) {
       const x1 = e.x1 * scaleX;
       const y1 = e.y1 * scaleY;
       const x2 = e.x2 * scaleX;
       const y2 = e.y2 * scaleY;
 
-      if (e.isFeatured) {
-        // Marker yellow casing under the featured relationship line
+      if (e.isLeadEdge && !monochrome) {
+        // High-contrast chalk-paper outer casing + blueprint inner moat under the lead ghost wire
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = '#ffd60a';
-        ctx.lineWidth = e.strokeWidth + 4.5;
+        ctx.strokeStyle = 'rgba(255, 254, 249, 0.92)';
+        ctx.lineWidth = e.strokeWidth + 5;
         ctx.lineCap = 'round';
         ctx.setLineDash([]);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
+        ctx.lineWidth = e.strokeWidth + 2.2;
+        ctx.lineCap = 'round';
         ctx.stroke();
         ctx.restore();
       }
@@ -1565,7 +2879,7 @@ html, body {
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.lineWidth = e.isFeatured ? e.strokeWidth + 0.8 : e.strokeWidth;
+      ctx.lineWidth = e.isLeadEdge ? e.strokeWidth + 1.1 : e.isFeatured ? e.strokeWidth + 0.4 : e.strokeWidth;
       ctx.lineCap = 'round';
 
       if (e.relationship === 'ghost') {
@@ -1585,7 +2899,8 @@ html, body {
       ctx.restore();
     }
 
-    // Draw nodes with directory hue fill and paper-colored outline
+    // Draw nodes with directory hue fill (or calm blueprint chalk in empty state) and paper-colored outline
+    const renderedNodes = [];
     for (const n of plate.nodes) {
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
@@ -1593,77 +2908,158 @@ html, body {
       ctx.save();
       ctx.beginPath();
       ctx.arc(nx, ny, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'hsl(' + hue + ', 64%, 66%)';
+      ctx.fillStyle = monochrome ? '#7eb3e0' : 'hsl(' + hue + ', 64%, 66%)';
       ctx.fill();
       ctx.lineWidth = n.isFeaturedEndpoint ? 2.5 : 1.8;
       ctx.strokeStyle = '#fffef9';
       ctx.stroke();
       ctx.restore();
+      renderedNodes.push({ nodeIndex: n.nodeIndex, text: n.label.text, x: nx, y: ny, r: n.r, isFeaturedEndpoint: n.isFeaturedEndpoint });
     }
 
-    // Draw collision-free node labels with 3px halo stroke at >= 12px mono
+    // Draw collision-free node labels with 3.5px halo stroke at >= 12px mono.
+    // On narrow mobile screens (< 480px), label featured endpoints by default and only place neighbor labels that fit with zero overlap.
     ctx.save();
-    ctx.font = '700 12.5px "M PLUS 1 Code", ui-monospace, monospace';
+    const isNarrow = w < 480;
+    ctx.font = (isNarrow ? '700 11.5px ' : '700 12.5px ') + '"M PLUS 1 Code", ui-monospace, monospace';
     ctx.lineJoin = 'round';
-    const placedMobileBoxes = [];
+
+    const obstacles = renderedNodes.map((rn) => ({
+      nodeIndex: rn.nodeIndex,
+      x: rn.x - rn.r - 6,
+      y: rn.y - rn.r - 6,
+      w: (rn.r + 6) * 2,
+      h: (rn.r + 6) * 2,
+    }));
     const balloonEl = document.querySelector('.f12-balloon');
+    let balloonRectLocal = null;
     if (balloonEl) {
       const cRect = canvas.getBoundingClientRect();
       const bRect = balloonEl.getBoundingClientRect();
       if (cRect.width > 0 && bRect.width > 0) {
-        placedMobileBoxes.push({
+        balloonRectLocal = {
           x: bRect.left - cRect.left - 4,
           y: bRect.top - cRect.top - 4,
           w: bRect.width + 8,
           h: bRect.height + 22,
-        });
+        };
+        obstacles.push(balloonRectLocal);
       }
     }
+
+    const renderedLabels = [];
+    const pad = 6;
+    const textH = 15;
+
     for (const n of plate.nodes) {
+      if (isNarrow && !n.isFeaturedEndpoint) continue;
       const lbl = n.label;
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
-      const textW = ctx.measureText(lbl.text).width;
-      const textH = 15;
-      let ax = lbl.anchorX * scaleX;
-      let ay = lbl.anchorY * scaleY;
-      let align = lbl.textAlign;
+      const textW = Math.ceil(ctx.measureText(lbl.text).width);
 
-      let left = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      const pad = 8;
-      if (left < pad || left + textW > w - pad) {
-        // Re-anchor centered above or below the node on narrow viewports so it never clips the canvas border
-        align = 'center';
-        ax = Math.max(pad + textW / 2, Math.min(w - pad - textW / 2, nx));
-        const candYs = [ny + n.r + 15, ny + n.r + 31, ny - n.r - 8, ny - n.r - 24, ny + n.r + 47];
-        ay = candYs[0];
-        for (const cy of candYs) {
-          if (cy < 16 || cy > h - 6) continue;
-          const cBox = { x: ax - textW / 2, y: cy - 12, w: textW, h: textH };
-          const hit = placedMobileBoxes.some(
-            (b) =>
-              cBox.x < b.x + b.w + 4 &&
-              cBox.x + cBox.w + 4 > b.x &&
-              cBox.y < b.y + b.h + 2 &&
-              cBox.y + cBox.h + 2 > b.y,
-          );
-          if (!hit) {
-            ay = cy;
-            break;
-          }
+      // Build candidate boxes around (nx, ny)
+      const prefAx = lbl.anchorX * scaleX;
+      const prefAy = lbl.anchorY * scaleY;
+      const prefAlign = lbl.textAlign;
+      const prefLeft = prefAlign === 'center' ? prefAx - textW / 2 : prefAlign === 'right' ? prefAx - textW : prefAx;
+
+      const leftFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.78));
+      const rightFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.22));
+      const centerClampedX = Math.max(pad, Math.min(w - pad - textW, nx - textW / 2));
+
+      const makeCand = (leftX, baselineY) => ({
+        ax: leftX,
+        ay: baselineY,
+        align: 'left',
+        x: leftX,
+        y: baselineY - 12,
+        w: textW,
+        h: textH,
+      });
+
+      const candidates = [];
+      if (!isNarrow) {
+        candidates.push({
+          ax: prefAx,
+          ay: prefAy,
+          align: prefAlign,
+          x: prefLeft,
+          y: prefAy - 12,
+          w: textW,
+          h: textH,
+        });
+      }
+
+      // Row offsets below and above the node
+      for (const dy of [n.r + 16, n.r + 32, n.r + 48, -n.r - 8, -n.r - 24]) {
+        const by = ny + dy;
+        if (isNarrow && nx < w * 0.45) {
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+        } else if (isNarrow && nx > w * 0.55) {
+          candidates.push(makeCand(rightFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(Math.max(pad, nx - textW), by));
+        } else {
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(rightFlankX, by));
         }
       }
-      const finalLeft = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      placedMobileBoxes.push({ x: finalLeft, y: ay - 12, w: textW, h: textH });
+      // E & W candidates
+      candidates.push(makeCand(nx + n.r + 8, ny + 4));
+      candidates.push(makeCand(nx - n.r - 8 - textW, ny + 4));
 
-      ctx.textAlign = align;
+      let chosen = null;
+      let bestFallback = null;
+      for (const c of candidates) {
+        if (c.x < pad || c.x + c.w > w - pad || c.y < pad || c.y + c.h > h - pad) {
+          continue;
+        }
+        const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+        const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+        if (!hitsObstacle && !hitsLabel) {
+          chosen = c;
+          break;
+        }
+        const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+        const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+        if (!bestFallback || pen < bestFallback.pen) {
+          bestFallback = { c, pen };
+        }
+      }
+
+      if (!chosen) {
+        // Scan a deterministic grid of positions to guarantee a zero-overlap slot if one exists
+        for (let gy = pad + 14; gy <= h - pad; gy += 14) {
+          for (let gx = pad; gx <= w - pad - textW; gx += 16) {
+            const c = makeCand(gx, gy);
+            const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+            const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+            const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+            const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+            if (!bestFallback || pen < bestFallback.pen) {
+              bestFallback = { c, pen };
+            }
+          }
+        }
+        chosen = bestFallback ? bestFallback.c : makeCand(centerClampedX, Math.min(h - pad, ny + n.r + 16));
+      }
+
+      renderedLabels.push({ nodeIndex: n.nodeIndex, text: lbl.text, x: chosen.x, y: chosen.y, w: chosen.w, h: chosen.h });
+      ctx.textAlign = chosen.align;
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
-      ctx.strokeText(lbl.text, ax, ay);
+      ctx.strokeText(lbl.text, chosen.ax, chosen.ay);
       ctx.fillStyle = '#fffef9';
-      ctx.fillText(lbl.text, ax, ay);
+      ctx.fillText(lbl.text, chosen.ax, chosen.ay);
     }
     ctx.restore();
+
+    window.__raPlateRenderedNodes = renderedNodes;
+    window.__raPlateRenderedLabels = renderedLabels;
+    window.__raPlateBalloonBox = balloonRectLocal;
   }
 
   drawPlate();
@@ -1677,6 +3073,22 @@ html, body {
       const cur = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
       drawPlate();
+    });
+  }
+  const moreBtn = document.getElementById('toggle-all-findings');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', () => {
+      const expanded = moreBtn.getAttribute('aria-expanded') === 'true';
+      const next = !expanded;
+      moreBtn.setAttribute('aria-expanded', String(next));
+      const rows = document.querySelectorAll('#ranked-findings-list [data-extra-row="true"]');
+      rows.forEach((r) => {
+        if (next) r.removeAttribute('hidden');
+        else r.setAttribute('hidden', '');
+      });
+      moreBtn.textContent = next
+        ? 'Collapse to top 15 findings'
+        : 'Show all ' + document.querySelectorAll('#ranked-findings-list .f12-ranked-row').length + ' findings (' + rows.length + ' more)';
     });
   }
 })();

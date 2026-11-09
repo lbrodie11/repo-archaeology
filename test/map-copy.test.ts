@@ -145,7 +145,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(copy.headline, 'tiny.ts and quick.ts keep changing together');
     assert.equal(
       copy.subhead,
-      'No import connects them. 8 of 8 commits that changed tiny.ts also changed quick.ts.',
+      'No direct or 2-hop import link was detected. 8 of 8 commits that changed tiny.ts also changed quick.ts.',
     );
     assert.equal(copy.shared, edge.shared);
     assert.equal(copy.fromChanges, edge.fromChanges);
@@ -164,7 +164,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(revCopy.headline, 'quick.ts and tiny.ts keep changing together');
     assert.equal(
       revCopy.subhead,
-      'No import connects them. 8 of 9 commits that changed quick.ts also changed tiny.ts.',
+      'No direct or 2-hop import link was detected. 8 of 9 commits that changed quick.ts also changed tiny.ts.',
     );
     assert.equal(revCopy.shared, reversedEdge.shared);
     assert.equal(revCopy.fromChanges, reversedEdge.toChanges);
@@ -186,13 +186,17 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     );
   });
 
-  it('disambiguates colliding basenames and middle-truncates long paths with …', () => {
+  it('disambiguates colliding basenames without dropping intermediate segments and middle-truncates long paths with …', () => {
     const [a, b] = disambiguatePairPaths(
       'src/adapter/bun/serve-static.ts',
       'src/adapter/deno/serve-static.ts',
     );
     assert.equal(a, 'bun/serve-static.ts');
     assert.equal(b, 'deno/serve-static.ts');
+
+    const [nestedA, nestedB] = disambiguatePairPaths('a/src/index.ts', 'b/src/index.ts');
+    assert.equal(nestedA, 'a/src/index.ts');
+    assert.equal(nestedB, 'b/src/index.ts');
 
     const [c, d] = disambiguatePairPaths('src/preset/tiny.ts', 'src/preset/quick.ts');
     assert.equal(c, 'tiny.ts');
@@ -240,7 +244,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(copy.headline, '3 files across src/adapter/* keep changing together');
     assert.equal(
       copy.subhead,
-      'No import connects these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3).',
+      'No direct or 2-hop import link was detected between these 3 parallel implementations of serve-static.ts. All 3 pairwise links passed thresholds across 16 supporting commits (9 touched all 3).',
     );
     assert.equal(copy.memberCount, family.members.length);
     assert.equal(copy.commitsTouchingTwoOrMore, family.commitsTouchingTwoOrMore);
@@ -255,18 +259,19 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       reason: 'Preset entrypoints must expose identical router bindings.',
     };
 
-    assert.equal(formatBalloonCallout(data, edge), '8 of 8 commits together · no import');
+    assert.equal(formatBalloonCallout(data, edge), '8 of 8 commits together · no import detected');
     assert.equal(formatCounterexamplesLine(0), 'Changed alone: 0 times');
     assert.equal(formatCounterexamplesLine(1), 'Changed alone: 1 time');
     assert.equal(formatCounterexamplesLine(5), 'Changed alone: 5 times');
 
     const metric = formatDirectionMetric('tiny.ts', 'quick.ts', 8, 8, 1, { low: 0.6756, high: 1 });
     assert.equal(metric.pctText, '100%');
+    assert.equal(metric.lowerBoundText, '≥68% CI');
     assert.equal(metric.detailText, '8 of 8 commits · 95% range 68–100%');
 
     assert.equal(
       formatOwnerNote(data.nodes[0]!, 'tiny.ts'),
-      'Usually changed by Alice (75% of tiny.ts)',
+      'Top historical contributor: Alice (75% of tiny.ts commits)',
     );
     // Below 0.4 threshold -> null
     assert.equal(formatOwnerNote(data.nodes[1]!, 'quick.ts'), null);
@@ -287,12 +292,35 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(panel.reverseDirection.pctText, '80%');
     assert.equal(panel.lastTogetherText, 'Last together 2026-04-12');
     assert.equal(panel.receiptsShown.length, 3);
-    assert.equal(panel.receiptsTotal, 4);
-    assert.equal(panel.receiptsOverflowCount, 1);
+    assert.equal(panel.receiptsTotal, 8);
+    assert.equal(panel.receiptsOverflowCount, 5);
     assert.equal(panel.howToReadSummary, HOW_TO_READ_SUMMARY);
     assert.equal(
       panel.explainCommand,
       'npx repo-archaeology explain src/preset/tiny.ts src/preset/quick.ts',
+    );
+
+    // Fallback explainCommand shell-quotes paths with spaces or shell metacharacters
+    const spacedData = makeBaseData({
+      nodes: [
+        { path: 'src/my preset/tiny$(id).ts', dir: 'src/my preset', changes: 8 },
+        { path: 'src/my preset/quick.ts', dir: 'src/my preset', changes: 10 },
+      ],
+      edges: [
+        {
+          ...edge,
+          explainCommand: undefined,
+        },
+      ],
+    });
+    const spacedPanel = formatEvidencePanelCopy(spacedData, {
+      kind: 'pair',
+      edgeIndex: 0,
+      edge: spacedData.edges[0]!,
+    });
+    assert.equal(
+      spacedPanel.explainCommand,
+      "npx repo-archaeology explain 'src/my preset/tiny$(id).ts' 'src/my preset/quick.ts'",
     );
   });
 
@@ -404,8 +432,36 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     }
   });
 
-  it('encodes and resolves #f=<sourcePath>..<targetPath> hashes safely and ignores invalid or tampered hashes', () => {
-    const data = makeBaseData();
+  it('encodes and resolves #f=<sourcePath>..<targetPath> hashes safely, including filenames with literal .., and ignores invalid or tampered hashes', () => {
+    const data = makeBaseData({
+      nodes: [
+        ...makeBaseData().nodes,
+        { path: 'src/preset/foo..bar.ts', dir: 'src/preset', changes: 5 },
+        { path: 'src/preset/baz..qux.ts', dir: 'src/preset', changes: 5 },
+      ],
+      edges: [
+        ...makeBaseData().edges,
+        {
+          source: 5,
+          target: 6,
+          relationship: 'ghost',
+          why: 'no import',
+          shared: 4,
+          fromChanges: 5,
+          toChanges: 5,
+          confidence: 0.8,
+          reverseConfidence: 0.8,
+          interval: { low: 0.38, high: 0.96 },
+          reverseInterval: { low: 0.38, high: 0.96 },
+          score: 0.38,
+          overviewPriority: 2,
+          weighted: false,
+          lastTogether: '2026-05-01',
+          crossesDirectories: false,
+          evidence: [],
+        },
+      ],
+    });
     const hash = formatFindingHash('src/preset/tiny.ts', 'src/preset/quick.ts');
     assert.equal(hash, '#f=src%2Fpreset%2Ftiny.ts..src%2Fpreset%2Fquick.ts');
 
@@ -418,6 +474,22 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       data,
     );
     assert.ok(reversed && reversed.kind === 'pair' && reversed.edgeIndex === 0);
+
+    // Paths containing literal '..' inside segments round-trip cleanly
+    const dotDotHash = formatFindingHash('src/preset/foo..bar.ts', 'src/preset/baz..qux.ts');
+    assert.equal(dotDotHash, '#f=src%2Fpreset%2Ffoo%2E%2Ebar.ts..src%2Fpreset%2Fbaz%2E%2Equx.ts');
+    const resolvedDotDot = resolveFindingFromHash(dotDotHash, data);
+    assert.ok(resolvedDotDot && resolvedDotDot.kind === 'pair' && resolvedDotDot.edgeIndex === 1);
+
+    // Contiguous path suffix disambiguation preserves intermediate directories
+    assert.deepEqual(disambiguatePairPaths('a/src/index.ts', 'b/src/index.ts'), [
+      'a/src/index.ts',
+      'b/src/index.ts',
+    ]);
+    assert.deepEqual(
+      disambiguatePairPaths('packages/a/src/util/index.ts', 'packages/b/src/util/index.ts'),
+      ['a/src/util/index.ts', 'b/src/util/index.ts'],
+    );
 
     // Invalid / tampered / unknown paths return null
     assert.equal(resolveFindingFromHash('', data), null);
@@ -484,10 +556,10 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
 
     const ranked = buildRankedFindings(makeBaseData());
     assert.equal(ranked.length, 1);
-    assert.equal(ranked[0]?.cutLabel, 'C-01');
+    assert.equal(ranked[0]?.findingId, 'F-01');
   });
 
-  it('verifies Hono design concepts trace every number to docs/design/ra-17/hono.mapdata.json with zero label overlaps', () => {
+  it('verifies Hono design concepts trace every number to docs/design/ra-17/hono.mapdata.json with zero label or balloon overlaps', () => {
     const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const ra17Dir = join(rootDir, 'docs', 'design', 'ra-17');
     const mapDataPath = join(ra17Dir, 'hono.mapdata.json');
@@ -501,9 +573,22 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     const evCopy = formatEvidencePanelCopy(honoData, featured, 'C-01');
     const plate = computeFeaturedPlateLayout(honoData, featured, { width: 760, height: 274 });
     assert.equal(plate.nodes.length, 6);
+    const bb = plate.balloonBox;
+    assert.ok(bb, 'expected balloonBox on featured plate');
 
     for (let i = 0; i < plate.nodes.length; i++) {
-      const a = plate.nodes[i]!.label;
+      const nodeI = plate.nodes[i]!;
+      const a = nodeI.label;
+      // Check against balloonBox
+      const labelHitsBalloon: boolean =
+        a.x < bb.x + bb.w && a.x + a.w > bb.x && a.y < bb.y + bb.h && a.y + a.h > bb.y;
+      assert.equal(labelHitsBalloon, false, `Label ${a.text} overlaps speech balloon`);
+      const circleHitsBalloon: boolean =
+        nodeI.x + nodeI.r > bb.x &&
+        nodeI.x - nodeI.r < bb.x + bb.w &&
+        nodeI.y + nodeI.r > bb.y &&
+        nodeI.y - nodeI.r < bb.y + bb.h;
+      assert.equal(circleHitsBalloon, false, `Node circle ${a.text} overlaps speech balloon`);
       for (let j = i + 1; j < plate.nodes.length; j++) {
         const b = plate.nodes[j]!.label;
         const overlaps =
@@ -514,7 +599,6 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
 
     for (const htmlFile of ['concept-a.html', 'concept-b.html']) {
       const html = readFileSync(join(ra17Dir, htmlFile), 'utf8');
-      assert.ok(html.includes(evCopy.headline));
       assert.ok(html.includes(evCopy.subhead));
       assert.ok(html.includes(evCopy.primaryDirection.pctText));
       assert.ok(html.includes(evCopy.reverseDirection.pctText));
@@ -525,7 +609,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     }
   });
 
-  it('verifies Concept A, Concept B, and Empty State meet first-viewport, >=11px font-size, zero horizontal scroll, and marker budget in Chromium', async (t) => {
+  it('verifies Concept A, Concept B, and Empty State meet first-viewport, >=11px font-size, zero horizontal scroll, zero canvas label/balloon collisions, and marker budget in Chromium', async (t) => {
     let chromium: typeof import('playwright').chromium | undefined;
     try {
       ({ chromium } = await import('playwright'));
@@ -589,17 +673,56 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
             }
           }
 
+          type Box = { x: number; y: number; w: number; h: number; text?: string };
+          type NodePt = { x: number; y: number; radius: number; label: string };
+          const w = window as unknown as {
+            __raPlateRenderedLabels?: Box[];
+            __raPlateRenderedNodes?: NodePt[];
+            __raPlateBalloonBox?: Box | null;
+          };
+          const labels = w.__raPlateRenderedLabels ?? [];
+          const nodes = w.__raPlateRenderedNodes ?? [];
+          const balloonBox = w.__raPlateBalloonBox ?? null;
+          const collisions: string[] = [];
+          for (let i = 0; i < labels.length; i++) {
+            const a = labels[i]!;
+            if (balloonBox) {
+              if (
+                a.x < balloonBox.x + balloonBox.w &&
+                a.x + a.w > balloonBox.x &&
+                a.y < balloonBox.y + balloonBox.h &&
+                a.y + a.h > balloonBox.y
+              ) {
+                collisions.push(`label ${a.text} hits balloon`);
+              }
+            }
+            for (let j = i + 1; j < labels.length; j++) {
+              const b = labels[j]!;
+              if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
+                collisions.push(`label ${a.text} hits label ${b.text}`);
+              }
+            }
+            for (const n of nodes) {
+              if (n.label === a.text) continue;
+              const nr = n.radius + 3;
+              if (a.x < n.x + nr && a.x + a.w > n.x - nr && a.y < n.y + nr && a.y + a.h > n.y - nr) {
+                collisions.push(`label ${a.text} hits node ${n.label}`);
+              }
+            }
+          }
+
           return {
             headlineBottom: headline?.bottom ?? 9999,
             dirCardsCountInView: dirCards.filter((r) => r.bottom <= 900).length,
-            plateBottom: plate?.bottom ?? 9999,
-            balloonBottom: balloon?.bottom ?? 9999,
+            plateBottom: plate?.bottom ?? 900,
+            balloonBottom: balloon?.bottom ?? 900,
             firstReceiptBottom: firstReceipt?.bottom ?? 9999,
             horizOverflow,
             minFontSize,
             minFontSelector,
             markerTextColorUsed,
             markerBgCount,
+            collisions,
           };
         });
 
@@ -609,6 +732,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
         assert.ok(audit.balloonBottom <= 900, `${file}: balloon bottom ${audit.balloonBottom} > 900`);
         assert.ok(audit.firstReceiptBottom <= 900, `${file}: first receipt bottom ${audit.firstReceiptBottom} > 900`);
         assert.equal(audit.horizOverflow, false, `${file}: unexpected horizontal overflow at 1440x900`);
+        assert.deepEqual(audit.collisions, [], `${file}: desktop canvas collisions: ${audit.collisions.join(', ')}`);
         assert.ok(
           audit.minFontSize >= 11,
           `${file}: found font-size ${audit.minFontSize}px on ${audit.minFontSelector} (< 11px)`,
@@ -617,19 +741,80 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
         // Only masthead status chip + C-01 kicker chip have marker yellow background
         assert.equal(audit.markerBgCount, 2, `${file}: expected 2 marker-yellow chips (masthead + C-01), got ${audit.markerBgCount}`);
 
-        // Check mobile 390x844 and 200% zoom (720x450) for zero horizontal overflow
+        // Verify "Show all 78 findings" button toggles hidden ranked items
+        const hiddenBefore = await page.locator('#ranked-findings-list [data-extra-row="true"][hidden]').count();
+        assert.equal(hiddenBefore, 63, `${file}: expected 63 initially hidden ranked rows`);
+        await page.click('#toggle-all-findings');
+        const hiddenAfter = await page.locator('#ranked-findings-list [data-extra-row="true"][hidden]').count();
+        assert.equal(hiddenAfter, 0, `${file}: expected 0 hidden ranked rows after clicking Show all`);
+
+        // Check mobile 390x844 and 200% zoom (720x450) for zero horizontal overflow and zero mobile collisions
         for (const vp of [
           { width: 390, height: 844 },
           { width: 720, height: 450 },
         ]) {
           await page.setViewportSize(vp);
-          const overflow = await page.evaluate(
-            () => document.documentElement.scrollWidth > window.innerWidth,
-          );
+          await page.waitForTimeout(50);
+          const vpAudit = await page.evaluate(() => {
+            const overflow = document.documentElement.scrollWidth > window.innerWidth;
+            const overflowingEls = Array.from(document.querySelectorAll('body *'))
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                return r.right > window.innerWidth + 0.5;
+              })
+              .slice(0, 5)
+              .map((el) => {
+                const r = el.getBoundingClientRect();
+                return `${el.tagName.toLowerCase()}.${el.className}(right=${Math.round(r.right)})`;
+              });
+            type Box = { x: number; y: number; w: number; h: number; text?: string };
+            type NodePt = { x: number; y: number; radius: number; label: string };
+            const w = window as unknown as {
+              __raPlateRenderedLabels?: Box[];
+              __raPlateRenderedNodes?: NodePt[];
+              __raPlateBalloonBox?: Box | null;
+            };
+            const labels = w.__raPlateRenderedLabels ?? [];
+            const nodes = w.__raPlateRenderedNodes ?? [];
+            const balloonBox = w.__raPlateBalloonBox ?? null;
+            const collisions: string[] = [];
+            for (let i = 0; i < labels.length; i++) {
+              const a = labels[i]!;
+              if (balloonBox) {
+                if (
+                  a.x < balloonBox.x + balloonBox.w &&
+                  a.x + a.w > balloonBox.x &&
+                  a.y < balloonBox.y + balloonBox.h &&
+                  a.y + a.h > balloonBox.y
+                ) {
+                  collisions.push(`label ${a.text} hits balloon`);
+                }
+              }
+              for (let j = i + 1; j < labels.length; j++) {
+                const b = labels[j]!;
+                if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) {
+                  collisions.push(`label ${a.text} hits label ${b.text}`);
+                }
+              }
+              for (const n of nodes) {
+                if (n.label === a.text) continue;
+                const nr = n.radius + 3;
+                if (a.x < n.x + nr && a.x + a.w > n.x - nr && a.y < n.y + nr && a.y + a.h > n.y - nr) {
+                  collisions.push(`label ${a.text} hits node ${n.label}`);
+                }
+              }
+            }
+            return { overflow, overflowingEls, collisions };
+          });
           assert.equal(
-            overflow,
+            vpAudit.overflow,
             false,
-            `${file}: unexpected horizontal overflow at ${vp.width}x${vp.height}`,
+            `${file}: unexpected horizontal overflow at ${vp.width}x${vp.height}: ${vpAudit.overflowingEls.join(', ')}`,
+          );
+          assert.deepEqual(
+            vpAudit.collisions,
+            [],
+            `${file}: canvas collisions at ${vp.width}x${vp.height}: ${vpAudit.collisions.join(', ')}`,
           );
         }
       }

@@ -173,31 +173,6 @@ html, body {
   position: relative;
 }
 
-/* Registration peg holes at top of sheet */
-.f12-pegs {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 56px;
-  height: 10px;
-  margin-bottom: 4px;
-}
-.f12-peg {
-  background: var(--f-hole);
-  border: 1.5px solid var(--f-rule);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-.f12-peg.round {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-}
-.f12-peg.slot {
-  width: 24px;
-  height: 7px;
-  border-radius: 4px;
-}
-
 /* Compact Masthead & Toolbar */
 .f12-masthead {
   display: flex;
@@ -207,7 +182,7 @@ html, body {
   gap: 8px 16px;
   padding-bottom: 7px;
   border-bottom: var(--f-stroke) solid var(--f-rule);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .f12-brand-row {
   display: flex;
@@ -242,6 +217,19 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
+}
+.f12-status-calm {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: var(--f-panel);
+  color: var(--f-ink);
+  border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 
 .f12-how-to-read {
@@ -319,6 +307,7 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .f12-seg-btn + .f12-seg-btn {
   border-left: 1.5px solid var(--f-rule);
@@ -329,18 +318,62 @@ html, body {
   color: var(--f-sheet);
 }
 
+/* Compact Inline Stat Strip (shared by Concept A & B) */
+.f12-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 5px 10px;
+  margin-bottom: 10px;
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-panel);
+}
+.f12-stat-strip-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.f12-stat-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-f-mono);
+  font-size: 11.5px;
+  color: var(--f-ink-2);
+}
+.f12-stat-inline strong {
+  font-family: var(--font-f-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--f-ink);
+  font-variant-numeric: tabular-nums;
+}
+.f12-stat-sep {
+  color: var(--f-grid);
+  font-weight: 700;
+}
+.f12-stat-window {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  color: var(--f-ink-2);
+}
+
 /* Panels & SVG Polygon Borders */
 .f12-panel {
   position: relative;
   background: var(--f-panel);
-  padding: 12px 14px;
+  padding: 10px 14px;
   min-width: 0;
 }
 .f12-panel.f12-slant-bottom {
-  padding-bottom: 20px;
+  padding-bottom: 18px;
 }
 .f12-panel.f12-slant-top {
-  padding-top: 20px;
+  padding-top: 18px;
 }
 .f12-panel-frame {
   position: absolute;
@@ -387,14 +420,14 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 6px;
+  gap: 6px 12px;
+  margin-bottom: 5px;
 }
 .f12-kicker-left {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .f12-kicker-chip {
   font-family: var(--font-f-mono);
@@ -406,6 +439,7 @@ html, body {
   background: var(--f-marker);
   color: var(--f-marker-ink);
   border: 1.5px solid var(--f-rule);
+  white-space: nowrap;
 }
 .f12-tag {
   font-family: var(--font-f-mono);
@@ -417,38 +451,45 @@ html, body {
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   color: var(--f-ink);
+  white-space: nowrap;
+}
+.f12-tag-weak {
+  border-style: dashed;
+  color: var(--f-ink-2);
 }
 .f12-last-date {
   font-family: var(--font-f-mono);
   font-size: 11.5px;
   font-weight: 700;
   color: var(--f-ink-2);
+  white-space: nowrap;
 }
 
 .f12-headline {
   font-family: var(--font-f-display);
   font-weight: 400;
-  font-size: clamp(20px, 2.05vw, 27px);
-  line-height: 1.12;
+  font-size: clamp(19px, 1.95vw, 25px);
+  line-height: 1.14;
   letter-spacing: 0.01em;
   margin: 0 0 4px;
   color: var(--f-ink);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.f12-headline code,
+.f12-headline code.f12-headline-path,
 .f12-mono-token {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 0.9em;
-  padding: 1px 6px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
+  font-size: 0.94em;
+  letter-spacing: -0.02em;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
 }
 .f12-subhead {
-  margin: 0 0 8px;
-  font-size: 13px;
-  line-height: 1.4;
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  line-height: 1.38;
   color: var(--f-ink-2);
   max-width: 95ch;
   overflow-wrap: anywhere;
@@ -457,56 +498,10 @@ html, body {
 .f12-subhead code {
   font-family: var(--font-f-mono);
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--f-ink);
 }
 
-/* Big-number Metric strip (Concept A) */
-.f12-stat-band {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--f-gutter-pair);
-  margin-bottom: 10px;
-}
-.f12-stat-card {
-  position: relative;
-  border: 2px solid var(--f-rule);
-  background: var(--f-panel);
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-width: 0;
-}
-.f12-stat-card.f12-stat-featured::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 6px;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.25px,
-    transparent 1.25px,
-    transparent 5px
-  );
-  border-bottom: 1.5px solid var(--f-rule);
-}
-.f12-stat-card.f12-stat-featured {
-  padding-top: 11px;
-}
-.f12-m-label {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .f12-ink-sq {
   display: inline-flex;
   align-items: center;
@@ -518,20 +513,6 @@ html, body {
   border: 1.5px solid var(--f-rule);
   font-size: 11px;
   line-height: 1;
-}
-.f12-m-value {
-  font-family: var(--font-f-display);
-  font-size: 26px;
-  line-height: 1.06;
-  margin: 2px 0 1px;
-  color: var(--f-ink);
-  font-variant-numeric: tabular-nums;
-}
-.f12-m-note {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  color: var(--f-ink-2);
-  margin: 0;
 }
 
 /* Cyanotype Plate */
@@ -547,7 +528,7 @@ html, body {
 .f12-plate-canvas-box {
   position: relative;
   width: 100%;
-  height: 274px;
+  height: 266px;
 }
 .f12-plate-canvas {
   display: block;
@@ -559,7 +540,7 @@ html, body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 12px;
+  gap: 5px 12px;
   padding: 5px 10px;
   background: var(--plate-ground-deep);
   border-top: 1.5px solid rgba(159, 180, 204, 0.25);
@@ -571,14 +552,22 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .f12-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--plate-chalk);
   font-size: 11px;
+  white-space: nowrap;
+}
+.f12-dir-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid #fffef9;
+  display: inline-block;
 }
 
 /* Speech Balloon Callout on the Plate (ported from balloon.tsx) */
@@ -623,9 +612,47 @@ html, body {
   stroke-linejoin: miter;
 }
 .f12-peak-dot {
-  fill: var(--f-marker);
+  fill: #fffef9;
   stroke: #121212;
-  stroke-width: 2px;
+  stroke-width: 2.2px;
+}
+
+/* Family Pairwise Summary Table inside Evidence Panel */
+.f12-family-pairs-box {
+  border: 1.5px solid var(--f-rule);
+  background: var(--f-sheet);
+  margin-bottom: 7px;
+}
+.f12-family-pairs-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--f-grid);
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink-2);
+}
+.f12-family-pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
+}
+.f12-family-pair-row:last-child {
+  border-bottom: 0;
+}
+.f12-family-pair-row.is-lead {
+  background: rgba(18, 18, 18, 0.05);
+  font-weight: 700;
+}
+:root[data-theme="dark"] .f12-family-pair-row.is-lead {
+  background: rgba(241, 240, 234, 0.08);
 }
 
 /* Evidence Panel Inside / Beside Hero */
@@ -633,12 +660,12 @@ html, body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 .f12-dir-card {
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
-  padding: 7px 10px;
+  padding: 6px 9px;
 }
 .f12-dir-route {
   font-family: var(--font-f-mono);
@@ -650,12 +677,28 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.f12-dir-metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 2px;
+}
 .f12-dir-pct {
   font-family: var(--font-f-display);
-  font-size: 24px;
-  line-height: 1.08;
+  font-size: 21px;
+  line-height: 1.05;
   color: var(--f-ink);
-  margin: 0 0 2px;
+  margin: 0;
+}
+.f12-dir-lb {
+  font-family: var(--font-f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--f-ink);
+  padding: 1px 5px;
+  border: 1px solid var(--f-rule);
+  background: var(--f-panel);
 }
 .f12-dir-detail {
   font-family: var(--font-f-mono);
@@ -664,36 +707,46 @@ html, body {
   margin: 0;
 }
 
-.f12-meta-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.f12-meta-pill {
+/* Plain Definition List for Evidence Metadata (no fake buttons) */
+.f12-evidence-dl {
+  margin: 0 0 7px;
+  padding: 4px 0;
+  border-top: 1px solid var(--f-grid);
+  border-bottom: 1px solid var(--f-grid);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
   font-family: var(--font-f-mono);
   font-size: 11px;
-  padding: 2px 7px;
-  border: 1px solid var(--f-rule);
-  background: var(--f-sheet);
+}
+.f12-evidence-dl dt {
+  color: var(--f-ink-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.f12-evidence-dl dd {
+  margin: 0;
   color: var(--f-ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .f12-cx-details {
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-  padding: 4px 8px;
-  margin-bottom: 8px;
+  padding: 3px 0;
+  margin-bottom: 6px;
   font-family: var(--font-f-mono);
   font-size: 11px;
+  border-bottom: 1px solid var(--f-grid);
 }
 .f12-cx-details summary {
   cursor: pointer;
   font-weight: 700;
-  color: var(--f-ink);
+  color: var(--f-ink-2);
 }
 .f12-cx-list {
-  margin: 6px 0 2px;
+  margin: 4px 0 2px;
   padding-left: 16px;
   color: var(--f-ink-2);
 }
@@ -703,20 +756,20 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .f12-receipts-title {
   font-family: var(--font-f-mono);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--f-ink-2);
   margin: 0;
 }
 .f12-receipt-list {
   list-style: none;
-  margin: 0 0 8px;
+  margin: 0 0 7px;
   padding: 0;
   border-top: 1.5px solid var(--f-rule);
 }
@@ -725,7 +778,7 @@ html, body {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 0;
+  padding: 3px 0;
   border-bottom: 1px solid var(--f-grid);
   font-size: 12px;
   min-width: 0;
@@ -760,7 +813,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1.5px solid var(--f-rule);
   background: var(--f-sheet);
   min-width: 0;
@@ -789,12 +842,12 @@ html, body {
   white-space: nowrap;
 }
 
-/* Tone Range Bars (ported from tone-bar-list.tsx) */
+/* Tone Range Bars with 45° Halftone Dots (ported from tone-bar-list.tsx) */
 .f12-range-track {
   position: relative;
   display: block;
   width: 100%;
-  height: 16px;
+  height: 15px;
   border: 2px solid var(--f-rule);
   background: var(--f-sheet);
 }
@@ -802,13 +855,11 @@ html, body {
   position: absolute;
   top: 0;
   bottom: 0;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--f-tone) 0,
-    var(--f-tone) 1.35px,
-    transparent 1.35px,
-    transparent 5px
-  );
+  background-image:
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px),
+    radial-gradient(circle, var(--f-tone) 1.15px, transparent 1.35px);
+  background-position: 0 0, 3px 3px;
+  background-size: 6px 6px;
   border-left: 1.5px solid var(--f-rule);
   border-right: 1.5px solid var(--f-rule);
 }
@@ -830,13 +881,16 @@ html, body {
 }
 .f12-ranked-row {
   display: grid;
-  grid-template-columns: 54px minmax(200px, 1.5fr) 120px 76px minmax(140px, 1.4fr) 92px;
+  grid-template-columns: 54px minmax(190px, 1.45fr) auto 76px minmax(140px, 1.35fr) 92px;
   align-items: center;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--f-grid);
   font-family: var(--font-f-mono);
   font-size: 12px;
+}
+.f12-ranked-row[hidden] {
+  display: none !important;
 }
 .f12-ranked-row.f12-ranked-active {
   background-image: repeating-linear-gradient(
@@ -856,6 +910,7 @@ html, body {
   border: 1.5px solid var(--f-rule);
   text-align: center;
   background: var(--f-sheet);
+  white-space: nowrap;
 }
 .f12-ranked-row.f12-ranked-active .f12-ranked-cut {
   background: var(--f-ink);
@@ -869,10 +924,17 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.f12-ranked-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
 .f12-ranked-ratio {
   font-weight: 700;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-range-col {
   display: flex;
@@ -885,11 +947,18 @@ html, body {
   min-width: 64px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .f12-ranked-date {
   font-size: 11px;
   color: var(--f-ink-2);
   text-align: right;
+  white-space: nowrap;
+}
+.f12-ranked-more-bar {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
 }
 
 /* Concept A Layout */
@@ -897,14 +966,14 @@ html, body {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   gap: var(--f-gutter-pair);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   align-items: stretch;
 }
 .concept-a-secondary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--f-gutter-pair);
-  margin-bottom: 42px;
+  margin-bottom: 36px;
 }
 
 /* Concept B Storyboard Layout */
@@ -934,47 +1003,36 @@ html, body {
 .f12-pair > .f12-panel {
   flex: 1;
 }
-.concept-b-chip-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1.5px solid var(--f-grid);
-}
-.concept-b-stat-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 9px;
-  border: 1.5px solid var(--f-rule);
-  background: var(--f-sheet);
-}
-.concept-b-stat-num {
-  font-family: var(--font-f-display);
-  font-size: 18px;
-  line-height: 1;
-  color: var(--f-ink);
-}
-.concept-b-stat-lbl {
-  font-family: var(--font-f-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--f-ink-2);
-}
 
 /* Responsive Mobile (390px) */
 @media (max-width: 900px) {
   .f12-desk {
-    padding: 4px;
+    padding: 3px;
   }
   .f12-sheet {
-    padding: 6px 10px 16px;
+    padding: 5px 8px 14px;
   }
-  .f12-stat-band {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .f12-masthead {
+    gap: 5px 8px;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+  .f12-search-input {
+    width: 120px;
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+  .f12-seg-btn {
+    padding: 2px 6px;
+    min-height: 24px;
+    font-size: 11px;
+  }
+  .f12-stat-strip {
+    padding: 4px 8px;
+    margin-bottom: 8px;
+  }
+  .f12-stat-window {
+    display: none;
   }
   .concept-a-hero-grid,
   .concept-a-secondary-grid,
@@ -984,18 +1042,44 @@ html, body {
     grid-template-columns: minmax(0, 1fr);
   }
   .f12-plate-canvas-box {
-    height: 260px !important;
+    height: 244px !important;
   }
   .f12-balloon {
     font-size: 11px;
     padding: 3px 7px;
   }
+  .f12-last-date,
+  .f12-kicker-left .f12-tag,
+  .f12-kicker-chip {
+    white-space: normal;
+  }
+  .f12-family-pair-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+  .f12-family-pair-row > span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .f12-family-pair-row > span:nth-child(3) {
+    grid-column: 1 / -1;
+    color: var(--f-ink-2);
+  }
   .f12-ranked-row {
     grid-template-columns: 48px minmax(0, 1fr) auto;
-    gap: 6px 8px;
+    gap: 5px 8px;
+  }
+  .f12-ranked-badges {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .f12-ranked-ratio {
+    grid-column: 1 / 2;
+    text-align: left;
   }
   .f12-ranked-range-col {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
+    min-width: 0;
   }
   .f12-ranked-date {
     display: none;
@@ -1007,19 +1091,14 @@ html, body {
 <div class="f12-desk">
   <main class="f12-sheet">
     
-<div class="f12-pegs" aria-hidden="true">
-  <span class="f12-peg round"></span>
-  <span class="f12-peg slot"></span>
-  <span class="f12-peg round"></span>
-</div>
 <header class="f12-masthead">
   <div class="f12-brand-row">
     <span class="f12-case-tag">REPO ARCHAEOLOGY // EMPTY STATE · NO GHOST WIRES</span>
     <span class="f12-repo-pill">hono</span>
-    <span class="f12-status-kicker">EVIDENCE · NOT PROOF</span>
+    <span class="f12-status-calm">CLEAN DIG · 0 GHOST WIRES</span>
     <details class="f12-how-to-read">
       <summary>How to read this map ▸</summary>
-      <div class="f12-how-to-read-pop">Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or supported indirect import in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the Wilson lower bound with recency and commit-origin weights when configured.</div>
+      <div class="f12-how-to-read-pop">Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or 2-hop import link detected in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the 95% Wilson lower bound with recency and commit-origin weights when configured.</div>
     </details>
   </div>
   <div class="f12-toolbar" role="toolbar" aria-label="Map controls">
@@ -1037,29 +1116,19 @@ html, body {
     <button type="button" id="theme-toggle" class="f12-seg-btn" style="border: 1.5px solid var(--f-rule);">Theme</button>
   </div>
 </header>
-
-    <section class="f12-stat-band" aria-label="Repository summary statistics">
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">GHOST WIRES</h2>
-        <p class="f12-m-value">0</p>
-        <p class="f12-m-note">none above configured thresholds</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">IMPORT LINKS</h2>
-        <p class="f12-m-value">63</p>
-        <p class="f12-m-note">co-changing files explained by imports</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">MIN THRESHOLDS</h2>
-        <p class="f12-m-value">≥3 · 40%</p>
-        <p class="f12-m-note">shared commits &amp; directional confidence</p>
-      </div>
-      <div class="f12-stat-card">
-        <h2 class="f12-m-label">COMMITS ANALYSED</h2>
-        <p class="f12-m-value">2,757</p>
-        <p class="f12-m-note">2021-12-14 to 2026-10-16</p>
-      </div>
-    </section>
+    
+<section class="f12-stat-strip" aria-label="Repository summary statistics">
+  <div class="f12-stat-strip-items">
+    <span class="f12-stat-inline"><span class="f12-ink-sq" aria-hidden="true">▲</span> <strong>0</strong> GHOST WIRES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>0</strong> FINDING FAMILIES</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>0</strong> UNCHECKED (0 TOTAL)</span>
+    <span class="f12-stat-sep" aria-hidden="true">·</span>
+    <span class="f12-stat-inline"><strong>2,757</strong> COMMITS ANALYSED</span>
+  </div>
+  <span class="f12-stat-window">2021-12-14 → 2026-10-16 · 107 files</span>
+</section>
 
     <section class="f12-panel f12-rect" aria-label="C-01 Empty state and strongest import cluster">
       <svg class="f12-panel-frame" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon vector-effect="non-scaling-stroke" points="0.35,0.35 99.65,0.35 99.65,99.65 0.35,99.65"></polygon></svg>
@@ -1067,8 +1136,8 @@ html, body {
       <div class="f12-panel-body">
         <div class="f12-kicker-row">
           <div class="f12-kicker-left">
-            <span class="f12-tag">C-01 / CLEAN DIG · ZERO GHOST WIRES</span>
-            <span class="f12-tag">CONTEXT: STRONGEST IMPORT CLUSTER</span>
+            <span class="f12-tag">CLEAN DIG · ZERO GHOST WIRES</span>
+            <span class="f12-tag">CONTEXT: STRONGEST IMPORT CLUSTER (12 FILES)</span>
           </div>
           <span class="f12-last-date">Latest commit 2026-10-16</span>
         </div>
@@ -1084,6 +1153,10 @@ html, body {
           </div>
           <div class="f12-plate-footer">
             <div class="f12-plate-legend">
+              <span class="f12-legend-item">
+                <span class="f12-dir-dot" style="background:#7eb3e0;"></span>
+                Import cluster node
+              </span>
               <span class="f12-legend-item">
                 <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke="rgba(232,238,245,0.75)" stroke-width="2"/></svg>
                 Direct import link (solid)
@@ -1103,7 +1176,8 @@ html, body {
 
 <script>
 (() => {
-  const plate = {"width":760,"height":320,"nodes":[{"nodeIndex":0,"path":"src/preset/tiny.ts","shortLabel":"tiny.ts","dir":"src/preset","changes":9,"x":315.9,"y":102.9,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":0,"text":"tiny.ts","fullPath":"src/preset/tiny.ts","position":"W","x":235.4,"y":93.9,"w":64,"h":18,"anchorX":299.4,"anchorY":107.9,"textAlign":"right"}},{"nodeIndex":1,"path":"src/preset/quick.ts","shortLabel":"quick.ts","dir":"src/preset","changes":10,"x":349.8,"y":135,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":1,"text":"quick.ts","fullPath":"src/preset/quick.ts","position":"W","x":262.3,"y":126,"w":71,"h":18,"anchorX":333.3,"anchorY":140,"textAlign":"right"}},{"nodeIndex":13,"path":"src/router/reg-exp-router/node.ts","shortLabel":"node.ts","dir":"src/router/reg-exp-router","changes":14,"x":394.3,"y":131.5,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":13,"text":"node.ts","fullPath":"src/router/reg-exp-router/node.ts","position":"S","x":362.3,"y":146,"w":64,"h":18,"anchorX":394.3,"anchorY":159.7,"textAlign":"center"}},{"nodeIndex":14,"path":"src/router/reg-exp-router/router.ts","shortLabel":"reg-exp-router/router.ts","dir":"src/router/reg-exp-router","changes":39,"x":463.7,"y":107.5,"r":9.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":14,"text":"reg-exp-router/router.ts","fullPath":"src/router/reg-exp-router/router.ts","position":"E","x":482.2,"y":98.5,"w":193,"h":18,"anchorX":482.2,"anchorY":112.5,"textAlign":"left"}},{"nodeIndex":27,"path":"src/hono.ts","shortLabel":"hono.ts","dir":"src","changes":152,"x":483.6,"y":154.4,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":27,"text":"hono.ts","fullPath":"src/hono.ts","position":"E","x":503.6,"y":145.4,"w":64,"h":18,"anchorX":503.6,"anchorY":159.4,"textAlign":"left"}},{"nodeIndex":45,"path":"src/router/reg-exp-router/trie.ts","shortLabel":"trie.ts","dir":"src/router/reg-exp-router","changes":11,"x":510.8,"y":204.7,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":45,"text":"trie.ts","fullPath":"src/router/reg-exp-router/trie.ts","position":"E","x":527.3,"y":195.7,"w":64,"h":18,"anchorX":527.3,"anchorY":209.7,"textAlign":"left"}},{"nodeIndex":55,"path":"src/router/smart-router/router.ts","shortLabel":"smart-router/router.ts","dir":"src/router/smart-router","changes":5,"x":460.4,"y":220.8,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":55,"text":"smart-router/router.ts","fullPath":"src/router/smart-router/router.ts","position":"SE","x":483.4,"y":238.1,"w":178,"h":18,"anchorX":483.4,"anchorY":251.7,"textAlign":"left"}},{"nodeIndex":58,"path":"src/compose.ts","shortLabel":"compose.ts","dir":"src","changes":49,"x":404.6,"y":231.5,"r":10.2,"isFeaturedEndpoint":true,"label":{"nodeIndex":58,"text":"compose.ts","fullPath":"src/compose.ts","position":"S","x":361.6,"y":248.7,"w":86,"h":18,"anchorX":404.6,"anchorY":262.4,"textAlign":"center"}},{"nodeIndex":66,"path":"src/router.ts","shortLabel":"src/router.ts","dir":"src","changes":10,"x":364.7,"y":193.7,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":66,"text":"src/router.ts","fullPath":"src/router.ts","position":"E","x":381.2,"y":184.7,"w":109,"h":18,"anchorX":381.2,"anchorY":198.7,"textAlign":"left"}},{"nodeIndex":78,"path":"src/helper/dev/index.ts","shortLabel":"index.ts","dir":"src/helper/dev","changes":9,"x":327,"y":229.9,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":78,"text":"index.ts","fullPath":"src/helper/dev/index.ts","position":"W","x":239.5,"y":220.9,"w":71,"h":18,"anchorX":310.5,"anchorY":234.9,"textAlign":"right"}},{"nodeIndex":79,"path":"src/hono-base.ts","shortLabel":"hono-base.ts","dir":"src","changes":96,"x":247.4,"y":201.6,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":79,"text":"hono-base.ts","fullPath":"src/hono-base.ts","position":"W","x":125.4,"y":192.6,"w":102,"h":18,"anchorX":227.4,"anchorY":206.6,"textAlign":"right"}},{"nodeIndex":97,"path":"src/types.ts","shortLabel":"types.ts","dir":"src","changes":127,"x":237.7,"y":150.4,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":97,"text":"types.ts","fullPath":"src/types.ts","position":"W","x":146.7,"y":141.4,"w":71,"h":18,"anchorX":217.7,"anchorY":155.4,"textAlign":"right"}}],"edges":[{"edgeIndex":2,"sourceNodeIndex":13,"targetNodeIndex":14,"x1":394.3,"y1":131.5,"x2":463.7,"y2":107.5,"relationship":"direct","intervalLow":0.5241,"strokeWidth":2.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":13,"sourceNodeIndex":45,"targetNodeIndex":13,"x1":510.8,"y1":204.7,"x2":394.3,"y2":131.5,"relationship":"direct","intervalLow":0.4343,"strokeWidth":2.6,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":14,"sourceNodeIndex":45,"targetNodeIndex":14,"x1":510.8,"y1":204.7,"x2":463.7,"y2":107.5,"relationship":"direct","intervalLow":0.4343,"strokeWidth":2.6,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":20,"sourceNodeIndex":58,"targetNodeIndex":27,"x1":404.6,"y1":231.5,"x2":483.6,"y2":154.4,"relationship":"indirect","intervalLow":0.3557,"strokeWidth":2.4,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":24,"sourceNodeIndex":66,"targetNodeIndex":14,"x1":364.7,"y1":193.7,"x2":463.7,"y2":107.5,"relationship":"direct","intervalLow":0.3126,"strokeWidth":2.3,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":34,"sourceNodeIndex":78,"targetNodeIndex":79,"x1":327,"y1":229.9,"x2":247.4,"y2":201.6,"relationship":"indirect","intervalLow":0.2666,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":35,"sourceNodeIndex":0,"targetNodeIndex":79,"x1":315.9,"y1":102.9,"x2":247.4,"y2":201.6,"relationship":"direct","intervalLow":0.2666,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":40,"sourceNodeIndex":66,"targetNodeIndex":27,"x1":364.7,"y1":193.7,"x2":483.6,"y2":154.4,"relationship":"indirect","intervalLow":0.2365,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":41,"sourceNodeIndex":1,"targetNodeIndex":79,"x1":349.8,"y1":135,"x2":247.4,"y2":201.6,"relationship":"direct","intervalLow":0.2365,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":45,"sourceNodeIndex":55,"targetNodeIndex":66,"x1":460.4,"y1":220.8,"x2":364.7,"y2":193.7,"relationship":"direct","intervalLow":0.2307,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":50,"sourceNodeIndex":0,"targetNodeIndex":97,"x1":315.9,"y1":102.9,"x2":237.7,"y2":150.4,"relationship":"direct","intervalLow":0.1887,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":54,"sourceNodeIndex":66,"targetNodeIndex":79,"x1":364.7,"y1":193.7,"x2":247.4,"y2":201.6,"relationship":"direct","intervalLow":0.1681,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":56,"sourceNodeIndex":1,"targetNodeIndex":97,"x1":349.8,"y1":135,"x2":237.7,"y2":150.4,"relationship":"direct","intervalLow":0.1681,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false}],"leadEdge":{"edgeIndex":2,"sourceNodeIndex":13,"targetNodeIndex":14,"x1":394.3,"y1":131.5,"x2":463.7,"y2":107.5,"relationship":"direct","intervalLow":0.5241,"strokeWidth":2.9,"isFeatured":false,"isLeadEdge":false},"balloonTarget":{"x":429,"y":119.5},"fullComponentNodeCount":12,"truncatedToEgoCap":false};
+  const plate = {"width":760,"height":320,"nodes":[{"nodeIndex":0,"path":"src/preset/tiny.ts","shortLabel":"tiny.ts","dir":"src/preset","changes":9,"x":218.3,"y":113.7,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":0,"text":"tiny.ts","fullPath":"src/preset/tiny.ts","position":"W","x":137.8,"y":104.7,"w":64,"h":18,"anchorX":201.8,"anchorY":118.7,"textAlign":"right"}},{"nodeIndex":1,"path":"src/preset/quick.ts","shortLabel":"quick.ts","dir":"src/preset","changes":10,"x":299.6,"y":99.6,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":1,"text":"quick.ts","fullPath":"src/preset/quick.ts","position":"N","x":264.1,"y":67.1,"w":71,"h":18,"anchorX":299.6,"anchorY":80.8,"textAlign":"center"}},{"nodeIndex":13,"path":"src/router/reg-exp-router/node.ts","shortLabel":"node.ts","dir":"src/router/reg-exp-router","changes":14,"x":419.5,"y":94.8,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":13,"text":"node.ts","fullPath":"src/router/reg-exp-router/node.ts","position":"N","x":387.5,"y":62.3,"w":64,"h":18,"anchorX":419.5,"anchorY":76,"textAlign":"center"}},{"nodeIndex":14,"path":"src/router/reg-exp-router/router.ts","shortLabel":"reg-exp-router/router.ts","dir":"src/router/reg-exp-router","changes":39,"x":512.7,"y":113.8,"r":9.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":14,"text":"reg-exp-router/router.ts","fullPath":"src/router/reg-exp-router/router.ts","position":"E","x":531.2,"y":104.8,"w":193,"h":18,"anchorX":531.2,"anchorY":118.8,"textAlign":"left"}},{"nodeIndex":27,"path":"src/hono.ts","shortLabel":"hono.ts","dir":"src","changes":152,"x":570.5,"y":149.6,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":27,"text":"hono.ts","fullPath":"src/hono.ts","position":"E","x":590.5,"y":140.6,"w":64,"h":18,"anchorX":590.5,"anchorY":154.6,"textAlign":"left"}},{"nodeIndex":45,"path":"src/router/reg-exp-router/trie.ts","shortLabel":"trie.ts","dir":"src/router/reg-exp-router","changes":11,"x":592.6,"y":190.4,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":45,"text":"trie.ts","fullPath":"src/router/reg-exp-router/trie.ts","position":"E","x":609.1,"y":181.4,"w":64,"h":18,"anchorX":609.1,"anchorY":195.4,"textAlign":"left"}},{"nodeIndex":55,"path":"src/router/smart-router/router.ts","shortLabel":"smart-router/router.ts","dir":"src/router/smart-router","changes":5,"x":540.5,"y":233.3,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":55,"text":"smart-router/router.ts","fullPath":"src/router/smart-router/router.ts","position":"E","x":557,"y":224.3,"w":178,"h":18,"anchorX":557,"anchorY":238.3,"textAlign":"left"}},{"nodeIndex":58,"path":"src/compose.ts","shortLabel":"compose.ts","dir":"src","changes":49,"x":457.4,"y":254.4,"r":10.2,"isFeaturedEndpoint":true,"label":{"nodeIndex":58,"text":"compose.ts","fullPath":"src/compose.ts","position":"S","x":414.4,"y":271.6,"w":86,"h":18,"anchorX":457.4,"anchorY":285.3,"textAlign":"center"}},{"nodeIndex":66,"path":"src/router.ts","shortLabel":"src/router.ts","dir":"src","changes":10,"x":360.7,"y":247.3,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":66,"text":"src/router.ts","fullPath":"src/router.ts","position":"N","x":306.2,"y":214.8,"w":109,"h":18,"anchorX":360.7,"anchorY":228.5,"textAlign":"center"}},{"nodeIndex":78,"path":"src/helper/dev/index.ts","shortLabel":"index.ts","dir":"src/helper/dev","changes":9,"x":247.4,"y":245.7,"r":7.5,"isFeaturedEndpoint":true,"label":{"nodeIndex":78,"text":"index.ts","fullPath":"src/helper/dev/index.ts","position":"W","x":159.9,"y":236.7,"w":71,"h":18,"anchorX":230.9,"anchorY":250.7,"textAlign":"right"}},{"nodeIndex":79,"path":"src/hono-base.ts","shortLabel":"hono-base.ts","dir":"src","changes":96,"x":180,"y":207.9,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":79,"text":"hono-base.ts","fullPath":"src/hono-base.ts","position":"W","x":58,"y":198.9,"w":102,"h":18,"anchorX":160,"anchorY":212.9,"textAlign":"right"}},{"nodeIndex":97,"path":"src/types.ts","shortLabel":"types.ts","dir":"src","changes":127,"x":160.9,"y":161.4,"r":11,"isFeaturedEndpoint":true,"label":{"nodeIndex":97,"text":"types.ts","fullPath":"src/types.ts","position":"W","x":69.9,"y":152.4,"w":71,"h":18,"anchorX":140.9,"anchorY":166.4,"textAlign":"right"}}],"edges":[{"edgeIndex":2,"sourceNodeIndex":13,"targetNodeIndex":14,"x1":419.5,"y1":94.8,"x2":512.7,"y2":113.8,"relationship":"direct","intervalLow":0.5241,"strokeWidth":2.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":13,"sourceNodeIndex":45,"targetNodeIndex":13,"x1":592.6,"y1":190.4,"x2":419.5,"y2":94.8,"relationship":"direct","intervalLow":0.4343,"strokeWidth":2.6,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":14,"sourceNodeIndex":45,"targetNodeIndex":14,"x1":592.6,"y1":190.4,"x2":512.7,"y2":113.8,"relationship":"direct","intervalLow":0.4343,"strokeWidth":2.6,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":20,"sourceNodeIndex":58,"targetNodeIndex":27,"x1":457.4,"y1":254.4,"x2":570.5,"y2":149.6,"relationship":"indirect","intervalLow":0.3557,"strokeWidth":2.4,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":24,"sourceNodeIndex":66,"targetNodeIndex":14,"x1":360.7,"y1":247.3,"x2":512.7,"y2":113.8,"relationship":"direct","intervalLow":0.3126,"strokeWidth":2.3,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":34,"sourceNodeIndex":78,"targetNodeIndex":79,"x1":247.4,"y1":245.7,"x2":180,"y2":207.9,"relationship":"indirect","intervalLow":0.2666,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":35,"sourceNodeIndex":0,"targetNodeIndex":79,"x1":218.3,"y1":113.7,"x2":180,"y2":207.9,"relationship":"direct","intervalLow":0.2666,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":40,"sourceNodeIndex":66,"targetNodeIndex":27,"x1":360.7,"y1":247.3,"x2":570.5,"y2":149.6,"relationship":"indirect","intervalLow":0.2365,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":41,"sourceNodeIndex":1,"targetNodeIndex":79,"x1":299.6,"y1":99.6,"x2":180,"y2":207.9,"relationship":"direct","intervalLow":0.2365,"strokeWidth":2.1,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":45,"sourceNodeIndex":55,"targetNodeIndex":66,"x1":540.5,"y1":233.3,"x2":360.7,"y2":247.3,"relationship":"direct","intervalLow":0.2307,"strokeWidth":2,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":50,"sourceNodeIndex":0,"targetNodeIndex":97,"x1":218.3,"y1":113.7,"x2":160.9,"y2":161.4,"relationship":"direct","intervalLow":0.1887,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":54,"sourceNodeIndex":66,"targetNodeIndex":79,"x1":360.7,"y1":247.3,"x2":180,"y2":207.9,"relationship":"direct","intervalLow":0.1681,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false},{"edgeIndex":56,"sourceNodeIndex":1,"targetNodeIndex":97,"x1":299.6,"y1":99.6,"x2":160.9,"y2":161.4,"relationship":"direct","intervalLow":0.1681,"strokeWidth":1.9,"isFeatured":false,"isLeadEdge":false}],"leadEdge":{"edgeIndex":2,"sourceNodeIndex":13,"targetNodeIndex":14,"x1":419.5,"y1":94.8,"x2":512.7,"y2":113.8,"relationship":"direct","intervalLow":0.5241,"strokeWidth":2.9,"isFeatured":false,"isLeadEdge":false},"balloonTarget":null,"balloonBox":null,"fullComponentNodeCount":12,"truncatedToEgoCap":false};
+  const monochrome = true;
   const canvas = document.getElementById('featured-plate-canvas');
   if (!canvas) return;
 
@@ -1111,6 +1185,15 @@ html, body {
     let h = 0;
     for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
     return ((h % 360) + 360) % 360;
+  }
+
+  function boxesOverlap(a, b, pad = 3) {
+    return (
+      a.x - pad < b.x + b.w &&
+      a.x + a.w + pad > b.x &&
+      a.y - pad < b.y + b.h &&
+      a.y + a.h + pad > b.y
+    );
   }
 
   function drawPlate() {
@@ -1155,26 +1238,33 @@ html, body {
 
     const scaleX = w / plate.width;
     const scaleY = h / plate.height;
-    const nodeByIdx = new Map(plate.nodes.map((n) => [n.nodeIndex, n]));
 
-    // Draw edges (non-featured first, featured on top)
-    const orderedEdges = [...plate.edges].sort((a, b) => (a.isFeatured ? 1 : 0) - (b.isFeatured ? 1 : 0));
+    // Draw edges (non-lead first, lead edge on top with chalk-paper outer casing — never marker yellow)
+    const orderedEdges = [...plate.edges].sort((a, b) => (a.isLeadEdge ? 1 : 0) - (b.isLeadEdge ? 1 : 0));
     for (const e of orderedEdges) {
       const x1 = e.x1 * scaleX;
       const y1 = e.y1 * scaleY;
       const x2 = e.x2 * scaleX;
       const y2 = e.y2 * scaleY;
 
-      if (e.isFeatured) {
-        // Marker yellow casing under the featured relationship line
+      if (e.isLeadEdge && !monochrome) {
+        // High-contrast chalk-paper outer casing + blueprint inner moat under the lead ghost wire
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = '#ffd60a';
-        ctx.lineWidth = e.strokeWidth + 4.5;
+        ctx.strokeStyle = 'rgba(255, 254, 249, 0.92)';
+        ctx.lineWidth = e.strokeWidth + 5;
         ctx.lineCap = 'round';
         ctx.setLineDash([]);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
+        ctx.lineWidth = e.strokeWidth + 2.2;
+        ctx.lineCap = 'round';
         ctx.stroke();
         ctx.restore();
       }
@@ -1183,7 +1273,7 @@ html, body {
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.lineWidth = e.isFeatured ? e.strokeWidth + 0.8 : e.strokeWidth;
+      ctx.lineWidth = e.isLeadEdge ? e.strokeWidth + 1.1 : e.isFeatured ? e.strokeWidth + 0.4 : e.strokeWidth;
       ctx.lineCap = 'round';
 
       if (e.relationship === 'ghost') {
@@ -1203,7 +1293,8 @@ html, body {
       ctx.restore();
     }
 
-    // Draw nodes with directory hue fill and paper-colored outline
+    // Draw nodes with directory hue fill (or calm blueprint chalk in empty state) and paper-colored outline
+    const renderedNodes = [];
     for (const n of plate.nodes) {
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
@@ -1211,77 +1302,158 @@ html, body {
       ctx.save();
       ctx.beginPath();
       ctx.arc(nx, ny, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'hsl(' + hue + ', 64%, 66%)';
+      ctx.fillStyle = monochrome ? '#7eb3e0' : 'hsl(' + hue + ', 64%, 66%)';
       ctx.fill();
       ctx.lineWidth = n.isFeaturedEndpoint ? 2.5 : 1.8;
       ctx.strokeStyle = '#fffef9';
       ctx.stroke();
       ctx.restore();
+      renderedNodes.push({ nodeIndex: n.nodeIndex, text: n.label.text, x: nx, y: ny, r: n.r, isFeaturedEndpoint: n.isFeaturedEndpoint });
     }
 
-    // Draw collision-free node labels with 3px halo stroke at >= 12px mono
+    // Draw collision-free node labels with 3.5px halo stroke at >= 12px mono.
+    // On narrow mobile screens (< 480px), label featured endpoints by default and only place neighbor labels that fit with zero overlap.
     ctx.save();
-    ctx.font = '700 12.5px "M PLUS 1 Code", ui-monospace, monospace';
+    const isNarrow = w < 480;
+    ctx.font = (isNarrow ? '700 11.5px ' : '700 12.5px ') + '"M PLUS 1 Code", ui-monospace, monospace';
     ctx.lineJoin = 'round';
-    const placedMobileBoxes = [];
+
+    const obstacles = renderedNodes.map((rn) => ({
+      nodeIndex: rn.nodeIndex,
+      x: rn.x - rn.r - 6,
+      y: rn.y - rn.r - 6,
+      w: (rn.r + 6) * 2,
+      h: (rn.r + 6) * 2,
+    }));
     const balloonEl = document.querySelector('.f12-balloon');
+    let balloonRectLocal = null;
     if (balloonEl) {
       const cRect = canvas.getBoundingClientRect();
       const bRect = balloonEl.getBoundingClientRect();
       if (cRect.width > 0 && bRect.width > 0) {
-        placedMobileBoxes.push({
+        balloonRectLocal = {
           x: bRect.left - cRect.left - 4,
           y: bRect.top - cRect.top - 4,
           w: bRect.width + 8,
           h: bRect.height + 22,
-        });
+        };
+        obstacles.push(balloonRectLocal);
       }
     }
+
+    const renderedLabels = [];
+    const pad = 6;
+    const textH = 15;
+
     for (const n of plate.nodes) {
+      if (isNarrow && !n.isFeaturedEndpoint) continue;
       const lbl = n.label;
       const nx = n.x * scaleX;
       const ny = n.y * scaleY;
-      const textW = ctx.measureText(lbl.text).width;
-      const textH = 15;
-      let ax = lbl.anchorX * scaleX;
-      let ay = lbl.anchorY * scaleY;
-      let align = lbl.textAlign;
+      const textW = Math.ceil(ctx.measureText(lbl.text).width);
 
-      let left = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      const pad = 8;
-      if (left < pad || left + textW > w - pad) {
-        // Re-anchor centered above or below the node on narrow viewports so it never clips the canvas border
-        align = 'center';
-        ax = Math.max(pad + textW / 2, Math.min(w - pad - textW / 2, nx));
-        const candYs = [ny + n.r + 15, ny + n.r + 31, ny - n.r - 8, ny - n.r - 24, ny + n.r + 47];
-        ay = candYs[0];
-        for (const cy of candYs) {
-          if (cy < 16 || cy > h - 6) continue;
-          const cBox = { x: ax - textW / 2, y: cy - 12, w: textW, h: textH };
-          const hit = placedMobileBoxes.some(
-            (b) =>
-              cBox.x < b.x + b.w + 4 &&
-              cBox.x + cBox.w + 4 > b.x &&
-              cBox.y < b.y + b.h + 2 &&
-              cBox.y + cBox.h + 2 > b.y,
-          );
-          if (!hit) {
-            ay = cy;
-            break;
-          }
+      // Build candidate boxes around (nx, ny)
+      const prefAx = lbl.anchorX * scaleX;
+      const prefAy = lbl.anchorY * scaleY;
+      const prefAlign = lbl.textAlign;
+      const prefLeft = prefAlign === 'center' ? prefAx - textW / 2 : prefAlign === 'right' ? prefAx - textW : prefAx;
+
+      const leftFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.78));
+      const rightFlankX = Math.max(pad, Math.min(w - pad - textW, nx - textW * 0.22));
+      const centerClampedX = Math.max(pad, Math.min(w - pad - textW, nx - textW / 2));
+
+      const makeCand = (leftX, baselineY) => ({
+        ax: leftX,
+        ay: baselineY,
+        align: 'left',
+        x: leftX,
+        y: baselineY - 12,
+        w: textW,
+        h: textH,
+      });
+
+      const candidates = [];
+      if (!isNarrow) {
+        candidates.push({
+          ax: prefAx,
+          ay: prefAy,
+          align: prefAlign,
+          x: prefLeft,
+          y: prefAy - 12,
+          w: textW,
+          h: textH,
+        });
+      }
+
+      // Row offsets below and above the node
+      for (const dy of [n.r + 16, n.r + 32, n.r + 48, -n.r - 8, -n.r - 24]) {
+        const by = ny + dy;
+        if (isNarrow && nx < w * 0.45) {
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+        } else if (isNarrow && nx > w * 0.55) {
+          candidates.push(makeCand(rightFlankX, by));
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(Math.max(pad, nx - textW), by));
+        } else {
+          candidates.push(makeCand(centerClampedX, by));
+          candidates.push(makeCand(leftFlankX, by));
+          candidates.push(makeCand(rightFlankX, by));
         }
       }
-      const finalLeft = align === 'center' ? ax - textW / 2 : align === 'right' ? ax - textW : ax;
-      placedMobileBoxes.push({ x: finalLeft, y: ay - 12, w: textW, h: textH });
+      // E & W candidates
+      candidates.push(makeCand(nx + n.r + 8, ny + 4));
+      candidates.push(makeCand(nx - n.r - 8 - textW, ny + 4));
 
-      ctx.textAlign = align;
+      let chosen = null;
+      let bestFallback = null;
+      for (const c of candidates) {
+        if (c.x < pad || c.x + c.w > w - pad || c.y < pad || c.y + c.h > h - pad) {
+          continue;
+        }
+        const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+        const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+        if (!hitsObstacle && !hitsLabel) {
+          chosen = c;
+          break;
+        }
+        const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+        const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+        if (!bestFallback || pen < bestFallback.pen) {
+          bestFallback = { c, pen };
+        }
+      }
+
+      if (!chosen) {
+        // Scan a deterministic grid of positions to guarantee a zero-overlap slot if one exists
+        for (let gy = pad + 14; gy <= h - pad; gy += 14) {
+          for (let gx = pad; gx <= w - pad - textW; gx += 16) {
+            const c = makeCand(gx, gy);
+            const hitsObstacle = obstacles.some((ob) => boxesOverlap(c, ob, 2));
+            const hitsLabel = renderedLabels.some((rl) => boxesOverlap(c, rl, 4));
+            const dist = Math.hypot(c.x + c.w / 2 - nx, c.y + c.h / 2 - ny);
+            const pen = (hitsLabel ? 1000 : 0) + (hitsObstacle ? 400 : 0) + dist;
+            if (!bestFallback || pen < bestFallback.pen) {
+              bestFallback = { c, pen };
+            }
+          }
+        }
+        chosen = bestFallback ? bestFallback.c : makeCand(centerClampedX, Math.min(h - pad, ny + n.r + 16));
+      }
+
+      renderedLabels.push({ nodeIndex: n.nodeIndex, text: lbl.text, x: chosen.x, y: chosen.y, w: chosen.w, h: chosen.h });
+      ctx.textAlign = chosen.align;
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = isDark ? '#09192c' : '#0e2540';
-      ctx.strokeText(lbl.text, ax, ay);
+      ctx.strokeText(lbl.text, chosen.ax, chosen.ay);
       ctx.fillStyle = '#fffef9';
-      ctx.fillText(lbl.text, ax, ay);
+      ctx.fillText(lbl.text, chosen.ax, chosen.ay);
     }
     ctx.restore();
+
+    window.__raPlateRenderedNodes = renderedNodes;
+    window.__raPlateRenderedLabels = renderedLabels;
+    window.__raPlateBalloonBox = balloonRectLocal;
   }
 
   drawPlate();
@@ -1295,6 +1467,22 @@ html, body {
       const cur = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
       drawPlate();
+    });
+  }
+  const moreBtn = document.getElementById('toggle-all-findings');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', () => {
+      const expanded = moreBtn.getAttribute('aria-expanded') === 'true';
+      const next = !expanded;
+      moreBtn.setAttribute('aria-expanded', String(next));
+      const rows = document.querySelectorAll('#ranked-findings-list [data-extra-row="true"]');
+      rows.forEach((r) => {
+        if (next) r.removeAttribute('hidden');
+        else r.setAttribute('hidden', '');
+      });
+      moreBtn.textContent = next
+        ? 'Collapse to top 15 findings'
+        : 'Show all ' + document.querySelectorAll('#ranked-findings-list .f12-ranked-row').length + ' findings (' + rows.length + ' more)';
     });
   }
 })();

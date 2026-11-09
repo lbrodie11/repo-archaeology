@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import { formatExplainCommand } from '../commands/explain.js';
 import type {
   MapCounterexample,
   MapData,
@@ -13,11 +14,11 @@ import type { RelationshipVerdictView } from '../report/views.js';
 import { sanitizeHtmlDisplayText } from '../style/frame12.js';
 import type { WilsonInterval } from '../util/stats.js';
 
-export const KICKER_MOST_INTERESTING = 'C-01 / MOST INTERESTING FINDING';
+export const KICKER_MOST_INTERESTING = 'F-01 · MOST INTERESTING FINDING';
 export const STATUS_CHIP_EVIDENCE = 'EVIDENCE · NOT PROOF';
 export const HOW_TO_READ_SUMMARY = 'How to read this map ▸';
 export const HOW_TO_READ_BODY =
-  'Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or supported indirect import in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the Wilson lower bound with recency and commit-origin weights when configured.';
+  'Files are nodes colored by directory and sized by commit count on a cyanotype survey plate. Pink dashed ghost wires connect files that repeatedly change together in git history with no direct or 2-hop import link detected in current code. Percentage ranges show the two-sided 95% Wilson score confidence interval from raw historical counts; ranking uses the 95% Wilson lower bound with recency and commit-origin weights when configured.';
 
 export interface StrongerDirectionView {
   /** True when `edge.source -> edge.target` is the stronger (or tied) direction; false when reversed. */
@@ -47,6 +48,8 @@ export interface DirectionMetricCopy {
   fromLabel: string;
   toLabel: string;
   pctText: string;
+  lowerBoundText: string;
+  ratioHeadline: string;
   detailText: string;
   pctValue: number;
   shared: number;
@@ -89,6 +92,24 @@ export interface EmptyStateCopy {
   minConfidencePct: number;
 }
 
+export interface FamilyPairRowCopy {
+  edgeIndex: number;
+  fromPath: string;
+  toPath: string;
+  shortFrom: string;
+  shortTo: string;
+  shared: number;
+  fromChanges: number;
+  toChanges: number;
+  pctText: string;
+  lowerBoundText: string;
+  rangeText: string;
+  rangeLowPct: number;
+  rangeHighPct: number;
+  relationship: Relationship;
+  isLeadPair: boolean;
+}
+
 export interface EvidencePanelCopy {
   kicker: string;
   statusChip: string;
@@ -120,6 +141,7 @@ export interface EvidencePanelCopy {
     commitsTouchingAll: number;
     qualifyingPairs: number;
     possiblePairs: number;
+    pairs: FamilyPairRowCopy[];
   };
 }
 
@@ -144,11 +166,14 @@ export type FeaturedFinding =
 
 export interface RankedFindingItem {
   id: string;
+  findingId: string;
   cutLabel: string;
   kind: 'family' | 'pair';
   relationship: Relationship;
   title: string;
   subtitle: string;
+  reverseSummary: string;
+  counterexampleLine: string;
   fromPath: string;
   toPath: string;
   shared: number;
@@ -204,8 +229,9 @@ export function middleTruncatePath(rawPath: string, maxChars = 32): string {
  * Returns concise, unambiguous display names for a pair of repository paths.
  * When the two files have distinct basenames (`tiny.ts` vs `quick.ts`), returns
  * their basenames. When their basenames collide (`src/adapter/bun/serve-static.ts`
- * vs `src/adapter/deno/serve-static.ts`), includes the distinguishing folder segment(s)
- * (`bun/serve-static.ts` vs `deno/serve-static.ts`).
+ * vs `src/adapter/deno/serve-static.ts`), includes the contiguous suffix from the
+ * differentiating folder segment (`bun/serve-static.ts` vs `deno/serve-static.ts`,
+ * or `a/src/index.ts` vs `b/src/index.ts`).
  */
 export function disambiguatePairPaths(rawPathA: string, rawPathB: string): [string, string] {
   const pathA = sanitizeHtmlDisplayText(rawPathA);
@@ -223,15 +249,17 @@ export function disambiguatePairPaths(rawPathA: string, rawPathB: string): [stri
     return [baseA, baseB];
   }
 
-  // Walk backwards from parent directory until segments differ
+  // Walk backwards from parent directory until segments differ and keep the contiguous suffix
   let offset = 2;
   const maxDepth = Math.max(partsA.length, partsB.length);
   while (offset <= maxDepth) {
     const segA = partsA[partsA.length - offset];
     const segB = partsB[partsB.length - offset];
     if (segA !== segB) {
-      const labelA = segA ? `${segA}/${baseA}` : pathA;
-      const labelB = segB ? `${segB}/${baseB}` : pathB;
+      const labelA =
+        partsA.length >= offset ? partsA.slice(partsA.length - offset).join('/') : pathA;
+      const labelB =
+        partsB.length >= offset ? partsB.slice(partsB.length - offset).join('/') : pathB;
       return [labelA, labelB];
     }
     offset++;
@@ -307,7 +335,7 @@ export function resolveStrongerDirection(data: MapData, edge: MapEdge): Stronger
 function relationshipLeadSentence(relationship: Relationship): string {
   switch (relationship) {
     case 'ghost':
-      return 'No import connects them.';
+      return 'No direct or 2-hop import link was detected.';
     case 'unknown':
       return "We couldn't check imports for these files.";
     case 'indirect':
@@ -323,7 +351,7 @@ function relationshipLeadSentence(relationship: Relationship): string {
  * Formats the deterministic headline and subhead for a two-file relationship.
  *
  * - Headline: `{a} and {b} keep changing together`
- * - Subhead (ghost): `No import connects them. {shared} of {fromChanges} commits that changed {a} also changed {b}.`
+ * - Subhead (ghost): `No direct or 2-hop import link was detected. {shared} of {fromChanges} commits that changed {a} also changed {b}.`
  * - Subhead (unknown): `We couldn't check imports for these files. {shared} of {fromChanges} commits that changed {a} also changed {b}.`
  */
 export function formatPairHeadline(data: MapData, edge: MapEdge): PairHeadlineCopy {
@@ -358,18 +386,21 @@ export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
   const fileNoun = memberCount === 1 ? 'file' : 'files';
   const cleanParent = sanitizeHtmlDisplayText(family.parentDir || '.');
   const dirsPattern = cleanParent === '.' || cleanParent === '' ? '*' : `${cleanParent}/*`;
-  const cleanFileName = sanitizeHtmlDisplayText(family.fileName);
+  const rawFileName =
+    family.fileName ||
+    (family as { stem?: string }).stem ||
+    posix.basename(family.members[0]?.path ?? family.label ?? 'file');
+  const cleanFileName = sanitizeHtmlDisplayText(rawFileName);
 
   const headline = `${memberCount} ${fileNoun} across ${dirsPattern} keep changing together`;
 
-  const hasGhost = family.relationshipKinds.includes('ghost');
+  const relKinds = Array.isArray(family.relationshipKinds) ? family.relationshipKinds : [];
+  const hasGhost = relKinds.includes('ghost');
   const hasUnknownOnly =
-    !hasGhost &&
-    family.relationshipKinds.length > 0 &&
-    family.relationshipKinds.every((k) => k === 'unknown');
+    !hasGhost && relKinds.length > 0 && relKinds.every((k) => k === 'unknown');
 
   const firstSentence = hasGhost
-    ? `No import connects these ${memberCount} parallel implementations of ${cleanFileName}.`
+    ? `No direct or 2-hop import link was detected between these ${memberCount} parallel implementations of ${cleanFileName}.`
     : hasUnknownOnly
       ? `We couldn't check imports for these ${memberCount} parallel implementations of ${cleanFileName}.`
       : `These ${memberCount} parallel implementations of ${cleanFileName} move together across sibling folders.`;
@@ -395,7 +426,7 @@ export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
 
 /**
  * Formats a single directional co-change metric:
- * `{pct}%` + `{shared} of {n} commits · 95% range {lo}–{hi}%`.
+ * `{pct}%` + `{shared} of {n} commits · ≥{lo}% CI (95% range {lo}–{hi}%)`.
  */
 export function formatDirectionMetric(
   fromLabel: string,
@@ -413,6 +444,8 @@ export function formatDirectionMetric(
     fromLabel,
     toLabel,
     pctText: `${pctValue}%`,
+    lowerBoundText: `≥${rangeLowPct}% CI`,
+    ratioHeadline: `${shared}/${totalChanges} ${commitNoun}`,
     detailText: `${shared} of ${totalChanges} ${commitNoun} · 95% range ${rangeLowPct}–${rangeHighPct}%`,
     pctValue,
     shared,
@@ -424,14 +457,14 @@ export function formatDirectionMetric(
 
 /**
  * Formats the speech-balloon callout pointing at the featured relationship's midpoint on the plate:
- * e.g. `8 of 8 commits together · no import`.
+ * e.g. `12 of 20 commits together · no import detected`.
  */
 export function formatBalloonCallout(data: MapData, edge: MapEdge): string {
   const dir = resolveStrongerDirection(data, edge);
   const commitNoun = dir.fromChanges === 1 ? 'commit' : 'commits';
   const kindPhrase =
     edge.relationship === 'ghost'
-      ? 'no import'
+      ? 'no import detected'
       : edge.relationship === 'unknown'
         ? 'imports unchecked'
         : edge.relationship === 'indirect'
@@ -463,7 +496,7 @@ export function formatOwnerNote(
   const author = sanitizeHtmlDisplayText(node.topAuthor);
   const pct = Math.round(node.topAuthorShare * 100);
   const label = shortLabel ?? (posix.basename(sanitizeHtmlDisplayText(node.path)) || sanitizeHtmlDisplayText(node.path));
-  return `Usually changed by ${author} (${pct}% of ${label})`;
+  return `Top historical contributor: ${author} (${pct}% of ${label} commits)`;
 }
 
 /**
@@ -510,11 +543,13 @@ export function formatEmptyStateCopy(
   const headline = `No ghost wires in ${repoName}`;
   const subhead = `Checked ${commits.toLocaleString('en-US')} ${commitNoun} at ≥${minShared} shared ${sharedNoun} and ≥${minConfidencePct}% confidence.`;
 
-  let contextNote: string | null = null;
+  let contextNote: string | null;
   if (contextCluster && contextCluster.edgeCount > 0) {
     const fileNoun = contextCluster.nodeCount === 1 ? 'file' : 'files';
     const linkNoun = contextCluster.edgeCount === 1 ? 'import link' : 'import links';
     contextNote = `Showing the strongest import cluster (${contextCluster.nodeCount} ${fileNoun}, ${contextCluster.edgeCount} ${linkNoun}) on the plate for repository context.`;
+  } else {
+    contextNote = null;
   }
 
   return {
@@ -534,7 +569,7 @@ export function formatEmptyStateCopy(
 export function formatEvidencePanelCopy(
   data: MapData,
   featured: Exclude<FeaturedFinding, { kind: 'empty' }>,
-  cutLabel = 'C-01',
+  findingId = 'F-01',
 ): EvidencePanelCopy {
   const edge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const dir = resolveStrongerDirection(data, edge);
@@ -580,7 +615,10 @@ export function formatEvidencePanelCopy(
       : edge.evidence;
 
   const receiptsShown = allReceipts.slice(0, 3);
-  const receiptsTotal = allReceipts.length;
+  const receiptsTotal =
+    featured.kind === 'family'
+      ? Math.max(allReceipts.length, featured.family.commitsTouchingTwoOrMore)
+      : Math.max(allReceipts.length, dir.shared);
   const receiptsOverflowCount = Math.max(0, receiptsTotal - receiptsShown.length);
 
   const ownerNotes: string[] = [];
@@ -603,10 +641,40 @@ export function formatEvidencePanelCopy(
   const originShareNote = formatOriginShareNote(edge.originShare);
   const verdictNote = formatVerdictNote(edge.verdict);
   const explainCommand =
-    edge.explainCommand ?? `npx repo-archaeology explain ${dir.fromPath} ${dir.toPath}`;
+    edge.explainCommand ?? formatExplainCommand(dir.fromNode.path, dir.toNode.path);
+
+  const familyPairs: FamilyPairRowCopy[] =
+    featured.kind === 'family'
+      ? featured.family.edgeIndices
+          .map((ei) => {
+            const pe = data.edges[ei];
+            if (!pe) return null;
+            const pDir = resolveStrongerDirection(data, pe);
+            const lo = Math.round(pDir.interval.low * 100);
+            const hi = Math.round(pDir.interval.high * 100);
+            return {
+              edgeIndex: ei,
+              fromPath: pDir.fromPath,
+              toPath: pDir.toPath,
+              shortFrom: pDir.shortFrom,
+              shortTo: pDir.shortTo,
+              shared: pDir.shared,
+              fromChanges: pDir.fromChanges,
+              toChanges: pDir.toChanges,
+              pctText: `${Math.round(pDir.confidence * 100)}%`,
+              lowerBoundText: `≥${lo}% CI`,
+              rangeText: `${lo}–${hi}%`,
+              rangeLowPct: lo,
+              rangeHighPct: hi,
+              relationship: pe.relationship,
+              isLeadPair: ei === featured.leadEdgeIndex,
+            };
+          })
+          .filter((p): p is FamilyPairRowCopy => p !== null)
+      : [];
 
   return {
-    kicker: `${cutLabel} / MOST INTERESTING FINDING`,
+    kicker: `${findingId} · MOST INTERESTING FINDING`,
     statusChip: STATUS_CHIP_EVIDENCE,
     headline: headlineInfo.headline,
     subhead: headlineInfo.subhead,
@@ -642,6 +710,7 @@ export function formatEvidencePanelCopy(
             commitsTouchingAll: featured.family.commitsTouchingAll,
             qualifyingPairs: featured.family.qualifyingPairs,
             possiblePairs: featured.family.possiblePairs,
+            pairs: familyPairs,
           },
         }
       : {}),
@@ -878,9 +947,11 @@ export function selectFeaturedFinding(
 
 /**
  * Formats a URL hash fragment (`#f=<sourcePath>..<targetPath>`) for deep-linking a finding.
+ * Escapes literal `..` inside either path as `%2E%2E` so `..` only appears as the delimiter.
  */
 export function formatFindingHash(sourcePath: string, targetPath: string): string {
-  return `#f=${encodeURIComponent(sourcePath)}..${encodeURIComponent(targetPath)}`;
+  const encodePart = (p: string): string => encodeURIComponent(p).replace(/\.\./g, '%2E%2E');
+  return `#f=${encodePart(sourcePath)}..${encodePart(targetPath)}`;
 }
 
 /**
@@ -995,15 +1066,24 @@ export function buildRankedFindings(
       const leadEdgeIdx = activeEdges[0] ?? ei;
       const leadEdge = data.edges[leadEdgeIdx]!;
       const dir = resolveStrongerDirection(data, leadEdge);
-      const cutNum = items.length + 1;
-      const cutLabel = `C-${String(cutNum).padStart(2, '0')}`;
+      const rankNum = items.length + 1;
+      const findingId = `F-${String(rankNum).padStart(2, '0')}`;
+      const famFileName =
+        fam.fileName ||
+        (fam as { stem?: string }).stem ||
+        posix.basename(fam.members[0]?.path ?? fam.label ?? 'file');
+      const famHasGhost =
+        Array.isArray(fam.relationshipKinds) && fam.relationshipKinds.includes('ghost');
       items.push({
         id: `family:${fam.id}`,
-        cutLabel,
+        findingId,
+        cutLabel: findingId,
         kind: 'family',
-        relationship: fam.relationshipKinds.includes('ghost') ? 'ghost' : leadEdge.relationship,
-        title: `${sanitizeHtmlDisplayText(fam.fileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
+        relationship: famHasGhost ? 'ghost' : leadEdge.relationship,
+        title: `${sanitizeHtmlDisplayText(famFileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
         subtitle: `${fam.members.length} files (${fam.members.map((m) => sanitizeHtmlDisplayText(m.variant)).join(', ')}) · ${fam.commitsTouchingTwoOrMore} commits (2+ files)`,
+        reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%)`,
+        counterexampleLine: formatCounterexamplesLine(dir.fromOnlyTotal),
         fromPath: dir.fromPath,
         toPath: dir.toPath,
         shared: dir.shared,
@@ -1026,15 +1106,18 @@ export function buildRankedFindings(
 
     const edge = data.edges[ei]!;
     const dir = resolveStrongerDirection(data, edge);
-    const cutNum = items.length + 1;
-    const cutLabel = `C-${String(cutNum).padStart(2, '0')}`;
+    const rankNum = items.length + 1;
+    const findingId = `F-${String(rankNum).padStart(2, '0')}`;
     items.push({
       id: `pair:${dir.fromPath}..${dir.toPath}`,
-      cutLabel,
+      findingId,
+      cutLabel: findingId,
       kind: 'pair',
       relationship: edge.relationship,
       title: `${dir.shortFrom} ⇢ ${dir.shortTo}`,
       subtitle: `${dir.shared} of ${dir.fromChanges} ${dir.fromChanges === 1 ? 'commit' : 'commits'} (${Math.round(dir.confidence * 100)}%) · 95% range ${Math.round(dir.interval.low * 100)}–${Math.round(dir.interval.high * 100)}%`,
+      reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${Math.round(dir.reverseConfidence * 100)}%)`,
+      counterexampleLine: formatCounterexamplesLine(dir.fromOnlyTotal),
       fromPath: dir.fromPath,
       toPath: dir.toPath,
       shared: dir.shared,
@@ -1115,6 +1198,7 @@ export interface FeaturedPlateLayout {
   edges: PlateEdgeLayout[];
   leadEdge: PlateEdgeLayout | null;
   balloonTarget: { x: number; y: number } | null;
+  balloonBox: { x: number; y: number; w: number; h: number } | null;
   fullComponentNodeCount: number;
   truncatedToEgoCap: boolean;
 }
@@ -1364,7 +1448,7 @@ export function computeFeaturedPlateLayout(
   }
 
   let seedNodeIndices: number[] = [];
-  let featuredEdgeSet = new Set<number>();
+  const featuredEdgeSet = new Set<number>();
   let leadEdgeIndex = -1;
 
   if (featured.kind === 'family') {
@@ -1391,6 +1475,7 @@ export function computeFeaturedPlateLayout(
       edges: [],
       leadEdge: null,
       balloonTarget: null,
+      balloonBox: null,
       fullComponentNodeCount: 0,
       truncatedToEgoCap: false,
     };
@@ -1461,11 +1546,13 @@ export function computeFeaturedPlateLayout(
 
   const egoNodeIndices = Array.from(egoSet);
   const seedSet = new Set<number>(seedNodeIndices);
-  // Keep seed nodes first in canonical order, then neighbor nodes
+  // Keep seed nodes first (with leadEdge endpoints in slots 0 and 1), then neighbor nodes
+  const leadSource = leadEdgeIndex >= 0 ? data.edges[leadEdgeIndex]?.source : undefined;
+  const leadTarget = leadEdgeIndex >= 0 ? data.edges[leadEdgeIndex]?.target : undefined;
   egoNodeIndices.sort((a, b) => {
-    const aSeed = seedSet.has(a) ? 0 : 1;
-    const bSeed = seedSet.has(b) ? 0 : 1;
-    return aSeed - bSeed || a - b;
+    const aLead = a === leadSource ? 0 : a === leadTarget ? 1 : seedSet.has(a) ? 2 : 3;
+    const bLead = b === leadSource ? 0 : b === leadTarget ? 1 : seedSet.has(b) ? 2 : 3;
+    return aLead - bLead || a - b;
   });
 
   const egoEdgeIndices = visibleEdgeIndices.filter((ei) => {
@@ -1475,9 +1562,9 @@ export function computeFeaturedPlateLayout(
 
   const nCount = egoNodeIndices.length;
   const cx = width / 2;
-  const cy = height / 2 + 12; // slightly lower center to leave room at top for speech balloon
-  const rx = Math.max(90, (width - 230) / 2);
-  const ry = Math.max(65, (height - 150) / 2);
+  const cy = height / 2 + 16; // shifted down slightly so top-center speech balloon has plenty of room
+  const rx = Math.max(90, (width - 220) / 2);
+  const ry = Math.max(60, (height - 110) / 2);
 
   const px = new Float64Array(nCount);
   const py = new Float64Array(nCount);
@@ -1491,48 +1578,115 @@ export function computeFeaturedPlateLayout(
     px[1] = cx + Math.min(130, rx * 0.65);
     py[1] = cy;
   } else if (nCount === 3) {
-    // Triangle with the top pair horizontal-ish so the balloon has a clear midpoint
+    // Triangle with the lead pair across the top-center so the speech balloon sits cleanly above it
     px[0] = cx - Math.min(135, rx * 0.72);
-    py[0] = cy - Math.min(48, ry * 0.45);
+    py[0] = cy - Math.min(44, ry * 0.52);
     px[1] = cx + Math.min(135, rx * 0.72);
-    py[1] = cy - Math.min(48, ry * 0.45);
+    py[1] = cy - Math.min(44, ry * 0.52);
     px[2] = cx;
-    py[2] = cy + Math.min(78, ry * 0.72);
+    py[2] = cy + Math.min(72, ry * 0.78);
   } else {
     const seedsInEgo = egoNodeIndices.filter((ni) => seedSet.has(ni));
     const nbrsInEgo = egoNodeIndices.filter((ni) => !seedSet.has(ni));
     const sCount = seedsInEgo.length;
     const mCount = nbrsInEgo.length;
 
-    const innerRx = mCount > 0 ? rx * 0.52 : rx * 0.82;
-    const innerRy = mCount > 0 ? ry * 0.52 : ry * 0.82;
+    const anchorX = new Float64Array(sCount);
+    const anchorY = new Float64Array(sCount);
+
+    if (sCount === 2) {
+      const spanX = Math.min(125, rx * 0.52);
+      anchorX[0] = cx - spanX;
+      anchorY[0] = cy - 14;
+      anchorX[1] = cx + spanX;
+      anchorY[1] = cy - 14;
+    } else if (sCount === 3) {
+      const spanX = Math.min(122, rx * 0.5);
+      const topY = cy - Math.min(42, ry * 0.52);
+      const botY = cy + Math.min(64, ry * 0.76);
+      anchorX[0] = cx - spanX;
+      anchorY[0] = topY;
+      anchorX[1] = cx + spanX;
+      anchorY[1] = topY;
+      anchorX[2] = cx;
+      anchorY[2] = botY;
+    } else {
+      const innerRx = mCount > 0 ? rx * 0.52 : rx * 0.8;
+      const innerRy = mCount > 0 ? ry * 0.56 : ry * 0.8;
+      for (let i = 0; i < sCount; i++) {
+        const angle = -Math.PI * 0.78 + (2 * Math.PI * i) / Math.max(1, sCount);
+        anchorX[i] = cx + Math.cos(angle) * innerRx;
+        anchorY[i] = cy + Math.sin(angle) * innerRy;
+      }
+    }
 
     for (let i = 0; i < sCount; i++) {
-      const angle = -Math.PI * 0.75 + (2 * Math.PI * i) / Math.max(1, sCount);
-      px[i] = cx + Math.cos(angle) * innerRx;
-      py[i] = cy + Math.sin(angle) * innerRy;
-    }
-    for (let j = 0; j < mCount; j++) {
-      const idx = sCount + j;
-      const angle = -Math.PI * 0.55 + (2 * Math.PI * j) / Math.max(1, mCount);
-      px[idx] = cx + Math.cos(angle) * rx * 0.92;
-      py[idx] = cy + Math.sin(angle) * ry * 0.88;
+      px[i] = anchorX[i]!;
+      py[i] = anchorY[i]!;
     }
 
-    // Light deterministic relaxation + minimum distance enforcement
+    // Place neighbors along an outer arc from right-flank (-0.12*PI) around the bottom to left-flank (+1.12*PI),
+    // ordered by the horizontal position of the seed node(s) each neighbor connects to so edges don't cross.
     const localIdxByGlobal = new Map<number, number>();
     egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
 
-    for (let iter = 0; iter < 80; iter++) {
+    const nbrMeta = nbrsInEgo.map((ni, j) => {
+      const localIdx = sCount + j;
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      for (const ei of egoEdgeIndices) {
+        const e = data.edges[ei]!;
+        if (e.source === ni && seedSet.has(e.target)) {
+          const si = localIdxByGlobal.get(e.target)!;
+          sumX += px[si]!;
+          sumY += py[si]!;
+          count++;
+        } else if (e.target === ni && seedSet.has(e.source)) {
+          const si = localIdxByGlobal.get(e.source)!;
+          sumX += px[si]!;
+          sumY += py[si]!;
+          count++;
+        }
+      }
+      const prefX = count > 0 ? sumX / count : cx;
+      const prefY = count > 0 ? sumY / count : cy;
+      return { localIdx, prefX, prefY, ni };
+    });
+
+    // Sort neighbors from right-connected to bottom-connected to left-connected
+    nbrMeta.sort((a, b) => b.prefX - a.prefX || a.prefY - b.prefY || a.ni - b.ni);
+
+    const arcAngles =
+      mCount === 1
+        ? [0.05 * Math.PI]
+        : mCount === 2
+          ? [-0.05 * Math.PI, 1.05 * Math.PI]
+          : mCount === 3
+            ? [-0.08 * Math.PI, 0.36 * Math.PI, 0.96 * Math.PI]
+            : Array.from(
+                { length: mCount },
+                (_, k) => -0.14 * Math.PI + (1.28 * Math.PI * k) / Math.max(1, mCount - 1),
+              );
+
+    for (let k = 0; k < mCount; k++) {
+      const { localIdx } = nbrMeta[k]!;
+      const angle = arcAngles[k]!;
+      px[localIdx] = cx + Math.cos(angle) * rx * 0.92;
+      py[localIdx] = cy + Math.sin(angle) * ry * 0.86;
+    }
+
+    // Light deterministic relaxation for neighbors while keeping seed nodes anchored in their clear formation
+    for (let iter = 0; iter < 50; iter++) {
       const fx = new Float64Array(nCount);
       const fy = new Float64Array(nCount);
       for (let i = 0; i < nCount; i++) {
         for (let j = i + 1; j < nCount; j++) {
           const dx = px[j]! - px[i]!;
           const dy = py[j]! - py[i]!;
-          const d2 = Math.max(16, dx * dx + dy * dy);
+          const d2 = Math.max(25, dx * dx + dy * dy);
           const d = Math.sqrt(d2);
-          const rep = 4200 / d2;
+          const rep = 3600 / d2;
           const rxForce = (dx / d) * rep;
           const ryForce = (dy / d) * rep;
           fx[i] = fx[i]! - rxForce;
@@ -1549,8 +1703,8 @@ export function computeFeaturedPlateLayout(
         const dx = px[lj]! - px[li]!;
         const dy = py[lj]! - py[li]!;
         const d = Math.max(1, Math.hypot(dx, dy));
-        const targetLen = featuredEdgeSet.has(ei) ? 145 : 125;
-        const kSpring = featuredEdgeSet.has(ei) ? 0.08 : 0.045;
+        const targetLen = featuredEdgeSet.has(ei) ? 160 : 125;
+        const kSpring = featuredEdgeSet.has(ei) ? 0.05 : 0.04;
         const f = (d - targetLen) * kSpring;
         const sx = (dx / d) * f;
         const sy = (dy / d) * f;
@@ -1559,12 +1713,32 @@ export function computeFeaturedPlateLayout(
         fx[lj] = fx[lj]! - sx;
         fy[lj] = fy[lj]! - sy;
       }
+
+      // Repel neighbor nodes from the speech-balloon zone above the lead pair (slots 0 and 1)
+      const bMidX = nCount >= 2 ? (px[0]! + px[1]!) / 2 : cx;
+      const bMidY = nCount >= 2 ? (py[0]! + py[1]!) / 2 : cy;
+      const zoneLeft = bMidX - 155;
+      const zoneRight = bMidX + 155;
+      const zoneTop = Math.max(6, bMidY - 82);
+      const zoneBottom = bMidY + 8;
+
       for (let i = 0; i < nCount; i++) {
-        const pull = seedSet.has(egoNodeIndices[i]!) ? 0.04 : 0.02;
-        fx[i] = fx[i]! + (cx - px[i]!) * pull;
-        fy[i] = fy[i]! + (cy - py[i]!) * pull;
-        px[i] = Math.max(115, Math.min(width - 115, px[i]! + fx[i]! * 0.25));
-        py[i] = Math.max(66, Math.min(height - 46, py[i]! + fy[i]! * 0.25));
+        if (i < sCount) {
+          // Keep seed nodes strongly anchored to their clean geometric formation
+          fx[i] = fx[i]! + (anchorX[i]! - px[i]!) * 0.35;
+          fy[i] = fy[i]! + (anchorY[i]! - py[i]!) * 0.35;
+        } else {
+          fx[i] = fx[i]! + (cx - px[i]!) * 0.015;
+          fy[i] = fy[i]! + (cy - py[i]!) * 0.015;
+          if (px[i]! > zoneLeft && px[i]! < zoneRight && py[i]! > zoneTop && py[i]! < zoneBottom) {
+            const pushDirX = px[i]! >= bMidX ? 1 : -1;
+            fx[i] = fx[i]! + pushDirX * 28;
+            fy[i] = fy[i]! + 24;
+          }
+        }
+
+        px[i] = Math.max(105, Math.min(width - 105, px[i]! + fx[i]! * 0.2));
+        py[i] = Math.max(64, Math.min(height - 42, py[i]! + fy[i]! * 0.2));
       }
     }
   }
@@ -1578,6 +1752,35 @@ export function computeFeaturedPlateLayout(
     const baseR = Math.max(5.5, Math.min(11, 4.2 + Math.sqrt(changes) * 0.85));
     return seedSet.has(ni) ? Math.max(7.5, baseR) : baseR;
   });
+
+  // Final hard guard: ensure no neighbor node circle falls inside the speech-balloon box above lead pair
+  if (nCount >= 2 && featured.kind !== 'empty') {
+    const bMidX = (px[0]! + px[1]!) / 2;
+    const bMidY = (py[0]! + py[1]!) / 2;
+    const bBoxW = 286;
+    const bBoxH = 44;
+    const bBoxX = Math.max(12, Math.min(width - bBoxW - 12, bMidX - bBoxW / 2));
+    const bBoxY = Math.max(8, bMidY - 58);
+
+    for (let i = 0; i < nCount; i++) {
+      if (seedSet.has(egoNodeIndices[i]!)) continue;
+      const rPad = radii[i]! + 12;
+      if (
+        px[i]! + rPad > bBoxX &&
+        px[i]! - rPad < bBoxX + bBoxW &&
+        py[i]! + rPad > bBoxY &&
+        py[i]! - rPad < bBoxY + bBoxH
+      ) {
+        // Push outward to the nearest horizontal side of the balloon box
+        if (px[i]! >= bMidX) {
+          px[i] = Math.min(width - 95, bBoxX + bBoxW + rPad + 14);
+        } else {
+          px[i] = Math.max(95, bBoxX - rPad - 14);
+        }
+        py[i] = Math.max(py[i]!, bMidY + 12);
+      }
+    }
+  }
 
   const localIdxByGlobal = new Map<number, number>();
   egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
@@ -1604,20 +1807,21 @@ export function computeFeaturedPlateLayout(
   });
 
   const leadEdge = edges.find((e) => e.isLeadEdge) ?? edges.find((e) => e.isFeatured) ?? edges[0] ?? null;
-  const balloonTarget = leadEdge
-    ? {
-        x: Math.round(((leadEdge.x1 + leadEdge.x2) / 2) * 10) / 10,
-        y: Math.round(((leadEdge.y1 + leadEdge.y2) / 2) * 10) / 10,
-      }
-    : null;
+  const balloonTarget =
+    leadEdge && featured.kind !== 'empty'
+      ? {
+          x: Math.round(((leadEdge.x1 + leadEdge.x2) / 2) * 10) / 10,
+          y: Math.round(((leadEdge.y1 + leadEdge.y2) / 2) * 10) / 10,
+        }
+      : null;
 
-  // Reserve a bounding box above the balloon target so node labels don't collide with the balloon
+  // Reserve a bounding box above the balloon target so node labels and nodes don't collide with the balloon
   const balloonBox = balloonTarget
     ? {
-        x: Math.max(12, Math.min(width - 232, balloonTarget.x - 110)),
-        y: Math.max(8, balloonTarget.y - 60),
-        w: 220,
-        h: 36,
+        x: Math.round(Math.max(12, Math.min(width - 288, balloonTarget.x - 138)) * 10) / 10,
+        y: Math.round(Math.max(8, balloonTarget.y - 54) * 10) / 10,
+        w: 276,
+        h: 40,
       }
     : null;
 
@@ -1690,7 +1894,7 @@ export function computeFeaturedPlateLayout(
           boxIntersectsSegment(fullCand, leadEdge.x1, leadEdge.y1, leadEdge.x2, leadEdge.y2);
 
         // Check overlap with balloon callout box
-        const hitsBalloon = balloonBox !== null && boxesOverlap(fullCand, balloonBox, 2);
+        const hitsBalloon = balloonBox !== null && boxesOverlap(fullCand, balloonBox, 4);
 
         if (!outOfBounds && !hitsLabel && !hitsNode && !hitsFeaturedLine && !hitsBalloon) {
           chosen = fullCand;
@@ -1699,9 +1903,9 @@ export function computeFeaturedPlateLayout(
 
         const penalty =
           (hitsLabel ? 1000 : 0) +
-          (hitsNode ? 300 : 0) +
+          (hitsNode ? 400 : 0) +
+          (hitsBalloon ? 350 : 0) +
           (outOfBounds ? 200 : 0) +
-          (hitsBalloon ? 120 : 0) +
           (hitsFeaturedLine ? 80 : 0) +
           extraOffset;
         if (!bestFallback || penalty < bestFallback.penalty) {
@@ -1734,6 +1938,7 @@ export function computeFeaturedPlateLayout(
     edges,
     leadEdge,
     balloonTarget,
+    balloonBox,
     fullComponentNodeCount,
     truncatedToEgoCap: fullComponentNodeCount > nCount,
   };
