@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-09
+
 ### Added
 - **Blueprint `Focus selected pair` Toggle & Chord Pruning (`#focus-pair-btn`, [`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):**
   - Added a `Focus selected pair` / `Show ego network` toggle button (`#focus-pair-btn`, `aria-pressed`) in the Cut `C-01` blueprint footer whenever the ego network contains more than 2 files, isolating the primary pair on demand.

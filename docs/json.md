@@ -15,7 +15,7 @@ Every JSON payload emitted by Repo Archaeology includes a top-level contract env
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.5.1"
+    "version": "0.6.0"
   }
 }
 ```
@@ -89,7 +89,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `commitsAnalyzed` | `integer` | Yes | Usable commits retained after sweep and subject filters. |
 | `sweepsSkipped` | `integer` | Yes | Commits skipped because they touched more than `maxFilesPerCommit` files. |
 | `subjectSkipped` | `integer` | Yes | Commits skipped via `--skip-commits` or `skipCommitPrefixes`. |
-| `revertsSkipped` | `integer` | Optional (always emitted by versions that filter reverts) | Mechanical `git revert` / `Reapply` commits skipped (`Revert "…"` and `Reapply "…"`; `0` when `--include-reverts` or `"skipReverts": false` is set). |
+| `revertsSkipped` | `integer` | Optional (always emitted since v0.6.0) | Mechanical `git revert` / `Reapply` commits skipped (`Revert "…"` and `Reapply "…"`; `0` when `--include-reverts` or `"skipReverts": false` is set). |
 | `renamesFollowed` | `integer` | Yes | File rename transitions bridged across history. |
 | `files` | `integer` | Yes | Distinct tracked file identities in the co-change model. |
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
@@ -193,7 +193,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.5.1"
+    "version": "0.6.0"
   },
   "meta": {
     "tool": "repo-archaeology",

@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.5.1`)
+## Shipped Foundations (`v0.2.x` – `v0.6.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
