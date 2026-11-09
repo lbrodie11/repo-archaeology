@@ -14,6 +14,13 @@ import { formatReadingFindingGuide, type ReadingFindingGuide } from '../report/g
 import type { RelationshipVerdictView } from '../report/views.js';
 import { sanitizeHtmlDisplayText } from '../style/frame12.js';
 import type { WilsonInterval } from '../util/stats.js';
+import {
+  computePlateLayout,
+  MAX_EGO_NODES,
+  PLATE_WIDTH,
+  type FeaturedPlateLayout,
+  type PlateFocus,
+} from './plate-layout.js';
 
 export const KICKER_MOST_INTERESTING = 'F-01 · MOST INTERESTING FINDING';
 export const STATUS_CHIP_EVIDENCE = 'EVIDENCE · NOT PROOF';
@@ -549,7 +556,8 @@ export function formatCounterexamplesLine(aloneCount: number): string {
 }
 
 /**
- * Formats the contributor ownership note when `topAuthorShare >= 0.4`.
+ * Formats the contributor concentration note when `topAuthorShare >= 0.4`. The note never names the
+ * contributor: map reports are meant to be shared, and the share alone is the useful signal.
  */
 export function formatOwnerNote(
   node: Pick<MapNode, 'path' | 'topAuthor' | 'topAuthorShare'>,
@@ -558,10 +566,9 @@ export function formatOwnerNote(
   if (!node.topAuthor || typeof node.topAuthorShare !== 'number' || node.topAuthorShare < 0.4) {
     return null;
   }
-  const author = sanitizeHtmlDisplayText(node.topAuthor);
   const pct = Math.round(node.topAuthorShare * 100);
   const label = shortLabel ?? (posix.basename(sanitizeHtmlDisplayText(node.path)) || sanitizeHtmlDisplayText(node.path));
-  return `Top historical contributor: ${author} (${pct}% of ${label} commits)`;
+  return `One contributor made ${pct}% of ${label} commits`;
 }
 
 /**
@@ -1312,843 +1319,60 @@ function eDefaultVisible(data: MapData, rel: Relationship): boolean {
   return true;
 }
 
-export type LabelCandidatePosition = 'S' | 'N' | 'E' | 'W' | 'SE' | 'SW' | 'NE' | 'NW';
-
-export interface PlateLabelBox {
-  nodeIndex: number;
-  text: string;
-  fullPath: string;
-  position: LabelCandidatePosition;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  anchorX: number;
-  anchorY: number;
-  textAlign: 'left' | 'center' | 'right';
-}
-
-export interface PlateNodeLayout {
-  nodeIndex: number;
-  path: string;
-  shortLabel: string;
-  dir: string;
-  changes: number;
-  x: number;
-  y: number;
-  r: number;
-  isFeaturedEndpoint: boolean;
-  label: PlateLabelBox;
-}
-
-export interface PlateEdgeLayout {
-  edgeIndex: number;
-  sourceNodeIndex: number;
-  targetNodeIndex: number;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  relationship: Relationship;
-  intervalLow: number;
-  strokeWidth: number;
-  isFeatured: boolean;
-  isLeadEdge: boolean;
-}
-
-export interface FeaturedPlateLayout {
-  width: number;
-  height: number;
-  nodes: PlateNodeLayout[];
-  edges: PlateEdgeLayout[];
-  leadEdge: PlateEdgeLayout | null;
-  balloonTarget: { x: number; y: number } | null;
-  balloonBox: { x: number; y: number; w: number; h: number } | null;
-  fullComponentNodeCount: number;
-  truncatedToEgoCap: boolean;
-  /** Number of non-featured context-to-context edges omitted from dense (>=5-node) plate diagrams. */
-  hiddenContextEdges: number;
-}
-
-export const MAX_EGO_NODES = 12;
-export const CANDIDATE_POSITIONS: readonly LabelCandidatePosition[] = [
-  'S',
-  'N',
-  'E',
-  'W',
-  'SE',
-  'SW',
-  'NE',
-  'NW',
-] as const;
-
-function disambiguateNodeSetPaths(paths: readonly string[]): string[] {
-  const cleanPaths = paths.map((p) => sanitizeHtmlDisplayText(p));
-  const splitPaths = cleanPaths.map((p) => p.split('/').filter(Boolean));
-  const depth = cleanPaths.map(() => 1);
-
-  for (let pass = 0; pass < 5; pass++) {
-    const counts = new Map<string, number>();
-    for (let i = 0; i < cleanPaths.length; i++) {
-      const parts = splitPaths[i]!;
-      const d = Math.min(depth[i]!, parts.length);
-      const label = parts.slice(parts.length - d).join('/') || cleanPaths[i]!;
-      counts.set(label, (counts.get(label) ?? 0) + 1);
-    }
-    let anyCollision = false;
-    for (let i = 0; i < cleanPaths.length; i++) {
-      const parts = splitPaths[i]!;
-      const d = Math.min(depth[i]!, parts.length);
-      const label = parts.slice(parts.length - d).join('/') || cleanPaths[i]!;
-      if ((counts.get(label) ?? 0) > 1 && depth[i]! < parts.length) {
-        depth[i]! += 1;
-        anyCollision = true;
-      }
-    }
-    if (!anyCollision) break;
-  }
-
-  return cleanPaths.map((p, i) => {
-    const parts = splitPaths[i]!;
-    const d = Math.min(depth[i]!, parts.length);
-    const combined = parts.slice(parts.length - d).join('/') || p;
-    return middleTruncatePath(combined, 36);
-  });
-}
-
-function boxesOverlap(
-  a: { x: number; y: number; w: number; h: number },
-  b: { x: number; y: number; w: number; h: number },
-  pad = 2,
-): boolean {
-  return (
-    a.x - pad < b.x + b.w &&
-    a.x + a.w + pad > b.x &&
-    a.y - pad < b.y + b.h &&
-    a.y + a.h + pad > b.y
-  );
-}
-
-function distToSegmentSq(
-  px: number,
-  py: number,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq <= 1e-6) {
-    const ex = px - x1;
-    const ey = py - y1;
-    return ex * ex + ey * ey;
-  }
-  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
-  const projX = x1 + t * dx;
-  const projY = y1 + t * dy;
-  const ex = px - projX;
-  const ey = py - projY;
-  return ex * ex + ey * ey;
-}
-
-function boxIntersectsSegment(
-  box: { x: number; y: number; w: number; h: number },
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): boolean {
-  // Sample 5 points along the segment and check if any fall inside the padded box
-  const pad = 3;
-  for (let s = 0; s <= 4; s++) {
-    const t = s / 4;
-    const sx = x1 + (x2 - x1) * t;
-    const sy = y1 + (y2 - y1) * t;
-    if (
-      sx >= box.x - pad &&
-      sx <= box.x + box.w + pad &&
-      sy >= box.y - pad &&
-      sy <= box.y + box.h + pad
-    ) {
-      return true;
-    }
-  }
-  const cx = box.x + box.w / 2;
-  const cy = box.y + box.h / 2;
-  return distToSegmentSq(cx, cy, x1, y1, x2, y2) < (box.h / 2 + 4) ** 2;
-}
-
-function candidateBoxForPosition(
-  nx: number,
-  ny: number,
-  r: number,
-  w: number,
-  h: number,
-  pos: LabelCandidatePosition,
-  extraOffset = 0,
-): Omit<PlateLabelBox, 'nodeIndex' | 'text' | 'fullPath'> {
-  const gap = 7 + extraOffset;
-  const diag = Math.round((r + gap) * 0.75);
-  switch (pos) {
-    case 'S':
-      return {
-        position: pos,
-        x: Math.round((nx - w / 2) * 10) / 10,
-        y: Math.round((ny + r + gap) * 10) / 10,
-        w,
-        h,
-        anchorX: nx,
-        anchorY: Math.round((ny + r + gap + h * 0.76) * 10) / 10,
-        textAlign: 'center',
-      };
-    case 'N':
-      return {
-        position: pos,
-        x: Math.round((nx - w / 2) * 10) / 10,
-        y: Math.round((ny - r - gap - h) * 10) / 10,
-        w,
-        h,
-        anchorX: nx,
-        anchorY: Math.round((ny - r - gap - h * 0.24) * 10) / 10,
-        textAlign: 'center',
-      };
-    case 'E':
-      return {
-        position: pos,
-        x: Math.round((nx + r + gap + 2) * 10) / 10,
-        y: Math.round((ny - h / 2) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx + r + gap + 2) * 10) / 10,
-        anchorY: Math.round((ny + h * 0.28) * 10) / 10,
-        textAlign: 'left',
-      };
-    case 'W':
-      return {
-        position: pos,
-        x: Math.round((nx - r - gap - 2 - w) * 10) / 10,
-        y: Math.round((ny - h / 2) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx - r - gap - 2) * 10) / 10,
-        anchorY: Math.round((ny + h * 0.28) * 10) / 10,
-        textAlign: 'right',
-      };
-    case 'SE':
-      return {
-        position: pos,
-        x: Math.round((nx + diag) * 10) / 10,
-        y: Math.round((ny + diag * 0.75) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx + diag) * 10) / 10,
-        anchorY: Math.round((ny + diag * 0.75 + h * 0.76) * 10) / 10,
-        textAlign: 'left',
-      };
-    case 'SW':
-      return {
-        position: pos,
-        x: Math.round((nx - diag - w) * 10) / 10,
-        y: Math.round((ny + diag * 0.75) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx - diag) * 10) / 10,
-        anchorY: Math.round((ny + diag * 0.75 + h * 0.76) * 10) / 10,
-        textAlign: 'right',
-      };
-    case 'NE':
-      return {
-        position: pos,
-        x: Math.round((nx + diag) * 10) / 10,
-        y: Math.round((ny - diag * 0.75 - h) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx + diag) * 10) / 10,
-        anchorY: Math.round((ny - diag * 0.75 - h * 0.24) * 10) / 10,
-        textAlign: 'left',
-      };
-    case 'NW':
-      return {
-        position: pos,
-        x: Math.round((nx - diag - w) * 10) / 10,
-        y: Math.round((ny - diag * 0.75 - h) * 10) / 10,
-        w,
-        h,
-        anchorX: Math.round((nx - diag) * 10) / 10,
-        anchorY: Math.round((ny - diag * 0.75 - h * 0.24) * 10) / 10,
-        textAlign: 'right',
-      };
-  }
-}
+export type {
+  FeaturedPlateLayout,
+  LabelCandidatePosition,
+  PlateEdgeLayout,
+  PlateGroup,
+  PlateLabelBox,
+  PlateMetrics,
+  PlateMode,
+  PlateNodeLayout,
+  PlateOverflowItem,
+} from './plate-layout.js';
+export { COMPACT_CONTEXT_NODES, MAX_EGO_NODES, PLATE_WIDTH } from './plate-layout.js';
 
 /**
- * Computes the deterministic ego-network layout (up to 12 nodes) and 8-position
- * collision-free label placement for the featured finding on the cyanotype plate.
+ * Lays out the featured finding's blueprint plate with the shared pair-centered engine
+ * (`src/map/plate-layout.ts`), the same code the rich map runs in the browser after a click.
+ * Widths below the desktop minimum (560) use the compact (phone) composition.
  */
 export function computeFeaturedPlateLayout(
   data: MapData,
   featured: FeaturedFinding,
   options?: {
     width?: number;
-    height?: number;
     visible?: Partial<Record<Relationship, boolean>>;
+    previous?: readonly { nodeIndex: number; x: number }[];
   },
 ): FeaturedPlateLayout {
-  const width = options?.width ?? 760;
-  const height = options?.height ?? 380;
-  const isRelVisible = (rel: Relationship): boolean =>
-    options?.visible ? Boolean(options.visible[rel]) : eDefaultVisible(data, rel);
-
-  const visibleEdgeIndices = data.edges
-    .map((_, idx) => idx)
-    .filter((ei) => isRelVisible(data.edges[ei]!.relationship));
-
-  const adjNodes = new Map<number, Set<number>>();
-  for (const ei of visibleEdgeIndices) {
-    const e = data.edges[ei]!;
-    if (!adjNodes.has(e.source)) adjNodes.set(e.source, new Set());
-    if (!adjNodes.has(e.target)) adjNodes.set(e.target, new Set());
-    adjNodes.get(e.source)!.add(e.target);
-    adjNodes.get(e.target)!.add(e.source);
-  }
-
-  let seedNodeIndices: number[] = [];
-  const featuredEdgeSet = new Set<number>();
-  let leadEdgeIndex = -1;
-
-  if (featured.kind === 'family') {
-    seedNodeIndices = featured.family.nodeIndices.filter((ni) => ni >= 0 && ni < data.nodes.length);
-    for (const ei of featured.family.edgeIndices) {
-      if (visibleEdgeIndices.includes(ei)) featuredEdgeSet.add(ei);
-    }
-    leadEdgeIndex = featured.leadEdgeIndex;
-  } else if (featured.kind === 'pair') {
-    seedNodeIndices = [featured.edge.source, featured.edge.target].filter(
-      (ni) => ni >= 0 && ni < data.nodes.length,
-    );
-    featuredEdgeSet.add(featured.edgeIndex);
-    leadEdgeIndex = featured.edgeIndex;
-  } else {
-    seedNodeIndices = featured.contextClusterNodeIndices.slice(0, MAX_EGO_NODES);
-  }
-
-  if (seedNodeIndices.length === 0) {
-    return {
-      width,
-      height,
-      nodes: [],
-      edges: [],
-      leadEdge: null,
-      balloonTarget: null,
-      balloonBox: null,
-      fullComponentNodeCount: 0,
-      truncatedToEgoCap: false,
-      hiddenContextEdges: 0,
-    };
-  }
-
-  // Measure full connected component size from seed nodes
-  const compVisited = new Set<number>(seedNodeIndices);
-  const compQueue = [...seedNodeIndices];
-  for (let q = 0; q < compQueue.length; q++) {
-    const u = compQueue[q]!;
-    for (const v of adjNodes.get(u) ?? []) {
-      if (!compVisited.has(v)) {
-        compVisited.add(v);
-        compQueue.push(v);
-      }
-    }
-  }
-  const fullComponentNodeCount = compVisited.size;
-
-  // Build ego network: seed nodes + direct neighbors ranked by strongest connecting edge, capped at 12
-  const egoSet = new Set<number>(seedNodeIndices.slice(0, MAX_EGO_NODES));
-  if (egoSet.size < MAX_EGO_NODES) {
-    const candidateNeighbors = new Map<
-      number,
-      { ghost: number; prio: number; score: number; shared: number }
-    >();
-    for (const ei of visibleEdgeIndices) {
-      const e = data.edges[ei]!;
-      const sIn = egoSet.has(e.source);
-      const tIn = egoSet.has(e.target);
-      if (sIn === tIn) continue;
-      const nbr = sIn ? e.target : e.source;
-      const rank = {
-        ghost: e.relationship === 'ghost' ? 1 : 0,
-        prio: e.overviewPriority,
-        score: e.score,
-        shared: e.shared,
-      };
-      const prev = candidateNeighbors.get(nbr);
-      if (
-        !prev ||
-        rank.ghost > prev.ghost ||
-        (rank.ghost === prev.ghost &&
-          (rank.prio > prev.prio ||
-            (rank.prio === prev.prio &&
-              (rank.score > prev.score || (rank.score === prev.score && rank.shared > prev.shared)))))
-      ) {
-        candidateNeighbors.set(nbr, rank);
-      }
-    }
-
-    const sortedNeighbors = Array.from(candidateNeighbors.entries())
-      .sort(
-        (a, b) =>
-          b[1].ghost - a[1].ghost ||
-          b[1].prio - a[1].prio ||
-          b[1].score - a[1].score ||
-          b[1].shared - a[1].shared ||
-          a[0] - b[0],
-      )
-      .map(([ni]) => ni);
-
-    for (const nbr of sortedNeighbors) {
-      if (egoSet.size >= MAX_EGO_NODES) break;
-      egoSet.add(nbr);
-    }
-  }
-
-  const egoNodeIndices = Array.from(egoSet);
-  const seedSet = new Set<number>(seedNodeIndices);
-  // Keep seed nodes first (with leadEdge endpoints in slots 0 and 1), then neighbor nodes
-  const leadSource = leadEdgeIndex >= 0 ? data.edges[leadEdgeIndex]?.source : undefined;
-  const leadTarget = leadEdgeIndex >= 0 ? data.edges[leadEdgeIndex]?.target : undefined;
-  egoNodeIndices.sort((a, b) => {
-    const aLead = a === leadSource ? 0 : a === leadTarget ? 1 : seedSet.has(a) ? 2 : 3;
-    const bLead = b === leadSource ? 0 : b === leadTarget ? 1 : seedSet.has(b) ? 2 : 3;
-    return aLead - bLead || a - b;
-  });
-
-  const rawEgoEdgeIndices = visibleEdgeIndices.filter((ei) => {
-    const e = data.edges[ei]!;
-    return egoSet.has(e.source) && egoSet.has(e.target);
-  });
-
-  // Avoid O(n^2) crossing-chord hairballs on dense >=5-node cliques by retaining
-  // lead-incident edges + ring-perimeter edges so the cluster stays clean and legible.
-  const egoPosByNode = new Map<number, number>();
-  egoNodeIndices.forEach((ni, idx) => egoPosByNode.set(ni, idx));
-  const egoEdgeIndices =
-    egoNodeIndices.length >= 5 && rawEgoEdgeIndices.length > egoNodeIndices.length + 3
-      ? rawEgoEdgeIndices.filter((ei) => {
-          if (ei === leadEdgeIndex) return true;
-          const e = data.edges[ei]!;
-          if (e.source === leadSource || e.target === leadSource || e.source === leadTarget || e.target === leadTarget) {
-            return true;
-          }
-          const pa = egoPosByNode.get(e.source) ?? -1;
-          const pb = egoPosByNode.get(e.target) ?? -1;
-          const diff = Math.abs(pa - pb);
-          return diff === 1 || diff === egoNodeIndices.length - 1;
-        })
-      : rawEgoEdgeIndices;
-
-  const nCount = egoNodeIndices.length;
-  const cx = width / 2;
-  const cy = height / 2 + 16; // shifted down slightly so top-center speech balloon has plenty of room
-  const rx = Math.max(90, (width - 220) / 2);
-  const ry = Math.max(60, (height - 110) / 2);
-
-  const px = new Float64Array(nCount);
-  const py = new Float64Array(nCount);
-
-  if (nCount === 1) {
-    px[0] = cx;
-    py[0] = cy;
-  } else if (nCount === 2) {
-    px[0] = cx - Math.min(130, rx * 0.65);
-    py[0] = cy;
-    px[1] = cx + Math.min(130, rx * 0.65);
-    py[1] = cy;
-  } else if (nCount === 3) {
-    // Triangle with the lead pair across the top-center so the speech balloon sits cleanly above it
-    px[0] = cx - Math.min(135, rx * 0.72);
-    py[0] = cy - Math.min(44, ry * 0.52);
-    px[1] = cx + Math.min(135, rx * 0.72);
-    py[1] = cy - Math.min(44, ry * 0.52);
-    px[2] = cx;
-    py[2] = cy + Math.min(72, ry * 0.78);
-  } else {
-    const seedsInEgo = egoNodeIndices.filter((ni) => seedSet.has(ni));
-    const nbrsInEgo = egoNodeIndices.filter((ni) => !seedSet.has(ni));
-    const sCount = seedsInEgo.length;
-    const mCount = nbrsInEgo.length;
-
-    const anchorX = new Float64Array(sCount);
-    const anchorY = new Float64Array(sCount);
-
-    if (sCount === 2) {
-      const spanX = mCount >= 5 ? Math.min(165, rx * 0.64) : Math.min(125, rx * 0.52);
-      const seedY = mCount >= 5 ? cy - Math.min(48, ry * 0.38) : cy - 14;
-      anchorX[0] = cx - spanX;
-      anchorY[0] = seedY;
-      anchorX[1] = cx + spanX;
-      anchorY[1] = seedY;
-    } else if (sCount === 3) {
-      const spanX = Math.min(122, rx * 0.5);
-      const topY = cy - Math.min(42, ry * 0.52);
-      const botY = cy + Math.min(64, ry * 0.76);
-      anchorX[0] = cx - spanX;
-      anchorY[0] = topY;
-      anchorX[1] = cx + spanX;
-      anchorY[1] = topY;
-      anchorX[2] = cx;
-      anchorY[2] = botY;
-    } else {
-      const innerScaleX = mCount > 0 ? (sCount >= 6 ? 0.78 : sCount >= 4 ? 0.66 : 0.52) : 0.85;
-      const innerScaleY = mCount > 0 ? (sCount >= 6 ? 0.78 : sCount >= 4 ? 0.66 : 0.56) : 0.85;
-      const innerRx = rx * innerScaleX;
-      const innerRy = ry * innerScaleY;
-      for (let i = 0; i < sCount; i++) {
-        const angle = -Math.PI * 0.78 + (2 * Math.PI * i) / Math.max(1, sCount);
-        anchorX[i] = cx + Math.cos(angle) * innerRx;
-        anchorY[i] = cy + Math.sin(angle) * innerRy;
-      }
-    }
-
-    for (let i = 0; i < sCount; i++) {
-      px[i] = anchorX[i]!;
-      py[i] = anchorY[i]!;
-    }
-
-    // Place neighbors along an outer arc from right-flank (-0.12*PI) around the bottom to left-flank (+1.12*PI),
-    // ordered by the horizontal position of the seed node(s) each neighbor connects to so edges don't cross.
-    const localIdxByGlobal = new Map<number, number>();
-    egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
-
-    const localDeg = new Int32Array(nCount);
-    for (const ei of egoEdgeIndices) {
-      const e = data.edges[ei]!;
-      const li = localIdxByGlobal.get(e.source);
-      const lj = localIdxByGlobal.get(e.target);
-      if (li !== undefined && lj !== undefined) {
-        localDeg[li] = localDeg[li]! + 1;
-        localDeg[lj] = localDeg[lj]! + 1;
-      }
-    }
-
-    const nbrMeta = nbrsInEgo.map((ni, j) => {
-      const localIdx = sCount + j;
-      let sumX = 0;
-      let sumY = 0;
-      let count = 0;
-      for (const ei of egoEdgeIndices) {
-        const e = data.edges[ei]!;
-        if (e.source === ni && seedSet.has(e.target)) {
-          const si = localIdxByGlobal.get(e.target)!;
-          sumX += px[si]!;
-          sumY += py[si]!;
-          count++;
-        } else if (e.target === ni && seedSet.has(e.source)) {
-          const si = localIdxByGlobal.get(e.source)!;
-          sumX += px[si]!;
-          sumY += py[si]!;
-          count++;
-        }
-      }
-      const prefX = count > 0 ? sumX / count : cx;
-      const prefY = count > 0 ? sumY / count : cy;
-      return { localIdx, prefX, prefY, ni };
-    });
-
-    // Sort neighbors from right-connected to bottom-connected to left-connected
-    nbrMeta.sort((a, b) => b.prefX - a.prefX || a.prefY - b.prefY || a.ni - b.ni);
-
-    const arcAngles =
-      mCount === 1
-        ? [0.05 * Math.PI]
-        : mCount === 2
-          ? [-0.05 * Math.PI, 1.05 * Math.PI]
-          : mCount === 3
-            ? [-0.08 * Math.PI, 0.36 * Math.PI, 0.96 * Math.PI]
-            : Array.from(
-                { length: mCount },
-                (_, k) => -0.14 * Math.PI + (1.28 * Math.PI * k) / Math.max(1, mCount - 1),
-              );
-
-    const outerAnchorX = new Float64Array(nCount);
-    const outerAnchorY = new Float64Array(nCount);
-    for (let k = 0; k < mCount; k++) {
-      const { localIdx } = nbrMeta[k]!;
-      const angle = arcAngles[k]!;
-      const ax = cx + Math.cos(angle) * rx * (mCount >= 6 ? 0.96 : 0.92);
-      const ay = cy + Math.sin(angle) * ry * (mCount >= 6 ? 0.92 : 0.86);
-      px[localIdx] = ax;
-      py[localIdx] = ay;
-      outerAnchorX[localIdx] = ax;
-      outerAnchorY[localIdx] = ay;
-    }
-
-    // Light deterministic relaxation for neighbors while keeping seed nodes anchored in their clear formation
-    for (let iter = 0; iter < 50; iter++) {
-      const fx = new Float64Array(nCount);
-      const fy = new Float64Array(nCount);
-      for (let i = 0; i < nCount; i++) {
-        for (let j = i + 1; j < nCount; j++) {
-          const dx = px[j]! - px[i]!;
-          const dy = py[j]! - py[i]!;
-          const d2 = Math.max(25, dx * dx + dy * dy);
-          const d = Math.sqrt(d2);
-          const rep = (nCount >= 8 ? 5800 : 3600) / d2;
-          const rxForce = (dx / d) * rep;
-          const ryForce = (dy / d) * rep;
-          fx[i] = fx[i]! - rxForce;
-          fy[i] = fy[i]! - ryForce;
-          fx[j] = fx[j]! + rxForce;
-          fy[j] = fy[j]! + ryForce;
-        }
-      }
-      for (const ei of egoEdgeIndices) {
-        const e = data.edges[ei]!;
-        const li = localIdxByGlobal.get(e.source);
-        const lj = localIdxByGlobal.get(e.target);
-        if (li === undefined || lj === undefined) continue;
-        const dx = px[lj]! - px[li]!;
-        const dy = py[lj]! - py[li]!;
-        const d = Math.max(1, Math.hypot(dx, dy));
-        const targetLen = featuredEdgeSet.has(ei) ? 170 : nCount >= 8 ? 190 : 125;
-        const degNorm = Math.sqrt(Math.max(1, Math.max(localDeg[li]!, localDeg[lj]!)));
-        const kSpring = (featuredEdgeSet.has(ei) ? 0.05 : 0.035) / degNorm;
-        const f = (d - targetLen) * kSpring;
-        const sx = (dx / d) * f;
-        const sy = (dy / d) * f;
-        fx[li] = fx[li]! + sx;
-        fy[li] = fy[li]! + sy;
-        fx[lj] = fx[lj]! - sx;
-        fy[lj] = fy[lj]! - sy;
-      }
-
-      // Repel neighbor nodes from the speech-balloon zone above the lead pair (slots 0 and 1)
-      const bMidX = nCount >= 2 ? (px[0]! + px[1]!) / 2 : cx;
-      const bMidY = nCount >= 2 ? (py[0]! + py[1]!) / 2 : cy;
-      const zoneLeft = bMidX - 155;
-      const zoneRight = bMidX + 155;
-      const zoneTop = Math.max(6, bMidY - 82);
-      const zoneBottom = bMidY + 8;
-
-      for (let i = 0; i < nCount; i++) {
-        if (i < sCount) {
-          // Keep seed nodes strongly anchored to their clean geometric formation
-          fx[i] = fx[i]! + (anchorX[i]! - px[i]!) * 0.35;
-          fy[i] = fy[i]! + (anchorY[i]! - py[i]!) * 0.35;
-        } else {
-          fx[i] = fx[i]! + (outerAnchorX[i]! - px[i]!) * 0.12;
-          fy[i] = fy[i]! + (outerAnchorY[i]! - py[i]!) * 0.12;
-          if (px[i]! > zoneLeft && px[i]! < zoneRight && py[i]! > zoneTop && py[i]! < zoneBottom) {
-            const pushDirX = px[i]! >= bMidX ? 1 : -1;
-            fx[i] = fx[i]! + pushDirX * 28;
-            fy[i] = fy[i]! + 24;
-          }
-        }
-
-        px[i] = Math.max(105, Math.min(width - 105, px[i]! + fx[i]! * 0.2));
-        py[i] = Math.max(64, Math.min(height - 42, py[i]! + fy[i]! * 0.2));
-      }
-    }
-  }
-
-  // Node radii and short disambiguated labels
-  const shortLabels = disambiguateNodeSetPaths(
-    egoNodeIndices.map((ni) => data.nodes[ni]?.path ?? `file-${ni}`),
-  );
-  const radii = egoNodeIndices.map((ni) => {
-    const changes = data.nodes[ni]?.changes ?? 1;
-    const baseR = Math.max(5.5, Math.min(11, 4.2 + Math.sqrt(changes) * 0.85));
-    return seedSet.has(ni) ? Math.max(7.5, baseR) : baseR;
-  });
-
-  // Final hard guard: ensure no non-lead node circle falls inside the speech-balloon box above lead pair
-  if (nCount >= 2 && featured.kind !== 'empty') {
-    const bMidX = (px[0]! + px[1]!) / 2;
-    const bMidY = (py[0]! + py[1]!) / 2;
-    const bBoxW = 368;
-    const bBoxH = 44;
-    const bBoxX = Math.max(12, Math.min(width - bBoxW - 12, bMidX - bBoxW / 2));
-    const bBoxY = Math.max(8, bMidY - 58);
-
-    for (let i = 2; i < nCount; i++) {
-      const rPad = radii[i]! + 12;
-      if (
-        px[i]! + rPad > bBoxX &&
-        px[i]! - rPad < bBoxX + bBoxW &&
-        py[i]! + rPad > bBoxY &&
-        py[i]! - rPad < bBoxY + bBoxH
-      ) {
-        // Push outward to the nearest horizontal side or below the balloon box
-        if (px[i]! >= bMidX) {
-          px[i] = Math.min(width - 95, bBoxX + bBoxW + rPad + 14);
-        } else {
-          px[i] = Math.max(95, bBoxX - rPad - 14);
-        }
-        py[i] = Math.max(py[i]!, bBoxY + bBoxH + rPad + 8);
-      }
-    }
-  }
-
-  const localIdxByGlobal = new Map<number, number>();
-  egoNodeIndices.forEach((gi, li) => localIdxByGlobal.set(gi, li));
-
-  const edges: PlateEdgeLayout[] = egoEdgeIndices.map((ei) => {
-    const e = data.edges[ei]!;
-    const li = localIdxByGlobal.get(e.source)!;
-    const lj = localIdxByGlobal.get(e.target)!;
-    const strokeWidth = Math.round((1.4 + Math.max(0, Math.min(1, e.interval.low)) * 2.8) * 10) / 10;
-    return {
-      edgeIndex: ei,
-      sourceNodeIndex: e.source,
-      targetNodeIndex: e.target,
-      x1: Math.round(px[li]! * 10) / 10,
-      y1: Math.round(py[li]! * 10) / 10,
-      x2: Math.round(px[lj]! * 10) / 10,
-      y2: Math.round(py[lj]! * 10) / 10,
-      relationship: e.relationship,
-      intervalLow: e.interval.low,
-      strokeWidth,
-      isFeatured: featuredEdgeSet.has(ei),
-      isLeadEdge: ei === leadEdgeIndex,
-    };
-  });
-
-  const leadEdge = edges.find((e) => e.isLeadEdge) ?? edges.find((e) => e.isFeatured) ?? edges[0] ?? null;
-  const balloonTarget =
-    leadEdge && featured.kind !== 'empty'
-      ? {
-          x: Math.round(((leadEdge.x1 + leadEdge.x2) / 2) * 10) / 10,
-          y: Math.round(((leadEdge.y1 + leadEdge.y2) / 2) * 10) / 10,
-        }
-      : null;
-
-  // Reserve a bounding box above the balloon target so node labels and nodes don't collide with the balloon
-  const balloonBox = balloonTarget
-    ? {
-        x: Math.round(Math.max(12, Math.min(width - 380, balloonTarget.x - 184)) * 10) / 10,
-        y: Math.round(Math.max(8, balloonTarget.y - 54) * 10) / 10,
-        w: 368,
-        h: 42,
-      }
-    : null;
-
-  // 8-position label placement around each node
-  const placedLabels: PlateLabelBox[] = [];
-  const nodes: PlateNodeLayout[] = [];
-
-  for (let i = 0; i < nCount; i++) {
-    const gi = egoNodeIndices[i]!;
-    const node = data.nodes[gi] ?? { path: `file-${gi}`, dir: '.', changes: 1 };
-    const text = shortLabels[i]!;
-    const fullPath = sanitizeHtmlDisplayText(node.path);
-    const nx = Math.round(px[i]! * 10) / 10;
-    const ny = Math.round(py[i]! * 10) / 10;
-    const r = Math.round(radii[i]! * 10) / 10;
-    const labelW = Math.ceil(text.length * 7.6 + 10);
-    const labelH = 18;
-
-    // Order the 8 candidates starting with those pointing away from the graph center
-    const dxCenter = nx - cx;
-    const dyCenter = ny - cy;
-    const orderedCandidates = [...CANDIDATE_POSITIONS].sort((posA, posB) => {
-      const scoreDir = (pos: LabelCandidatePosition): number => {
-        const vx = pos.includes('E') ? 1 : pos.includes('W') ? -1 : 0;
-        const vy = pos.includes('S') ? 1 : pos.includes('N') ? -1 : 0;
-        return -(vx * dxCenter + vy * dyCenter);
-      };
-      return scoreDir(posA) - scoreDir(posB);
-    });
-
-    let chosen: PlateLabelBox | null = null;
-    let bestFallback: { box: PlateLabelBox; penalty: number } | null = null;
-
-    for (const extraOffset of [0, 16, 32]) {
-      for (const pos of orderedCandidates) {
-        const cand = candidateBoxForPosition(nx, ny, r, labelW, labelH, pos, extraOffset);
-        const fullCand: PlateLabelBox = {
-          nodeIndex: gi,
-          text,
-          fullPath,
-          ...cand,
-        };
-
-        // Check bounds
-        const outOfBounds =
-          fullCand.x < 6 ||
-          fullCand.y < 6 ||
-          fullCand.x + fullCand.w > width - 6 ||
-          fullCand.y + fullCand.h > height - 6;
-
-        // Check overlap with already placed labels
-        const hitsLabel = placedLabels.some((other) => boxesOverlap(fullCand, other, 3));
-
-        // Check overlap with any node circle
-        let hitsNode = false;
-        for (let j = 0; j < nCount; j++) {
-          const ox = px[j]!;
-          const oy = py[j]!;
-          const or = radii[j]! + 3;
-          const nodeBox = { x: ox - or, y: oy - or, w: or * 2, h: or * 2 };
-          if (boxesOverlap(fullCand, nodeBox, 1)) {
-            hitsNode = true;
-            break;
-          }
-        }
-
-        // Check overlap with featured edge line
-        const hitsFeaturedLine =
-          leadEdge !== null &&
-          boxIntersectsSegment(fullCand, leadEdge.x1, leadEdge.y1, leadEdge.x2, leadEdge.y2);
-
-        // Check overlap with balloon callout box
-        const hitsBalloon = balloonBox !== null && boxesOverlap(fullCand, balloonBox, 4);
-
-        if (!outOfBounds && !hitsLabel && !hitsNode && !hitsFeaturedLine && !hitsBalloon) {
-          chosen = fullCand;
-          break;
-        }
-
-        const penalty =
-          (hitsLabel ? 1000 : 0) +
-          (hitsNode ? 400 : 0) +
-          (hitsBalloon ? 350 : 0) +
-          (outOfBounds ? 200 : 0) +
-          (hitsFeaturedLine ? 80 : 0) +
-          extraOffset;
-        if (!bestFallback || penalty < bestFallback.penalty) {
-          bestFallback = { box: fullCand, penalty };
-        }
-      }
-      if (chosen) break;
-    }
-
-    const finalLabel = chosen ?? bestFallback!.box;
-    placedLabels.push(finalLabel);
-    nodes.push({
-      nodeIndex: gi,
-      path: fullPath,
-      shortLabel: text,
-      dir: sanitizeHtmlDisplayText(node.dir),
-      changes: node.changes,
-      x: nx,
-      y: ny,
-      r,
-      isFeaturedEndpoint: seedSet.has(gi),
-      label: finalLabel,
-    });
-  }
-
-  return {
-    width,
-    height,
-    nodes,
-    edges,
-    leadEdge,
-    balloonTarget,
-    balloonBox,
-    fullComponentNodeCount,
-    truncatedToEgoCap: fullComponentNodeCount > nCount,
-    hiddenContextEdges: Math.max(0, rawEgoEdgeIndices.length - egoEdgeIndices.length),
+  const visible: Partial<Record<Relationship, boolean>> = options?.visible ?? {
+    ghost: eDefaultVisible(data, 'ghost'),
+    unknown: eDefaultVisible(data, 'unknown'),
+    indirect: eDefaultVisible(data, 'indirect'),
+    direct: eDefaultVisible(data, 'direct'),
+    test: eDefaultVisible(data, 'test'),
   };
+  const focus: PlateFocus =
+    featured.kind === 'family'
+      ? {
+          seeds: featured.family.nodeIndices,
+          leadEdge: featured.leadEdgeIndex,
+          featuredEdges: featured.family.edgeIndices,
+        }
+      : featured.kind === 'pair'
+        ? {
+            seeds: [featured.edge.source, featured.edge.target],
+            leadEdge: featured.edgeIndex,
+            featuredEdges: [featured.edgeIndex],
+          }
+        : { seeds: featured.contextClusterNodeIndices.slice(0, MAX_EGO_NODES), leadEdge: null, featuredEdges: [] };
+  const width = options?.width ?? PLATE_WIDTH.desktop.max;
+  return computePlateLayout(data, focus, {
+    mode: width < PLATE_WIDTH.desktop.min ? 'compact' : 'desktop',
+    width,
+    visible,
+    previous: options?.previous,
+  });
 }
 

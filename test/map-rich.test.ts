@@ -427,8 +427,9 @@ describe('RA-16 · 4, 5 & 6. Marker budget (static), Line grammar, and WCAG Cont
 
     // Extract client script (after #ra-data / #ra-layout)
     const scripts = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/g)).map((m) => m[1]!);
-    assert.equal(scripts.length, 1, 'Expected 1 executable client <script>');
-    const clientJs = scripts[0]!;
+    assert.equal(scripts.length, 2, 'Expected the shared plate layout engine and the client <script>');
+    assert.ok(scripts[0]!.startsWith('var RAPlateLayout = '), 'Expected the inlined plate layout engine first');
+    const clientJs = scripts.join('\n');
 
     const hexRegex = /#[0-9a-fA-F]{3,8}\b/g;
     for (const [sourceName, text] of [['CSS', css], ['Client JS', clientJs]] as const) {
@@ -1266,7 +1267,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       const focusToggleCheck = await gPage.evaluate(() => {
         const focusBtn = document.getElementById('focus-pair-btn') as HTMLButtonElement | null;
         const svg = document.getElementById('featured-plate-svg')!;
-        const nonHitLines = Array.from(svg.querySelectorAll('line:not(.f12-plate-edge-hit)'));
+        const nonHitLines = Array.from(svg.querySelectorAll('.f12-plate-wire'));
         const hasDimmedContextEdges = nonHitLines.some((l) => l.getAttribute('stroke-opacity') === '0.9');
         const allNodesBefore = Array.from(svg.querySelectorAll('.f12-plate-node')).filter(
           (n) => (n as HTMLElement).style.display !== 'none',

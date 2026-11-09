@@ -35,7 +35,8 @@
   },
   "homepage": "https://github.com/lbrodie11/repo-archaeology#readme",
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "build": "node scripts/build-plate-layout.mjs --check && node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "build:plate-layout": "node scripts/build-plate-layout.mjs",
     "dev": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",

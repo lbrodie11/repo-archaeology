@@ -30,6 +30,7 @@ import {
   type RankedFindingItem,
 } from './copy.js';
 import { computeLayout, computeRichLayout, type LayoutResult } from './layout.js';
+import { PLATE_LAYOUT_BROWSER_JS } from './plate-layout.browser.js';
 
 let cachedEmbeddedFontCss: string | null = null;
 
@@ -165,7 +166,6 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     });
     const emptyPlate = computeFeaturedPlateLayout(data, featured, {
       width: 760,
-      height: 360,
       visible: ALL_KINDS_VISIBLE,
     });
     return {
@@ -185,7 +185,7 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
 
   const ranked = buildRankedFindings(data, ALL_KINDS_VISIBLE);
   const evidence = formatEvidencePanelCopy(data, featured);
-  const plate = computeFeaturedPlateLayout(data, featured, { width: 760, height: 420 });
+  const plate = computeFeaturedPlateLayout(data, featured, { width: 760 });
   const leadEdge = featured.kind === 'family' ? featured.leadEdge : featured.edge;
   const leadEdgeIndex = featured.kind === 'family' ? featured.leadEdgeIndex : featured.edgeIndex;
   const balloonText = formatBalloonCallout(data, leadEdge);
@@ -231,7 +231,6 @@ function buildBriefingData(data: MapData): BriefingDataPayload {
     }
     const famPlate = computeFeaturedPlateLayout(data, famFeatured, {
       width: 760,
-      height: 420,
       visible: ALL_KINDS_VISIBLE,
     });
     const famHasGhost =
@@ -522,6 +521,7 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
             <div class="f12-fg-section">
               <div class="f12-fg-sec-title">01 · START HERE</div>
               <p class="f12-fg-intro">Repo Archaeology examines Git history to identify files that repeatedly change together. Select a finding, inspect its directional numbers and supporting commits, and decide whether the companion file deserves coordinated review. Historical co-change is a signal to investigate, not proof that a change is required.</p>
+              <p class="f12-fg-intro"><strong>Reading the blueprint plate:</strong> the selected pair sits on top. Files with a relationship to both of them sit in the middle, files related to only one sit on that file's side, and family files reached only through other files sit at the bottom. Position shows how a file connects to the pair, not how strong the relationship is: compare the percentages in the evidence panel for that. Dense plates hide some connections between context files and say how many; the Atlas shows all of them.</p>
             </div>
             <div class="f12-fg-section">
               <div class="f12-fg-sec-title">02 · GLOSSARY (${GLOSSARY_TERMS.length} TERMS)</div>
@@ -602,6 +602,7 @@ function renderRichMapHtml(data: MapData, layout: LayoutResult | null): string {
   </div>
 </div>
 <script type="application/json" id="ra-data">${embedJson(data)}</script>${layoutScript}${briefingScript}
+<script>${PLATE_LAYOUT_BROWSER_JS}</script>
 <script>${RICH_CLIENT}</script>
 </body>
 </html>
@@ -846,6 +847,10 @@ const CLIENT = String.raw`
     return e;
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
+  // Contributor concentration without naming the person: map reports are meant to be shared
+  function contributorShareNote(author, share) {
+    return author && typeof share === 'number' && share >= 0.4 ? ' · One contributor: ' + pct(share) + ' of commits' : '';
+  }
   function formatCi(iv, raw) {
     return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
   }
@@ -2489,7 +2494,7 @@ const CLIENT = String.raw`
       boxHead.appendChild(link);
       boxHead.appendChild(el('span', 'family-variant-pill', m.variant));
       box.appendChild(boxHead);
-      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + (m.topAuthor ? ' · Top author: ' + m.topAuthor : '')));
+      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + contributorShareNote(m.topAuthor, m.topAuthorShare)));
       memberContainer.appendChild(box);
     });
     panel.appendChild(memberContainer);
@@ -2686,7 +2691,7 @@ const CLIENT = String.raw`
     linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
     boxAHead.appendChild(linkA);
     boxA.appendChild(boxAHead);
-    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : ''));
+    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + contributorShareNote(e.s.author, e.s.share));
     boxA.appendChild(subA);
     pairContainer.appendChild(boxA);
 
@@ -2703,7 +2708,7 @@ const CLIENT = String.raw`
     linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
     boxBHead.appendChild(linkB);
     boxB.appendChild(boxBHead);
-    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : ''));
+    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + contributorShareNote(e.t.author, e.t.share));
     boxB.appendChild(subB);
     pairContainer.appendChild(boxB);
 
@@ -3291,11 +3296,20 @@ canvas.pointing { cursor: pointer; }
 .f12-lede { margin: 0; font: 400 15.5px/1.55 var(--f-font-body); color: var(--f-ink-2); max-width: 72ch; overflow-wrap: anywhere; }
 
 .f12-plate-wrap { position: relative; border: var(--f-stroke-ink) solid var(--f-rule); background: #0e2540; overflow: hidden; margin-top: 2px; }
-.f12-plate-svg { display: block; width: 100%; height: auto; aspect-ratio: 760 / 420; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
+.f12-plate-svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; touch-action: none; cursor: grab; }
 .f12-plate-svg.is-panning { cursor: grabbing; }
-.f12-plate-node { cursor: grab; }
+.f12-plate-node { cursor: pointer; }
 .f12-plate-node.is-dragging { cursor: grabbing; }
+.f12-plate-node:focus { outline: none; }
+.f12-plate-node:focus-visible .f12-plate-node-dot { stroke: #ffd60a; stroke-width: 3.5; }
 .f12-plate-edge-hit { cursor: pointer; }
+.f12-plate-wire, .f12-plate-halo, .f12-plate-node, .f12-plate-node-label { transition: opacity 140ms ease-out; }
+.f12-plate-svg.has-hot .f12-plate-wire:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-halo:not(.is-hot) { opacity: 0.14; }
+.f12-plate-svg.has-hot .f12-plate-node:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-node-label:not(.is-hot) { opacity: 0.4; }
+.f12-plate-svg.has-hot .f12-plate-wire.is-hot:not(.is-primary) { stroke-width: 2.4px; stroke-opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .f12-plate-wire, .f12-plate-halo, .f12-plate-node, .f12-plate-node-label { transition: none; }
+}
 .f12-plate-balloon { pointer-events: none; }
 .f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11.5px/1.35 var(--f-font-mono); }
 .f12-plate-footer-right { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -3303,6 +3317,15 @@ canvas.pointing { cursor: pointer; }
 .f12-plate-reset-btn:hover, .f12-plate-reset-btn[aria-pressed="true"] { background: #173b61; }
 .f12-plate-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .f12-plate-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.f12-plate-key { flex-basis: 100%; margin: 0; color: #7eb3e0; font: 500 11.5px/1.45 var(--f-font-mono); }
+.f12-plate-caption { margin: 0; padding: 8px 12px; background: #fffef9; color: #121212; border-top: 2px solid #121212; font: 700 12.5px/1.4 var(--f-font-mono); }
+.f12-plate-more { padding: 8px 12px 10px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; }
+.f12-plate-more-hdr { margin: 0 0 6px; font: 700 11px/1.3 var(--f-font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+.f12-plate-more-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.f12-plate-more-btn { display: flex; width: 100%; min-height: 44px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 6px 10px; border: 1px solid #7eb3e0; background: #13304f; color: #fffef9; font: 600 12.5px/1.3 var(--f-font-mono); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.f12-plate-more-btn:hover { background: #173b61; }
+.f12-plate-more-btn:focus-visible { outline: 3px solid #ffd60a; outline-offset: 2px; }
+.f12-plate-more-rel { color: #7eb3e0; font-weight: 500; font-size: 11.5px; }
 
 .f12-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .f12-dir-box { border: 1px solid var(--f-ink-2); background: var(--f-sheet); padding: 10px; min-width: 0; }
@@ -3401,7 +3424,6 @@ canvas.pointing { cursor: pointer; }
   .f12-stat-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .f12-stat-pill { padding: 4px 8px; gap: 6px; font-size: 10.5px; min-width: 0; overflow-wrap: anywhere; }
   .f12-stat-pill strong { font-size: 14px; }
-  .f12-plate-svg { aspect-ratio: 340 / 240; }
   .f12-cut-panel { padding: 14px 12px 12px; gap: 8px; }
   .f12-howto { width: 100%; }
   .f12-howto-pop { position: static; width: 100%; max-width: 100%; max-height: none; margin-top: 6px; padding: 10px; box-shadow: none; }
@@ -3607,6 +3629,10 @@ const RICH_CLIENT = String.raw`
     return e;
   }
   function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
+  // Contributor concentration without naming the person: map reports are meant to be shared
+  function contributorShareNote(author, share) {
+    return author && typeof share === 'number' && share >= 0.4 ? ' · One contributor: ' + pct(share) + ' of commits' : '';
+  }
   function formatCi(iv, raw) {
     return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
   }
@@ -4861,6 +4887,7 @@ const RICH_CLIENT = String.raw`
   }
   function clearSelection() {
     selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
+    briefingReturnFamilyIdx = -1;
     briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
     briefingSelectedFamilyIdx = (briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
       ? briefingData.featured.familyIndex
@@ -5385,7 +5412,7 @@ const RICH_CLIENT = String.raw`
     linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
     boxAHead.appendChild(linkA);
     boxA.appendChild(boxAHead);
-    boxA.appendChild(el('div', 'pair-dir', 'Folder: ' + e.s.safeDir + ' · Changed in ' + plural(e.s.changes, 'commit') + (e.s.author ? ' · Top author: ' + e.s.author : '')));
+    boxA.appendChild(el('div', 'pair-dir', 'Folder: ' + e.s.safeDir + ' · Changed in ' + plural(e.s.changes, 'commit') + contributorShareNote(e.s.author, e.s.share)));
     pairContainer.appendChild(boxA);
 
     var wire = el('div', 'pair-wire');
@@ -5401,7 +5428,7 @@ const RICH_CLIENT = String.raw`
     linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
     boxBHead.appendChild(linkB);
     boxB.appendChild(boxBHead);
-    boxB.appendChild(el('div', 'pair-dir', 'Folder: ' + e.t.safeDir + ' · Changed in ' + plural(e.t.changes, 'commit') + (e.t.author ? ' · Top author: ' + e.t.author : '')));
+    boxB.appendChild(el('div', 'pair-dir', 'Folder: ' + e.t.safeDir + ' · Changed in ' + plural(e.t.changes, 'commit') + contributorShareNote(e.t.author, e.t.share)));
     pairContainer.appendChild(boxB);
     panel.appendChild(pairContainer);
 
@@ -5539,6 +5566,8 @@ const RICH_CLIENT = String.raw`
     ? briefingData.featured.familyIndex
     : -1;
   var briefingUseDefaultFeatured = Boolean(briefingData && briefingData.featured);
+  // Family the reader pivoted out of (via a plate node, wire or family pair row), so C-01 can offer a way back
+  var briefingReturnFamilyIdx = -1;
 
   function makeHelpBtn(popoverId, ariaLabel, visibleLabel) {
     var btn = el('button', 'f12-help-btn' + (visibleLabel ? ' f12-help-pill' : ''), visibleLabel ? (visibleLabel + ' ?') : '?');
@@ -5837,6 +5866,7 @@ const RICH_CLIENT = String.raw`
   function selectBriefingFamily(familyIdx, updateHash) {
     if (!briefingData || !briefingData.families || !briefingData.families[familyIdx]) return;
     var famEntry = briefingData.families[familyIdx];
+    briefingReturnFamilyIdx = -1;
     briefingSelectedFamilyIdx = familyIdx;
     briefingSelectedEdgeIdx = famEntry.edgeIndex;
     briefingUseDefaultFeatured = Boolean(
@@ -5883,6 +5913,9 @@ const RICH_CLIENT = String.raw`
 
   function selectBriefingEdge(edgeObj, isDefault, updateHash) {
     if (!edgeObj) return;
+    briefingReturnFamilyIdx = isDefault
+      ? -1
+      : (briefingSelectedFamilyIdx >= 0 ? briefingSelectedFamilyIdx : briefingReturnFamilyIdx);
     briefingSelectedEdgeIdx = edgeObj.idx;
     briefingSelectedFamilyIdx = (isDefault && briefingData && briefingData.featured && (briefingData.featured.isFamily || briefingData.featured.kind === 'family') && typeof briefingData.featured.familyIndex === 'number')
       ? briefingData.featured.familyIndex
@@ -5905,349 +5938,69 @@ const RICH_CLIENT = String.raw`
     renderPanel();
   }
 
-  function pointToSegDist(px, py, x1, y1, x2, y2) {
-    var dx = x2 - x1, dy = y2 - y1;
-    var lenSq = dx * dx + dy * dy;
-    if (lenSq < 1e-6) return Math.hypot(px - x1, py - y1);
-    var t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
-    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-  }
-
-  function buildDynamicPlate(seedNodes, featuredEdgeIdxSet, leadEdgeObj, isMobile) {
-    var w = isMobile ? 340 : 760;
-    var h = isMobile ? 240 : 420;
-    var maxEgoNodes = isMobile ? 6 : 12;
-    var maxLabelLen = isMobile ? 20 : 28;
-    var padX = isMobile ? 48 : 88;
-    var padTop = isMobile ? 36 : 58;
-    var padBottom = isMobile ? 28 : 42;
-
-    var seedSet = Object.create(null);
-    seedNodes.forEach(function (sn) { seedSet[sn.i] = true; });
-
-    // Count connected component size via BFS
-    var compVisited = Object.create(null);
-    var bfsQ = seedNodes.slice();
-    bfsQ.forEach(function (sn) { compVisited[sn.i] = true; });
-    var qHead = 0;
-    while (qHead < bfsQ.length) {
-      var curr = bfsQ[qHead++];
-      curr.edges.forEach(function (ce) {
-        var nb = ce.s === curr ? ce.t : ce.s;
-        if (!compVisited[nb.i]) {
-          compVisited[nb.i] = true;
-          bfsQ.push(nb);
-        }
-      });
-    }
-    var fullComponentNodeCount = Object.keys(compVisited).length;
-
-    // Collect 1-hop neighbors ranked by ghost status & Wilson lower bound
-    var neighborMap = Object.create(null);
-    seedNodes.forEach(function (sn) {
-      sn.edges.forEach(function (ce) {
-        var other = ce.s === sn ? ce.t : ce.s;
-        if (seedSet[other.i]) return;
-        var wScore = (ce.d.relationship === 'ghost' ? 10 : 1) + ce.lowBound * 4 + (ce.d.shared || 0) * 0.05;
-        if (!neighborMap[other.i] || wScore > neighborMap[other.i].score) {
-          neighborMap[other.i] = { node: other, score: wScore };
-        }
-      });
+  // Plates rebuilt after a click run the same engine as the report's first plate (src/map/plate-layout.ts,
+  // inlined as RAPlateLayout), so both follow identical layout rules and geometry guarantees.
+  function buildDynamicPlate(seedNodes, featuredEdgeIdxSet, leadEdgeObj, spec, previousPlate) {
+    var mode = spec.mode;
+    var plate = RAPlateLayout.computePlateLayout(data, {
+      seeds: seedNodes.map(function (n) { return n.i; }),
+      leadEdge: leadEdgeObj.idx,
+      featuredEdges: Object.keys(featuredEdgeIdxSet).map(Number)
+    }, {
+      mode: mode,
+      width: spec.width,
+      visible: visible,
+      previous: previousPlate && previousPlate.mode === mode
+        ? (previousPlate.nodes || []).map(function (pn) { return { nodeIndex: pn.nodeIndex, x: pn.x }; })
+        : undefined
     });
-    var sortedNeighbors = Object.keys(neighborMap)
-      .map(function (k) { return neighborMap[k]; })
-      .sort(function (a, b) {
-        return b.score - a.score || a.node.path.localeCompare(b.node.path);
-      });
-    var orderedSeeds = seedNodes.slice().sort(function (a, b) {
-      var aLead = a === leadEdgeObj.s ? 0 : (a === leadEdgeObj.t ? 1 : 2);
-      var bLead = b === leadEdgeObj.s ? 0 : (b === leadEdgeObj.t ? 1 : 2);
-      return aLead - bLead || a.path.localeCompare(b.path);
-    });
-    var chosenNodes = orderedSeeds.slice(0, maxEgoNodes);
-    for (var ni = 0; ni < sortedNeighbors.length && chosenNodes.length < maxEgoNodes; ni++) {
-      chosenNodes.push(sortedNeighbors[ni].node);
-    }
-
-    var chosenSet = Object.create(null);
-    chosenNodes.forEach(function (cn, idx) { chosenSet[cn.i] = idx; });
-
-    var cx = w * 0.5;
-    var cy = h * (isMobile ? 0.56 : 0.55);
-    var posX = new Array(chosenNodes.length);
-    var posY = new Array(chosenNodes.length);
-    var sCount = Math.min(orderedSeeds.length, chosenNodes.length);
-    var outerCount = chosenNodes.length - sCount;
-    if (sCount === 2) {
-      var span = isMobile ? (outerCount >= 5 ? 116 : 96) : (outerCount >= 5 ? 236 : 196);
-      var seedY = outerCount >= 5 ? (cy - (isMobile ? 22 : 36)) : cy;
-      posX[0] = cx - span * 0.5; posY[0] = seedY;
-      posX[1] = cx + span * 0.5; posY[1] = seedY;
-    } else if (sCount >= 5) {
-      var leadSpan = isMobile ? 104 : 212;
-      var leadY = cy - (isMobile ? 20 : 34);
-      posX[0] = cx - leadSpan * 0.5; posY[0] = leadY;
-      posX[1] = cx + leadSpan * 0.5; posY[1] = leadY;
-      var remSeeds = sCount - 2;
-      var rxLarge = isMobile ? 106 : 244;
-      var ryLarge = isMobile ? 72 : 136;
-      for (var rsi = 0; rsi < remSeeds; rsi++) {
-        var rAng = -0.14 * Math.PI + (1.28 * Math.PI * rsi) / Math.max(1, remSeeds - 1);
-        posX[2 + rsi] = cx + Math.cos(rAng) * rxLarge;
-        posY[2 + rsi] = cy + Math.sin(rAng) * ryLarge;
-      }
-    } else {
-      var rx = isMobile ? 76 : 168;
-      var ry = isMobile ? 54 : 104;
-      for (var si = 0; si < sCount; si++) {
-        var sAng = -Math.PI * 0.75 + (2 * Math.PI * si) / Math.max(1, sCount);
-        posX[si] = cx + Math.cos(sAng) * rx;
-        posY[si] = cy + Math.sin(sAng) * ry;
-      }
-    }
-    var outerAnchorX = new Array(chosenNodes.length);
-    var outerAnchorY = new Array(chosenNodes.length);
-    for (var ai = 0; ai < sCount; ai++) {
-      outerAnchorX[ai] = posX[ai];
-      outerAnchorY[ai] = posY[ai];
-    }
-    for (var oi = 0; oi < outerCount; oi++) {
-      var oIdx = sCount + oi;
-      var oAng = outerCount >= 4
-        ? (-0.14 * Math.PI + (1.28 * Math.PI * oi) / Math.max(1, outerCount - 1))
-        : (-Math.PI * 0.35 + (2 * Math.PI * oi) / Math.max(1, outerCount));
-      var ox = cx + Math.cos(oAng) * (isMobile ? 118 : 262);
-      var oy = cy + Math.sin(oAng) * (isMobile ? 78 : 146);
-      posX[oIdx] = ox;
-      posY[oIdx] = oy;
-      outerAnchorX[oIdx] = ox;
-      outerAnchorY[oIdx] = oy;
-    }
-
-    // Collect internal edges and per-node degree
-    var rawSubEdges = [];
-    edges.forEach(function (ce) {
-      var u = chosenSet[ce.s.i], v = chosenSet[ce.t.i];
-      if (u !== undefined && v !== undefined) {
-        rawSubEdges.push({ ce: ce, u: u, v: v, isFeat: Boolean(featuredEdgeIdxSet[ce.idx]) });
-      }
-    });
-    // Prune crossing non-incident chords on dense >=5-node cliques so the blueprint stays legible
-    var subEdges = (chosenNodes.length >= 5 && rawSubEdges.length > chosenNodes.length + 3)
-      ? rawSubEdges.filter(function (se) {
-          if (se.ce === leadEdgeObj) return true;
-          if (se.ce.s === leadEdgeObj.s || se.ce.s === leadEdgeObj.t || se.ce.t === leadEdgeObj.s || se.ce.t === leadEdgeObj.t) {
-            return true;
-          }
-          var diff = Math.abs(se.u - se.v);
-          return diff === 1 || diff === chosenNodes.length - 1;
-        })
-      : rawSubEdges;
-    var hiddenContextEdges = Math.max(0, rawSubEdges.length - subEdges.length);
-    var nodeDeg = new Array(chosenNodes.length).fill(0);
-    subEdges.forEach(function (se) {
-      nodeDeg[se.u]++;
-      nodeDeg[se.v]++;
-    });
-
-    // Reserve top-center balloon zone on desktop; on mobile keep compact
-    var balloonW = isMobile ? 256 : 310;
-    var balloonH = isMobile ? 28 : 38;
-    var balloonX = Math.round(cx - balloonW / 2);
-    var balloonY = isMobile ? 8 : 34;
-
-    // 50-step deterministic force relaxation (degree-normalized so cliques never collapse inward)
-    var idealDist = isMobile ? 88 : 168;
-    for (var step = 0; step < 50; step++) {
-      var cooling = 1 - step / 55;
-      var fx = new Array(chosenNodes.length).fill(0);
-      var fy = new Array(chosenNodes.length).fill(0);
-      for (var i = 0; i < chosenNodes.length; i++) {
-        for (var j = i + 1; j < chosenNodes.length; j++) {
-          var dx = posX[j] - posX[i];
-          var dy = posY[j] - posY[i];
-          var dist = Math.hypot(dx, dy) || 0.5;
-          var minSep = (i < sCount && j < sCount) ? idealDist * 1.15 : idealDist * 0.92;
-          if (dist < minSep * 1.45) {
-            var rep = ((minSep * 1.45 - dist) / dist) * 0.46 * cooling;
-            fx[i] -= dx * rep; fy[i] -= dy * rep;
-            fx[j] += dx * rep; fy[j] += dy * rep;
-          }
-        }
-      }
-      subEdges.forEach(function (se) {
-        var dx = posX[se.v] - posX[se.u];
-        var dy = posY[se.v] - posY[se.u];
-        var dist = Math.hypot(dx, dy) || 1;
-        var target = se.isFeat ? idealDist * 1.08 : idealDist * 0.98;
-        var degNorm = Math.sqrt(Math.max(1, Math.max(nodeDeg[se.u] || 1, nodeDeg[se.v] || 1)));
-        var pull = ((dist - target) / dist) * (0.12 / degNorm) * cooling;
-        fx[se.u] += dx * pull; fy[se.u] += dy * pull;
-        fx[se.v] -= dx * pull; fy[se.v] -= dy * pull;
-      });
-      for (var k = 0; k < chosenNodes.length; k++) {
-        var isSeedNode = k < sCount;
-        var damp = isSeedNode ? 0.35 : 0.78;
-        if (!isSeedNode && outerAnchorX[k] !== undefined) {
-          fx[k] += (outerAnchorX[k] - posX[k]) * 0.14 * cooling;
-          fy[k] += (outerAnchorY[k] - posY[k]) * 0.14 * cooling;
-        }
-        // Keep nodes out of balloon box
-        if (
-          posX[k] > balloonX - 24 &&
-          posX[k] < balloonX + balloonW + 24 &&
-          posY[k] < balloonY + balloonH + 26
-        ) {
-          fy[k] += 5.5 * cooling;
-        }
-        posX[k] = Math.max(padX, Math.min(w - padX, posX[k] + fx[k] * damp));
-        posY[k] = Math.max(padTop, Math.min(h - padBottom, posY[k] + fy[k] * damp));
-      }
-    }
-
-    // Compute Balloon target at midpoint of lead edge
-    var leadSIdx = chosenSet[leadEdgeObj.s.i] !== undefined ? chosenSet[leadEdgeObj.s.i] : 0;
-    var leadTIdx = chosenSet[leadEdgeObj.t.i] !== undefined ? chosenSet[leadEdgeObj.t.i] : Math.min(1, chosenNodes.length - 1);
-    var btX = Math.round((posX[leadSIdx] + posX[leadTIdx]) / 2);
-    var btY = Math.round((posY[leadSIdx] + posY[leadTIdx]) / 2);
-    balloonW = Math.max(balloonW, isMobile ? 268 : 340);
-    balloonX = Math.max(12, Math.min(w - balloonW - 12, Math.round(btX - balloonW / 2)));
-    balloonY = Math.max(8, Math.min(btY - balloonH - (isMobile ? 16 : 24), isMobile ? 14 : 46));
-    var balloonBox = { x: balloonX, y: balloonY, w: balloonW, h: balloonH };
-    for (var bni = 0; bni < chosenNodes.length; bni++) {
-      if (
-        posX[bni] > balloonBox.x - 42 &&
-        posX[bni] < balloonBox.x + balloonBox.w + 42 &&
-        posY[bni] < balloonBox.y + balloonBox.h + 22
-      ) {
-        posY[bni] = Math.min(h - padBottom, balloonBox.y + balloonBox.h + 24);
-      }
-    }
-
-    // Build short labels (distinguish endpoints if duplicate basenames)
-    var baseCounts = Object.create(null);
-    var rawBasenames = chosenNodes.map(function (cn) {
-      var parts = cn.safePath.split('/');
-      return parts[parts.length - 1] || cn.safePath;
-    });
-    rawBasenames.forEach(function (b) { baseCounts[b] = (baseCounts[b] || 0) + 1; });
-
-    var placedBoxes = [{ x: balloonBox.x - 4, y: balloonBox.y - 4, w: balloonBox.w + 8, h: balloonBox.h + 12 }];
-    var pNodes = [];
-    var candDirs = [
-      { key: 'S', dx: 0, dy: 1, align: 'center' },
-      { key: 'N', dx: 0, dy: -1, align: 'center' },
-      { key: 'E', dx: 1, dy: 0, align: 'left' },
-      { key: 'W', dx: -1, dy: 0, align: 'right' },
-      { key: 'SE', dx: 0.85, dy: 0.85, align: 'left' },
-      { key: 'SW', dx: -0.85, dy: 0.85, align: 'right' },
-      { key: 'NE', dx: 0.85, dy: -0.85, align: 'left' },
-      { key: 'NW', dx: -0.85, dy: -0.85, align: 'right' }
-    ];
-
-    chosenNodes.forEach(function (cn, idx) {
-      var isSeed = idx < sCount;
-      var r = isSeed ? (isMobile ? 7.5 : 9.2) : (isMobile ? 5.5 : 6.6);
-      var nx = Math.round(posX[idx]);
-      var ny = Math.round(posY[idx]);
-      var lblText = rawBasenames[idx];
-      if (baseCounts[lblText] > 1) {
-        var segs = cn.safePath.split('/').filter(Boolean);
-        if (segs.length >= 2) lblText = segs[segs.length - 2] + '/' + segs[segs.length - 1];
-      }
-      lblText = middleTruncate(lblText, maxLabelLen);
-      var charW = isMobile ? 7.1 : 7.5;
-      var tw = Math.max(40, Math.round(lblText.length * charW + 10));
-      var th = 18;
-
-      var bestCand = null;
-      var bestPenalty = Infinity;
-      candDirs.forEach(function (cd) {
-        var offset = r + 8;
-        var ax = Math.round(nx + cd.dx * offset);
-        var ay = Math.round(ny + cd.dy * (cd.dy === 0 ? 4 : offset + (cd.dy > 0 ? 8 : -2)));
-        var bx = cd.align === 'right' ? ax - tw + 4 : (cd.align === 'center' ? Math.round(ax - tw / 2) : ax - 4);
-        var by = ay - 13;
-        var pen = 0;
-        if (bx < 6) pen += (6 - bx) * 25;
-        if (by < 6) pen += (6 - by) * 25;
-        if (bx + tw > w - 6) pen += (bx + tw - (w - 6)) * 25;
-        if (by + th > h - 6) pen += (by + th - (h - 6)) * 25;
-
-        placedBoxes.forEach(function (ob) {
-          var ox = Math.max(0, Math.min(bx + tw, ob.x + ob.w) - Math.max(bx, ob.x));
-          var oy = Math.max(0, Math.min(by + th, ob.y + ob.h) - Math.max(by, ob.y));
-          if (ox > 0 && oy > 0) pen += ox * oy * 12 + 500;
-        });
-        for (var m = 0; m < chosenNodes.length; m++) {
-          var mx = posX[m], my = posY[m], mr = (m < sCount ? 9.5 : 6.8) + 4;
-          var nearX = Math.max(bx, Math.min(mx, bx + tw));
-          var nearY = Math.max(by, Math.min(my, by + th));
-          if (Math.hypot(mx - nearX, my - nearY) < mr) pen += 900;
-        }
-        var lcx = bx + tw / 2, lcy = by + th / 2;
-        subEdges.forEach(function (se) {
-          if (!se.isFeat) return;
-          var dSeg = pointToSegDist(lcx, lcy, posX[se.u], posY[se.u], posX[se.v], posY[se.v]);
-          if (dSeg < th * 0.75) pen += 320;
-        });
-        if (pen < bestPenalty) {
-          bestPenalty = pen;
-          bestCand = { x: bx, y: by, w: tw, h: th, anchorX: ax, anchorY: ay, textAlign: cd.align };
-        }
-      });
-
-      if (bestCand) placedBoxes.push(bestCand);
-      pNodes.push({
-        nodeIndex: cn.i,
-        path: cn.safePath,
-        shortLabel: lblText,
-        dir: cn.safeDir,
-        changes: cn.changes || 1,
-        x: nx,
-        y: ny,
-        r: r,
-        isFeaturedEndpoint: isSeed,
-        label: bestCand
-      });
-    });
-
-    var pEdges = subEdges.map(function (se) {
-      return {
-        edgeIndex: se.ce.idx,
-        sourceNodeIndex: se.ce.s.i,
-        targetNodeIndex: se.ce.t.i,
-        x1: Math.round(posX[se.u]),
-        y1: Math.round(posY[se.u]),
-        x2: Math.round(posX[se.v]),
-        y2: Math.round(posY[se.v]),
-        relationship: se.ce.d.relationship,
-        intervalLow: se.ce.lowBound,
-        strokeWidth: Number((1.6 + se.ce.lowBound * 3.2).toFixed(2)),
-        isFeatured: se.isFeat,
-        isLeadEdge: se.ce === leadEdgeObj
-      };
-    });
-
     var forwardFirst = leadEdgeObj.d.confidence > leadEdgeObj.d.reverseConfidence ||
       (leadEdgeObj.d.confidence === leadEdgeObj.d.reverseConfidence && leadEdgeObj.d.fromChanges <= leadEdgeObj.d.toChanges);
     var denom = forwardFirst ? leadEdgeObj.d.fromChanges : leadEdgeObj.d.toChanges;
     var relSuffix = leadEdgeObj.d.relationship === 'ghost' ? 'no import' : leadEdgeObj.d.relationship + ' link';
-
-    return {
-      width: w,
-      height: h,
-      nodes: pNodes,
-      edges: pEdges,
-      balloonTarget: { x: btX, y: btY },
-      balloonBox: balloonBox,
-      balloonText: leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix,
-      fullComponentNodeCount: fullComponentNodeCount,
-      hiddenContextEdges: hiddenContextEdges
-    };
+    plate.balloonText = leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix;
+    return plate;
   }
 
   var dynamicPlateCache = Object.create(null);
+  // The plate currently on screen, so the next plate can keep shared files where the reader saw them
+  var lastPlateObj = null;
+  // Plates are laid out for the width they are shown at (near 1:1), so labels keep their intended size:
+  // compact below the desktop minimum, otherwise desktop at the measured width (capped at 760).
+  var plateAreaWidth = null;
+  var renderedPlateSpec = null;
+  function plateSpecFor(isMobileViewport) {
+    var range = RAPlateLayout.PLATE_WIDTH;
+    var avail = plateAreaWidth || (isMobileViewport ? Math.max(0, (window.innerWidth || 0) - 48) : range.desktop.max);
+    if (avail < range.desktop.min) {
+      return { mode: 'compact', width: Math.max(range.compact.min, Math.min(range.compact.max, Math.floor(avail))) };
+    }
+    // Within 48px of full width the report's prebuilt 760px plate is used (it scales by at most ~6%)
+    var width = avail >= range.desktop.max - 48 ? range.desktop.max : Math.floor(avail);
+    return { mode: 'desktop', width: width };
+  }
+  // At most one automatic re-render per load or resize: the re-render can change page height, and with it a
+  // scrollbar and the measured width, which must not feed back into another re-render.
+  var plateResyncing = false;
+  function syncPlateWidth() {
+    var wrap = briefingEl ? briefingEl.querySelector('.f12-plate-wrap') : null;
+    if (!wrap || !wrap.clientWidth || !renderedPlateSpec) return;
+    plateAreaWidth = wrap.clientWidth;
+    if (plateResyncing) return;
+    var wanted = plateSpecFor(Boolean(window.innerWidth && window.innerWidth <= 640));
+    var changed = wanted.mode !== renderedPlateSpec.mode || Math.abs(wanted.width - renderedPlateSpec.width) >= 24;
+    if (!changed) return;
+    setTimeout(function () {
+      if (viewMode !== 'briefing') return;
+      plateResyncing = true;
+      try {
+        renderBriefingBoard();
+        syncMarkerDom();
+      } finally {
+        plateResyncing = false;
+      }
+    }, 0);
+  }
 
   function snapshotPlateInitialState(plate, w, h) {
     if (!plate || plate._initialNodes) return;
@@ -6283,6 +6036,7 @@ const RICH_CLIENT = String.raw`
     var ns = 'http://www.w3.org/2000/svg';
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
     var w = plate.width || 760, h = plate.height || 420;
+    svgEl.style.aspectRatio = w + ' / ' + h;
     snapshotPlateInitialState(plate, w, h);
     var vb = plate._viewBox || (plate._viewBox = { x: 0, y: 0, w: w, h: h });
     svgEl.setAttribute('viewBox', vb.x.toFixed(1) + ' ' + vb.y.toFixed(1) + ' ' + vb.w.toFixed(1) + ' ' + vb.h.toFixed(1));
@@ -6328,9 +6082,14 @@ const RICH_CLIENT = String.raw`
 
     var edgeLayer = document.createElementNS(ns, 'g');
     var nodeLayer = document.createElementNS(ns, 'g');
+    // Labels sit above the wires but below every node: a label may graze a dot, but it can never hide a
+    // clickable file, and a later node group can no longer paint its own pill over an earlier label
+    var labelLayer = document.createElementNS(ns, 'g');
+    labelLayer.setAttribute('class', 'f12-plate-labels');
     var balloonLayer = document.createElementNS(ns, 'g');
     balloonLayer.setAttribute('class', 'f12-plate-balloon');
     svgEl.appendChild(edgeLayer);
+    svgEl.appendChild(labelLayer);
     svgEl.appendChild(nodeLayer);
     svgEl.appendChild(balloonLayer);
 
@@ -6357,6 +6116,23 @@ const RICH_CLIENT = String.raw`
       return (isPrimaryEdge(a) ? 1 : 0) - (isPrimaryEdge(b) ? 1 : 0);
     });
 
+    // Wires are quadratic curves whose control point comes from the shared layout engine, so what is
+    // drawn is exactly what the layout scored (a bend of 0 draws a straight wire).
+    function wirePath(pe) {
+      var c = RAPlateLayout.wireControlPoint(pe.x1, pe.y1, pe.x2, pe.y2, pe.bend || 0);
+      return 'M ' + pe.x1 + ' ' + pe.y1 + ' Q ' + Math.round(c.x * 10) / 10 + ' ' + Math.round(c.y * 10) / 10 + ' ' + pe.x2 + ' ' + pe.y2;
+    }
+    function wireEl(pe, cls) {
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('class', cls);
+      path.setAttribute('d', wirePath(pe));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('data-edge-idx', String(pe.edgeIndex));
+      path.setAttribute('data-source', String(pe.sourceNodeIndex));
+      path.setAttribute('data-target', String(pe.targetNodeIndex));
+      return path;
+    }
+
     var edgeRecords = [];
     sortedEdgesForDraw.forEach(function (pe) {
       var primary = isPrimaryEdge(pe);
@@ -6364,18 +6140,14 @@ const RICH_CLIENT = String.raw`
       var halo = null;
       if (primary) {
         // Blueprint chalk halo (#fffef9) instead of #ffd60a stroke (--f-marker is never a stroke)
-        halo = document.createElementNS(ns, 'line');
-        halo.setAttribute('x1', String(pe.x1)); halo.setAttribute('y1', String(pe.y1));
-        halo.setAttribute('x2', String(pe.x2)); halo.setAttribute('y2', String(pe.y2));
+        halo = wireEl(pe, 'f12-plate-halo');
         halo.setAttribute('stroke', '#fffef9');
         halo.setAttribute('stroke-width', String(Math.max(6.8, Number(strokeW) + 4.2)));
         halo.setAttribute('stroke-opacity', '0.45');
         halo.setAttribute('stroke-linecap', 'round');
         edgeLayer.appendChild(halo);
       }
-      var line = document.createElementNS(ns, 'line');
-      line.setAttribute('x1', String(pe.x1)); line.setAttribute('y1', String(pe.y1));
-      line.setAttribute('x2', String(pe.x2)); line.setAttribute('y2', String(pe.y2));
+      var line = wireEl(pe, primary ? 'f12-plate-wire is-primary' : 'f12-plate-wire');
       var col = pe.relationship === 'ghost' ? '#ff4f9a' : (pe.relationship === 'unknown' ? '#e3b65b' : (pe.relationship === 'indirect' ? '#7fd1b0' : '#7eb3e0'));
       line.setAttribute('stroke', col);
       line.setAttribute('stroke-width', primary ? String(Math.max(3.2, Number(strokeW) + 0.9)) : '1.35');
@@ -6386,10 +6158,7 @@ const RICH_CLIENT = String.raw`
       line.setAttribute('stroke-linecap', 'round');
       edgeLayer.appendChild(line);
 
-      var hitLine = document.createElementNS(ns, 'line');
-      hitLine.setAttribute('class', 'f12-plate-edge-hit');
-      hitLine.setAttribute('x1', String(pe.x1)); hitLine.setAttribute('y1', String(pe.y1));
-      hitLine.setAttribute('x2', String(pe.x2)); hitLine.setAttribute('y2', String(pe.y2));
+      var hitLine = wireEl(pe, 'f12-plate-edge-hit');
       hitLine.setAttribute('stroke', 'transparent');
       hitLine.setAttribute('stroke-width', '14');
       hitLine.setAttribute('stroke-linecap', 'round');
@@ -6405,10 +6174,23 @@ const RICH_CLIENT = String.raw`
       g.setAttribute('class', 'f12-plate-node');
       g.setAttribute('data-node-idx', String(pn.nodeIndex));
       g.setAttribute('data-plate-idx', String(pIdx));
+      if (pn.group) g.setAttribute('data-group', pn.group);
 
       var titleEl = document.createElementNS(ns, 'title');
-      titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 drag to move';
+      titleEl.textContent = (pn.path || pn.shortLabel || '') + ' \u00b7 click to inspect \u00b7 drag to move';
       g.appendChild(titleEl);
+      if (plateOpts && typeof plateOpts.onSelectNode === 'function') {
+        g.setAttribute('tabindex', '0');
+        g.setAttribute('role', 'button');
+        var shownWires = rawEdges.filter(function (pe) { return pe.sourceNodeIndex === pn.nodeIndex || pe.targetNodeIndex === pn.nodeIndex; }).length;
+        g.setAttribute('aria-label', 'Inspect ' + (pn.path || pn.shortLabel || 'file') + ' (' + shownWires + ' ' + (shownWires === 1 ? 'connection' : 'connections') + ' shown)');
+        g.addEventListener('keydown', function (kev) {
+          if (kev.key === 'Enter' || kev.key === ' ' || kev.key === 'Spacebar') {
+            kev.preventDefault();
+            plateOpts.onSelectNode(pn.nodeIndex);
+          }
+        });
+      }
 
       var hitC = document.createElementNS(ns, 'circle');
       hitC.setAttribute('cx', String(pn.x)); hitC.setAttribute('cy', String(pn.y));
@@ -6421,6 +6203,7 @@ const RICH_CLIENT = String.raw`
       var c = document.createElementNS(ns, 'circle');
       c.setAttribute('cx', String(pn.x)); c.setAttribute('cy', String(pn.y));
       c.setAttribute('r', String(pn.r));
+      c.setAttribute('class', 'f12-plate-node-dot');
       c.setAttribute('fill', fillCol);
       c.setAttribute('stroke', '#fffef9');
       c.setAttribute('stroke-width', pn.isFeaturedEndpoint ? '2.5' : '1.8');
@@ -6428,15 +6211,20 @@ const RICH_CLIENT = String.raw`
 
       var pill = null;
       var txt = null;
+      var labelG = null;
       var lbl = pn.label;
       if (lbl) {
+        labelG = document.createElementNS(ns, 'g');
+        labelG.setAttribute('class', 'f12-plate-node-label');
+        labelG.setAttribute('data-node-idx', String(pn.nodeIndex));
+        labelG.setAttribute('aria-hidden', 'true');
         pill = document.createElementNS(ns, 'rect');
         pill.setAttribute('x', String(Math.round(lbl.x)));
         pill.setAttribute('y', String(Math.round(lbl.y)));
         pill.setAttribute('width', String(Math.round(lbl.w)));
         pill.setAttribute('height', String(Math.round(lbl.h)));
         pill.setAttribute('fill', 'rgba(9, 25, 44, 0.88)');
-        g.appendChild(pill);
+        labelG.appendChild(pill);
 
         txt = document.createElementNS(ns, 'text');
         txt.setAttribute('x', String(lbl.anchorX));
@@ -6448,10 +6236,11 @@ const RICH_CLIENT = String.raw`
         txt.setAttribute('font-size', isCompactPlate ? '13' : (pn.isFeaturedEndpoint ? '13.5' : '12.5'));
         txt.setAttribute('font-weight', pn.isFeaturedEndpoint ? '700' : '500');
         txt.textContent = pn.shortLabel;
-        g.appendChild(txt);
+        labelG.appendChild(txt);
+        labelLayer.appendChild(labelG);
       }
       nodeLayer.appendChild(g);
-      nodeRecords.push({ pn: pn, isPrimary: Boolean(primaryNodeIdxSet[pn.nodeIndex]), gEl: g, hitCircleEl: hitC, circleEl: c, pillEl: pill, txtEl: txt });
+      nodeRecords.push({ pn: pn, isPrimary: Boolean(primaryNodeIdxSet[pn.nodeIndex]), gEl: g, labelEl: labelG, hitCircleEl: hitC, circleEl: c, pillEl: pill, txtEl: txt });
     });
 
     function applyFocusPairFilter() {
@@ -6465,6 +6254,7 @@ const RICH_CLIENT = String.raw`
       nodeRecords.forEach(function (nr) {
         var hide = focusPair && !nr.isPrimary;
         nr.gEl.style.display = hide ? 'none' : '';
+        if (nr.labelEl) nr.labelEl.style.display = hide ? 'none' : '';
       });
     }
     svgEl._setFocusPairOnly = function (active) {
@@ -6473,10 +6263,70 @@ const RICH_CLIENT = String.raw`
     };
     applyFocusPairFilter();
 
+    // Pointing at (or focusing) a file lights up its wires and neighbours and steps everything else
+    // back; pointing at a wire lights up the wire and its two files. Touch skips this (no hover).
+    function setHot(nodeIdx, edgeIdx) {
+      var hotNodes = Object.create(null);
+      var hotEdges = Object.create(null);
+      if (typeof nodeIdx === 'number') {
+        hotNodes[nodeIdx] = true;
+        edgeRecords.forEach(function (er) {
+          if (er.pe.sourceNodeIndex === nodeIdx || er.pe.targetNodeIndex === nodeIdx) {
+            hotEdges[er.pe.edgeIndex] = true;
+            hotNodes[er.pe.sourceNodeIndex] = true;
+            hotNodes[er.pe.targetNodeIndex] = true;
+          }
+        });
+      } else if (typeof edgeIdx === 'number') {
+        edgeRecords.forEach(function (er) {
+          if (er.pe.edgeIndex === edgeIdx) {
+            hotEdges[edgeIdx] = true;
+            hotNodes[er.pe.sourceNodeIndex] = true;
+            hotNodes[er.pe.targetNodeIndex] = true;
+          }
+        });
+      }
+      var active = typeof nodeIdx === 'number' || typeof edgeIdx === 'number';
+      svgEl.classList.toggle('has-hot', active);
+      edgeRecords.forEach(function (er) {
+        var hot = active && Boolean(hotEdges[er.pe.edgeIndex]);
+        er.lineEl.classList.toggle('is-hot', hot);
+        if (er.haloEl) er.haloEl.classList.toggle('is-hot', hot);
+      });
+      nodeRecords.forEach(function (nr) {
+        var hot = active && Boolean(hotNodes[nr.pn.nodeIndex]);
+        nr.gEl.classList.toggle('is-hot', hot);
+        if (nr.labelEl) nr.labelEl.classList.toggle('is-hot', hot);
+      });
+    }
+    nodeRecords.forEach(function (nr) {
+      // A file's label traces it just like its dot
+      [nr.gEl, nr.labelEl].forEach(function (target) {
+        if (!target) return;
+        target.addEventListener('pointerenter', function (ev) {
+          if (ev.pointerType !== 'touch' && !plateDrag) setHot(nr.pn.nodeIndex);
+        });
+        target.addEventListener('pointerleave', function () { if (!plateDrag) setHot(); });
+      });
+      // Only keyboard focus traces a file; focus left behind by a mouse click or a re-render does not
+      nr.gEl.addEventListener('focus', function () {
+        var keyboard = true;
+        try { keyboard = nr.gEl.matches(':focus-visible'); } catch (_) {}
+        if (keyboard) setHot(nr.pn.nodeIndex);
+      });
+      nr.gEl.addEventListener('blur', function () { setHot(); });
+    });
+    edgeRecords.forEach(function (er) {
+      er.hitEl.addEventListener('pointerenter', function (ev) {
+        if (ev.pointerType !== 'touch' && !plateDrag) setHot(undefined, er.pe.edgeIndex);
+      });
+      er.hitEl.addEventListener('pointerleave', function () { if (!plateDrag) setHot(); });
+    });
+
     var balloonDom = null;
     if (plate.balloonBox && balloonText) {
       var bb = plate.balloonBox;
-      var shownBText = isCompactPlate ? middleTruncate(balloonText, 32) : balloonText;
+      var shownBText = isCompactPlate ? middleTruncate(balloonText, 40) : balloonText;
       var rawBw = bb.w || bb.width || 300;
       var minBw = Math.round(shownBText.length * (isCompactPlate ? 6.9 : 7.7) + 28);
       var bw = Math.min(w - 24, Math.max(rawBw, minBw));
@@ -6535,15 +6385,10 @@ const RICH_CLIENT = String.raw`
       var curVb = plate._viewBox;
       svgEl.setAttribute('viewBox', curVb.x.toFixed(1) + ' ' + curVb.y.toFixed(1) + ' ' + curVb.w.toFixed(1) + ' ' + curVb.h.toFixed(1));
       edgeRecords.forEach(function (er) {
-        var pe = er.pe;
-        if (er.haloEl) {
-          er.haloEl.setAttribute('x1', String(pe.x1)); er.haloEl.setAttribute('y1', String(pe.y1));
-          er.haloEl.setAttribute('x2', String(pe.x2)); er.haloEl.setAttribute('y2', String(pe.y2));
-        }
-        er.lineEl.setAttribute('x1', String(pe.x1)); er.lineEl.setAttribute('y1', String(pe.y1));
-        er.lineEl.setAttribute('x2', String(pe.x2)); er.lineEl.setAttribute('y2', String(pe.y2));
-        er.hitEl.setAttribute('x1', String(pe.x1)); er.hitEl.setAttribute('y1', String(pe.y1));
-        er.hitEl.setAttribute('x2', String(pe.x2)); er.hitEl.setAttribute('y2', String(pe.y2));
+        var d = wirePath(er.pe);
+        if (er.haloEl) er.haloEl.setAttribute('d', d);
+        er.lineEl.setAttribute('d', d);
+        er.hitEl.setAttribute('d', d);
       });
       nodeRecords.forEach(function (nr) {
         var pn = nr.pn;
@@ -6600,6 +6445,7 @@ const RICH_CLIENT = String.raw`
       plate._dirty = false;
       nodeRecords.forEach(function (nr) {
         if (nr.gEl.parentNode === nodeLayer) nodeLayer.appendChild(nr.gEl);
+        if (nr.labelEl && nr.labelEl.parentNode === labelLayer) labelLayer.appendChild(nr.labelEl);
       });
       syncPlateDom();
     }
@@ -6621,7 +6467,8 @@ const RICH_CLIENT = String.raw`
       var target = ev.target;
       var foundNodeRec = null;
       for (var ni = 0; ni < nodeRecords.length; ni++) {
-        if (nodeRecords[ni].gEl === target || nodeRecords[ni].gEl.contains(target)) {
+        if (nodeRecords[ni].gEl === target || nodeRecords[ni].gEl.contains(target) ||
+            (nodeRecords[ni].labelEl && nodeRecords[ni].labelEl.contains(target))) {
           foundNodeRec = nodeRecords[ni];
           break;
         }
@@ -6660,6 +6507,9 @@ const RICH_CLIENT = String.raw`
         foundNodeRec.gEl.classList.add('is-dragging');
         if (foundNodeRec.gEl.parentNode === nodeLayer) {
           nodeLayer.appendChild(foundNodeRec.gEl);
+        }
+        if (foundNodeRec.labelEl && foundNodeRec.labelEl.parentNode === labelLayer) {
+          labelLayer.appendChild(foundNodeRec.labelEl);
         }
       } else {
         plateDrag = {
@@ -6736,6 +6586,7 @@ const RICH_CLIENT = String.raw`
         if (ev && typeof svgEl.releasePointerCapture === 'function') svgEl.releasePointerCapture(ev.pointerId);
       } catch (_) {}
       plateDrag = null;
+      if (wasMoved) setHot();
       if (!wasMoved && ev && ev.type === 'pointerup' && plateOpts) {
         if (mode === 'node' && nodeRec && typeof plateOpts.onSelectNode === 'function') {
           plateOpts.onSelectNode(nodeRec.pn.nodeIndex);
@@ -6820,11 +6671,14 @@ const RICH_CLIENT = String.raw`
         prevFocusDesc = { kind: 'sec-card', edgeIdx: activeEl.getAttribute('data-edge-idx') };
       } else if (activeEl.classList && activeEl.classList.contains('f12-family-pair-row') && activeEl.getAttribute('data-edge-idx')) {
         prevFocusDesc = { kind: 'family-pair', edgeIdx: activeEl.getAttribute('data-edge-idx') };
+      } else if (activeEl.classList && activeEl.classList.contains('f12-plate-node')) {
+        prevFocusDesc = { kind: 'plate-node', nodeIdx: activeEl.getAttribute('data-node-idx') };
       } else if (activeEl.id) {
         prevFocusDesc = { kind: 'id', id: activeEl.id };
       }
     }
     briefingEl.textContent = '';
+    renderedPlateSpec = null;
     var isMobileViewport = Boolean(window.innerWidth && window.innerWidth <= 640);
 
     // 1. Compact Inline Stat Strip with accessible '?' popover buttons
@@ -6875,10 +6729,19 @@ const RICH_CLIENT = String.raw`
         empSvg.setAttribute('class', 'f12-plate-svg');
         empSvg.setAttribute('role', 'img');
         empSvg.setAttribute('aria-label', 'Analyzed files context plate');
-        renderPlateSvg(empSvg, emp.plate, '');
+        var empSpec = plateSpecFor(isMobileViewport);
+        var empPlate = empSpec.mode === 'desktop' && empSpec.width === RAPlateLayout.PLATE_WIDTH.desktop.max
+          ? emp.plate
+          : RAPlateLayout.computePlateLayout(data, {
+              seeds: emp.plate.nodes.map(function (pn) { return pn.nodeIndex; }),
+              leadEdge: null,
+              featuredEdges: []
+            }, { mode: empSpec.mode, width: empSpec.width });
+        renderPlateSvg(empSvg, empPlate, '');
+        renderedPlateSpec = empSpec;
         empPlateWrap.appendChild(empSvg);
         var empFooter = el('div', 'f12-plate-footer');
-        empFooter.appendChild(el('span', 'f12-plate-meta', 'Context view: top ' + emp.plate.nodes.length + ' most frequently changed files in repository'));
+        empFooter.appendChild(el('span', 'f12-plate-meta', 'Context view: top ' + empPlate.nodes.length + ' most frequently changed files in repository'));
         empPlateWrap.appendChild(empFooter);
         empPanel.appendChild(empPlateWrap);
       }
@@ -7025,6 +6888,21 @@ const RICH_CLIENT = String.raw`
         evEl.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
       }
     });
+    var returnFamEntry = (!activeFamilyEntry && briefingReturnFamilyIdx >= 0 && briefingData.families)
+      ? briefingData.families[briefingReturnFamilyIdx]
+      : null;
+    if (returnFamEntry && (returnFamEntry.memberPaths || []).some(function (mp) { return mp === activeEdge.s.path || mp === activeEdge.t.path; })) {
+      var backFamIdx = briefingReturnFamilyIdx;
+      var backToFamBtn = el('button', 'f12-jump-btn', '\u2190 Back to family (' + (returnFamEntry.memberPaths || []).length + ' files)');
+      backToFamBtn.type = 'button';
+      backToFamBtn.id = 'back-to-family-btn';
+      backToFamBtn.addEventListener('click', function () {
+        selectBriefingFamily(backFamIdx, true);
+        var hl = document.getElementById('briefing-headline');
+        if (hl && typeof hl.focus === 'function') hl.focus();
+      });
+      beat01.appendChild(backToFamBtn);
+    }
     beat01.appendChild(jumpEvBtn);
     cut01.appendChild(beat01);
 
@@ -7101,14 +6979,15 @@ const RICH_CLIENT = String.raw`
     var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('id', 'featured-plate-svg');
     svg.setAttribute('class', 'f12-plate-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate');
+    svg.setAttribute('role', 'group');
+    svg.setAttribute('aria-label', 'Featured ego-network blueprint plate: select a file to inspect its strongest connection');
 
     var plateObj = null;
     var bText = '';
     var visMaskKey = ['ghost', 'unknown', 'indirect', 'direct', 'test'].map(function (k) { return visible[k] ? '1' : '0'; }).join('');
-    var plateCacheKey = (activeFamilyEntry ? 'fam:' + activeFamilyEntry.familyIndex + ':' + activeEdge.idx : 'edge:' + activeEdge.idx) + ':' + (isMobileViewport ? 'm' : 'd') + ':' + visMaskKey;
-    if (usePrebuiltLeadCopy && !isMobileViewport) {
+    var plateSpec = plateSpecFor(isMobileViewport);
+    var plateCacheKey = (activeFamilyEntry ? 'fam:' + activeFamilyEntry.familyIndex + ':' + activeEdge.idx : 'edge:' + activeEdge.idx) + ':' + plateSpec.mode + plateSpec.width + ':' + visMaskKey;
+    if (usePrebuiltLeadCopy && plateSpec.mode === 'desktop' && plateSpec.width === RAPlateLayout.PLATE_WIDTH.desktop.max) {
       plateObj = featuredPayload.plate;
       bText = featuredPayload.balloonText;
     } else if (dynamicPlateCache[plateCacheKey]) {
@@ -7130,18 +7009,19 @@ const RICH_CLIENT = String.raw`
       });
       if (famNodes.length < 2) famNodes = [activeEdge.s, activeEdge.t];
       famEdgeSet[activeEdge.idx] = true;
-      plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, isMobileViewport);
+      plateObj = buildDynamicPlate(famNodes, famEdgeSet, activeEdge, plateSpec, lastPlateObj);
       bText = (!familyFilteredToSubset && activeFamilyEntry.balloonText) ? activeFamilyEntry.balloonText : plateObj.balloonText;
       dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     } else {
       var pairSeedNodes = forwardFirst ? [activeEdge.s, activeEdge.t] : [activeEdge.t, activeEdge.s];
       var pairFeatSet = Object.create(null);
       pairFeatSet[activeEdge.idx] = true;
-      plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, isMobileViewport);
+      plateObj = buildDynamicPlate(pairSeedNodes, pairFeatSet, activeEdge, plateSpec, lastPlateObj);
       bText = usePrebuiltLeadCopy ? featuredPayload.balloonText : plateObj.balloonText;
       dynamicPlateCache[plateCacheKey] = { plate: plateObj, bText: bText };
     }
 
+    var isCompactPlateObj = plateObj.mode === 'compact';
     var resetPlateBtn = el('button', 'f12-plate-reset-btn', 'Reset plate');
     resetPlateBtn.type = 'button';
     resetPlateBtn.id = 'reset-plate-btn';
@@ -7172,37 +7052,85 @@ const RICH_CLIENT = String.raw`
       if (h2 && typeof h2.focus === 'function') h2.focus();
     });
 
-    renderPlateSvg(svg, plateObj, bText, {
+    // Selecting a file (on the plate or in the compact list) opens its strongest visible relationship,
+    // preferring one other than the pair already shown.
+    function selectPlateNode(nodeIdx) {
+      if (typeof nodeIdx !== 'number' || !nodes[nodeIdx]) return;
+      var candidates = (plateObj.edges || [])
+        .filter(function (pe) { return pe.sourceNodeIndex === nodeIdx || pe.targetNodeIndex === nodeIdx; })
+        .map(function (pe) { return edges[pe.edgeIndex]; });
+      if (candidates.length === 0) candidates = nodes[nodeIdx].edges.slice();
+      candidates = candidates.filter(function (ce) { return ce && visible[ce.d.relationship]; });
+      if (candidates.length === 0) return;
+      candidates.sort(function (ea, eb) {
+        var aDiff = ea.idx !== activeEdge.idx ? 1 : 0;
+        var bDiff = eb.idx !== activeEdge.idx ? 1 : 0;
+        var aGhost = ea.d.relationship === 'ghost' ? 1 : 0;
+        var bGhost = eb.d.relationship === 'ghost' ? 1 : 0;
+        return (bGhost - aGhost) || (bDiff - aDiff) || (eb.d.overviewPriority - ea.d.overviewPriority) || (eb.d.score - ea.d.score) || (ea.idx - eb.idx);
+      });
+      var next = candidates[0];
+      if (!activeFamilyEntry && next.idx === activeEdge.idx) return;
+      selectBriefingEdge(next, false, true);
+    }
+
+    renderPlateSvg(svg, plateObj, isCompactPlateObj ? '' : bText, {
       onDirtyChange: function (isDirty) {
         resetPlateBtn.hidden = !isDirty;
       },
       onSelectEdge: function (edgeIdx) {
         if (typeof edgeIdx === 'number' && edges[edgeIdx]) {
           if (!activeFamilyEntry && edgeIdx === activeEdge.idx) return;
-          selectBriefingEdge(edgeIdx);
+          selectBriefingEdge(edges[edgeIdx], false, true);
         }
       },
-      onSelectNode: function (nodeIdx) {
-        if (typeof nodeIdx !== 'number' || !plateObj.edges) return;
-        var incident = plateObj.edges.filter(function (pe) {
-          return (pe.sourceNodeIndex === nodeIdx || pe.targetNodeIndex === nodeIdx) &&
-                 edges[pe.edgeIndex] && visible[edges[pe.edgeIndex].d.relationship];
-        });
-        if (incident.length === 0) return;
-        incident.sort(function (a, b) {
-          var ea = edges[a.edgeIndex], eb = edges[b.edgeIndex];
-          var aDiff = a.edgeIndex !== activeEdge.idx ? 1 : 0;
-          var bDiff = b.edgeIndex !== activeEdge.idx ? 1 : 0;
-          var aGhost = ea.d.relationship === 'ghost' ? 1 : 0;
-          var bGhost = eb.d.relationship === 'ghost' ? 1 : 0;
-          return (bGhost - aGhost) || (bDiff - aDiff) || (eb.d.overviewPriority - ea.d.overviewPriority) || (eb.d.score - ea.d.score);
-        });
-        var nextEdgeIdx = incident[0].edgeIndex;
-        if (!activeFamilyEntry && nextEdgeIdx === activeEdge.idx) return;
-        selectBriefingEdge(nextEdgeIdx);
-      }
+      onSelectNode: selectPlateNode
     });
     plateWrap.appendChild(svg);
+    lastPlateObj = plateObj;
+    renderedPlateSpec = plateSpec;
+
+    var focusNames = (plateObj.nodes || [])
+      .filter(function (pn) { return pn.group === 'focus'; })
+      .map(function (pn) { return pn.shortLabel; });
+    // On phones the callout moves under the plate and the remaining files become a selectable list
+    if (isCompactPlateObj) {
+      if (bText) {
+        var caption = el('p', 'f12-plate-caption', bText);
+        caption.id = 'plate-caption';
+        plateWrap.appendChild(caption);
+      }
+      var overflow = plateObj.overflow || [];
+      if (overflow.length > 0) {
+        var moreBox = el('div', 'f12-plate-more');
+        var moreHdr = el('h3', 'f12-plate-more-hdr', 'More related files (' + overflow.length + ')');
+        moreHdr.id = 'plate-more-hdr';
+        moreBox.appendChild(moreHdr);
+        var moreList = el('ul', 'f12-plate-more-list');
+        moreList.setAttribute('aria-labelledby', 'plate-more-hdr');
+        overflow.forEach(function (item) {
+          var li = el('li', '');
+          var btn = el('button', 'f12-plate-more-btn');
+          btn.type = 'button';
+          btn.setAttribute('data-node-idx', String(item.nodeIndex));
+          btn.title = item.path;
+          btn.appendChild(el('span', '', item.shortLabel));
+          var rel = item.group === 'shared'
+            ? 'Linked to both files'
+            : item.group === 'a-only'
+              ? 'Linked to ' + (focusNames[0] || 'the first file') + ' only'
+              : item.group === 'b-only'
+                ? 'Linked to ' + (focusNames[1] || 'the second file') + ' only'
+                : 'Linked through other files';
+          btn.appendChild(el('span', 'f12-plate-more-rel', rel));
+          btn.addEventListener('click', function () { selectPlateNode(item.nodeIndex); });
+          li.appendChild(btn);
+          moreList.appendChild(li);
+        });
+        moreBox.appendChild(moreList);
+        plateWrap.appendChild(moreBox);
+      }
+    }
 
     var plateFooter = el('div', 'f12-plate-footer');
     var plateLegend = el('div', 'f12-plate-legend');
@@ -7210,14 +7138,27 @@ const RICH_CLIENT = String.raw`
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '- - Ghost wire (long dash)'));
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u00b7\u00b7\u00b7 Unchecked (dotted)'));
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2500\u2500 Import (solid)'));
+    if (focusNames.length === 2) {
+      plateLegend.appendChild(el('p', 'f12-plate-key', isCompactPlateObj
+        ? 'Layout: the selected pair on top, the closest related files below, the rest listed under the plate.'
+        : 'Layout: the selected pair on top \u00b7 files linked to both in the middle \u00b7 files linked to only ' + focusNames[0] + ' on the left or only ' + focusNames[1] + ' on the right \u00b7 files reached through other files at the bottom.'));
+    }
     plateFooter.appendChild(plateLegend);
     var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
+    var drawnCount = plateObj.nodes ? plateObj.nodes.length : 0;
     var hiddenEdgesCount = plateObj.hiddenContextEdges || 0;
     var hiddenEdgesNote = hiddenEdgesCount > 0
       ? ' \u00b7 ' + hiddenEdgesCount + ' ' + (hiddenEdgesCount === 1 ? 'connection' : 'connections') + ' between context files hidden (see Atlas)'
       : '';
+    var disconnectedCount = (plateObj.disconnectedNodeIndices || []).length;
+    var disconnectedNote = disconnectedCount > 0
+      ? ' \u00b7 ' + disconnectedCount + ' finding ' + (disconnectedCount === 1 ? 'file has' : 'files have') + ' no visible connection with the current filters'
+      : '';
+    var countNote = isCompactPlateObj && (plateObj.overflow || []).length > 0
+      ? 'Showing ' + drawnCount + ' of ' + compTotal + ' files in component (' + plateObj.overflow.length + ' more listed above)'
+      : 'Ego network (' + drawnCount + ' of ' + compTotal + ' files in component)';
     var footerRight = el('div', 'f12-plate-footer-right');
-    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)' + hiddenEdgesNote + ' \u00b7 Drag files to move'));
+    footerRight.appendChild(el('span', 'f12-plate-meta', countNote + hiddenEdgesNote + disconnectedNote + ' \u00b7 Point at a file to trace its wires \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
     if (focusPairBtn) footerRight.appendChild(focusPairBtn);
     footerRight.appendChild(resetPlateBtn);
     plateFooter.appendChild(footerRight);
@@ -7323,8 +7264,8 @@ const RICH_CLIENT = String.raw`
       }
     } else {
       var leadN = forwardFirst ? activeEdge.s : activeEdge.t;
-      if (leadN.author) {
-        metaStrip.appendChild(el('span', 'f12-meta-pill', 'Top historical contributor: ' + leadN.author + ' (' + pct(leadN.share || 0) + ' of ' + dynLabels[0] + ' commits)'));
+      if (leadN.author && typeof leadN.share === 'number' && leadN.share >= 0.4) {
+        metaStrip.appendChild(el('span', 'f12-meta-pill', 'One contributor made ' + pct(leadN.share) + ' of ' + dynLabels[0] + ' commits'));
       }
     }
     cut05.appendChild(metaStrip);
@@ -7601,6 +7542,8 @@ const RICH_CLIENT = String.raw`
           || briefingEl.querySelector('.f12-rank-row.active');
       } else if (prevFocusDesc.kind === 'id') {
         nextFocusEl = document.getElementById(prevFocusDesc.id);
+      } else if (prevFocusDesc.kind === 'plate-node') {
+        nextFocusEl = briefingEl.querySelector('#featured-plate-svg .f12-plate-node[data-node-idx="' + prevFocusDesc.nodeIdx + '"]');
       }
       if (!nextFocusEl) {
         nextFocusEl = briefingEl.querySelector('.f12-rank-row.active') || document.getElementById('briefing-headline');
@@ -7609,6 +7552,7 @@ const RICH_CLIENT = String.raw`
         try { nextFocusEl.focus({ preventScroll: true }); } catch (_) { nextFocusEl.focus(); }
       }
     }
+    syncPlateWidth();
   }
 
   if (window.location && window.location.hash) {
@@ -7630,6 +7574,7 @@ const RICH_CLIENT = String.raw`
   });
 
   var lastBriefingMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
+  var plateSyncTimer = null;
   window.addEventListener('resize', function () {
     var nowMobile = Boolean(window.innerWidth && window.innerWidth <= 640);
     if (nowMobile !== lastBriefingMobile) {
@@ -7638,7 +7583,13 @@ const RICH_CLIENT = String.raw`
         renderBriefingBoard();
         syncMarkerDom();
       }
+      return;
     }
+    if (plateSyncTimer !== null) clearTimeout(plateSyncTimer);
+    plateSyncTimer = setTimeout(function () {
+      plateSyncTimer = null;
+      if (viewMode === 'briefing') syncPlateWidth();
+    }, 120);
   });
 
   function renderPanel() {
