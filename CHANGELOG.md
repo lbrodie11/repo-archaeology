@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-09
+
+### Added
+- **Interactive Briefing Blueprint Plate (`#featured-plate-svg`, [`src/map/template.ts`](src/map/template.ts)):**
+  - Made the Cut `C-01` ego-network blueprint SVG in `map --style rich` fully interactive (`renderPlateSvg`), matching the `Atlas` and `--style classic` canvas controls: drag any file node to untangle overlapping traces in real time (updating connected wires, featured halos, label pills, and the speech-balloon callout tail/pin live), pan the blueprint background, cursor-centered `wheel` zoom (`0.3×`–`1.75×` with `gradientUnits="userSpaceOnUse"` cyanotype background and grid), click any wire or node to pivot the Evidence panel, and reset via the footer `Reset plate` button (`#reset-plate-btn`) or double-clicking the plate background.
+  - Added `user-select: none` and `touch-action: none` on `.f12-plate-svg` so dragging nodes or panning the blueprint never accidentally highlights SVG `<text>` labels.
+
+### Fixed
+- **Dense-Clique Layout Spread on Briefing Blueprint Plates ([`src/map/copy.ts`](src/map/copy.ts), [`src/map/template.ts`](src/map/template.ts)):** Normalized spring attraction by node degree (`1 / Math.sqrt(max(deg_i, deg_j))`), widened seed and ring radii for 6–12 file cliques, and anchored outer neighbors toward their outer arc in both build-time `computeFeaturedPlateLayout` and client-side `buildDynamicPlate` so high-density multi-file cliques spread cleanly across the `760×420` plate instead of collapsing inward.
+
 ## [0.5.0] - 2026-11-08
 
 > **Repo Archaeology v0.5.0 — Investigation Board & Field Guide**

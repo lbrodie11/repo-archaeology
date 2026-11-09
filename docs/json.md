@@ -15,7 +15,7 @@ Every JSON payload emitted by Repo Archaeology includes a top-level contract env
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.5.0"
+    "version": "0.5.1"
   }
 }
 ```
@@ -192,7 +192,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.5.0"
+    "version": "0.5.1"
   },
   "meta": {
     "tool": "repo-archaeology",
