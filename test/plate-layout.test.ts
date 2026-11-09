@@ -7,6 +7,7 @@ import {
   MAX_EGO_NODES,
   measureLabelWidth,
   truncateLabel,
+  wireControlPoint,
   type FeaturedPlateLayout,
   type PlateGraph,
 } from '../src/map/plate-layout.js';
@@ -311,6 +312,57 @@ describe('pair-centered plate layout engine (src/map/plate-layout.ts)', () => {
       assert.equal(p.width, expected, `${mode} at ${width}`);
       assert.deepEqual(problems(p), [], `${mode} at ${width}`);
     }
+  });
+
+  it('computes the shared wire control point: straight at bend 0, mirrored by sign, safe on degenerate input', () => {
+    assert.deepEqual(wireControlPoint(0, 0, 100, 0, 0), { x: 50, y: 0 });
+    assert.deepEqual(wireControlPoint(0, 0, 100, 0, 0.2), { x: 50, y: 20 });
+    assert.deepEqual(wireControlPoint(0, 0, 100, 0, -0.2), { x: 50, y: -20 });
+    assert.deepEqual(wireControlPoint(10, 10, 10, 10, 0.4), { x: 10, y: 10 }, 'zero-length wires stay put');
+    assert.deepEqual(wireControlPoint(0, 0, 100, 0, Number.NaN), { x: 50, y: 0 });
+  });
+
+  it('routes wires cleanly on random graphs: never through an unrelated file, off the plate, or above the pair', () => {
+    let seed = 20261109;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const stems = ['index', 'picker', 'theme-provider', 'use-random', 'registry-item-schema', 'config', 'a', 'very-long-component-name-for-labels'];
+    let curved = 0;
+    for (let trial = 0; trial < 80; trial++) {
+      const n = 3 + Math.floor(rand() * 12);
+      const paths = Array.from({ length: n }, (_, i) => `src/${['ui', 'lib', 'app'][i % 3]}/${stems[Math.floor(rand() * stems.length)]}-${i}.tsx`);
+      const specs: EdgeSpec[] = [[0, 1, 9]];
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        if (i + j > 1 && rand() < 0.45) specs.push([i, j, 2 + Math.floor(rand() * 8), rand() < 0.7 ? 'ghost' : 'direct']);
+      }
+      const g = graph(paths, specs);
+      const family = rand() < 0.5;
+      const focus = family
+        ? { seeds: paths.map((_, i) => i), leadEdge: 0, featuredEdges: specs.map((_, i) => i) }
+        : pair(g);
+      for (const mode of ['desktop', 'compact'] as const) {
+        const p = computePlateLayout(g, focus, { mode, width: mode === 'desktop' ? 560 + Math.floor(rand() * 200) : 300 + Math.floor(rand() * 140) });
+        const label = `trial ${trial} ${mode}`;
+        assert.deepEqual(problems(p), [], label);
+        const focusTop = Math.min(...p.nodes.filter((x) => x.group === 'focus').map((x) => x.y));
+        for (const e of p.edges) {
+          if (e.isLeadEdge) assert.equal(e.bend, 0, `${label}: the lead wire stays straight`);
+          if (e.bend) curved++;
+          const c = wireControlPoint(e.x1, e.y1, e.x2, e.y2, e.bend);
+          for (let k = 0; k <= 50; k++) {
+            const t = k / 50, u = 1 - t;
+            const x = u * u * e.x1 + 2 * u * t * c.x + t * t * e.x2;
+            const y = u * u * e.y1 + 2 * u * t * c.y + t * t * e.y2;
+            assert.ok(x >= 0 && x <= p.width && y >= 0 && y <= p.height, `${label}: wire ${e.edgeIndex} leaves the plate`);
+            assert.ok(y >= focusTop - 4, `${label}: wire ${e.edgeIndex} climbs above the pair`);
+            for (const f of p.nodes) {
+              if (f.nodeIndex === e.sourceNodeIndex || f.nodeIndex === e.targetNodeIndex) continue;
+              assert.ok(Math.hypot(x - f.x, y - f.y) >= f.r + 2, `${label}: wire ${e.edgeIndex} runs through ${f.shortLabel}`);
+            }
+          }
+        }
+      }
+    }
+    assert.ok(curved > 20, `expected the router to bend wires on dense random graphs, bent ${curved}`);
   });
 
   it('lays out a dense plate in a few milliseconds', () => {

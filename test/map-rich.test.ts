@@ -1267,7 +1267,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       const focusToggleCheck = await gPage.evaluate(() => {
         const focusBtn = document.getElementById('focus-pair-btn') as HTMLButtonElement | null;
         const svg = document.getElementById('featured-plate-svg')!;
-        const nonHitLines = Array.from(svg.querySelectorAll('line:not(.f12-plate-edge-hit)'));
+        const nonHitLines = Array.from(svg.querySelectorAll('.f12-plate-wire'));
         const hasDimmedContextEdges = nonHitLines.some((l) => l.getAttribute('stroke-opacity') === '0.9');
         const allNodesBefore = Array.from(svg.querySelectorAll('.f12-plate-node')).filter(
           (n) => (n as HTMLElement).style.display !== 'none',

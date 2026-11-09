@@ -3303,6 +3303,13 @@ canvas.pointing { cursor: pointer; }
 .f12-plate-node:focus { outline: none; }
 .f12-plate-node:focus-visible .f12-plate-node-dot { stroke: #ffd60a; stroke-width: 3.5; }
 .f12-plate-edge-hit { cursor: pointer; }
+.f12-plate-wire, .f12-plate-halo, .f12-plate-node, .f12-plate-node-label { transition: opacity 140ms ease-out; }
+.f12-plate-svg.has-hot .f12-plate-wire:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-halo:not(.is-hot) { opacity: 0.14; }
+.f12-plate-svg.has-hot .f12-plate-node:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-node-label:not(.is-hot) { opacity: 0.4; }
+.f12-plate-svg.has-hot .f12-plate-wire.is-hot:not(.is-primary) { stroke-width: 2.4px; stroke-opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .f12-plate-wire, .f12-plate-halo, .f12-plate-node, .f12-plate-node-label { transition: none; }
+}
 .f12-plate-balloon { pointer-events: none; }
 .f12-plate-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 12px; background: #09192c; border-top: 1.5px solid #173b61; color: #fffef9; font: 600 11.5px/1.35 var(--f-font-mono); }
 .f12-plate-footer-right { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -6109,6 +6116,23 @@ const RICH_CLIENT = String.raw`
       return (isPrimaryEdge(a) ? 1 : 0) - (isPrimaryEdge(b) ? 1 : 0);
     });
 
+    // Wires are quadratic curves whose control point comes from the shared layout engine, so what is
+    // drawn is exactly what the layout scored (a bend of 0 draws a straight wire).
+    function wirePath(pe) {
+      var c = RAPlateLayout.wireControlPoint(pe.x1, pe.y1, pe.x2, pe.y2, pe.bend || 0);
+      return 'M ' + pe.x1 + ' ' + pe.y1 + ' Q ' + Math.round(c.x * 10) / 10 + ' ' + Math.round(c.y * 10) / 10 + ' ' + pe.x2 + ' ' + pe.y2;
+    }
+    function wireEl(pe, cls) {
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('class', cls);
+      path.setAttribute('d', wirePath(pe));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('data-edge-idx', String(pe.edgeIndex));
+      path.setAttribute('data-source', String(pe.sourceNodeIndex));
+      path.setAttribute('data-target', String(pe.targetNodeIndex));
+      return path;
+    }
+
     var edgeRecords = [];
     sortedEdgesForDraw.forEach(function (pe) {
       var primary = isPrimaryEdge(pe);
@@ -6116,18 +6140,14 @@ const RICH_CLIENT = String.raw`
       var halo = null;
       if (primary) {
         // Blueprint chalk halo (#fffef9) instead of #ffd60a stroke (--f-marker is never a stroke)
-        halo = document.createElementNS(ns, 'line');
-        halo.setAttribute('x1', String(pe.x1)); halo.setAttribute('y1', String(pe.y1));
-        halo.setAttribute('x2', String(pe.x2)); halo.setAttribute('y2', String(pe.y2));
+        halo = wireEl(pe, 'f12-plate-halo');
         halo.setAttribute('stroke', '#fffef9');
         halo.setAttribute('stroke-width', String(Math.max(6.8, Number(strokeW) + 4.2)));
         halo.setAttribute('stroke-opacity', '0.45');
         halo.setAttribute('stroke-linecap', 'round');
         edgeLayer.appendChild(halo);
       }
-      var line = document.createElementNS(ns, 'line');
-      line.setAttribute('x1', String(pe.x1)); line.setAttribute('y1', String(pe.y1));
-      line.setAttribute('x2', String(pe.x2)); line.setAttribute('y2', String(pe.y2));
+      var line = wireEl(pe, primary ? 'f12-plate-wire is-primary' : 'f12-plate-wire');
       var col = pe.relationship === 'ghost' ? '#ff4f9a' : (pe.relationship === 'unknown' ? '#e3b65b' : (pe.relationship === 'indirect' ? '#7fd1b0' : '#7eb3e0'));
       line.setAttribute('stroke', col);
       line.setAttribute('stroke-width', primary ? String(Math.max(3.2, Number(strokeW) + 0.9)) : '1.35');
@@ -6138,10 +6158,7 @@ const RICH_CLIENT = String.raw`
       line.setAttribute('stroke-linecap', 'round');
       edgeLayer.appendChild(line);
 
-      var hitLine = document.createElementNS(ns, 'line');
-      hitLine.setAttribute('class', 'f12-plate-edge-hit');
-      hitLine.setAttribute('x1', String(pe.x1)); hitLine.setAttribute('y1', String(pe.y1));
-      hitLine.setAttribute('x2', String(pe.x2)); hitLine.setAttribute('y2', String(pe.y2));
+      var hitLine = wireEl(pe, 'f12-plate-edge-hit');
       hitLine.setAttribute('stroke', 'transparent');
       hitLine.setAttribute('stroke-width', '14');
       hitLine.setAttribute('stroke-linecap', 'round');
@@ -6165,7 +6182,8 @@ const RICH_CLIENT = String.raw`
       if (plateOpts && typeof plateOpts.onSelectNode === 'function') {
         g.setAttribute('tabindex', '0');
         g.setAttribute('role', 'button');
-        g.setAttribute('aria-label', 'Inspect ' + (pn.path || pn.shortLabel || 'file'));
+        var shownWires = rawEdges.filter(function (pe) { return pe.sourceNodeIndex === pn.nodeIndex || pe.targetNodeIndex === pn.nodeIndex; }).length;
+        g.setAttribute('aria-label', 'Inspect ' + (pn.path || pn.shortLabel || 'file') + ' (' + shownWires + ' ' + (shownWires === 1 ? 'connection' : 'connections') + ' shown)');
         g.addEventListener('keydown', function (kev) {
           if (kev.key === 'Enter' || kev.key === ' ' || kev.key === 'Spacebar') {
             kev.preventDefault();
@@ -6245,6 +6263,66 @@ const RICH_CLIENT = String.raw`
     };
     applyFocusPairFilter();
 
+    // Pointing at (or focusing) a file lights up its wires and neighbours and steps everything else
+    // back; pointing at a wire lights up the wire and its two files. Touch skips this (no hover).
+    function setHot(nodeIdx, edgeIdx) {
+      var hotNodes = Object.create(null);
+      var hotEdges = Object.create(null);
+      if (typeof nodeIdx === 'number') {
+        hotNodes[nodeIdx] = true;
+        edgeRecords.forEach(function (er) {
+          if (er.pe.sourceNodeIndex === nodeIdx || er.pe.targetNodeIndex === nodeIdx) {
+            hotEdges[er.pe.edgeIndex] = true;
+            hotNodes[er.pe.sourceNodeIndex] = true;
+            hotNodes[er.pe.targetNodeIndex] = true;
+          }
+        });
+      } else if (typeof edgeIdx === 'number') {
+        edgeRecords.forEach(function (er) {
+          if (er.pe.edgeIndex === edgeIdx) {
+            hotEdges[edgeIdx] = true;
+            hotNodes[er.pe.sourceNodeIndex] = true;
+            hotNodes[er.pe.targetNodeIndex] = true;
+          }
+        });
+      }
+      var active = typeof nodeIdx === 'number' || typeof edgeIdx === 'number';
+      svgEl.classList.toggle('has-hot', active);
+      edgeRecords.forEach(function (er) {
+        var hot = active && Boolean(hotEdges[er.pe.edgeIndex]);
+        er.lineEl.classList.toggle('is-hot', hot);
+        if (er.haloEl) er.haloEl.classList.toggle('is-hot', hot);
+      });
+      nodeRecords.forEach(function (nr) {
+        var hot = active && Boolean(hotNodes[nr.pn.nodeIndex]);
+        nr.gEl.classList.toggle('is-hot', hot);
+        if (nr.labelEl) nr.labelEl.classList.toggle('is-hot', hot);
+      });
+    }
+    nodeRecords.forEach(function (nr) {
+      // A file's label traces it just like its dot
+      [nr.gEl, nr.labelEl].forEach(function (target) {
+        if (!target) return;
+        target.addEventListener('pointerenter', function (ev) {
+          if (ev.pointerType !== 'touch' && !plateDrag) setHot(nr.pn.nodeIndex);
+        });
+        target.addEventListener('pointerleave', function () { if (!plateDrag) setHot(); });
+      });
+      // Only keyboard focus traces a file; focus left behind by a mouse click or a re-render does not
+      nr.gEl.addEventListener('focus', function () {
+        var keyboard = true;
+        try { keyboard = nr.gEl.matches(':focus-visible'); } catch (_) {}
+        if (keyboard) setHot(nr.pn.nodeIndex);
+      });
+      nr.gEl.addEventListener('blur', function () { setHot(); });
+    });
+    edgeRecords.forEach(function (er) {
+      er.hitEl.addEventListener('pointerenter', function (ev) {
+        if (ev.pointerType !== 'touch' && !plateDrag) setHot(undefined, er.pe.edgeIndex);
+      });
+      er.hitEl.addEventListener('pointerleave', function () { if (!plateDrag) setHot(); });
+    });
+
     var balloonDom = null;
     if (plate.balloonBox && balloonText) {
       var bb = plate.balloonBox;
@@ -6307,15 +6385,10 @@ const RICH_CLIENT = String.raw`
       var curVb = plate._viewBox;
       svgEl.setAttribute('viewBox', curVb.x.toFixed(1) + ' ' + curVb.y.toFixed(1) + ' ' + curVb.w.toFixed(1) + ' ' + curVb.h.toFixed(1));
       edgeRecords.forEach(function (er) {
-        var pe = er.pe;
-        if (er.haloEl) {
-          er.haloEl.setAttribute('x1', String(pe.x1)); er.haloEl.setAttribute('y1', String(pe.y1));
-          er.haloEl.setAttribute('x2', String(pe.x2)); er.haloEl.setAttribute('y2', String(pe.y2));
-        }
-        er.lineEl.setAttribute('x1', String(pe.x1)); er.lineEl.setAttribute('y1', String(pe.y1));
-        er.lineEl.setAttribute('x2', String(pe.x2)); er.lineEl.setAttribute('y2', String(pe.y2));
-        er.hitEl.setAttribute('x1', String(pe.x1)); er.hitEl.setAttribute('y1', String(pe.y1));
-        er.hitEl.setAttribute('x2', String(pe.x2)); er.hitEl.setAttribute('y2', String(pe.y2));
+        var d = wirePath(er.pe);
+        if (er.haloEl) er.haloEl.setAttribute('d', d);
+        er.lineEl.setAttribute('d', d);
+        er.hitEl.setAttribute('d', d);
       });
       nodeRecords.forEach(function (nr) {
         var pn = nr.pn;
@@ -6513,6 +6586,7 @@ const RICH_CLIENT = String.raw`
         if (ev && typeof svgEl.releasePointerCapture === 'function') svgEl.releasePointerCapture(ev.pointerId);
       } catch (_) {}
       plateDrag = null;
+      if (wasMoved) setHot();
       if (!wasMoved && ev && ev.type === 'pointerup' && plateOpts) {
         if (mode === 'node' && nodeRec && typeof plateOpts.onSelectNode === 'function') {
           plateOpts.onSelectNode(nodeRec.pn.nodeIndex);
@@ -7084,7 +7158,7 @@ const RICH_CLIENT = String.raw`
       ? 'Showing ' + drawnCount + ' of ' + compTotal + ' files in component (' + plateObj.overflow.length + ' more listed above)'
       : 'Ego network (' + drawnCount + ' of ' + compTotal + ' files in component)';
     var footerRight = el('div', 'f12-plate-footer-right');
-    footerRight.appendChild(el('span', 'f12-plate-meta', countNote + hiddenEdgesNote + disconnectedNote + ' \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
+    footerRight.appendChild(el('span', 'f12-plate-meta', countNote + hiddenEdgesNote + disconnectedNote + ' \u00b7 Point at a file to trace its wires \u00b7 Click a file or wire to inspect \u00b7 Drag to move'));
     if (focusPairBtn) footerRight.appendChild(focusPairBtn);
     footerRight.appendChild(resetPlateBtn);
     plateFooter.appendChild(footerRight);

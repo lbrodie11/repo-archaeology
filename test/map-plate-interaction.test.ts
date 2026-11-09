@@ -97,9 +97,19 @@ const MEASURE_PLATE = () => {
       label: pill ? { x: num(pill, 'x'), y: num(pill, 'y'), w: num(pill, 'width'), h: num(pill, 'height') } : null,
     };
   });
-  const wires = Array.from(svg.querySelectorAll('.f12-plate-edge-hit')).map((l) => ({
-    x1: num(l, 'x1'), y1: num(l, 'y1'), x2: num(l, 'x2'), y2: num(l, 'y2'),
-  }));
+  // Sample each rendered wire (straight or curved) along its actual SVG path
+  const wires = Array.from(svg.querySelectorAll('.f12-plate-wire'))
+    .filter((w) => (w as SVGPathElement).style.display !== 'none')
+    .map((w) => {
+      const path = w as SVGPathElement;
+      const len = path.getTotalLength();
+      const points: [number, number][] = [];
+      for (let k = 0; k <= 60; k++) {
+        const pt = path.getPointAtLength((len * k) / 60);
+        points.push([pt.x, pt.y]);
+      }
+      return { source: w.getAttribute('data-source')!, target: w.getAttribute('data-target')!, points };
+    });
   const balloonRect = svg.querySelectorAll('.f12-plate-balloon rect')[1];
   const tail = svg.querySelector('.f12-plate-balloon polygon');
   let balloon = null as null | { x: number; y: number; w: number; h: number; tipX: number; tipY: number };
@@ -120,7 +130,7 @@ function plateProblems(m: PlateMeasure, opts: { strict: boolean }): string[] {
   const overlap = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   m.nodes.forEach((n, i) => {
-    const deg = m.wires.filter((w) => (w.x1 === n.x && w.y1 === n.y) || (w.x2 === n.x && w.y2 === n.y)).length;
+    const deg = m.wires.filter((w) => w.source === n.idx || w.target === n.idx).length;
     if (deg === 0) problems.push(`${n.text}: no visible wire (orphan)`);
     const L = n.label;
     if (!L) {
@@ -144,6 +154,22 @@ function plateProblems(m: PlateMeasure, opts: { strict: boolean }): string[] {
       problems.push(`${n.text} label crossed by balloon pointer`);
     }
   });
+  for (const w of m.wires) {
+    if (w.points.some(([x, y]) => x < -0.5 || y < -0.5 || x > m.width + 0.5 || y > m.height + 0.5)) {
+      problems.push(`wire ${w.source}-${w.target} leaves the plate`);
+    }
+    if (!opts.strict) continue;
+    for (const n of m.nodes) {
+      if (n.idx === w.source || n.idx === w.target) continue;
+      if (w.points.some(([x, y]) => Math.hypot(x - n.x, y - n.y) < n.r + 2)) {
+        problems.push(`wire ${w.source}-${w.target} runs through ${n.text}`);
+      }
+    }
+    const b = m.balloon;
+    if (b && w.points.some(([x, y]) => x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h)) {
+      problems.push(`wire ${w.source}-${w.target} runs under the balloon`);
+    }
+  }
   if (opts.strict && m.balloon) {
     for (const n of m.nodes) {
       const b = m.balloon;
@@ -232,6 +258,14 @@ describe('Briefing blueprint plate interaction (map --style rich)', { skip: !pw 
       for (const n of initial.nodes) {
         const dot = page.locator(`#featured-plate-svg .f12-plate-node[data-node-idx="${n.idx}"] .f12-plate-node-dot`);
         await dot.click({ force: true });
+        // The file under the pointer may stay traced (it is being pointed at), but once the pointer
+        // leaves, nothing may stay faded: a mouse click must not leave a focus highlight behind
+        await page.mouse.move(2, 2);
+        assert.equal(
+          await page.evaluate(() => document.getElementById('featured-plate-svg')!.classList.contains('has-hot')),
+          false,
+          'No highlight is left behind after a mouse click once the pointer moves away',
+        );
         const pivoted = (await headline()) ?? '';
         assert.notEqual(pivoted, familyHeadline, `Clicking ${n.text} should select one of its pairs`);
         assert.ok(pivoted.includes(n.text), `Expected pair headline to mention ${n.text}, got: ${pivoted}`);
@@ -259,14 +293,14 @@ describe('Briefing blueprint plate interaction (map --style rich)', { skip: !pw 
       // 2) Clicking a context wire selects that pair
       const wirePoint = await page.evaluate(() => {
         const svg = document.getElementById('featured-plate-svg') as unknown as SVGSVGElement;
-        const hits = Array.from(svg.querySelectorAll('.f12-plate-edge-hit'));
+        const hits = Array.from(svg.querySelectorAll('.f12-plate-edge-hit')) as SVGPathElement[];
         for (const l of hits) {
-          const x1 = Number(l.getAttribute('x1')), y1 = Number(l.getAttribute('y1'));
-          const x2 = Number(l.getAttribute('x2')), y2 = Number(l.getAttribute('y2'));
+          const len = l.getTotalLength();
           for (const t of [0.35, 0.5, 0.65]) {
+            const at = l.getPointAtLength(len * t);
             const p = svg.createSVGPoint();
-            p.x = x1 + (x2 - x1) * t;
-            p.y = y1 + (y2 - y1) * t;
+            p.x = at.x;
+            p.y = at.y;
             const s = p.matrixTransform(svg.getScreenCTM()!);
             if (document.elementFromPoint(s.x, s.y) === l) return { x: s.x, y: s.y };
           }
@@ -302,6 +336,63 @@ describe('Briefing blueprint plate interaction (map --style rich)', { skip: !pw 
       await page.mouse.move(dragDot!.x + 70, dragDot!.y + 30, { steps: 5 });
       await page.mouse.up();
       assert.equal(await headline(), familyHeadline, 'Dragging a file should move it, not select a pair');
+      const followsDrag = await page.evaluate((idx: string) => {
+        const svg = document.getElementById('featured-plate-svg')!;
+        const dot = svg.querySelector(`.f12-plate-node[data-node-idx="${idx}"] .f12-plate-node-dot`)!;
+        const cx = Number(dot.getAttribute('cx')), cy = Number(dot.getAttribute('cy'));
+        const wires = Array.from(svg.querySelectorAll('.f12-plate-wire')).filter(
+          (w) => w.getAttribute('data-source') === idx || w.getAttribute('data-target') === idx,
+        );
+        return wires.length > 0 && wires.every((w) => {
+          const n = (w.getAttribute('d') ?? '').match(/-?\d+(\.\d+)?/g)!.map(Number);
+          const end = w.getAttribute('data-source') === idx ? [n[0], n[1]] : [n[4], n[5]];
+          return Math.abs(end[0]! - cx) < 0.5 && Math.abs(end[1]! - cy) < 0.5;
+        });
+      }, initial.nodes[6]!.idx);
+      assert.equal(followsDrag, true, 'Curved wires stay attached to a dragged file');
+
+      // Pointing at a file lights up its wires and neighbours and steps the rest back; leaving restores it
+      const hov = initial.nodes[3]!;
+      await page.locator(`#featured-plate-svg .f12-plate-node[data-node-idx="${hov.idx}"] .f12-plate-node-dot`).hover({ force: true });
+      await page.waitForTimeout(220);
+      const hot = await page.evaluate((idx: string) => {
+        const svg = document.getElementById('featured-plate-svg')!;
+        const wires = Array.from(svg.querySelectorAll('.f12-plate-wire'));
+        const incident = wires.filter((w) => w.getAttribute('data-source') === idx || w.getAttribute('data-target') === idx);
+        const others = wires.filter((w) => !incident.includes(w));
+        return {
+          hasHot: svg.classList.contains('has-hot'),
+          hotWires: wires.filter((w) => w.classList.contains('is-hot')).length,
+          incident: incident.length,
+          incidentHot: incident.every((w) => w.classList.contains('is-hot') && Number(getComputedStyle(w).opacity) === 1),
+          othersDimmed: others.every((w) => Number(getComputedStyle(w).opacity) < 0.2),
+          aria: svg.querySelector(`.f12-plate-node[data-node-idx="${idx}"]`)!.getAttribute('aria-label') ?? '',
+        };
+      }, hov.idx);
+      assert.equal(hot.hasHot, true, 'Hovering a file highlights it');
+      assert.ok(hot.incident > 0 && hot.hotWires === hot.incident && hot.incidentHot, `Its ${hot.incident} wires are lit`);
+      assert.equal(hot.othersDimmed, true, 'Unrelated wires step back');
+      assert.match(hot.aria, new RegExp(`\\(${hot.incident} connections? shown\\)$`), 'Accessible name says how many wires are shown');
+      await page.mouse.move(2, 2);
+      await page.waitForTimeout(220);
+      assert.equal(await page.evaluate(() => document.getElementById('featured-plate-svg')!.classList.contains('has-hot')), false);
+      // Pointing at a file's label traces it too
+      await page.locator(`#featured-plate-svg .f12-plate-node-label[data-node-idx="${hov.idx}"] text`).hover({ force: true });
+      assert.equal(await page.evaluate(() => document.getElementById('featured-plate-svg')!.classList.contains('has-hot')), true);
+      await page.mouse.move(2, 2);
+      // Keyboard focus highlights the same way (Tab into the plate) and clears on blur
+      await page.locator('#briefing-headline').focus();
+      await page.evaluate((idx: string) => {
+        const nodes = Array.from(document.querySelectorAll('#featured-plate-svg .f12-plate-node'));
+        const target = nodes.find((n) => n.getAttribute('data-node-idx') === idx)!;
+        const before = nodes[nodes.indexOf(target) - 1] as HTMLElement | undefined;
+        (before ?? (document.getElementById('briefing-headline') as HTMLElement)).focus();
+      }, hov.idx);
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-node-idx')), hov.idx);
+      assert.equal(await page.evaluate(() => document.getElementById('featured-plate-svg')!.classList.contains('has-hot')), true);
+      await page.locator('#briefing-headline').focus();
+      assert.equal(await page.evaluate(() => document.getElementById('featured-plate-svg')!.classList.contains('has-hot')), false);
 
       // 5) Every pair plate (client-built) is free of orphans, clipped labels and overlapping labels
       const hashes: string[] = await page.evaluate(() => {

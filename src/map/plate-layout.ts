@@ -101,6 +101,12 @@ export interface PlateEdgeLayout {
   strokeWidth: number;
   isFeatured: boolean;
   isLeadEdge: boolean;
+  /**
+   * How far the wire bows to clear files, labels and other wires: the control point of its quadratic
+   * curve sits `bend` x length from the chord midpoint along the normal (0 = straight). Kept as a ratio
+   * so a dragged file reshapes the curve instead of breaking it. See `wireControlPoint`.
+   */
+  bend: number;
 }
 
 export interface PlateOverflowItem {
@@ -211,6 +217,15 @@ const COMPACT: PlateConfig = {
  * from the previous plate. Overlaps should already be zero by construction; the weights keep the
  * search honest if a future change breaks that.
  */
+/**
+ * Candidate bends for each wire and what it costs to choose one. A wire through an unrelated dot reads
+ * as a false relationship, so it dominates; then leaving the plate or touching the balloon; then
+ * running under a label and crossing other wires. A small cost per unit of bend keeps wires straight
+ * unless a curve buys real clarity.
+ */
+const BEND_OPTIONS = [0, 0.1, -0.1, 0.2, -0.2, 0.3, -0.3, 0.4, -0.4, 0.5, -0.5];
+const CURVE_COST = { throughDot: 400, outsidePlate: 500, throughBalloon: 300, throughLabel: 30, crossing: 12, perBend: 20 };
+
 const OBJECTIVE = {
   labelOverlap: 10000,
   labelNodeOverlap: 10000,
@@ -409,6 +424,91 @@ function segmentHitsBox(x1: number, y1: number, x2: number, y2: number, b: Box):
     segmentsCross(x1, y1, x2, y2, b.x, btm, r, btm) ||
     segmentsCross(x1, y1, x2, y2, b.x, b.y, b.x, btm)
   );
+}
+
+/**
+ * Control point of a wire's quadratic Bezier: the chord midpoint moved `bend` x chord length along the
+ * left-hand normal (screen coordinates). A bend of 0 gives the midpoint, i.e. a straight wire. The
+ * renderer uses this same function, so drawn curves match the geometry the layout scored.
+ */
+export function wireControlPoint(x1: number, y1: number, x2: number, y2: number, bend: number): { x: number; y: number } {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  if (!(len > 1) || !bend || !Number.isFinite(bend)) return { x: mx, y: my };
+  return { x: mx - (dy / len) * bend * len, y: my + (dx / len) * bend * len };
+}
+
+type Point = [number, number];
+
+/** Points along a wire: its two ends when straight, or 10 segments along the curve (enough for a gentle quadratic). */
+function wirePolyline(x1: number, y1: number, x2: number, y2: number, bend: number): Point[] {
+  if (!bend) return [[x1, y1], [x2, y2]];
+  const c = wireControlPoint(x1, y1, x2, y2, bend);
+  const pts: Point[] = [];
+  for (let k = 0; k <= 10; k++) {
+    const t = k / 10;
+    const u = 1 - t;
+    pts.push([u * u * x1 + 2 * u * t * c.x + t * t * x2, u * u * y1 + 2 * u * t * c.y + t * t * y2]);
+  }
+  return pts;
+}
+
+interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function boundsOf(poly: readonly Point[]): Bounds {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of poly) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function polylineCrossings(a: readonly Point[], b: readonly Point[]): number {
+  const ba = boundsOf(a);
+  const bb = boundsOf(b);
+  if (ba.maxX < bb.minX || bb.maxX < ba.minX || ba.maxY < bb.minY || bb.maxY < ba.minY) return 0;
+  let n = 0;
+  for (let i = 0; i + 1 < a.length; i++) {
+    for (let j = 0; j + 1 < b.length; j++) {
+      if (segmentsCross(a[i]![0], a[i]![1], a[i + 1]![0], a[i + 1]![1], b[j]![0], b[j]![1], b[j + 1]![0], b[j + 1]![1])) n++;
+    }
+  }
+  return n;
+}
+
+/** True when (px, py) lies within `limit` of the wire. */
+function polylineNear(px: number, py: number, poly: readonly Point[], limit: number): boolean {
+  const b = boundsOf(poly);
+  if (px < b.minX - limit || px > b.maxX + limit || py < b.minY - limit || py > b.maxY + limit) return false;
+  return polylineDistance(px, py, poly) < limit;
+}
+
+function polylineDistance(px: number, py: number, poly: readonly Point[]): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < poly.length; i++) {
+    best = Math.min(best, distToSegment(px, py, poly[i]![0], poly[i]![1], poly[i + 1]![0], poly[i + 1]![1]));
+  }
+  return best;
+}
+
+function polylineHitsBox(poly: readonly Point[], b: Box): boolean {
+  const pb = boundsOf(poly);
+  if (pb.maxX < b.x || pb.minX > b.x + b.w || pb.maxY < b.y || pb.minY > b.y + b.h) return false;
+  for (let i = 0; i + 1 < poly.length; i++) {
+    if (segmentHitsBox(poly[i]![0], poly[i]![1], poly[i + 1]![0], poly[i + 1]![1], b)) return true;
+  }
+  return false;
 }
 
 /**
@@ -763,7 +863,7 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
       ? { x: at.x - p.labelW / 2, y: at.y - p.r - 5 - LABEL_HEIGHT, w: p.labelW, h: LABEL_HEIGHT }
       : { x: at.x - p.labelW / 2, y: at.y + p.r + 5, w: p.labelW, h: LABEL_HEIGHT };
 
-  function measure(g: Positions): PlateMetrics {
+  function measure(g: Positions, bends?: ReadonlyMap<number, number>): PlateMetrics {
     const list = drawnIds.map((id) => ({ p: pnodes.get(id)!, at: g.get(id)! }));
     const boxes = list.map(({ p, at }) => labelBoxOf(p, at));
     let labelOverlaps = 0;
@@ -780,6 +880,10 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
       }
     }
     const weight = (e: NEdge): number => (e === lead ? 3 : focusSet.has(e.s) || focusSet.has(e.t) ? 1.5 : 1);
+    const polys = kept.map((e) => {
+      const p1 = g.get(e.s)!, p2 = g.get(e.t)!;
+      return wirePolyline(p1.x, p1.y, p2.x, p2.y, bends?.get(e.id) ?? 0);
+    });
     let crossings = 0;
     let weightedCrossings = 0;
     for (let i = 0; i < kept.length; i++) {
@@ -787,23 +891,20 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
         const e = kept[i]!;
         const f = kept[j]!;
         if (e.s === f.s || e.s === f.t || e.t === f.s || e.t === f.t) continue;
-        const p1 = g.get(e.s)!, p2 = g.get(e.t)!, p3 = g.get(f.s)!, p4 = g.get(f.t)!;
-        if (segmentsCross(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4.x, p4.y)) {
-          crossings++;
-          weightedCrossings += weight(e) * weight(f);
-        }
+        const n = polylineCrossings(polys[i]!, polys[j]!);
+        crossings += n;
+        weightedCrossings += n * weight(e) * weight(f);
       }
     }
     let wiresThroughDots = 0;
     let wiresThroughLabels = 0;
-    for (const e of kept) {
-      const p1 = g.get(e.s)!, p2 = g.get(e.t)!;
+    kept.forEach((e, k) => {
       list.forEach(({ p, at }, i) => {
         if (p.id === e.s || p.id === e.t) return;
-        if (distToSegment(at.x, at.y, p1.x, p1.y, p2.x, p2.y) < p.r + 3) wiresThroughDots++;
-        if (segmentHitsBox(p1.x, p1.y, p2.x, p2.y, boxes[i]!)) wiresThroughLabels++;
+        if (polylineNear(at.x, at.y, polys[k]!, p.r + 3)) wiresThroughDots++;
+        if (polylineHitsBox(polys[k]!, boxes[i]!)) wiresThroughLabels++;
       });
-    }
+    });
     return { crossings, weightedCrossings, labelOverlaps, labelNodeOverlaps, wiresThroughDots, wiresThroughLabels };
   }
 
@@ -885,10 +986,88 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
     best = { pos: best.pos, score: best.score, metrics: m };
     budget--;
   }
+  // 10) Curve wires around what they would otherwise run through. The lead wire stays straight (the
+  //     balloon points at its midpoint); every other wire picks the cheapest bend given the others,
+  //     longest first, over two passes so early choices can adapt to later ones.
+  const bends = new Map<number, number>();
+  {
+    const g = best.pos;
+    let bottom = 0;
+    for (const id of drawnIds) {
+      const p = pnodes.get(id)!;
+      const box = labelBoxOf(p, g.get(id)!);
+      bottom = Math.max(bottom, g.get(id)!.y + p.r, box.y + box.h);
+    }
+    const plateBottom = Math.max(cfg.minHeight, bottom + cfg.bottomPad);
+    const files = drawnIds.map((id) => ({ p: pnodes.get(id)!, at: g.get(id)!, box: labelBoxOf(pnodes.get(id)!, g.get(id)!) }));
+    let balloonZone: Box | null = null;
+    if (lead && cfg.balloon) {
+      const cx = (g.get(A)!.x + g.get(B)!.x) / 2;
+      const bx = Math.max(12, Math.min(W - cfg.balloon.w - 12, cx - cfg.balloon.w / 2));
+      balloonZone = { x: bx - 4, y: cfg.balloon.y - 4, w: cfg.balloon.w + 8, h: cfg.balloon.h + 8 };
+    }
+    const ends = (e: NEdge): [number, number, number, number] => {
+      const p1 = g.get(e.s)!, p2 = g.get(e.t)!;
+      return [p1.x, p1.y, p2.x, p2.y];
+    };
+    const polyOf = (e: NEdge, bend: number): Point[] => {
+      const [x1, y1, x2, y2] = ends(e);
+      return wirePolyline(x1, y1, x2, y2, bend);
+    };
+    // Each wire's current curve, resampled only when its bend changes
+    const current = new Map<number, Point[]>();
+    for (const e of kept) current.set(e.id, polyOf(e, 0));
+    const cost = (e: NEdge, bend: number, limit = Infinity): number => {
+      const poly = polyOf(e, bend);
+      let c = Math.abs(bend) * CURVE_COST.perBend;
+      for (const { p, at, box } of files) {
+        // +1.5px covers the gap between the sampled polyline and the true curve
+        if (p.id !== e.s && p.id !== e.t && polylineNear(at.x, at.y, poly, p.r + 4.5)) c += CURVE_COST.throughDot;
+        if (polylineHitsBox(poly, box)) c += CURVE_COST.throughLabel;
+      }
+      // Margins of a few px cover the gap between the sampled polyline and the true curve
+      if (poly.some(([x, y]) => x < 3 || x > W - 3 || y < 3 || y > plateBottom - 3)) c += CURVE_COST.outsidePlate;
+      // The pair is the top of the drawing: no other wire may climb above its row (or into the balloon)
+      if (lead && poly.some(([, y]) => y < cfg.focusY - 4)) c += CURVE_COST.throughBalloon;
+      if (balloonZone && polylineHitsBox(poly, balloonZone)) c += CURVE_COST.throughBalloon;
+      for (const f of kept) {
+        if (c >= limit) return c;
+        if (f === e || f.s === e.s || f.s === e.t || f.t === e.s || f.t === e.t) continue;
+        c += CURVE_COST.crossing * polylineCrossings(poly, current.get(f.id)!);
+      }
+      return c;
+    };
+    const curvable = kept
+      .filter((e) => e !== lead)
+      .map((e) => {
+        const [x1, y1, x2, y2] = ends(e);
+        return { e, len: Math.hypot(x2 - x1, y2 - y1) };
+      })
+      .sort((a, b) => b.len - a.len || a.e.id - b.e.id)
+      .map((o) => o.e);
+    for (let pass = 0; pass < 2; pass++) {
+      for (const e of curvable) {
+        let bestBend = bends.get(e.id) ?? 0;
+        let bestCost = cost(e, bestBend);
+        for (const b of BEND_OPTIONS) {
+          const c = cost(e, b, bestCost);
+          if (c < bestCost - 1e-9) {
+            bestCost = c;
+            bestBend = b;
+          }
+        }
+        if (bestBend) bends.set(e.id, bestBend);
+        else bends.delete(e.id);
+        current.set(e.id, polyOf(e, bestBend));
+      }
+    }
+    best = { pos: best.pos, score: best.score, metrics: measure(best.pos, bends) };
+  }
+
   const keptIds = new Set(kept.map((e) => e.id));
   const hiddenEdgeIndices = raw.filter((e) => !keptIds.has(e.id)).map((e) => e.id);
 
-  // 10) Emit geometry (vertically centred inside the minimum height), validating every coordinate
+  // 11) Emit geometry (vertically centred inside the minimum height), validating every coordinate
   const finalPos = best.pos;
   let contentBottom = 0;
   for (const id of drawnIds) {
@@ -951,6 +1130,7 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
       strokeWidth: round1(1.4 + e.low * 2.8),
       isFeatured: featured.has(e.id),
       isLeadEdge: e === lead,
+      bend: bends.get(e.id) ?? 0,
     }));
   const leadOut = edgesOut.find((e) => e.isLeadEdge) ?? null;
   const balloonTarget =
@@ -967,7 +1147,7 @@ export function computePlateLayout(graph: PlateGraph, focus: PlateFocus, options
 
   const coords: number[] = [];
   for (const n of nodesOut) coords.push(n.x, n.y, n.r, n.label.x, n.label.y, n.label.w);
-  for (const e of edgesOut) coords.push(e.x1, e.y1, e.x2, e.y2, e.strokeWidth);
+  for (const e of edgesOut) coords.push(e.x1, e.y1, e.x2, e.y2, e.strokeWidth, e.bend);
   if (!coords.every((v) => Number.isFinite(v)) || !Number.isFinite(height)) {
     return emptyLayout(W, cfg.minHeight, mode, compSeen.size);
   }
