@@ -110,6 +110,7 @@ export interface Meta {
   commitsAnalyzed: number;
   sweepsSkipped: number;
   subjectSkipped: number;
+  revertsSkipped?: number;
   renamesFollowed: number;
   files: number;
   oldestCommit?: string;
@@ -128,6 +129,7 @@ export interface Meta {
     minConfidence: number;
     halfLifeDays?: number;
     skipCommits?: string;
+    skipReverts?: boolean;
     ignore: string[];
     useDefaultIgnores: boolean;
     origin?: OriginConfig;
@@ -163,6 +165,7 @@ export function buildMeta(ctx: Context): Meta {
     commitsAnalyzed: ctx.history.commits.length,
     sweepsSkipped: stats.sweepsSkipped,
     subjectSkipped: stats.subjectSkipped,
+    revertsSkipped: stats.revertsSkipped,
     renamesFollowed: stats.renamesFollowed,
     files: ctx.model.fileCount,
     oldestCommit: stats.oldestTime ? isoDate(stats.oldestTime) : undefined,
@@ -183,6 +186,7 @@ export function buildMeta(ctx: Context): Meta {
       minConfidence: s.minConfidence,
       halfLifeDays: s.halfLifeDays,
       skipCommits: s.skipCommits,
+      ...(s.skipReverts !== undefined ? { skipReverts: s.skipReverts } : {}),
       ignore: [...s.ignore],
       useDefaultIgnores: s.useDefaultIgnores,
       ...(s.origin !== undefined ? { origin: s.origin } : {}),
@@ -299,8 +303,10 @@ export function relationshipLabel(r: Relationship): string {
 export function printHeader(title: string, meta: Meta): void {
   console.log(`${c.bold('Repo Archaeology')} ${c.dim('·')} ${title}`);
   const span = meta.oldestCommit && meta.newestCommit ? ` from ${meta.oldestCommit} to ${meta.newestCommit}` : '';
+  const revertsSkipped = meta.revertsSkipped ?? 0;
   const skippedParts = [
     meta.sweepsSkipped > 0 ? plural(meta.sweepsSkipped, 'sweeping commit') : '',
+    revertsSkipped > 0 ? plural(revertsSkipped, 'revert commit') : '',
     meta.subjectSkipped > 0 ? `${meta.subjectSkipped} matching --skip-commits` : '',
   ].filter(Boolean);
   const skipped = skippedParts.length > 0 ? `, ${skippedParts.join(' and ')} skipped` : '';

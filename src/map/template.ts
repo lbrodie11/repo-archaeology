@@ -5658,9 +5658,10 @@ const RICH_CLIENT = String.raw`
       relExp += ' ' + vTag;
     }
     var leadNode = forwardFirst ? edgeObj.s : edgeObj.t;
-    if (leadNode && leadNode.author && typeof leadNode.share === 'number' && leadNode.share >= 0.6) {
+    var isBotOrAgentLead = leadNode && leadNode.author && /\[bot\]$|\b(?:dependabot|renovate|github-actions|snyk-bot|greenkeeper|semantic-release-bot|mergify|copilot-swe-agent|devin-ai-integration|cursor-agent|codex|claude-code|gemini-code-assist)\b/i.test(leadNode.author);
+    if (leadNode && !isBotOrAgentLead && typeof leadNode.share === 'number' && leadNode.share >= 0.6) {
       var authorSharePct = Math.floor(leadNode.share * 100 + 1e-9);
-      relExp += ' Most changes to ' + safeFrom + ' were made by ' + sanitizeText(leadNode.author) + ' (' + authorSharePct + '%), so this pattern may reflect one contributor\'s workflow habits rather than a strict code dependency.';
+      relExp += ' One contributor made ' + authorSharePct + '% of the analyzed changes to ' + safeFrom + ', so this pattern may reflect one contributor\'s workflow habits rather than a strict code dependency.';
     }
     var fromAlone = Math.max(0, fromChanges - d.shared);
     var toAlone = Math.max(0, toChanges - d.shared);
@@ -6042,6 +6043,7 @@ const RICH_CLIENT = String.raw`
           return diff === 1 || diff === chosenNodes.length - 1;
         })
       : rawSubEdges;
+    var hiddenContextEdges = Math.max(0, rawSubEdges.length - subEdges.length);
     var nodeDeg = new Array(chosenNodes.length).fill(0);
     subEdges.forEach(function (se) {
       nodeDeg[se.u]++;
@@ -6240,7 +6242,8 @@ const RICH_CLIENT = String.raw`
       balloonTarget: { x: btX, y: btY },
       balloonBox: balloonBox,
       balloonText: leadEdgeObj.d.shared + ' of ' + denom + ' commits together \u00b7 ' + relSuffix,
-      fullComponentNodeCount: fullComponentNodeCount
+      fullComponentNodeCount: fullComponentNodeCount,
+      hiddenContextEdges: hiddenContextEdges
     };
   }
 
@@ -6375,8 +6378,8 @@ const RICH_CLIENT = String.raw`
       line.setAttribute('x2', String(pe.x2)); line.setAttribute('y2', String(pe.y2));
       var col = pe.relationship === 'ghost' ? '#ff4f9a' : (pe.relationship === 'unknown' ? '#e3b65b' : (pe.relationship === 'indirect' ? '#7fd1b0' : '#7eb3e0'));
       line.setAttribute('stroke', col);
-      line.setAttribute('stroke-width', primary ? String(Math.max(3, Number(strokeW) + 0.8)) : '1.6');
-      line.setAttribute('stroke-opacity', primary ? '1' : '0.38');
+      line.setAttribute('stroke-width', primary ? String(Math.max(3.2, Number(strokeW) + 0.9)) : '1.35');
+      line.setAttribute('stroke-opacity', primary ? '1' : '0.9');
       if (pe.relationship === 'ghost') line.setAttribute('stroke-dasharray', '9 5');
       else if (pe.relationship === 'unknown') line.setAttribute('stroke-dasharray', '2 5');
       else if (pe.relationship === 'indirect') line.setAttribute('stroke-dasharray', '5 4');
@@ -7209,8 +7212,12 @@ const RICH_CLIENT = String.raw`
     plateLegend.appendChild(el('span', 'f12-plate-legend-item', '\u2500\u2500 Import (solid)'));
     plateFooter.appendChild(plateLegend);
     var compTotal = plateObj.fullComponentNodeCount || (plateObj.nodes ? plateObj.nodes.length : 0);
+    var hiddenEdgesCount = plateObj.hiddenContextEdges || 0;
+    var hiddenEdgesNote = hiddenEdgesCount > 0
+      ? ' \u00b7 ' + hiddenEdgesCount + ' ' + (hiddenEdgesCount === 1 ? 'connection' : 'connections') + ' between context files hidden (see Atlas)'
+      : '';
     var footerRight = el('div', 'f12-plate-footer-right');
-    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component) \u00b7 Drag files to move'));
+    footerRight.appendChild(el('span', 'f12-plate-meta', 'Ego network (' + (plateObj.nodes ? plateObj.nodes.length : 0) + ' of ' + compTotal + ' files in component)' + hiddenEdgesNote + ' \u00b7 Drag files to move'));
     if (focusPairBtn) footerRight.appendChild(focusPairBtn);
     footerRight.appendChild(resetPlateBtn);
     plateFooter.appendChild(footerRight);

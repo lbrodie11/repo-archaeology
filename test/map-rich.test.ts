@@ -1262,12 +1262,12 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
       assert.equal(afterReset.viewBox, beforeDrag.viewBox, 'Expected #reset-plate-btn to restore initial viewBox');
       assert.equal(afterReset.resetHidden, true, 'Expected #reset-plate-btn to hide after reset');
 
-      // 6) Verify Focus selected pair toggle (#focus-pair-btn), non-featured edge dimming (0.38), asymmetry summary, and 200% text / 320px reflow
+      // 6) Verify Focus selected pair toggle (#focus-pair-btn), non-featured edge contrast (0.9), asymmetry summary, and 200% text / 320px reflow
       const focusToggleCheck = await gPage.evaluate(() => {
         const focusBtn = document.getElementById('focus-pair-btn') as HTMLButtonElement | null;
         const svg = document.getElementById('featured-plate-svg')!;
         const nonHitLines = Array.from(svg.querySelectorAll('line:not(.f12-plate-edge-hit)'));
-        const hasDimmedContextEdges = nonHitLines.some((l) => l.getAttribute('stroke-opacity') === '0.38');
+        const hasDimmedContextEdges = nonHitLines.some((l) => l.getAttribute('stroke-opacity') === '0.9');
         const allNodesBefore = Array.from(svg.querySelectorAll('.f12-plate-node')).filter(
           (n) => (n as HTMLElement).style.display !== 'none',
         ).length;
@@ -1292,7 +1292,7 @@ describe('RA-16 · Browser verification (Contract, Marker budget, Grammar, Theme
         };
       });
       assert.equal(focusToggleCheck.hasFocusBtn, true, 'Expected #focus-pair-btn when plate has > 2 nodes');
-      assert.equal(focusToggleCheck.hasDimmedContextEdges, true, 'Expected non-featured context edges to use stroke-opacity="0.38"');
+      assert.equal(focusToggleCheck.hasDimmedContextEdges, true, 'Expected non-featured context edges to use stroke-opacity="0.9"');
       assert.equal(focusToggleCheck.visibleNodesWhenFocused, 2, 'Expected Focus selected pair toggle to isolate the 2 primary nodes');
       assert.equal(focusToggleCheck.pressedWhenFocused, 'true', 'Expected #focus-pair-btn aria-pressed="true" when focused');
       assert.equal(focusToggleCheck.visibleNodesAfterUnfocus, focusToggleCheck.allNodesBefore, 'Expected second click on #focus-pair-btn to restore full ego network');

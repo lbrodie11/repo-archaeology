@@ -414,9 +414,13 @@ export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
     posix.basename(family.members[0]?.path ?? family.label ?? 'file');
   const cleanFileName = sanitizeHtmlDisplayText(rawFileName);
   const isSameDirSuffix = cleanFileName.startsWith('*-');
+  const suffixLabel = isSameDirSuffix
+    ? cleanFileName.slice(1).replace(/\.[^.]+$/, '')
+    : cleanFileName;
+  const parentLabel = cleanParent === '.' || cleanParent === '' ? 'root' : cleanParent;
 
   const headline = isSameDirSuffix
-    ? `${memberCount} ${cleanFileName} ${fileNoun} in ${cleanParent === '.' || cleanParent === '' ? 'root' : cleanParent} keep changing together`
+    ? `${memberCount} ${fileNoun} sharing the ${suffixLabel} suffix in ${parentLabel} keep changing together`
     : `${memberCount} ${fileNoun} across ${dirsPattern} keep changing together`;
 
   const relKinds = Array.isArray(family.relationshipKinds) ? family.relationshipKinds : [];
@@ -424,13 +428,17 @@ export function formatFamilyHeadline(family: MapFamily): FamilyHeadlineCopy {
   const hasUnknownOnly =
     !hasGhost && relKinds.length > 0 && relKinds.every((k) => k === 'unknown');
 
+  const groupPhrase = isSameDirSuffix
+    ? `${memberCount} ${fileNoun} sharing the ${suffixLabel} suffix (${cleanFileName})`
+    : `${memberCount} parallel implementations of ${cleanFileName}`;
+
   const firstSentence = hasGhost
-    ? `No direct or 2-hop import link was detected between these ${memberCount} parallel implementations of ${cleanFileName}.`
+    ? `No direct or 2-hop import link was detected between these ${groupPhrase}.`
     : hasUnknownOnly
-      ? `We couldn't check imports for these ${memberCount} parallel implementations of ${cleanFileName}.`
+      ? `We couldn't check imports for these ${groupPhrase}.`
       : isSameDirSuffix
-        ? `These ${memberCount} parallel implementations of ${cleanFileName} move together in ${cleanParent === '.' || cleanParent === '' ? 'root' : cleanParent}.`
-        : `These ${memberCount} parallel implementations of ${cleanFileName} move together across sibling folders.`;
+        ? `These ${groupPhrase} move together in ${parentLabel}.`
+        : `These ${groupPhrase} move together across sibling folders.`;
 
   const commitNoun = family.commitsTouchingTwoOrMore === 1 ? 'commit' : 'commits';
   const pairClause =
@@ -1209,7 +1217,7 @@ export function buildRankedFindings(
         kind: 'family',
         relationship: famHasGhost ? 'ghost' : leadEdge.relationship,
         title: String(famFileName).startsWith('*-')
-          ? `${sanitizeHtmlDisplayText(famFileName)} in ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? 'root' : fam.parentDir)}`
+          ? `${fam.members.length} files sharing the ${sanitizeHtmlDisplayText(String(famFileName).slice(1).replace(/\.[^.]+$/, ''))} suffix in ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? 'root' : fam.parentDir)}`
           : `${sanitizeHtmlDisplayText(famFileName)} across ${sanitizeHtmlDisplayText(fam.parentDir === '.' ? '*' : `${fam.parentDir}/*`)}`,
         subtitle: `${fam.members.length} files (${fam.members.map((m) => sanitizeHtmlDisplayText(m.variant)).join(', ')}) · ${fam.commitsTouchingTwoOrMore} commits (2+ files)`,
         reverseSummary: `Reverse (${dir.shortTo} → ${dir.shortFrom}): ${dir.shared} of ${dir.toChanges} (${famRevPctText})`,
@@ -1358,6 +1366,8 @@ export interface FeaturedPlateLayout {
   balloonBox: { x: number; y: number; w: number; h: number } | null;
   fullComponentNodeCount: number;
   truncatedToEgoCap: boolean;
+  /** Number of non-featured context-to-context edges omitted from dense (>=5-node) plate diagrams. */
+  hiddenContextEdges: number;
 }
 
 export const MAX_EGO_NODES = 12;
@@ -1635,6 +1645,7 @@ export function computeFeaturedPlateLayout(
       balloonBox: null,
       fullComponentNodeCount: 0,
       truncatedToEgoCap: false,
+      hiddenContextEdges: 0,
     };
   }
 
@@ -2137,6 +2148,7 @@ export function computeFeaturedPlateLayout(
     balloonBox,
     fullComponentNodeCount,
     truncatedToEgoCap: fullComponentNodeCount > nCount,
+    hiddenContextEdges: Math.max(0, rawEgoEdgeIndices.length - egoEdgeIndices.length),
   };
 }
 

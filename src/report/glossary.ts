@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS } from '../config.js';
 import type { MapData } from '../commands/map.js';
 import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import type { WeightingMode } from '../model/cochange.js';
+import { isHumanAuthorIdentity, type CommitOrigin } from '../model/origin.js';
 import { VERDICTS_FILE, type RelationshipVerdictView } from '../model/verdicts.js';
 import { sanitizeHtmlDisplayText } from '../style/frame12.js';
 import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
@@ -180,6 +181,7 @@ export interface ReadingFindingInput {
   familyPossiblePairs?: number;
   topAuthor?: string;
   topAuthorShare?: number;
+  topAuthorOrigin?: CommitOrigin;
 }
 
 export interface ReadingFindingGuide {
@@ -262,10 +264,14 @@ export function formatReadingFindingGuide(input: ReadingFindingInput): ReadingFi
     relationshipExplanation = `${relationshipExplanation} ${verdictTag}`;
   }
 
-  if (input.topAuthor && input.topAuthorShare !== undefined && input.topAuthorShare >= 0.6) {
-    const safeAuthor = sanitizeHtmlDisplayText(input.topAuthor);
+  const isHumanTopAuthor =
+    input.topAuthorOrigin !== 'bot' &&
+    input.topAuthorOrigin !== 'agent' &&
+    (input.topAuthor === undefined ||
+      isHumanAuthorIdentity({ authorName: input.topAuthor, authorEmail: '' }));
+  if (input.topAuthorShare !== undefined && input.topAuthorShare >= 0.6 && isHumanTopAuthor) {
     const authorPct = Math.round(input.topAuthorShare * 100);
-    relationshipExplanation = `${relationshipExplanation} Most changes to ${safeFrom} were made by ${safeAuthor} (${authorPct}%), so this pattern may reflect one contributor's workflow habits rather than a strict code dependency.`;
+    relationshipExplanation = `${relationshipExplanation} One contributor made ${authorPct}% of the analyzed changes to ${safeFrom}, so this pattern may reflect one contributor's workflow habits rather than a strict code dependency.`;
   }
 
   const fromAlone = Math.max(0, input.fromChanges - input.shared);
@@ -327,6 +333,7 @@ export function buildAnalysisProvenance(data: MapData, toolVersion?: string): An
   const trackedFiles = m.files ?? data.nodes?.length ?? 0;
   const renamesFollowed = m.renamesFollowed ?? 0;
   const sweepsSkipped = m.sweepsSkipped ?? 0;
+  const revertsSkipped = m.revertsSkipped ?? 0;
   const subjectSkipped = m.subjectSkipped ?? 0;
   const minShared = s.minShared ?? DEFAULT_SETTINGS.minShared;
   const minConfidence = s.minConfidence ?? DEFAULT_SETTINGS.minConfidence;
@@ -349,6 +356,9 @@ export function buildAnalysisProvenance(data: MapData, toolVersion?: string): An
   const skippedParts: string[] = [];
   if (sweepsSkipped > 0) {
     skippedParts.push(`${sweepsSkipped.toLocaleString('en-US')} large sweep${sweepsSkipped === 1 ? '' : 's'} > ${maxFilesPerCommit} files skipped`);
+  }
+  if (revertsSkipped > 0) {
+    skippedParts.push(`${revertsSkipped.toLocaleString('en-US')} revert commit${revertsSkipped === 1 ? '' : 's'} skipped`);
   }
   if (subjectSkipped > 0) {
     skippedParts.push(`${subjectSkipped.toLocaleString('en-US')} skipped by commit-subject filter`);

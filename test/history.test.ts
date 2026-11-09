@@ -87,23 +87,50 @@ describe('history from real git repositories', () => {
     assert.equal(history.stats.subjectSkipped, 1);
   });
 
-  it('skips mechanical Revert "..." commits so a commit and its revert are not double-counted', async () => {
+  it('skips mechanical Revert "..." and Reapply "..." commits in stats.revertsSkipped (not subjectSkipped)', async () => {
     const r = repo();
     r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'feat(create): update customizer (#10129)');
     r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'Revert "feat(create): update customizer (#10129)"');
-    r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'feat(create): re-apply customizer');
+    r.touch(['accent-picker.tsx', 'menu-picker.tsx'], 'Reapply "feat(create): update customizer (#10129)"');
     const history = await loadHistory(r.dir, options);
     assert.deepEqual(history.commits.map((c) => c.subject), [
-      'feat(create): re-apply customizer',
       'feat(create): update customizer (#10129)',
     ]);
-    assert.equal(history.stats.subjectSkipped, 1);
+    assert.equal(history.stats.subjectSkipped, 0, 'Revert commits must not increment subjectSkipped');
+    assert.equal(history.stats.revertsSkipped, 2, 'Expected both Revert and Reapply commits in revertsSkipped');
     const model = new CoChangeModel(history.commits);
     assert.equal(
       model.pair(model.id('accent-picker.tsx')!, model.id('menu-picker.tsx')!)!.count,
-      2,
-      'Expected revert commit to be excluded from co-change count',
+      1,
+      'Expected Original -> Revert -> Reapply sequence to count the underlying change once',
     );
+
+    const withReverts = await loadHistory(r.dir, { ...options, skipReverts: false });
+    assert.equal(withReverts.commits.length, 3);
+    assert.equal(withReverts.stats.revertsSkipped, 0);
+    assert.equal(withReverts.stats.subjectSkipped, 0);
+  });
+
+  it('reports skipped reverts separately from --skip-commits and honours --include-reverts', () => {
+    const r = repo();
+    r.touch(['a.ts', 'b.ts'], 'feat: tweak');
+    r.touch(['a.ts', 'b.ts'], 'Revert "feat: tweak"');
+
+    for (const style of ['classic', 'rich']) {
+      const out = runCli(['scan', '--style', style], r.dir);
+      assert.equal(out.code, 0, out.stderr);
+      assert.match(out.stdout, /1 revert commit\b/, `${style} header should count the revert`);
+      assert.doesNotMatch(out.stdout, /matching --skip-commits/, `${style} header must not blame --skip-commits`);
+    }
+
+    const json = JSON.parse(runCli(['scan', '--json'], r.dir).stdout);
+    assert.equal(json.meta.revertsSkipped, 1);
+    assert.equal(json.meta.subjectSkipped, 0);
+
+    const included = JSON.parse(runCli(['scan', '--include-reverts', '--json'], r.dir).stdout);
+    assert.equal(included.meta.revertsSkipped, 0);
+    assert.equal(included.meta.commitsAnalyzed, 2);
+    assert.equal(included.meta.settings.skipReverts, false);
   });
 
   it('handles spaces, unicode and newlines in file names', async () => {

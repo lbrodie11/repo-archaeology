@@ -545,6 +545,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
 
       assert.equal(plate.nodes.length, Math.min(12, nodeCount));
       assert.equal(plate.truncatedToEgoCap, nodeCount > 12);
+      assert.equal(plate.hiddenContextEdges, 0, 'Star fixtures have no context-to-context chords to hide');
 
       for (let i = 0; i < plate.nodes.length; i++) {
         const a = plate.nodes[i]!.label;
@@ -567,6 +568,53 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     const ranked = buildRankedFindings(makeBaseData());
     assert.equal(ranked.length, 1);
     assert.equal(ranked[0]?.findingId, 'F-01');
+  });
+
+  it('counts context-to-context chords pruned from dense >= 5-node cliques so the plate can disclose them', () => {
+    const nodeCount = 6;
+    const nodes: MapNode[] = Array.from({ length: nodeCount }, (_, i) => ({
+      path: `src/clique/member-${i}.ts`,
+      dir: 'src/clique',
+      changes: 10 + i,
+    }));
+    const edges: MapEdge[] = [];
+    for (let i = 0; i < nodeCount; i++) {
+      for (let j = i + 1; j < nodeCount; j++) {
+        edges.push({
+          source: i,
+          target: j,
+          relationship: i === 0 && j === 1 ? 'ghost' : 'direct',
+          why: 'test',
+          shared: 6,
+          fromChanges: 10,
+          toChanges: 12,
+          confidence: 0.6,
+          reverseConfidence: 0.5,
+          interval: { low: 0.35, high: 0.8 },
+          reverseInterval: { low: 0.28, high: 0.72 },
+          score: 0.35,
+          overviewPriority: i === 0 && j === 1 ? 2 : 0,
+          weighted: false,
+          lastTogether: '2026-05-01',
+          crossesDirectories: false,
+          evidence: [],
+        });
+      }
+    }
+    const data = makeBaseData({ nodes, edges, families: [] });
+    const plate = computeFeaturedPlateLayout(data, selectFeaturedFinding(data), {
+      width: 760,
+      height: 380,
+      visible: { ghost: true, direct: true, indirect: true, unknown: true },
+    });
+
+    assert.equal(plate.nodes.length, nodeCount);
+    assert.ok(plate.hiddenContextEdges > 0, 'Expected pruned chords on a 6-node clique');
+    assert.equal(
+      plate.edges.length + plate.hiddenContextEdges,
+      edges.length,
+      'Every clique edge is either drawn or counted as hidden',
+    );
   });
 
   it('distinguishes weighted vs raw percentages, attributes reverse counterexamples to the reverse file, and adapts empty-state threshold suggestions', () => {
@@ -1000,7 +1048,7 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
     assert.equal(redactFilesystemPaths('Failed at /workspaces/secret-project/src'), 'Failed at <repo-path>');
     assert.equal(redactFilesystemPaths('Failed at /Volumes/Macintosh_HD/project'), 'Failed at <repo-path>');
 
-    // 4. Plain-language directional asymmetry summary + single-contributor habit caveat
+    // 4. Plain-language directional asymmetry summary + unnamed single-contributor habit caveat
     const asymPanel = formatEvidencePanelCopy(base, {
       kind: 'pair',
       edgeIndex: 0,
@@ -1011,8 +1059,80 @@ describe('RA-17 copy templates and featured finding selection (src/map/copy.ts)'
       `Expected plain-language asymmetrySummary, got: ${asymPanel.asymmetrySummary}`,
     );
     assert.ok(
-      asymPanel.readingGuide?.whatItDoesNotSay.includes("one contributor's workflow habits"),
-      `Expected single-contributor caveat when topAuthorShare >= 0.6, got: ${asymPanel.readingGuide?.whatItDoesNotSay}`,
+      asymPanel.readingGuide?.whatItDoesNotSay.includes('One contributor made 75% of the analyzed changes to tiny.ts') &&
+        asymPanel.readingGuide?.whatItDoesNotSay.includes("one contributor's workflow habits"),
+      `Expected unnamed single-contributor caveat when topAuthorShare >= 0.6, got: ${asymPanel.readingGuide?.whatItDoesNotSay}`,
     );
+    assert.equal(
+      asymPanel.readingGuide?.whatItDoesNotSay.includes('Alice'),
+      false,
+      'Single-contributor note must not name an individual in shared reports',
+    );
+
+    // Boundary & bot/agent exclusion tests for single-contributor note
+    const at60Guide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 6,
+      fromChanges: 10,
+      toChanges: 10,
+      confidence: 0.6,
+      reverseConfidence: 0.6,
+      interval: { low: 0.31, high: 0.83 },
+      reverseInterval: { low: 0.31, high: 0.83 },
+      relationship: 'ghost',
+      topAuthor: 'Alice',
+      topAuthorShare: 0.6,
+    });
+    assert.ok(at60Guide.whatItDoesNotSay.includes('One contributor made 60%'));
+
+    const below60Guide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 6,
+      fromChanges: 10,
+      toChanges: 10,
+      confidence: 0.6,
+      reverseConfidence: 0.6,
+      interval: { low: 0.31, high: 0.83 },
+      reverseInterval: { low: 0.31, high: 0.83 },
+      relationship: 'ghost',
+      topAuthor: 'Alice',
+      topAuthorShare: 0.59,
+    });
+    assert.equal(below60Guide.whatItDoesNotSay.includes('One contributor made'), false);
+
+    const botGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 8,
+      fromChanges: 10,
+      toChanges: 10,
+      confidence: 0.8,
+      reverseConfidence: 0.8,
+      interval: { low: 0.49, high: 0.94 },
+      reverseInterval: { low: 0.49, high: 0.94 },
+      relationship: 'ghost',
+      topAuthor: 'dependabot[bot]',
+      topAuthorShare: 0.9,
+    });
+    assert.equal(botGuide.whatItDoesNotSay.includes('One contributor made'), false);
+
+    const agentOriginGuide = formatReadingFindingGuide({
+      fromLabel: 'tiny.ts',
+      toLabel: 'quick.ts',
+      shared: 8,
+      fromChanges: 10,
+      toChanges: 10,
+      confidence: 0.8,
+      reverseConfidence: 0.8,
+      interval: { low: 0.49, high: 0.94 },
+      reverseInterval: { low: 0.49, high: 0.94 },
+      relationship: 'ghost',
+      topAuthor: 'Internal Bot',
+      topAuthorShare: 0.85,
+      topAuthorOrigin: 'agent',
+    });
+    assert.equal(agentOriginGuide.whatItDoesNotSay.includes('One contributor made'), false);
   });
 });

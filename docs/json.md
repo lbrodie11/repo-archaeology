@@ -89,6 +89,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `commitsAnalyzed` | `integer` | Yes | Usable commits retained after sweep and subject filters. |
 | `sweepsSkipped` | `integer` | Yes | Commits skipped because they touched more than `maxFilesPerCommit` files. |
 | `subjectSkipped` | `integer` | Yes | Commits skipped via `--skip-commits` or `skipCommitPrefixes`. |
+| `revertsSkipped` | `integer` | Optional (always emitted by versions that filter reverts) | Mechanical `git revert` / `Reapply` commits skipped (`Revert "…"` and `Reapply "…"`; `0` when `--include-reverts` or `"skipReverts": false` is set). |
 | `renamesFollowed` | `integer` | Yes | File rename transitions bridged across history. |
 | `files` | `integer` | Yes | Distinct tracked file identities in the co-change model. |
 | `oldestCommit` | `string` (`YYYY-MM-DD`) | Optional | Date of the oldest analyzed commit (omitted when `commitsAnalyzed === 0`). |
@@ -96,7 +97,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
 | `verdicts` | `{ loaded, active, expired, file }` | Optional (always emitted since RA-11) | Summary of `.repo-archaeology.verdicts.json`: total `loaded` entries, `active` entries, `expired` (`until < today`) entries, and `file: ".repo-archaeology.verdicts.json"`. |
 | `imports` | `ImportsCoverageMeta` | Optional | Import resolution coverage and unresolved diagnostics for commands that perform import classification (`scan`, `diff`, `file`, `map`, `explain`, `imports`, and bare `repo-archaeology`). Omitted on `backtest`. |
-| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `origin`, `owners`). |
+| `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `skipReverts`, `origin`, `owners`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 | `cache` | `{ enabled: boolean, hits: integer, misses: integer, dir?: string }` | Optional (always emitted by the CLI since RA-04) | History cache usage for this run (`common.schema.json#/$defs/CacheMeta`). `hits` counts needed commits served from the persistent raw-commit cache; `misses` counts commits parsed from `git log` in this run (all of them when `enabled: false`, i.e. `--no-cache`). `dir` is relative to the repository root with POSIX separators, or the literal `"$REPO_ARCHAEOLOGY_CACHE_DIR"` when that environment variable chose the directory; it is never an absolute path and is omitted when no relative path exists (e.g. another drive on Windows). Cached and `--no-cache` runs are otherwise identical, so consumers comparing outputs should exclude `meta.cache`. Cache rebuilds (corruption, checksum mismatch, version change) and read-only shallow clones add a message to `warnings`. |
 
@@ -201,6 +202,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
     "commitsAnalyzed": 118,
     "sweepsSkipped": 2,
     "subjectSkipped": 0,
+    "revertsSkipped": 0,
     "renamesFollowed": 3,
     "files": 42,
     "oldestCommit": "2025-01-10",

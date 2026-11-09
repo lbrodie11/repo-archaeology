@@ -292,8 +292,10 @@ function renderRichHeader(
     meta.oldestCommit && meta.newestCommit
       ? ` from ${sanitizeRichText(meta.oldestCommit)} to ${sanitizeRichText(meta.newestCommit)}`
       : '';
+  const revertsSkipped = meta.revertsSkipped ?? 0;
   const skippedParts = [
     meta.sweepsSkipped > 0 ? plural(meta.sweepsSkipped, 'sweeping commit') : '',
+    revertsSkipped > 0 ? plural(revertsSkipped, 'revert commit') : '',
     meta.subjectSkipped > 0 ? `${meta.subjectSkipped} matching --skip-commits` : '',
   ].filter(Boolean);
   const skipped = skippedParts.length > 0 ? `, ${skippedParts.join(' and ')} skipped` : '';

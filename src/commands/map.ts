@@ -11,7 +11,7 @@ import { renderMapHtml } from '../map/template.js';
 import type { WeightingMode } from '../model/cochange.js';
 import { buildFindingFamilies, isEligibleFamilyPair, type FindingFamilyView } from '../model/families.js';
 import { resolveCommitFileChange } from '../model/history.js';
-import type { CommitOrigin, OriginShare } from '../model/origin.js';
+import { isHumanAuthorIdentity, type CommitOrigin, type OriginShare } from '../model/origin.js';
 import { buildMeta, toView, type Meta, type RelationshipVerdictView, type RelationshipView } from '../report/views.js';
 import { resolveStyleMode, type StyleMode } from '../style/frame12.js';
 import type { WilsonInterval } from '../util/stats.js';
@@ -162,27 +162,7 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
     // repository, or a run with --before, would otherwise have nothing that counts as recent.
     const newest = ctx.history.stats.newestTime;
     const recencyReference = newest !== undefined ? newest * 1000 : Date.parse(generatedAt);
-    const nodes: MapNode[] = [];
-    const nodeIndex = new Map<string, number>();
-    const nodeFor = (path: string): number => {
-      let index = nodeIndex.get(path);
-      if (index === undefined) {
-        const id = ctx.model.id(path)!;
-        const [top] = ctx.model.topAuthors(id, 1);
-        index = nodes.length;
-        nodeIndex.set(path, index);
-        nodes.push({
-          path,
-          dir: posix.dirname(path) === '.' ? '(root)' : posix.dirname(path),
-          changes: ctx.model.changeCount[id] ?? 0,
-          topAuthor: top?.author,
-          topAuthorShare: top ? Math.round(top.share * 100) / 100 : undefined,
-        });
-      }
-      return index;
-    };
-
-    // Index commit indices by file ID (sorted newest first by author time) for fast counterexample lookup.
+    // Index commit indices by file ID (sorted newest first by author time) for fast counterexample and contributor lookup.
     const commitsByFile: number[][] = Array.from({ length: ctx.model.fileCount }, () => []);
     const commitFileSets: Set<number>[] = [];
     const sortedCommitIndices = ctx.model.commits
@@ -205,6 +185,55 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
         commitsByFile[fid]!.push(idx);
       }
     }
+
+    const nodes: MapNode[] = [];
+    const nodeIndex = new Map<string, number>();
+    const nodeFor = (path: string): number => {
+      let index = nodeIndex.get(path);
+      if (index === undefined) {
+        const id = ctx.model.id(path)!;
+        const totalChanges = ctx.model.changeCount[id] ?? 0;
+        const authorCounts = new Map<string, { commits: number; humanCommits: number }>();
+        for (const cIdx of commitsByFile[id] ?? []) {
+          const c = ctx.model.commits[cIdx]!;
+          const authorName = c.canonicalAuthor || c.author;
+          if (!authorName) continue;
+          const entry = authorCounts.get(authorName) ?? { commits: 0, humanCommits: 0 };
+          entry.commits++;
+          if (
+            c.humanAuthor !== false &&
+            c.origin !== 'bot' &&
+            c.origin !== 'agent' &&
+            isHumanAuthorIdentity({ authorName, authorEmail: c.canonicalEmail || c.authorEmail || '' }, ctx.settings.origin)
+          ) {
+            entry.humanCommits++;
+          }
+          authorCounts.set(authorName, entry);
+        }
+        let topAuthor: string | undefined;
+        let topAuthorCommits = 0;
+        let topAuthorHumanCommits = 0;
+        for (const [authorName, entry] of authorCounts) {
+          if (entry.commits > topAuthorCommits) {
+            topAuthor = authorName;
+            topAuthorCommits = entry.commits;
+            topAuthorHumanCommits = entry.humanCommits;
+          }
+        }
+        const topIsHuman = Boolean(topAuthor && totalChanges > 0 && topAuthorHumanCommits > 0);
+        index = nodes.length;
+        nodeIndex.set(path, index);
+        nodes.push({
+          path,
+          dir: posix.dirname(path) === '.' ? '(root)' : posix.dirname(path),
+          changes: totalChanges,
+          topAuthor: topIsHuman ? topAuthor : undefined,
+          topAuthorShare:
+            topIsHuman && totalChanges > 0 ? Math.round((topAuthorCommits / totalChanges) * 100) / 100 : undefined,
+        });
+      }
+      return index;
+    };
 
     const findCounterexamples = (fileId: number, otherId: number): { total: number; items: MapCounterexample[] } => {
       const items: MapCounterexample[] = [];
