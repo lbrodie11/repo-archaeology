@@ -1,0 +1,454 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "head": {
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
+    "commitsRead": 116,
+    "commitsAnalyzed": 113,
+    "sweepsSkipped": 3,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 150,
+    "oldestCommit": "2026-10-16",
+    "newestCommit": "2026-11-10",
+    "origins": {
+      "human": 99,
+      "agent": 14,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 2,
+      "internalEdges": 11,
+      "external": 3,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "from": "src/imports/classify.ts",
+  "to": "src/commands/imports.ts",
+  "relationship": "direct",
+  "why": "imports.ts imports classify.ts",
+  "meetsThresholds": false,
+  "shared": 2,
+  "fromChanges": 16,
+  "toChanges": 4,
+  "confidence": 0.125,
+  "reverseConfidence": 0.5,
+  "interval": {
+    "low": 0.0349,
+    "high": 0.3603
+  },
+  "reverseInterval": {
+    "low": 0.15,
+    "high": 0.85
+  },
+  "score": 0.035,
+  "weighted": false,
+  "lastTogether": "2026-11-08",
+  "crossesDirectories": true,
+  "originShare": {
+    "human": 1,
+    "agent": 0,
+    "bot": 0
+  },
+  "sharedCommits": [
+    {
+      "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+      "date": "2026-11-08",
+      "author": "Repo Archaeology",
+      "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/imports/classify.ts",
+        "path": "src/imports/classify.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": true,
+        "timedOut": false,
+        "omittedHunks": 11,
+        "omittedLines": 178,
+        "hunks": [
+          {
+            "header": "@@ -5,8 +5,11 @@ import {",
+            "lines": [
+              "   candidateFilePaths,",
+              "   gitTreeFiles,",
+              "+  IMPORT_UNRESOLVED_REASON_CODES,",
+              "   ImportResolver,",
+              "   MAX_SOURCE_BYTES,",
+              "   type GitTreeFiles,",
+              "   type GitTreeFilesOptions,",
+              "+  type ImportResolutionVia,",
+              "+  type ImportsCoverageMeta,",
+              "   type ImportUnresolvedReasonCode,",
+              "   type RepoFiles,"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -16,7 +19,11 @@ import { extractDetailedDependencies } from './typescript.js';",
+            "lines": [
+              " export {",
+              "   gitTreeFiles,",
+              "+  IMPORT_UNRESOLVED_REASON_CODES,",
+              "   MAX_SOURCE_BYTES,",
+              "   type GitTreeFiles,",
+              "   type GitTreeFilesOptions,",
+              "+  type ImportResolutionVia,",
+              "+  type ImportsCoverageMeta,",
+              "+  type ImportUnresolvedReasonCode,",
+              " };",
+              " "
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -68,8 +75,18 @@ interface FileImports {",
+            "lines": [
+              " export function workingTreeFiles(root: string, existing: ReadonlySet<string>): RepoFiles {",
+              "   let realRoot: string | undefined;",
+              "+  const existsCache = new Map<string, boolean>();",
+              "+  const realDirCache = new Map<string, string>();",
+              "   const getRealRoot = (): string => {",
+              "     realRoot ??= realpathSync(root);",
+              "     return realRoot;",
+              "   };",
+              "+  const getRealDir = (dir: string): string => {",
+              "+    let cached = realDirCache.get(dir);",
+              "+    if (cached === undefined) {",
+              "+      cached = realpathSync(join(root, dir));",
+              "+      realDirCache.set(dir, cached);",
+              "+    }",
+              "+    return cached;",
+              "+  };",
+              "   const isInsideRealDir = (realTarget: string, realDir: string): boolean =>",
+              "     realTarget === realDir || realTarget.startsWith(realDir.endsWith(sep) ? realDir : realDir + sep);"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -78,15 +95,24 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R",
+            "lines": [
+              "     exists: (path) => {",
+              "       if (!existing.has(path)) return false;",
+              "+      const cached = existsCache.get(path);",
+              "+      if (cached !== undefined) return cached;",
+              "       try {",
+              "         const full = join(root, path);",
+              "         const stat = lstatSync(full);",
+              "-        if (!stat.isFile()) return false;",
+              "+        if (!stat.isFile()) {",
+              "+          existsCache.set(path, false);",
+              "+          return false;",
+              "+        }",
+              "         const real = realpathSync(full);",
+              "-        return isInsideRealDir(real, getRealRoot());",
+              "+        const ok = isInsideRealDir(real, getRealRoot());",
+              "+        existsCache.set(path, ok);",
+              "+        return ok;",
+              "       } catch {",
+              "+        existsCache.set(path, false);",
+              "         return false;",
+              "       }",
+              "     },",
+              "     isWithinDir: (path, dir) => {",
+              "+      if (!dir) return true;"
+            ],
+            "truncated": true,
+            "omittedLines": 2
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "src/commands/imports.ts",
+        "path": "src/commands/imports.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": true,
+        "timedOut": false,
+        "omittedHunks": 16,
+        "omittedLines": 256,
+        "hunks": [
+          {
+            "header": "@@ -3,5 +3,12 @@ import { ignorePatterns } from '../config.js';",
+            "lines": [
+              " import { toRepoPath, UsageError, type Context } from '../context.js';",
+              " import { workingTreeFiles } from '../imports/classify.js';",
+              "-import { ImportResolver, type RepoFiles } from '../imports/resolve.js';",
+              "+import {",
+              "+  IMPORT_UNRESOLVED_REASON_CODES,",
+              "+  ImportResolver,",
+              "+  type ImportResolutionVia,",
+              "+  type ImportsCoverageMeta,",
+              "+  type ImportUnresolvedReasonCode,",
+              "+  type RepoFiles,",
+              "+} from '../imports/resolve.js';",
+              " import { extractDetailedDependencies, type ImportEdgeKind } from '../imports/typescript.js';",
+              " import { buildMeta, printHeader, type Meta } from '../report/views.js';"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -9,5 +16,10 @@ import { PathMatcher } from '../util/glob.js';",
+            "lines": [
+              " import { c, plural, terminalText } from '../util/term.js';",
+              " ",
+              "-export type { ImportEdgeKind };",
+              "+export type {",
+              "+  ImportEdgeKind,",
+              "+  ImportResolutionVia,",
+              "+  ImportsCoverageMeta,",
+              "+  ImportUnresolvedReasonCode,",
+              "+};",
+              " ",
+              " export interface ImportGraphEdge {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -16,4 +28,6 @@ export interface ImportGraphEdge {",
+            "lines": [
+              "   specifier: string;",
+              "   kind: ImportEdgeKind;",
+              "+  via?: ImportResolutionVia;",
+              "+  heuristic?: boolean;",
+              " }",
+              " "
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -22,4 +36,5 @@ export interface ImportGraphUnresolved {",
+            "lines": [
+              "   specifier: string;",
+              "   reason: string;",
+              "+  reasonCode?: ImportUnresolvedReasonCode;",
+              " }",
+              " "
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+      "date": "2026-11-08",
+      "author": "Repo Archaeology",
+      "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/imports/classify.ts",
+        "path": "src/imports/classify.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -10,5 +10,5 @@ import {",
+            "lines": [
+              "   type RepoFiles,",
+              " } from './resolve.js';",
+              "-import { extractDependencies } from './typescript.js';",
+              "+import { extractDetailedDependencies } from './typescript.js';",
+              " ",
+              " export {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -200,9 +200,9 @@ export class RelationshipClassifier {",
+            "lines": [
+              "     }",
+              "     result.analyzable = true;",
+              "-    const { specifiers, referencePaths, nonLiteralLoads } = extractDependencies(text, file);",
+              "+    const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, file);",
+              "     // A load whose target is computed at runtime could be the partner file.",
+              "     result.unresolved += nonLiteralLoads;",
+              "-    for (const specifier of specifiers) {",
+              "-      const resolved = this.resolver.resolve(file, specifier);",
+              "+    for (const { specifier, kind } of imports) {",
+              "+      const resolved = this.resolver.resolve(file, specifier, kind === 'require' ? 'require' : 'import');",
+              "       if (resolved.kind === 'file') {",
+              "         if (resolved.path !== file) result.imports.add(resolved.path);"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "src/commands/imports.ts",
+        "path": "src/commands/imports.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,5 +1,5 @@",
+            "lines": [
+              " import { posix, win32 } from 'node:path';",
+              " import { ignorePatterns } from '../config.js';",
+              "-import { toRepoPath, type Context } from '../context.js';",
+              "+import { toRepoPath, UsageError, type Context } from '../context.js';",
+              " import { workingTreeFiles } from '../imports/classify.js';",
+              " import { ImportResolver, type RepoFiles } from '../imports/resolve.js';"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -102,5 +102,5 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {",
+            "lines": [
+              " ",
+              "     for (const { specifier, kind } of imports) {",
+              "-      const resolved = resolver.resolve(from, specifier, kind === 'require' ? 'require' : undefined);",
+              "+      const resolved = resolver.resolve(from, specifier, kind === 'require' ? 'require' : 'import');",
+              "       if (resolved.kind === 'file') {",
+              "         if (resolved.path !== from && ctx.currentFiles.has(resolved.path)) {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -200,8 +200,9 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp",
+            "lines": [
+              "     for (const rawInput of options.files) {",
+              "       const path = ctx.currentFiles.has(rawInput) ? rawInput : toRepoPath(ctx, rawInput);",
+              "-      if (ctx.currentFiles.has(path)) {",
+              "-        index.indexFile(path);",
+              "-        allowedFrom.add(path);",
+              "+      if (!ctx.currentFiles.has(path)) {",
+              "+        throw new UsageError(`No such file in ${ctx.head?.ref ?? 'the working tree'}: ${path}`);",
+              "       }",
+              "+      index.indexFile(path);",
+              "+      allowedFrom.add(path);",
+              "       const importers = index.importersByTarget.get(path);",
+              "       if (importers) {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    }
+  ],
+  "counterexamples": {
+    "fromWithoutToTotal": 14,
+    "toWithoutFromTotal": 2,
+    "fromWithoutTo": [
+      {
+        "hash": "f9bcbee8be6e5ecd12e867866373eaa946692bcd",
+        "date": "2026-11-08",
+        "author": "Repo Archaeology",
+        "subject": "feat(imports): implement workspace-aware package exports, #imports, and source remapping (RA-09A)",
+        "origin": "human",
+        "historicalPath": "src/imports/classify.ts",
+        "status": "M"
+      },
+      {
+        "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+        "date": "2026-11-08",
+        "author": "Repo Archaeology",
+        "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+        "origin": "human",
+        "historicalPath": "src/imports/classify.ts",
+        "status": "M"
+      },
+      {
+        "hash": "76889e7c06f24ed496f54241f161d2333f9ce189",
+        "date": "2026-11-08",
+        "author": "Repo Archaeology",
+        "subject": "feat(imports): add git-tree-backed RepoFiles using a single git cat-file --batch process",
+        "origin": "human",
+        "historicalPath": "src/imports/classify.ts",
+        "status": "M"
+      }
+    ],
+    "toWithoutFrom": [
+      {
+        "hash": "77ad2906474d7cc94108b4f4e90e7255ab6134a9",
+        "date": "2026-11-08",
+        "author": "Repo Archaeology",
+        "subject": "fix(imports): address PR #19 review — YAML parser, in-repo package fallback, root-anchored globs, PATTERN_KEY_COMPARE, and module split",
+        "origin": "human",
+        "historicalPath": "src/commands/imports.ts",
+        "status": "M"
+      },
+      {
+        "hash": "780e0df18875a822e07197fcb6ab38940ceb6d50",
+        "date": "2026-11-08",
+        "author": "Repo Archaeology",
+        "subject": "feat(api): add openRepository() library session API and importGraph (RA-03)",
+        "origin": "human",
+        "historicalPath": "src/commands/imports.ts",
+        "status": "A"
+      }
+    ]
+  },
+  "bounds": {
+    "maxCommits": 3,
+    "contextLines": 2,
+    "maxPatchBytes": 65536,
+    "maxHunksPerFile": 4,
+    "maxLinesPerHunk": 24,
+    "maxTotalPatchLines": 200,
+    "timeoutMs": 8000,
+    "commitsTruncated": false,
+    "outputTruncated": false,
+    "timedOut": false
+  },
+  "cliCommand": "npx repo-archaeology explain src/imports/classify.ts src/commands/imports.ts",
+  "disclaimer": "Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files."
+}

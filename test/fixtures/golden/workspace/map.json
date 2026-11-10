@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 26,
+    "commitsAnalyzed": 26,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 13,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-01-26",
+    "origins": {
+      "human": 26,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 8,
+      "internalEdges": 5,
+      "external": 1,
+      "unresolved": 2,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 2,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {
+        "unknown-package": 1,
+        "not-exported": 1
+      }
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 26 usable commits: results will be thin until the project has more history."
+    ]
+  },
+  "file": "<map.html>",
+  "nodes": 10,
+  "edges": 7,
+  "counts": {
+    "ghost": 1,
+    "unknown": 4,
+    "indirect": 1,
+    "direct": 1,
+    "test": 0
+  },
+  "patchesIncluded": false
+}
