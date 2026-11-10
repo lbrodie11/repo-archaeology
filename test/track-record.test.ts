@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { sanitizeGitEnv, validateAgainstSchema } from '../scripts/schema-validator.mjs';
+import { sanitizeGitEnv, validateAgainstSchema, validateSchemaNode } from '../scripts/schema-validator.mjs';
 import { openRepository } from '../src/api/index.js';
 import { diff } from '../src/commands/diff.js';
 import { loadContext, UsageError } from '../src/context.js';
@@ -244,12 +244,12 @@ describe('RA-06 track record: evaluation window', () => {
         continue;
       }
       assert.ok('evaluated' in tr, 'expected: \'evaluated\' in tr');
-      assert.equal(tr.evaluated.commits, expected.window);
-      assert.equal(tr.evaluated.trainingCommits, expected.training);
+      assert.equal(tr.evaluated!.commits, expected.window);
+      assert.equal(tr.evaluated!.trainingCommits, expected.training);
       // `evaluated` describes the actual replayed window.
       const ordered = chronologicalTimeline(t.newestFirst());
-      assert.equal(tr.evaluated.from, new Date(ordered[expected.training]!.commitTime * 1000).toISOString().slice(0, 10));
-      assert.equal(tr.evaluated.to, new Date(ordered[n - 1]!.commitTime * 1000).toISOString().slice(0, 10));
+      assert.equal(tr.evaluated!.from, new Date(ordered[expected.training]!.commitTime * 1000).toISOString().slice(0, 10));
+      assert.equal(tr.evaluated!.to, new Date(ordered[n - 1]!.commitTime * 1000).toISOString().slice(0, 10));
       // Bounded work: at most (from + pair) updates per commit touching the tracked files.
       assert.ok(stats.stateUpdates <= 2 * n, `${stats.stateUpdates} updates for N = ${n}`);
     }
@@ -563,7 +563,206 @@ describe('RA-06 track record: filters and file lifetimes', () => {
   });
 });
 
+/** The adjacent float64 above (`dir = 1`) or below (`dir = -1`) a positive finite `x`. */
+function nextFloat(x: number, dir: 1 | -1): number {
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, x);
+  view.setBigUint64(0, view.getBigUint64(0) + BigInt(dir));
+  return view.getFloat64(0);
+}
+
+/**
+ * Reference replay: qualification from a CoChangeModel freshly built on each exact prefix, and
+ * the documented episode rules written out plainly (no shared state with the implementation).
+ */
+function referenceCounts(
+  ordered: readonly HistoryCommit[],
+  pair: ReplayPair,
+  thresholds: Thresholds,
+  settings: { halfLifeDays?: number; originWeights?: OriginWeights },
+  windowHours = 48,
+): { fired: number; confirmed: number; triggers: number; qualifies: boolean[] } {
+  const plan = planTrackWindow(ordered.length);
+  const windowSeconds = windowHours * HOUR;
+  const newest = ordered[ordered.length - 1]!.commitTime;
+  const qualifies: boolean[] = [];
+  const episodes: { start: number; confirmed: boolean; censored: boolean }[] = [];
+  let open: { start: number; confirmed: boolean; censored: boolean } | undefined;
+  let triggers = 0;
+  for (let i = plan.training; i < ordered.length; i++) {
+    const c = ordered[i]!;
+    const model = new CoChangeModel(ordered.slice(0, i).reverse(), settings);
+    const fromId = model.id(pair.from);
+    const toId = model.id(pair.to);
+    const q = fromId !== undefined && toId !== undefined && model.companions(fromId, thresholds).some((x) => x.to === toId);
+    qualifies.push(q);
+    const touchesFrom = c.files.includes(pair.from);
+    const touchesTo = c.files.includes(pair.to);
+    if (open && (touchesFrom || touchesTo)) {
+      if (c.commitTime - open.start > windowSeconds) {
+        episodes.push(open);
+        open = undefined;
+      } else if (touchesTo) {
+        open.confirmed = true;
+        episodes.push(open);
+        open = undefined;
+      }
+    }
+    if (touchesFrom && !touchesTo && q) {
+      triggers++;
+      if (!open) open = { start: c.commitTime, confirmed: false, censored: false };
+    }
+  }
+  if (open) episodes.push(open);
+  const counted = episodes.filter((e) => e.start + windowSeconds <= newest);
+  return { fired: counted.length, confirmed: counted.filter((e) => e.confirmed).length, triggers, qualifies };
+}
+
+function assertMatchesReference(
+  t: Timeline,
+  pair: ReplayPair,
+  thresholds: Thresholds,
+  settings: { halfLifeDays?: number; originWeights?: OriginWeights },
+  label: string,
+): void {
+  const ordered = chronologicalTimeline(t.newestFirst());
+  const seen: boolean[] = [];
+  const key = pairKey(pair.from, pair.to);
+  const replay = replayTimeline(ordered, [pair], {
+    thresholds,
+    ...settings,
+    onEvaluate: (e) => {
+      if (e.key === key) seen.push(e.qualifies);
+    },
+  }).get(key)!;
+  const expected = referenceCounts(ordered, pair, thresholds, settings);
+  assert.deepEqual(seen, expected.qualifies, `${label}: qualification at every step`);
+  const tr = toTrackRecord(replay);
+  assert.deepEqual(
+    { fired: firedOf(tr), confirmed: 'confirmed' in tr ? tr.confirmed : 0, triggers: 'triggers' in tr ? tr.triggers : -1 },
+    { fired: expected.fired, confirmed: expected.confirmed, triggers: expected.triggers },
+    `${label}: fired/confirmed/triggers`,
+  );
+}
+
+describe('RA-06 track record: numerical boundaries (shared weight policy with CoChangeModel)', () => {
+  it('review fixture: 1.2 / 1.5 at minConfidence 0.8 with origin weights 1/0.1/0.3 agrees with the model', () => {
+    const t = new Timeline();
+    t.add(['A', 'B'], { origin: 'human' }).add(['A', 'B'], { origin: 'agent' }).add(['A', 'B'], { origin: 'agent' });
+    t.add(['A'], { origin: 'bot' });
+    while (t.commits.length < 50) t.add(['C']);
+    t.add(['A']).add(['B']);
+    for (let i = 0; i < 10; i++) t.add(['A', 'B']);
+    while (t.commits.length < 100) t.add(['C']);
+    const thresholds = { minShared: 1, minConfidence: 0.8 };
+    const settings = { originWeights: { human: 1, agent: 0.1, bot: 0.3 } };
+    const prefix = new CoChangeModel(chronologicalTimeline(t.newestFirst()).slice(0, 50).reverse(), settings);
+    const a = prefix.id('A')!;
+    const b = prefix.id('B')!;
+    const reference = prefix.companions(a, thresholds).some((c) => c.to === b);
+    const replay = replayOne(t, AB, { thresholds, ...settings });
+    assert.equal(replay.triggers > 0, reference, 'the replay triggers exactly when the prefix model qualifies');
+    assertMatchesReference(t, AB, thresholds, settings, 'review fixture');
+    // Fed in any order, the model holds the same weights (no order-dependent accumulation).
+    const shuffled = new CoChangeModel(chronologicalTimeline(t.newestFirst()).slice(0, 50), settings);
+    assert.equal(shuffled.confidence(shuffled.pair(shuffled.id('A')!, shuffled.id('B')!)!, shuffled.id('A')!), prefix.confidence(prefix.pair(a, b)!, a));
+  });
+
+  const weightSets: [string, OriginWeights][] = [
+    ['1/0.1/0.3', { human: 1, agent: 0.1, bot: 0.3 }],
+    ['0.7/0.3/0.1', { human: 0.7, agent: 0.3, bot: 0.1 }],
+  ];
+  const modes: [string, (w: OriginWeights) => { halfLifeDays?: number; originWeights?: OriginWeights }][] = [
+    ['origin-only', (w) => ({ originWeights: w })],
+    ['recency+origin', (w) => ({ halfLifeDays: 2.5, originWeights: w })],
+    ['recency-only', () => ({ halfLifeDays: 1.7 })],
+  ];
+  const origins: CommitOrigin[] = ['human', 'agent', 'bot', 'agent', 'human', 'bot', 'agent'];
+  const randomTimeline = (seed: number): Timeline => {
+    let state = seed;
+    const rand = () => ((state = (state * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const t = new Timeline();
+    for (let i = 0; i < 80; i++) {
+      const r = rand();
+      const files = r < 0.35 ? ['A', 'B'] : r < 0.6 ? ['A'] : r < 0.75 ? ['B'] : ['C'];
+      t.add(files, { dt: 1 + Math.floor(rand() * 40), origin: origins[Math.floor(rand() * origins.length)] });
+    }
+    return t;
+  };
+
+  for (const [weightLabel, weights] of weightSets) {
+    for (const [modeLabel, settingsFor] of modes) {
+      it(`${modeLabel} ${weightLabel}: exact, just-below and just-above thresholds match a fresh prefix model`, () => {
+        const settings = settingsFor(weights);
+        for (const seed of [3, 11, 29]) {
+          const t = randomTimeline(seed);
+          const ordered = chronologicalTimeline(t.newestFirst());
+          const plan = planTrackWindow(ordered.length);
+          // Thresholds at confidences the prefix model actually produces during the window.
+          const observed = new Set<number>();
+          for (let i = plan.training; i < ordered.length; i += 7) {
+            const model = new CoChangeModel(ordered.slice(0, i).reverse(), settings);
+            const a = model.id('A');
+            const b = model.id('B');
+            const stat = a !== undefined && b !== undefined ? model.pair(a, b) : undefined;
+            if (stat && a !== undefined) observed.add(model.confidence(stat, a));
+          }
+          const values = [...observed].filter((v) => v > 0 && v < 1).slice(0, 3);
+          assert.ok(values.length > 0, `${modeLabel} seed ${seed}: the fixture produces fractional confidences`);
+          for (const v of values) {
+            for (const minConfidence of [v, nextFloat(v, -1), nextFloat(v, 1)]) {
+              for (const minShared of [1, 2.2]) {
+                assertMatchesReference(t, AB, { minShared, minConfidence }, settings, `${modeLabel} ${weightLabel} seed ${seed} minShared ${minShared} minConfidence ${minConfidence}`);
+                assertMatchesReference(t, { from: 'B', to: 'A' }, { minShared, minConfidence }, settings, `${modeLabel} ${weightLabel} B→A seed ${seed}`);
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+});
+
 describe('RA-06 track record: wording', () => {
+  it('renders every schema-valid never_fired shape without throwing, inventing counts, or printing "undefined"', () => {
+    const evaluated = { from: '2026-01-01', to: '2026-02-01', commits: 400, trainingCommits: 1600 };
+    const excludedNone = { censored: 0, targetDeleted: 0, clockSkew: 0 };
+    const cases: [string, Record<string, unknown>, string | undefined][] = [
+      ['minimal { fired: 0, reason }', {}, undefined],
+      ['evaluated only', { evaluated }, 'No completed earlier triggers in the last 400 commits.'],
+      ['excluded only', { excluded: { ...excludedNone, censored: 2 } }, undefined],
+      ['triggers only', { triggers: 0 }, undefined],
+      ['evaluated + triggers 0', { evaluated, triggers: 0 }, 'No earlier triggers in the last 400 commits.'],
+      ['evaluated + triggers > 0, no excluded', { evaluated, triggers: 3 }, 'No completed earlier triggers in the last 400 commits.'],
+      ['evaluated + excluded, no triggers', { evaluated, excluded: { ...excludedNone, censored: 2 } }, 'No completed earlier triggers in the last 400 commits.'],
+      ['windowHours + coChanged only', { windowHours: 48, coChanged: 3 }, undefined],
+    ];
+    for (const [label, extra, expected] of cases) {
+      const trackRecord = { fired: 0, reason: 'never_fired', ...extra } as ReturnType<typeof toTrackRecord>;
+      const errors: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, trackRecord, { $ref: 'common.schema.json#/$defs/TrackRecord' }, 'common.schema.json', '$', errors);
+      assert.deepEqual(errors, [], `${label} is a valid wire shape`);
+      let line: ReturnType<typeof formatTrackRecordLine>;
+      assert.doesNotThrow(() => (line = formatTrackRecordLine({ to: 'src/x.ts', trackRecord })), label);
+      assert.equal(line?.text, expected, label);
+      if (line) assert.doesNotMatch(line.text, /undefined|NaN/, label);
+    }
+  });
+
+  it('zero triggers and positive triggers with every episode excluded are worded differently', () => {
+    const base = { fired: 0 as const, reason: 'never_fired' as const, coChanged: 0, windowHours: 48, evaluated: { from: '2026-01-01', to: '2026-02-01', commits: 400, trainingCommits: 1600 } };
+    const none = formatTrackRecordLine({ to: 'x.ts', trackRecord: { ...base, triggers: 0, excluded: { censored: 0, targetDeleted: 0, clockSkew: 0 } } });
+    const allExcluded = formatTrackRecordLine({ to: 'x.ts', trackRecord: { ...base, triggers: 2, excluded: { censored: 1, targetDeleted: 1, clockSkew: 0 } } });
+    assert.equal(none?.text, 'No earlier triggers in the last 400 commits.');
+    assert.equal(allExcluded?.text, 'No completed earlier triggers in the last 400 commits (2 too recent or left out).');
+    // And from a real replay: an episode inside the final window is censored.
+    const t = new Timeline();
+    t.repeat(10, ['A', 'B']).repeat(40, ['C']).repeat(49, ['C'], 100);
+    t.add(['A'], { dt: 100 });
+    const tr = toTrackRecord(replayOne(t, AB));
+    assert.equal(formatTrackRecordLine({ to: 'B', trackRecord: tr })?.text, 'No completed earlier triggers in the last 50 commits (1 too recent or left out).');
+  });
+
   it('counts first, small-sample caveat, never-fired line, no accuracy framing', () => {
     const tr = toTrackRecord(replayOne(coreFixture(), AB));
     const line = formatTrackRecordLine({ to: 'src/auth/permissions.ts', trackRecord: tr })!;

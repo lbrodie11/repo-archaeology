@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - **Per-pair track record on `diff` suggestions (RA-06, [`src/model/track-record.ts`](src/model/track-record.ts)):** each suggestion gets an optional, additive `trackRecord` (`schemaVersion: 1` unchanged): replaying the baseline history in commit order with no future information, how often a threshold trigger for that exact `from → to` pair (`from` changed without `to` while the model linked them) was followed by a change to `to` within 48 hours (`fired`, `confirmed`, `triggers`, `coChanged`, `precision`, `interval`, `windowHours`, `evaluated`, `excluded`), or `{ fired: 0, reason: "never_fired" }` / `{ reason: "limited_history" }`. Classic, `--style rich` and Markdown output add one counts-first line per suggestion ("Before: 5 times this changed without permissions.ts; it changed within 48 h after 4 (not proof those were fixes)."). New `diff` flags `--no-track-record` and `--track-window <hours>` (1–720), and `repo.diff({ trackRecord, trackWindowHours })`. Definitions are in [`docs/json.md`](docs/json.md#521-track-record-suggestionstrackrecord-commonschemajsondefstrackrecord).
 
+### Changed
+- **One numerical policy for weighted co-change counts ([`src/model/cochange.ts`](src/model/cochange.ts)):** with `--origin-weights` and no half-life, weighted counts are now `Σ count[origin] × weight[origin]` over integer counts instead of a running float sum, and with `--half-life` recency weights accumulate in one canonical chronological order. The values are mathematically unchanged; only the last floating-point bits can differ, so a confidence that sits exactly on `--min-confidence` is decided the same way regardless of the order commits arrive in, and the RA-06 replay matches `diff` exactly. Unweighted results are unchanged.
+
 ## [0.9.0] - 2026-11-10
 
 ### Added

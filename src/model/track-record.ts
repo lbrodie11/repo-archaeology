@@ -3,9 +3,16 @@ import { MIN_COMMITS_FOR_BACKTEST } from '../commands/backtest.js';
 import { DEFAULT_FOLLOW_UP_WINDOW_HOURS } from '../commands/followup-benchmark.js';
 import { wilsonInterval } from '../util/stats.js';
 import { isoDate } from '../util/term.js';
-import type { Thresholds } from './cochange.js';
+import {
+  combineOriginCounts,
+  companionQualifies,
+  compareChronological,
+  confidenceRatio,
+  DecayedSum,
+  type Thresholds,
+} from './cochange.js';
 import type { HistoryCommit } from './history.js';
-import { hasNonDefaultOriginWeights, resolveOriginWeights, type OriginWeights } from './origin.js';
+import { hasNonDefaultOriginWeights, resolveOriginWeights, type OriginCounts, type OriginWeights } from './origin.js';
 
 /**
  * Per-pair track record (RA-06): "when this pair triggered before, did the target change soon after?"
@@ -131,59 +138,51 @@ export function pairKey(from: string, to: string): string {
 }
 
 /**
- * Orders commits chronologically by committer time, breaking ties by git-log order then hash,
- * exactly as `followup-benchmark` does (it sorts newest first, then reverses).
+ * Orders commits chronologically by committer time, breaking ties by git-log order then hash:
+ * the order `followup-benchmark` replays and `CoChangeModel` accumulates recency weights in.
  */
 export function chronologicalTimeline(commits: readonly HistoryCommit[]): HistoryCommit[] {
-  return [...commits]
-    .sort(
-      (x, y) =>
-        y.commitTime - x.commitTime ||
-        (x.logOrder !== undefined && y.logOrder !== undefined ? x.logOrder - y.logOrder : 0) ||
-        (x.hash < y.hash ? -1 : x.hash > y.hash ? 1 : 0),
-    )
-    .reverse();
+  return [...commits].sort(compareChronological);
 }
 
 /**
- * A recency-weighted sum kept relative to one reference time and rescaled lazily by
- * `2^(−Δt / halfLife)`: the same weights `CoChangeModel` assigns relative to its newest commit.
+ * Weighted counter that follows `CoChangeModel`'s numerical policy: integer per-origin counts
+ * (exact, order-independent) plus, with a half-life, a `DecayedSum` fed in replay order.
  */
-class DecayedSum {
-  private sum = 0;
-  private at = Number.NEGATIVE_INFINITY;
+class WeightCounter {
+  readonly counts: OriginCounts = { human: 0, agent: 0, bot: 0 };
+  count = 0;
+  private readonly decayed?: DecayedSum;
 
-  constructor(private readonly halfLifeSeconds: number | undefined) {}
-
-  private scale(delta: number): number {
-    if (this.halfLifeSeconds === undefined || delta <= 0) return 1;
-    return 0.5 ** (delta / this.halfLifeSeconds);
+  constructor(
+    halfLifeSeconds: number | undefined,
+    private readonly weights: Required<OriginWeights>,
+  ) {
+    if (halfLifeSeconds !== undefined) this.decayed = new DecayedSum(halfLifeSeconds);
   }
 
-  /** Adds a commit's origin weight at `time`, with `reference` the newest commit time seen so far. */
-  add(weight: number, time: number, reference: number): void {
-    if (this.halfLifeSeconds === undefined) {
-      this.sum += weight;
-      return;
-    }
-    const base = this.at === Number.NEGATIVE_INFINITY ? 0 : this.sum * this.scale(reference - this.at);
-    this.sum = base + weight * this.scale(reference - time);
-    this.at = reference;
+  add(commit: HistoryCommit, reference: number): void {
+    const origin = commit.origin ?? 'human';
+    this.count++;
+    this.counts[origin]++;
+    this.decayed?.add(this.weights[origin], commit.commitTime, reference);
   }
 
-  value(reference: number): number {
-    if (this.halfLifeSeconds === undefined) return this.sum;
-    if (this.at === Number.NEGATIVE_INFINITY) return 0;
-    return this.sum * this.scale(reference - this.at);
+  /** `PairStat.originWeight`: the origin-weighted count. */
+  originWeight(): number {
+    return combineOriginCounts(this.counts, this.weights);
+  }
+
+  /** `PairStat.weight` / `changeWeight` as a model built from the same prefix holds it. */
+  weight(reference: number): number {
+    return this.decayed ? this.decayed.value(reference) : this.originWeight();
   }
 }
 
 interface PairState {
   pair: ReplayPair;
   key: string;
-  count: number;
-  originWeight: number;
-  weight: DecayedSum;
+  shared: WeightCounter;
   toDeleted: boolean;
   open?: ReplayEpisode;
   result: PairReplay;
@@ -208,9 +207,9 @@ export function replayTimeline(
   const halfLifeSeconds =
     options.halfLifeDays !== undefined && options.halfLifeDays > 0 ? options.halfLifeDays * 86400 : undefined;
   const useOriginWeights = hasNonDefaultOriginWeights(options.originWeights);
-  const originWeights = resolveOriginWeights(options.originWeights);
-  const originWeightOf = (commit: HistoryCommit): number =>
-    useOriginWeights ? originWeights[commit.origin ?? 'human'] : 1;
+  // Default weights resolve to all 1s, so the unweighted case is the same integer arithmetic.
+  const originWeights = useOriginWeights ? resolveOriginWeights(options.originWeights) : resolveOriginWeights();
+  const counter = () => new WeightCounter(halfLifeSeconds, originWeights);
 
   const windowStart = timeline[plan.training];
   const windowEnd = timeline[timeline.length - 1];
@@ -240,15 +239,15 @@ export function replayTimeline(
     };
     out.set(key, result);
     if (pair.from === pair.to) continue;
-    states.push({ pair, key, count: 0, originWeight: 0, weight: new DecayedSum(halfLifeSeconds), toDeleted: false, result });
+    states.push({ pair, key, shared: counter(), toDeleted: false, result });
   }
   if (limited || states.length === 0) return out;
 
   // State only for tracked `from` files and their tracked partners.
-  const fromWeight = new Map<string, DecayedSum>();
+  const fromWeight = new Map<string, WeightCounter>();
   const byFile = new Map<string, PairState[]>();
   for (const state of states) {
-    if (!fromWeight.has(state.pair.from)) fromWeight.set(state.pair.from, new DecayedSum(halfLifeSeconds));
+    if (!fromWeight.has(state.pair.from)) fromWeight.set(state.pair.from, counter());
     for (const file of [state.pair.from, state.pair.to]) {
       const list = byFile.get(file);
       if (list) {
@@ -258,25 +257,24 @@ export function replayTimeline(
   }
 
   let reference = Number.NEGATIVE_INFINITY;
-  const { minShared, minConfidence } = options.thresholds;
-
-  /** Same test as `CoChangeModel.companions(from, thresholds)` for the single partner `to`. */
+  /**
+   * Same test, on the same numbers, as `CoChangeModel.companions(from, thresholds)` for the single
+   * partner `to` (a pair exists only once it has a shared commit).
+   */
   const qualifies = (state: PairState): boolean => {
-    if (state.count === 0) return false;
-    const effectiveShared = useOriginWeights ? state.originWeight : state.count;
-    if (effectiveShared + 1e-9 < minShared) return false;
-    const denominator = fromWeight.get(state.pair.from)!.value(reference);
-    const confidence = denominator === 0 ? 0 : Math.min(1, state.weight.value(reference) / denominator);
-    return confidence >= minConfidence;
+    const shared = state.shared;
+    if (shared.count === 0) return false;
+    const effectiveShared = useOriginWeights ? shared.originWeight() : shared.count;
+    const confidence = confidenceRatio(shared.weight(reference), fromWeight.get(state.pair.from)!.weight(reference));
+    return companionQualifies(effectiveShared, confidence, options.thresholds);
   };
 
   /** Adds `commit` to the per-pair state (mirrors `CoChangeModel.addCommit` for the tracked counters). */
   const addCommit = (commit: HistoryCommit, files: ReadonlySet<string>): void => {
     if (commit.commitTime > reference) reference = commit.commitTime;
-    const originWeight = originWeightOf(commit);
-    for (const [from, sum] of fromWeight) {
+    for (const [from, weight] of fromWeight) {
       if (!files.has(from)) continue;
-      sum.add(originWeight, commit.commitTime, reference);
+      weight.add(commit, reference);
       if (stats) stats.stateUpdates++;
     }
     for (const file of files) {
@@ -284,9 +282,7 @@ export function replayTimeline(
       if (!touched) continue;
       for (const state of touched) {
         if (file !== state.pair.from || !files.has(state.pair.to)) continue;
-        state.count++;
-        state.originWeight += originWeight;
-        state.weight.add(originWeight, commit.commitTime, reference);
+        state.shared.add(commit, reference);
         if (stats) stats.stateUpdates++;
       }
     }
@@ -449,11 +445,12 @@ export type TrackRecord =
   | {
       fired: 0;
       reason: 'never_fired';
-      triggers: number;
-      coChanged: number;
-      windowHours: number;
-      evaluated: TrackRecordEvaluated;
-      excluded: TrackRecordExcluded;
+      /** Context fields: optional in the wire contract (Gutter needs only `fired` and `reason`); `toTrackRecord` always sets them. */
+      triggers?: number;
+      coChanged?: number;
+      windowHours?: number;
+      evaluated?: TrackRecordEvaluated;
+      excluded?: TrackRecordExcluded;
     }
   | { reason: 'limited_history' };
 

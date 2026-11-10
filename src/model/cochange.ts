@@ -58,6 +58,72 @@ export interface ModelOptions {
   originWeights?: OriginWeights;
 }
 
+/*
+ * Numerical policy shared by `CoChangeModel` and the RA-06 track-record replay, so that the
+ * same commits and options always produce bit-identical weights and threshold decisions,
+ * whatever order the commits arrive in:
+ *
+ * - Origin-only and unweighted: a weight is `Σ count[origin] × weight[origin]` over integer
+ *   per-origin counts, in the fixed term order human, agent, bot (`combineOriginCounts`).
+ * - Recency (with or without origin weights): a `DecayedSum` fed in one canonical chronological
+ *   order (`compareChronological`) and rebased lazily to the newest commit time seen so far.
+ * - Thresholds: `companionQualifies` is the single `minShared` / `minConfidence` test.
+ */
+
+/** Weighted count from integer per-origin counts, summed in the fixed order human, agent, bot. */
+export function combineOriginCounts(counts: OriginCounts, weights: Required<OriginWeights>): number {
+  return counts.human * weights.human + counts.agent * weights.agent + counts.bot * weights.bot;
+}
+
+/**
+ * Canonical chronological order (oldest first): committer time, then git-log order (higher
+ * `logOrder` is older), then hash. The same order `backtest --follow-ups` replays.
+ */
+export function compareChronological(x: HistoryCommit, y: HistoryCommit): number {
+  return (
+    x.commitTime - y.commitTime ||
+    (x.logOrder !== undefined && y.logOrder !== undefined ? y.logOrder - x.logOrder : 0) ||
+    (x.hash < y.hash ? 1 : x.hash > y.hash ? -1 : 0)
+  );
+}
+
+/**
+ * A recency-weighted sum `Σ w · 2^(−(R − t) / halfLife)` kept relative to the newest commit time
+ * seen when it was last updated and rescaled lazily, so it can be read at any later reference
+ * time `R`. Feed it in `compareChronological` order with `reference` = the running newest
+ * commit time; the result then does not depend on how the caller is structured.
+ */
+export class DecayedSum {
+  private sum = 0;
+  private at = Number.NEGATIVE_INFINITY;
+
+  constructor(private readonly halfLifeSeconds: number) {}
+
+  private scale(delta: number): number {
+    return delta <= 0 ? 1 : 0.5 ** (delta / this.halfLifeSeconds);
+  }
+
+  add(weight: number, time: number, reference: number): void {
+    const base = this.at === Number.NEGATIVE_INFINITY ? 0 : this.sum * this.scale(reference - this.at);
+    this.sum = base + weight * this.scale(reference - time);
+    this.at = reference;
+  }
+
+  value(reference: number): number {
+    return this.at === Number.NEGATIVE_INFINITY ? 0 : this.sum * this.scale(reference - this.at);
+  }
+}
+
+/** `P(to | from)` from weighted counts, capped at 1 (0 when `from` has no weight). */
+export function confidenceRatio(pairWeight: number, fromWeight: number): number {
+  return fromWeight === 0 ? 0 : Math.min(1, pairWeight / fromWeight);
+}
+
+/** The single `minShared` / `minConfidence` test for a directional pair with at least one shared commit. */
+export function companionQualifies(effectiveShared: number, confidence: number, thresholds: Thresholds): boolean {
+  return effectiveShared + 1e-9 >= thresholds.minShared && confidence >= thresholds.minConfidence;
+}
+
 /**
  * Co-change statistics over a set of commits.
  *
@@ -74,6 +140,8 @@ export class CoChangeModel {
   readonly files: string[] = [];
   readonly changeCount: number[] = [];
   readonly changeWeight: number[] = [];
+  /** Integer per-origin change counts per file (the exact basis of `changeWeight` without a half-life). */
+  private readonly changeOriginCounts: OriginCounts[] = [];
   /** Sum of squared commit weights, for the effective sample size. */
   private readonly changeWeightSq: number[] = [];
   readonly lastTime: number[] = [];
@@ -96,6 +164,36 @@ export class CoChangeModel {
     this.originWeights = resolveOriginWeights(options.originWeights);
     this.hasOriginWeights = hasNonDefaultOriginWeights(options.originWeights);
     this.commitList.forEach((commit, index) => this.addCommit(commit, index));
+    if (this.halfLifeSeconds !== undefined) this.applyRecencyWeights();
+  }
+
+  /**
+   * Recency weights (see the numerical policy above): one `DecayedSum` per file and per pair,
+   * fed in canonical chronological order and read at the model's reference time.
+   */
+  private applyRecencyWeights(): void {
+    const halfLife = this.halfLifeSeconds!;
+    const order = this.commitList.map((_, i) => i).sort((x, y) => compareChronological(this.commitList[x]!, this.commitList[y]!) || x - y);
+    const fileSums = this.files.map(() => new DecayedSum(halfLife));
+    const pairSums = new Map<PairStat, DecayedSum>();
+    let reference = Number.NEGATIVE_INFINITY;
+    for (const index of order) {
+      const commit = this.commitList[index]!;
+      if (commit.commitTime > reference) reference = commit.commitTime;
+      const weight = this.originWeightOf(commit);
+      const ids = [...new Set(commit.files.map((f) => this.ids.get(f)!))];
+      for (const id of ids) fileSums[id]!.add(weight, commit.commitTime, reference);
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const stat = this.adjacency[Math.min(ids[i]!, ids[j]!)]!.get(Math.max(ids[i]!, ids[j]!))!;
+          let sum = pairSums.get(stat);
+          if (!sum) pairSums.set(stat, (sum = new DecayedSum(halfLife)));
+          sum.add(weight, commit.commitTime, reference);
+        }
+      }
+    }
+    fileSums.forEach((sum, id) => (this.changeWeight[id] = sum.value(reference)));
+    for (const [stat, sum] of pairSums) stat.weight = sum.value(reference);
   }
 
   get commits(): readonly HistoryCommit[] {
@@ -166,8 +264,7 @@ export class CoChangeModel {
 
   /** Confidence that `to` changes, given that `from` changed. */
   confidence(stat: PairStat, from: number): number {
-    const denominator = this.changeWeight[from] ?? 0;
-    return denominator === 0 ? 0 : Math.min(1, stat.weight / denominator);
+    return confidenceRatio(stat.weight, this.changeWeight[from] ?? 0);
   }
 
   /** Files that historically change with `from`, best first. */
@@ -176,9 +273,8 @@ export class CoChangeModel {
     const neighbours = this.adjacency[from];
     if (!neighbours) return result;
     for (const [to, stat] of neighbours) {
-      if (this.effectiveShared(stat) + 1e-9 < thresholds.minShared) continue;
       const confidence = this.confidence(stat, from);
-      if (confidence < thresholds.minConfidence) continue;
+      if (!companionQualifies(this.effectiveShared(stat), confidence, thresholds)) continue;
       result.push({
         from,
         to,
@@ -197,11 +293,12 @@ export class CoChangeModel {
       const neighbours = this.adjacency[a];
       if (!neighbours) continue;
       for (const [b, stat] of neighbours) {
-        if (b <= a || this.effectiveShared(stat) + 1e-9 < thresholds.minShared) continue;
+        if (b <= a) continue;
+        const shared = this.effectiveShared(stat);
         const ab = this.confidence(stat, a);
         const ba = this.confidence(stat, b);
-        const passAB = ab >= thresholds.minConfidence;
-        const passBA = ba >= thresholds.minConfidence;
+        const passAB = companionQualifies(shared, ab, thresholds);
+        const passBA = companionQualifies(shared, ba, thresholds);
         if (!passAB && !passBA) continue;
         const scoreAB = wilsonLowerBound(ab, this.effectiveChanges(a));
         const scoreBA = wilsonLowerBound(ba, this.effectiveChanges(b));
@@ -245,6 +342,7 @@ export class CoChangeModel {
       this.files.push(path);
       this.changeCount.push(0);
       this.changeWeight.push(0);
+      this.changeOriginCounts.push({ human: 0, agent: 0, bot: 0 });
       this.changeWeightSq.push(0);
       this.lastTime.push(0);
       this.authors.push(new Map());
@@ -260,7 +358,10 @@ export class CoChangeModel {
     const ids = [...new Set(commit.files.map((f) => this.intern(f)))];
     for (const id of ids) {
       this.changeCount[id]!++;
-      this.changeWeight[id]! += weight;
+      const counts = this.changeOriginCounts[id]!;
+      counts[origin]++;
+      // Recency weights are filled in by `applyRecencyWeights` once every commit is known.
+      if (this.halfLifeSeconds === undefined) this.changeWeight[id] = combineOriginCounts(counts, this.originWeights);
       this.changeWeightSq[id]! += weight * weight;
       this.lastTime[id] = Math.max(this.lastTime[id]!, commit.time);
       const authors = this.authors[id]!;
@@ -287,9 +388,9 @@ export class CoChangeModel {
           this.adjacency[b]!.set(a, stat);
         }
         stat.count++;
-        stat.weight += weight;
-        stat.originWeight += originWeight;
         stat.originCounts[origin]++;
+        stat.originWeight = combineOriginCounts(stat.originCounts, this.originWeights);
+        if (this.halfLifeSeconds === undefined) stat.weight = stat.originWeight;
         stat.lastTime = Math.max(stat.lastTime, commit.time);
         this.addEvidence(stat, index);
       }
