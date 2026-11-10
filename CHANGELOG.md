@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Go and Python Import Analysis ([`src/imports/go.ts`](src/imports/go.ts), [`src/imports/python.ts`](src/imports/python.ts), [`src/imports/toml.ts`](src/imports/toml.ts)):** Pairs of `.go` and `.py` files used to be `unknown`; now they are classified as `direct`, `indirect` or `ghost` when the analyzer can tell, and stay `unknown` whenever it can't. Both analyzers are dependency-free bounded lexers and never execute Go, Python or build tooling.
+  - **Go:**
+    - Imports resolve against every `go.mod` (nested ones included), local `replace` directives and a root `go.work`, with complete-segment module matching.
+    - An import links to the imported package's non-test files (`via: "go-package"`; `explain` says `imports package <path>`).
+    - Two files in the same package directory share scope without imports, so their pair is `unknown` (`same Go package: files share scope without imports`), never `ghost`.
+  - **Python:**
+    - Imports resolve against the source roots: the repository root, `src/`, project directories, and `pyproject.toml` setuptools, poetry and hatch settings, read with a minimal TOML subset reader.
+    - Absolute imports are resolved by elimination against that local namespace, so a local module shadows the standard library and no dependency list is needed.
+    - Also handled: relative imports, namespace packages, the `from pkg import name` attribute heuristic (`heuristic: true`), and literal `importlib.import_module("…")` calls (`kind: "dynamic"`).
+  - **When results stay `unknown`:**
+    - Lexer failures, malformed import blocks, unusable manifests, computed dynamic imports, ambiguous names and budget hits make a file incomplete, which keeps its pairs `unknown`.
+    - Third-party imports are external and never make a file incomplete.
+  - **Warnings and docs:** Manifest problems, in-repo modules imported without a local mapping and budget hits are reported in `meta.warnings`. The README has a new *Language support* table.
+- **JSON contract (additive, still `schemaVersion: 1`):** `ImportResolutionVia` gains `"go-package"` and `"python-module"` ([`schema/common.schema.json`](schema/common.schema.json)), and `imports --json` `languages` can include `"go"` and `"python"`. [`docs/json.md`](docs/json.md) and [`docs/api.md`](docs/api.md) now state that the `via`, `reasonCode` and `languages` value sets may grow within `schemaVersion: 1` and that consumers must tolerate unknown values. This enum growth is why the next release is a minor version.
+
 ### Changed
 - **One Import-Analysis Pipeline ([`src/imports/analysis.ts`](src/imports/analysis.ts)):** Relationship classification (`scan`, `diff`, `file`, `explain`, `map`) and the import graph (`imports`) now read every file through the same `analyzeFile` step and a `LanguageAnalyzer` registry, instead of each calling the TypeScript extractor and resolver on its own, so the two cannot drift apart. No output changes: golden JSON snapshots of every command on two fixtures and on this repository's own history ([`test/golden.test.ts`](test/golden.test.ts)) are byte-identical before and after, and a parity test checks that both see the same edges for every fixture file.
 
