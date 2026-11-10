@@ -96,6 +96,7 @@ function checkGolden(group: string, name: string, actual: string): void {
     return;
   }
   assert.ok(existsSync(path), `missing golden snapshot ${path}; record it with UPDATE_GOLDEN=1`);
+  // `.gitattributes` pins these files to LF so a Windows checkout compares the same bytes.
   const expected = readFileSync(path, 'utf8');
   // Byte-identical: compare the raw text, not parsed objects.
   assert.equal(actual, expected, `${group}/${name}.json changed`);
@@ -121,6 +122,29 @@ async function mapDataGolden(group: string, dir: string, flags: Record<string, n
 }
 
 const FIXTURE_FLAGS = ['--min-shared', '2', '--min-confidence', '0.3', '--no-cache'];
+
+describe('golden snapshot files', () => {
+  it('are checked out with LF line endings on every platform (.gitattributes eol=lf)', (t) => {
+    let attr: string;
+    try {
+      attr = execFileSync('git', ['check-attr', 'eol', '--', 'test/fixtures/golden/app/scan.json'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: sanitizeGitEnv(process.env),
+      });
+    } catch {
+      t.skip('not a git checkout');
+      return;
+    }
+    assert.match(attr, /eol: lf$/m, 'test/fixtures/golden/** must keep `text eol=lf` in .gitattributes');
+    for (const group of ['app', 'workspace', 'self']) {
+      for (const name of ['scan', 'imports', 'map-data']) {
+        const text = readFileSync(join(GOLDEN_DIR, group, `${name}.json`), 'utf8');
+        assert.ok(!text.includes('\r'), `${group}/${name}.json contains CR characters`);
+      }
+    }
+  });
+});
 
 describe('golden JSON snapshots (TS/JS import analysis baseline)', { concurrency: true }, () => {
   let app: FixtureRepo;
