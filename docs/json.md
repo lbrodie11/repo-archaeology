@@ -15,7 +15,7 @@ Every JSON payload emitted by Repo Archaeology includes a top-level contract env
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.8.0"
+    "version": "0.9.0"
   }
 }
 ```
@@ -150,7 +150,7 @@ Commands that inspect JS/TS imports (`scan`, `diff`, `file`, `map`, `explain`, `
 - **`external` (`integer`):** Specifiers classified as external packages (`node:` built-ins, declared `dependencies` / `devDependencies` / `peerDependencies` / `optionalDependencies`, `package.json#imports` mapped to external packages, or `tsconfig.paths` mapped into `node_modules`).
 - **`unresolved` (`integer`):** Specifiers that could not be resolved to an internal file or declared external dependency (always equal to the sum of values in `unresolvedByReason`).
 - **`dynamicLoads` (`integer`):** Files in `scope` containing non-literal dynamic `import(expr)` or `require(expr)` calls.
-- **`unsupportedFiles` (`integer`):** Non-JS/TS files encountered by relationship classification in `scope`.
+- **`unsupportedFiles` (`integer`):** Files without an import analyzer (anything but JS/TS, Go and Python) encountered in `scope`.
 - **`sourceUnavailable` (`integer`):** Supported JS/TS files in `scope` whose source contents could not be read (e.g., missing blob or exceeding `MAX_SOURCE_BYTES`).
 - **`heuristicEdges` (`integer`):** Internal edges in `scope` resolved via a heuristic fallback (such as an unconfigured `"source"` export condition, `dist/` → `src/` build-output remapping without a matching `tsconfig` `outDir`/`rootDir`, or a nested `package.json` in a repository with no explicit workspace manifest). For example, on `shadcn-ui`, all `441` workspace `exports` edges resolve via `dist/` → `src/` fallback and are counted in `heuristicEdges: 441` (and surfaced as `(441 heuristic)` in the human `repo-archaeology imports` terminal summary).
 - **`unresolvedByReason` (`Partial<Record<ImportUnresolvedReasonCode, integer>>`, optional):** Non-zero counts of unresolved specifiers grouped by `reasonCode` (`"alias-unmatched"`, `"unknown-package"`, `"target-missing"`, `"not-exported"`, `"invalid-target"`, `"unsupported-config"`, `"ambiguous-package"`). When a bare specifier matches an in-repo `package.json` `name` that is not in an active workspace, it is never silently treated as `"external"` even if listed in `dependencies`: unparseable/conflicting workspace manifests report `"unsupported-config"`, and packages excluded from a valid workspace manifest report `"unknown-package"`.
@@ -196,7 +196,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.8.0"
+    "version": "0.9.0"
   },
   "meta": {
     "tool": "repo-archaeology",

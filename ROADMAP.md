@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.8.0`)
+## Shipped Foundations (`v0.2.x` – `v0.9.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
@@ -33,6 +33,7 @@ Last updated: November 2026
 - **Revert Filtering & Honest Suffix Families (`v0.6.0`):** Mechanical `Revert "…"` / `Reapply "…"` commits are skipped by default (`meta.revertsSkipped`, `--include-reverts` to opt out), and same-directory suffix families exclude generic layer suffixes (`-service`, `-controller`, …).
 - **Pair-Centered Briefing Plate on One Shared Engine (`v0.7.0`):** The Briefing plate is laid out by a single deterministic engine used by both the report and the browser, in rows by relationship to the selected pair, with curved wires that avoid unrelated files and labels, width-aware compact plates, keyboard access, and trace-on-hover.
 - **Readable Atlas Overview (`v0.8.0`):** Dense Atlas frames draw as folder groups until opened or zoomed, frames hidden by filters explain themselves, captions and labels stay readable at any zoom, and `Reset view` reaches every frame; seeded browser stress tests cover the plate and the Atlas.
+- **Go and Python Import Analysis (`v0.9.0`):** Go and Python files get the same import checking as JS/TS, through one shared analysis pipeline, with dependency-free lexers that never execute code. Go resolves `go.mod`/`go.work` modules and replacements to package files; Python resolves source roots (`pyproject.toml`, `setup.cfg`, `setup.py` read as text) with the import system's package rules. When the analyzer is unsure, the pair stays unchecked, never a ghost wire.
 
 ---
 
