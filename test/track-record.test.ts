@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import { sanitizeGitEnv, validateAgainstSchema } from '../scripts/schema-validator.mjs';
+import { openRepository } from '../src/api/index.js';
+import { diff } from '../src/commands/diff.js';
+import { loadContext, UsageError } from '../src/context.js';
+import { RELATIONSHIPS } from '../src/imports/classify.js';
 import type { Context } from '../src/context.js';
 import type { RawChange, RawCommit } from '../src/git/log.js';
 import { CoChangeModel, type Thresholds } from '../src/model/cochange.js';
@@ -16,6 +24,7 @@ import {
   type ReplayPair,
 } from '../src/model/track-record.js';
 import { formatTrackRecordLine } from '../src/report/views.js';
+import { FixtureRepo } from './helpers.js';
 
 const HOUR = 3600;
 const T0 = Date.UTC(2025, 0, 1) / 1000;
@@ -102,6 +111,8 @@ function coreFixture(): Timeline {
 
 const AB: ReplayPair = { from: 'A', to: 'B' };
 
+const firedOf = (tr: ReturnType<typeof toTrackRecord>): number | undefined => ('fired' in tr ? tr.fired : undefined);
+
 describe('RA-06 track record: replay semantics', () => {
   it('core: 4 A-only triggers, 3 followed by B within 24 h → fired 4, confirmed 3', () => {
     const replay = replayOne(coreFixture(), AB);
@@ -177,7 +188,7 @@ describe('RA-06 track record: replay semantics', () => {
     t.repeat(48, ['C'], 100);
     const tr = toTrackRecord(replayOne(t, AB));
     assert.deepEqual(
-      { fired: tr.fired, reason: 'reason' in tr ? tr.reason : undefined, coChanged: 'coChanged' in tr ? tr.coChanged : -1 },
+      { fired: firedOf(tr), reason: 'reason' in tr ? tr.reason : undefined, coChanged: 'coChanged' in tr ? tr.coChanged : -1 },
       { fired: 0, reason: 'never_fired', coChanged: 2 },
     );
   });
@@ -313,7 +324,7 @@ describe('RA-06 track record: time', () => {
     const replay = replayTimeline(t.commits, [AB], { thresholds: DEFAULT_THRESHOLDS }).get(pairKey('A', 'B'))!;
     const tr = toTrackRecord(replay);
     assert.deepEqual(
-      { fired: tr.fired, excluded: 'excluded' in tr ? tr.excluded : undefined },
+      { fired: firedOf(tr), excluded: 'excluded' in tr ? tr.excluded : undefined },
       { fired: 0, excluded: { censored: 0, targetDeleted: 0, clockSkew: 1 } },
     );
   });
@@ -472,15 +483,15 @@ describe('RA-06 track record: filters and file lifetimes', () => {
     for (let k = 0; k < 4; k++) log.add(['A'], { dt: 100 });
     padTo(log, 100);
     const base = record(log.ctx(), 'A', 'B');
-    assert.equal(base.fired, 4);
+    assert.equal(firedOf(base), 4);
     // 10 shared commits never reach minShared 11.
     const strictShared = record(log.ctx({ thresholds: { minShared: 11, minConfidence: 0.4 } }), 'A', 'B');
-    assert.deepEqual([strictShared.fired, 'reason' in strictShared && strictShared.reason], [0, 'never_fired']);
+    assert.deepEqual([firedOf(strictShared), 'reason' in strictShared && strictShared.reason], [0, 'never_fired']);
     // Before the k-th A-only commit (k = 0..3) confidence is 10 / (10 + k): 1, 0.909, 0.833, 0.769.
     const strictConfidence = record(log.ctx({ thresholds: { minShared: 3, minConfidence: 0.9 } }), 'A', 'B');
-    assert.equal(strictConfidence.fired, 2);
+    assert.equal(firedOf(strictConfidence), 2);
     const looser = record(log.ctx({ thresholds: { minShared: 3, minConfidence: 0.75 } }), 'A', 'B');
-    assert.equal(looser.fired, 4); // 10/13 = 0.769 ≥ 0.75 for the 4th trigger
+    assert.equal(firedOf(looser), 4); // 10/13 = 0.769 ≥ 0.75 for the 4th trigger
   });
 
   it('a revert commit counts only when the revert policy keeps it', () => {
@@ -531,7 +542,7 @@ describe('RA-06 track record: filters and file lifetimes', () => {
     // Deleted and never re-created, so the identity keeps its plain path.
     const tr = record(ctx, 'A', 'B');
     assert.deepEqual(
-      { fired: tr.fired, excluded: 'excluded' in tr ? tr.excluded : undefined, triggers: 'triggers' in tr ? tr.triggers : -1 },
+      { fired: firedOf(tr), excluded: 'excluded' in tr ? tr.excluded : undefined, triggers: 'triggers' in tr ? tr.triggers : -1 },
       { fired: 0, excluded: { censored: 0, targetDeleted: 1, clockSkew: 0 }, triggers: 1 },
     );
   });
@@ -544,11 +555,11 @@ describe('RA-06 track record: filters and file lifetimes', () => {
     padTo(log, 100);
     const ctx = log.ctx();
     const live = record(ctx, 'A', 'B');
-    assert.deepEqual([live.fired, 'triggers' in live ? live.triggers : -1], [0, 0]);
+    assert.deepEqual([firedOf(live), 'triggers' in live ? live.triggers : -1], [0, 0]);
     // The earlier lifetime is a separate identity; its episodes stop when it was deleted.
     const oldIdentity = ctx.history.commits.find((c) => c.files.some((f) => f.startsWith('B\u0000')))!.files.find((f) => f.startsWith('B\u0000'))!;
     const old = record(ctx, 'A', oldIdentity);
-    assert.deepEqual([old.fired, 'triggers' in old ? old.triggers : -1], [0, 0]);
+    assert.deepEqual([firedOf(old), 'triggers' in old ? old.triggers : -1], [0, 0]);
   });
 });
 
@@ -585,3 +596,320 @@ describe('RA-06 track record: wording', () => {
     for (const text of [line.text, five.text, never.text]) assert.doesNotMatch(text, /accura|correct|chance|%/i);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// End-to-end: CLI renderers, JSON, API, bare command, flags, isolation.
+// ---------------------------------------------------------------------------------------------
+
+const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
+const TSX = import.meta.resolve('tsx');
+const SCHEMA_DIR = join(import.meta.dirname, '..', 'schema');
+const HANDLER = 'src/handler.ts';
+const PERMISSIONS = 'src/permissions.ts';
+const OTHER = 'src/other.ts';
+const LINKED = 'src/linked.ts';
+
+function runCli(args: string[], cwd: string) {
+  const result = spawnSync(process.execPath, ['--import', TSX, CLI, ...args], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 60_000,
+    env: sanitizeGitEnv(process.env, { NO_COLOR: '1', REPO_ARCHAEOLOGY_CACHE_DIR: '' }),
+  });
+  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * 100 daily commits (T = W = 50). Training: handler+permissions co-change 10 times (incl. the
+ * initial commit), linked+permissions 5 times. Window: 4 handler-only commits, the first 3
+ * followed one day later by a permissions-only commit.
+ */
+function buildRepo(): FixtureRepo {
+  const repo = new FixtureRepo();
+  for (const f of [HANDLER, PERMISSIONS, OTHER, LINKED]) repo.write(f, `// ${f}\n`);
+  repo.git('add', '.');
+  repo.commit({ message: 'initial' });
+  for (let i = 0; i < 9; i++) repo.touch([HANDLER, PERMISSIONS]);
+  for (let i = 0; i < 5; i++) repo.touch([LINKED, PERMISSIONS]);
+  for (let i = 0; i < 35; i++) repo.touch([OTHER]);
+  for (let k = 0; k < 4; k++) {
+    repo.touch([HANDLER]);
+    if (k < 3) repo.touch([PERMISSIONS]);
+    repo.touch([OTHER]);
+  }
+  for (let i = 0; i < 39; i++) repo.touch([OTHER]);
+  assert.equal(Number(repo.git('rev-list', '--count', 'HEAD').trim()), 100);
+  return repo;
+}
+
+type Json = Record<string, any>;
+
+function permissionsSuggestion(payload: Json): Json {
+  const s = (payload.suggestions as Json[]).find((x) => x.to === PERMISSIONS);
+  assert.ok(s, `expected a ${PERMISSIONS} suggestion`);
+  return s;
+}
+
+function assertInvariants(tr: Json): void {
+  if (!('fired' in tr)) return;
+  if (tr.reason === 'never_fired') return;
+  assert.ok(0 <= tr.confirmed && tr.confirmed <= tr.fired && tr.fired <= tr.triggers, 'expected 0 <= confirmed <= fired <= triggers');
+  assert.ok(
+    0 <= tr.interval.low && tr.interval.low <= tr.precision && tr.precision <= tr.interval.high && tr.interval.high <= 1,
+    'expected 0 <= low <= precision <= high <= 1',
+  );
+}
+
+describe('RA-06 track record: end-to-end contract', () => {
+  let repo: FixtureRepo;
+  let originalPermissions: string;
+
+  before(() => {
+    repo = buildRepo();
+    originalPermissions = readFileSync(join(repo.dir, PERMISSIONS), 'utf8');
+  });
+  after(() => repo.cleanup());
+
+  const editHandler = () => writeFileSync(join(repo.dir, HANDLER), 'export const handler = 1; // edited\n');
+  const reset = () => {
+    repo.git('checkout', '-q', '--', '.');
+    repo.git('clean', '-qfd');
+  };
+
+  it('classic, rich, Markdown, --json, --json-out, the API and the bare command report identical numbers', async () => {
+    editHandler();
+    try {
+      const json = runCli(['diff', '--json'], repo.dir);
+      assert.equal(json.code, 0, json.stderr);
+      const payload = JSON.parse(json.stdout) as Json;
+      validateAgainstSchema(SCHEMA_DIR, payload, 'diff.schema.json');
+      const s = permissionsSuggestion(payload);
+      assert.equal(s.from, HANDLER);
+      const tr = s.trackRecord as Json;
+      assert.deepEqual(
+        { fired: tr.fired, confirmed: tr.confirmed, triggers: tr.triggers, coChanged: tr.coChanged, precision: tr.precision, windowHours: tr.windowHours },
+        { fired: 4, confirmed: 3, triggers: 4, coChanged: 0, precision: 0.75, windowHours: 48 },
+      );
+      assert.deepEqual(tr.excluded, { censored: 0, targetDeleted: 0, clockSkew: 0 });
+      assert.equal(tr.evaluated.commits, 50);
+      assert.equal(tr.evaluated.trainingCommits, 50);
+      assertInvariants(tr);
+      for (const other of payload.suggestions as Json[]) {
+        if (other.trackRecord) assertInvariants(other.trackRecord);
+      }
+
+      const outFile = join(repo.dir, '..', `${basename(repo.dir)}-track.json`);
+      const classic = runCli(['diff', '--json-out', outFile], repo.dir);
+      const rich = runCli(['--style', 'rich', 'diff'], repo.dir);
+      const markdown = runCli(['diff', '--format', 'markdown'], repo.dir);
+      const bare = runCli(['--json'], repo.dir);
+      for (const r of [classic, rich, markdown, bare]) assert.equal(r.code, 0, r.stderr);
+      const fromFile = JSON.parse(readFileSync(outFile, 'utf8')) as Json;
+      rmSync(outFile, { force: true });
+      assert.deepEqual(permissionsSuggestion(fromFile).trackRecord, tr);
+      const bareJson = JSON.parse(bare.stdout) as Json;
+      assert.equal(bareJson.mode, 'diff');
+      validateAgainstSchema(SCHEMA_DIR, bareJson, 'default.schema.json');
+      assert.deepEqual(permissionsSuggestion(bareJson).trackRecord, tr);
+
+      const api = await openRepository({ cwd: repo.dir });
+      try {
+        const viaApi = (await api.diff()) as unknown as Json;
+        assert.deepEqual(stripVolatile(viaApi), stripVolatile(payload));
+      } finally {
+        await api.close();
+      }
+
+      const expectedLine =
+        'Before: 4 times this changed without permissions.ts; it changed within 48 h after 3 (small sample; not proof those were fixes).';
+      assert.ok(classic.stdout.includes(expectedLine), `classic output lacks the track-record line:\n${classic.stdout}`);
+      assert.ok(rich.stdout.includes(expectedLine), `rich output lacks the track-record line:\n${rich.stdout}`);
+      assert.ok(
+        markdown.stdout.includes(
+          'Before: 4 times this changed without `permissions.ts`; it changed within 48 h after 3 (small sample; not proof those were fixes).',
+        ),
+        `Markdown output lacks the track-record line:\n${markdown.stdout}`,
+      );
+      // Never framed as accuracy, correctness or chance in any renderer.
+      for (const [label, text] of [['classic', classic.stdout], ['rich', rich.stdout], ['markdown', markdown.stdout]] as const) {
+        assert.doesNotMatch(text, /accura|correct|chance/i, `${label} output uses accuracy-type wording`);
+      }
+    } finally {
+      reset();
+    }
+  });
+
+  it('--no-track-record omits the field; suggestion order and exit codes are unchanged', () => {
+    editHandler();
+    try {
+      const withRecord = runCli(['diff', '--json', '--exit-code'], repo.dir);
+      const without = runCli(['diff', '--json', '--exit-code', '--no-track-record'], repo.dir);
+      assert.equal(withRecord.code, 1);
+      assert.equal(without.code, 1);
+      const a = JSON.parse(withRecord.stdout) as Json;
+      const b = JSON.parse(without.stdout) as Json;
+      validateAgainstSchema(SCHEMA_DIR, b, 'diff.schema.json');
+      for (const s of b.suggestions as Json[]) assert.equal('trackRecord' in s, false);
+      const stripped = (a.suggestions as Json[]).map(({ trackRecord: _tr, ...rest }) => rest);
+      assert.deepEqual(stripped, b.suggestions);
+      const text = runCli(['diff', '--no-track-record'], repo.dir);
+      assert.doesNotMatch(text.stdout, /Before: |No earlier triggers/);
+    } finally {
+      reset();
+    }
+  });
+
+  it('--track-window accepts whole hours 1..720 and exits 2 otherwise', () => {
+    editHandler();
+    try {
+      for (const ok of ['1', '720']) {
+        const r = runCli(['diff', '--json', '--track-window', ok], repo.dir);
+        assert.equal(r.code, 0, r.stderr);
+        assert.equal(permissionsSuggestion(JSON.parse(r.stdout) as Json).trackRecord.windowHours, Number(ok));
+      }
+      // Daily commits: nothing follows within 1 h.
+      const oneHour = permissionsSuggestion(JSON.parse(runCli(['diff', '--json', '--track-window', '1'], repo.dir).stdout) as Json);
+      assert.equal(oneHour.trackRecord.confirmed, 0);
+      for (const bad of ['0', '721', 'abc', '1.5', '-3']) {
+        const r = runCli(['diff', '--track-window', bad], repo.dir);
+        assert.equal(r.code, 2, `--track-window ${bad}: ${r.stderr}`);
+        assert.match(r.stderr, /--track-window must be a whole number of hours from 1 to 720/);
+      }
+    } finally {
+      reset();
+    }
+  });
+
+  it('API: trackRecord: false and trackWindowHours follow the same rules', async () => {
+    editHandler();
+    const api = await openRepository({ cwd: repo.dir });
+    try {
+      const off = (await api.diff({ trackRecord: false })) as unknown as Json;
+      for (const s of off.suggestions as Json[]) assert.equal('trackRecord' in s, false);
+      const week = (await api.diff({ trackWindowHours: 168 })) as unknown as Json;
+      assert.equal(permissionsSuggestion(week).trackRecord.windowHours, 168);
+      for (const bad of [0, 721, 1.5, Number.NaN]) {
+        await assert.rejects(() => api.diff({ trackWindowHours: bad }), UsageError);
+      }
+    } finally {
+      await api.close();
+      reset();
+    }
+  });
+
+  it('never calls replayPairs with trackRecord: false; replays only each suggestion\'s primary pair', async () => {
+    writeFileSync(join(repo.dir, HANDLER), 'export const handler = 2;\n');
+    writeFileSync(join(repo.dir, LINKED), 'export const linked = 2;\n');
+    try {
+      const ctx = await loadContext(repo.dir, {}, { silent: true });
+      const calls: ReplayPair[][] = [];
+      const spy: typeof replayPairs = (c, pairs, opts) => {
+        calls.push([...pairs]);
+        return replayPairs(c, pairs, opts);
+      };
+      const off = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS], trackRecord: false, replayPairs: spy });
+      assert.equal(calls.length, 0);
+      assert.ok(off.suggestions.length > 0, 'expected suggestions');
+      assert.ok(off.suggestions.every((s) => s.trackRecord === undefined), 'expected no trackRecord');
+
+      const on = await diff(ctx, { limit: 10, kinds: [...RELATIONSHIPS], replayPairs: spy });
+      assert.equal(calls.length, 1);
+      const s = on.suggestions.find((x) => x.to === PERMISSIONS)!;
+      assert.equal(s.alsoLinkedFrom.length, 1, 'both changed files link to permissions.ts');
+      assert.deepEqual(
+        calls[0],
+        on.suggestions.map((x) => ({ from: x.from, to: x.to })),
+        'one primary pair per suggestion, alsoLinkedFrom sources not replayed',
+      );
+      assert.ok(!calls[0]!.some((p) => p.from === s.alsoLinkedFrom[0] && p.to === PERMISSIONS), 'secondary source not replayed');
+      assert.deepEqual(
+        off.suggestions.map((x) => [x.from, x.to]),
+        on.suggestions.map((x) => [x.from, x.to]),
+        'order unchanged',
+      );
+    } finally {
+      reset();
+    }
+  });
+
+  it('a dirty working tree does not affect the record', () => {
+    editHandler();
+    try {
+      const clean = permissionsSuggestion(JSON.parse(runCli(['diff', '--json'], repo.dir).stdout) as Json).trackRecord;
+      writeFileSync(join(repo.dir, OTHER), 'export const other = -1;\n');
+      writeFileSync(join(repo.dir, 'src/untracked.ts'), 'export const u = 1;\n');
+      const dirty = permissionsSuggestion(JSON.parse(runCli(['diff', '--json'], repo.dir).stdout) as Json).trackRecord;
+      assert.deepEqual(dirty, clean);
+    } finally {
+      reset();
+    }
+  });
+
+  it('with --base main, feature-branch commits (including later permissions changes) never enter the replay', () => {
+    editHandler();
+    const onMain = permissionsSuggestion(JSON.parse(runCli(['diff', '--json'], repo.dir).stdout) as Json).trackRecord;
+    reset();
+    repo.git('checkout', '-q', '-b', 'feature');
+    try {
+      repo.touch([HANDLER], 'feature: handler');
+      repo.touch([PERMISSIONS], 'feature: permissions');
+      repo.commit({ message: 'feature: restore permissions', write: { [PERMISSIONS]: originalPermissions } });
+      const r = runCli(['diff', '--base', 'main', '--json'], repo.dir);
+      assert.equal(r.code, 0, r.stderr);
+      const payload = JSON.parse(r.stdout) as Json;
+      assert.deepEqual(payload.changed.map((c: Json) => c.path), [HANDLER]);
+      assert.equal(payload.evaluation.baselineSha, repo.git('rev-parse', 'main').trim());
+      // If the branch leaked, its handler commit would add a trigger confirmed a day later.
+      assert.deepEqual(permissionsSuggestion(payload).trackRecord, onMain);
+    } finally {
+      repo.git('checkout', '-q', 'main');
+      repo.git('branch', '-q', '-D', 'feature');
+    }
+  });
+
+  it('with --head <old>, nothing newer than <old> is used', () => {
+    repo.git('checkout', '-q', '-b', 'head-test');
+    try {
+      repo.touch([HANDLER], 'old: handler');
+      const old = repo.git('rev-parse', 'HEAD').trim();
+      const args = ['diff', '--base', `${old}~1`, '--head', old, '--json'];
+      const before = JSON.parse(runCli(args, repo.dir).stdout) as Json;
+      const tr = permissionsSuggestion(before).trackRecord;
+      assert.equal(tr.fired, 4);
+      repo.touch([PERMISSIONS], 'new: permissions');
+      repo.touch([HANDLER], 'new: handler');
+      repo.touch([PERMISSIONS], 'new: permissions again');
+      const later = JSON.parse(runCli(args, repo.dir).stdout) as Json;
+      assert.deepEqual(later.suggestions, before.suggestions);
+      assert.deepEqual(later.evaluation, before.evaluation);
+    } finally {
+      repo.git('checkout', '-q', 'main');
+      repo.git('branch', '-q', '-D', 'head-test');
+    }
+  });
+
+  it('thin history (< 50 usable commits) gives limited_history and prints no line', () => {
+    const small = new FixtureRepo();
+    try {
+      small.write(HANDLER, 'a\n');
+      small.write(PERMISSIONS, 'b\n');
+      small.git('add', '.');
+      small.commit({ message: 'init' });
+      for (let i = 0; i < 6; i++) small.touch([HANDLER, PERMISSIONS]);
+      writeFileSync(join(small.dir, HANDLER), 'edited\n');
+      const payload = JSON.parse(runCli(['diff', '--json'], small.dir).stdout) as Json;
+      assert.deepEqual(permissionsSuggestion(payload).trackRecord, { reason: 'limited_history' });
+      validateAgainstSchema(SCHEMA_DIR, payload, 'diff.schema.json');
+      const text = runCli(['diff'], small.dir).stdout;
+      assert.doesNotMatch(text, /Before: |No earlier triggers/);
+    } finally {
+      small.cleanup();
+    }
+  });
+});
+
+function stripVolatile(payload: Json): Json {
+  const clone = structuredClone(payload);
+  delete clone.meta?.cache;
+  return clone;
+}

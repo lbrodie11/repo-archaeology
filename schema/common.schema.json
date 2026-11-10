@@ -1231,7 +1231,95 @@
             "type": "string",
             "pattern": "^@[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?$"
           }
+        },
+        "trackRecord": {
+          "$ref": "#/$defs/TrackRecord"
         }
+      }
+    },
+    "TrackRecord": {
+      "description": "RA-06 per-pair track record for the suggestion's primary directional pair (from → to): how often a threshold trigger (from changed without to while to qualified as a companion) was followed by a change to to within windowHours, replayed over the baseline history. Observational evidence, not correctness. Absent with --no-track-record. Cross-field invariants (0 ≤ confirmed ≤ fired ≤ triggers; interval.low ≤ precision ≤ interval.high) are documented in docs/json.md and enforced by test/json-contract.test.ts.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "At least one completed episode in the evaluation window.",
+          "additionalProperties": false,
+          "required": ["fired", "confirmed", "triggers", "coChanged", "precision", "interval", "windowHours", "evaluated", "excluded"],
+          "properties": {
+            "fired": { "type": "integer", "minimum": 1, "description": "Episodes opened by a threshold trigger and fully observed." },
+            "confirmed": { "type": "integer", "minimum": 0, "description": "Episodes in which `to` changed within windowHours after the opening trigger." },
+            "triggers": { "type": "integer", "minimum": 1, "description": "Every threshold trigger in the window, including ones inside an open episode." },
+            "coChanged": { "type": "integer", "minimum": 0, "description": "Commits in the window touching both files while `to` qualified." },
+            "precision": { "type": "number", "minimum": 0, "maximum": 1, "description": "confirmed / fired: an observed follow-up rate (name shared with Gutter), not accuracy." },
+            "interval": { "$ref": "#/$defs/TrackRecordInterval" },
+            "windowHours": { "$ref": "#/$defs/TrackWindowHours" },
+            "evaluated": { "$ref": "#/$defs/TrackRecordEvaluated" },
+            "excluded": { "$ref": "#/$defs/TrackRecordExcluded" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The window was evaluable, with no completed episode.",
+          "additionalProperties": false,
+          "required": ["fired", "reason"],
+          "properties": {
+            "fired": { "const": 0 },
+            "reason": { "const": "never_fired" },
+            "triggers": { "type": "integer", "minimum": 0 },
+            "coChanged": { "type": "integer", "minimum": 0 },
+            "windowHours": { "$ref": "#/$defs/TrackWindowHours" },
+            "evaluated": { "$ref": "#/$defs/TrackRecordEvaluated" },
+            "excluded": { "$ref": "#/$defs/TrackRecordExcluded" }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Too little (or partial) baseline history for a track record.",
+          "additionalProperties": false,
+          "required": ["reason"],
+          "properties": {
+            "reason": { "const": "limited_history" }
+          }
+        }
+      ]
+    },
+    "TrackRecordInterval": {
+      "type": "object",
+      "description": "95% Wilson score interval for confirmed / fired. Descriptive only: episodes from one repository are not independent.",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": { "type": "number", "minimum": 0, "maximum": 1 },
+        "high": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "TrackWindowHours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 720,
+      "description": "Follow-up window in hours (--track-window; default 48)."
+    },
+    "TrackRecordEvaluated": {
+      "type": "object",
+      "description": "The replayed evaluation window.",
+      "additionalProperties": false,
+      "required": ["from", "to", "commits", "trainingCommits"],
+      "properties": {
+        "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Committer date of the oldest replayed commit." },
+        "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Committer date of the newest replayed commit." },
+        "commits": { "type": "integer", "minimum": 30, "maximum": 2000, "description": "Commits replayed for triggers (W)." },
+        "trainingCommits": { "type": "integer", "minimum": 30, "description": "Commits before the window that built the initial state (N − W)." }
+      }
+    },
+    "TrackRecordExcluded": {
+      "type": "object",
+      "description": "Episodes left out of fired.",
+      "additionalProperties": false,
+      "required": ["censored", "targetDeleted", "clockSkew"],
+      "properties": {
+        "censored": { "type": "integer", "minimum": 0 },
+        "targetDeleted": { "type": "integer", "minimum": 0 },
+        "clockSkew": { "type": "integer", "minimum": 0 }
       }
     },
     "DiffFamilyView": {

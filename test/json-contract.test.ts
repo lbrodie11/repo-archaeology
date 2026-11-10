@@ -997,6 +997,96 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
   });
 });
 
+/** RA-06 cross-field invariants the per-field schema cannot express. */
+function assertTrackRecordInvariants(tr: Record<string, any>, path: string): void {
+  if (!('fired' in tr) || tr.reason !== undefined) return;
+  assert.ok(0 <= tr.confirmed && tr.confirmed <= tr.fired && tr.fired <= tr.triggers, `${path}: 0 <= confirmed <= fired <= triggers`);
+  assert.ok(
+    0 <= tr.interval.low && tr.interval.low <= tr.precision && tr.precision <= tr.interval.high && tr.interval.high <= 1,
+    `${path}: 0 <= low <= precision <= high <= 1`,
+  );
+  assert.ok(Math.abs(tr.precision - tr.confirmed / tr.fired) < 1e-4, `${path}: precision = confirmed / fired`);
+}
+
+describe('RA-06 trackRecord JSON contract', () => {
+  it('diff --json emits schema-valid trackRecord shapes with the documented invariants', () => {
+    const r = new FixtureRepo();
+    try {
+      r.write('src/a.ts', 'a\n');
+      r.write('src/b.ts', 'b\n');
+      r.write('src/c.ts', 'c\n');
+      r.git('add', '.');
+      r.commit({ message: 'init' });
+      for (let i = 0; i < 9; i++) r.touch(['src/a.ts', 'src/b.ts']);
+      for (let i = 0; i < 40; i++) r.touch(['src/c.ts']);
+      for (let k = 0; k < 6; k++) {
+        r.touch(['src/a.ts']);
+        if (k % 2 === 0) r.touch(['src/b.ts']);
+      }
+      for (let i = 0; i < 41; i++) r.touch(['src/c.ts']);
+      r.write('src/a.ts', 'edited\n');
+      const res = runCli(['diff', '--json'], r.dir);
+      assert.equal(res.code, 0, res.stderr);
+      const payload = JSON.parse(res.stdout);
+      assertMatchesSchema(payload, 'diff.schema.json');
+      const tr = payload.suggestions.find((s: { to: string }) => s.to === 'src/b.ts').trackRecord;
+      // Daily commits: the a-only commits at k = 2 and k = 4 fall inside an open 48 h episode, so they
+      // are extra triggers, not new episodes.
+      assert.deepEqual([tr.fired, tr.confirmed, tr.triggers], [4, 3, 6]);
+      assertTrackRecordInvariants(tr, 'suggestions[b].trackRecord');
+
+      const off = JSON.parse(runCli(['diff', '--json', '--no-track-record'], r.dir).stdout);
+      assertMatchesSchema(off, 'diff.schema.json');
+      assert.equal(off.suggestions.some((s: object) => 'trackRecord' in s), false);
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('the TrackRecord schema accepts exactly the three documented shapes', () => {
+    const schemaRef = { $ref: 'common.schema.json#/$defs/TrackRecord' };
+    const errorsFor = (value: unknown): string[] => {
+      const errors: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, value, schemaRef, 'common.schema.json', '$', errors);
+      return errors;
+    };
+    const evaluated = { from: '2026-03-01', to: '2026-11-01', commits: 500, trainingCommits: 1500 };
+    const excluded = { censored: 1, targetDeleted: 0, clockSkew: 0 };
+    const full = {
+      fired: 5, confirmed: 4, triggers: 7, coChanged: 7, precision: 0.8,
+      interval: { low: 0.376, high: 0.964 }, windowHours: 48, evaluated, excluded,
+    };
+    assertTrackRecordInvariants(full, 'example');
+    assert.deepEqual(errorsFor(full), []);
+    assert.deepEqual(errorsFor({ fired: 0, reason: 'never_fired' }), []);
+    assert.deepEqual(
+      errorsFor({ fired: 0, reason: 'never_fired', triggers: 0, coChanged: 0, windowHours: 48, evaluated, excluded }),
+      [],
+    );
+    assert.deepEqual(errorsFor({ reason: 'limited_history' }), []);
+
+    const invalid: [string, unknown][] = [
+      ['precision > 1', { ...full, precision: 1.2 }],
+      ['interval.low < 0', { ...full, interval: { low: -0.1, high: 0.9 } }],
+      ['windowHours 0', { ...full, windowHours: 0 }],
+      ['windowHours 721', { ...full, windowHours: 721 }],
+      ['fired 0 without reason', { ...full, fired: 0 }],
+      ['missing interval', { ...full, interval: undefined }],
+      ['unknown reason', { reason: 'not_enough' }],
+      ['limited_history with counts', { reason: 'limited_history', fired: 0 }],
+      ['never_fired with fired 2', { fired: 2, reason: 'never_fired' }],
+      ['never_fired with precision', { fired: 0, reason: 'never_fired', precision: 0 }],
+      ['accuracy field', { ...full, accuracy: 0.8 }],
+      ['excluded missing clockSkew', { ...full, excluded: { censored: 0, targetDeleted: 0 } }],
+      ['evaluated with a timestamp', { ...full, evaluated: { ...evaluated, from: '2026-03-01T00:00:00Z' } }],
+    ];
+    for (const [label, value] of invalid) {
+      const clean = JSON.parse(JSON.stringify(value));
+      assert.notDeepEqual(errorsFor(clean), [], `schema should reject ${label}`);
+    }
+  });
+});
+
 function resolveSchemaNodeForTest(ref: string): JsonSchemaNode {
   const [file, pointer] = ref.split('#/$defs/');
   const root = loadSchema(file!);
