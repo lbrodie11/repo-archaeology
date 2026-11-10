@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.7.0/schema/common.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.8.0/schema/common.schema.json",
   "title": "Repo Archaeology Common Definitions (v1)",
   "description": "Shared JSON Schema definitions for Repo Archaeology CLI v1 JSON outputs.",
   "$defs": {

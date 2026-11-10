@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-10
+
+### Added
+- **Seeded Browser Stress Tests for the Briefing Plate and the Atlas ([`test/map-plate-stress.test.ts`](test/map-plate-stress.test.ts), [`test/map-atlas-stress.test.ts`](test/map-atlas-stress.test.ts), [`test/fixtures/atlas-graphs.ts`](test/fixtures/atlas-graphs.ts)):** Seeded random walks (clicks, keyboard, touch, drag, zoom, plain scrolling, filters, search, deep links, resizes, view switches) that check invariants after every step: no page errors, finite geometry, no unexplained blank frames, selection and inspector agree, layout guarantees on untouched plates, and bounded DOM growth. The Atlas suite runs ten generated graph shapes (empty, pairs, star, clique, chain, 300-file component, 120 components, unchecked-only groups, awkward names) across desktop, hi-DPI with reduced motion, forced colors, and 390px and 320px touch viewports. `RA_STRESS_SEED`, `RA_STRESS_STEPS` and `RA_STRESS_HTML` explore other walks and real maps; the canvas exposes a read-only `__atlasSnapshot()` for these tests.
+
 ### Changed
 - **Atlas Overview Level of Detail ([`src/map/template.ts`](src/map/template.ts), [`src/map/layout.ts`](src/map/layout.ts)):**
   - **No unexplained blank frames.** Cut frames whose relationships are all hidden by the filter bar draw a dashed border and say what is hidden and how to show it ("3 unchecked links hidden by filters · click to show"); clicking the frame, or the `Show hidden relationships` button in the overview panel (which lists the affected frames), turns those kinds on. Frames made only of unchecked links, which start hidden whenever other kinds exist, now sort last in their own `unchecked` band instead of opening the sheet (on shadcn-ui the first, fourth and fifth frames were blank by default).

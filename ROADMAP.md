@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.7.0`)
+## Shipped Foundations (`v0.2.x` – `v0.8.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
@@ -30,6 +30,9 @@ Last updated: November 2026
 - **Statistical & Origin-Aware Evidence (`v0.4.0`):** Two-sided 95% Wilson confidence intervals (`interval` / `reverseInterval`), `human` / `agent` / `bot` commit origin classification and weighting (`--origin-weights`, `backtest --compare-origin-weights`), relationship verdicts (`.repo-archaeology.verdicts.json`), and historical contributor / `CODEOWNERS` context (`--owners`).
 - **Precomputed Map Engine & Opt-In FRAME/12 `--style rich` (`v0.4.0`):** Deterministic precomputed layout (`#ra-layout`) with zero-idle-CPU rendering, plus opt-in `--style rich` FRAME/12 editorial terminal output and ranked contact-sheet ("dig sheet") browser maps.
 - **FRAME/12 Investigation Board & Built-In Field Guide (`v0.5.1`):** Interactive `Briefing` + `Atlas` views in `map --style rich` with a featured finding ego-network blueprint (`C-01`), directional co-change and Wilson confidence interval evidence cards, ranked findings index (`C-05`), and a built-in 12-term **Repo Archaeology Field Guide** with contextual `?` popovers and worked statistical explanations.
+- **Revert Filtering & Honest Suffix Families (`v0.6.0`):** Mechanical `Revert "…"` / `Reapply "…"` commits are skipped by default (`meta.revertsSkipped`, `--include-reverts` to opt out), and same-directory suffix families exclude generic layer suffixes (`-service`, `-controller`, …).
+- **Pair-Centered Briefing Plate on One Shared Engine (`v0.7.0`):** The Briefing plate is laid out by a single deterministic engine used by both the report and the browser, in rows by relationship to the selected pair, with curved wires that avoid unrelated files and labels, width-aware compact plates, keyboard access, and trace-on-hover.
+- **Readable Atlas Overview (`v0.8.0`):** Dense Atlas frames draw as folder groups until opened or zoomed, frames hidden by filters explain themselves, captions and labels stay readable at any zoom, and `Reset view` reaches every frame; seeded browser stress tests cover the plate and the Atlas.
 
 ---
 

@@ -238,7 +238,7 @@ jobs:
 
       - name: Check for overlooked companion files
         id: archaeology
-        uses: lbrodie11/repo-archaeology@v0.7.0
+        uses: lbrodie11/repo-archaeology@v0.8.0
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
@@ -253,9 +253,9 @@ jobs:
   - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
   - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
   - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
-  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.7.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.7.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
+  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.8.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.8.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
   - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is resolved to its canonical absolute path and honoured, while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated into separate empty config files. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
-  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.7.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.8.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
 
 ### `explain`
 
@@ -583,7 +583,7 @@ Known limits:
 
 ## Project status
 
-The v0.5 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), historical revision analysis without checkout (`--head <ref>`), two-sided 95% Wilson confidence intervals (`interval` / `reverseInterval`), commit origin classification and weighting (`human` / `agent` / `bot`, `--origin-weights`, `backtest --compare-origin-weights`), the persistent raw-commit history cache, `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), the programmatic `openRepository()` library API and `imports` / `importGraph` ([docs/api.md](docs/api.md) and [`schema/import-graph.schema.json`](schema/import-graph.schema.json)), relationship verdicts (`.repo-archaeology.verdicts.json`), historical contributor and `CODEOWNERS` context (`--owners`), the precomputed `map` layout engine and opt-in FRAME/12 `--style rich` terminal and Investigation Board (`Briefing` + `Atlas` + `Field Guide`) map view, `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
+The v0.8 implementation is complete and tested, including pre-change baseline isolation (`diff --base`), historical revision analysis without checkout (`--head <ref>`), two-sided 95% Wilson confidence intervals (`interval` / `reverseInterval`), commit origin classification and weighting (`human` / `agent` / `bot`, `--origin-weights`, `backtest --compare-origin-weights`), the persistent raw-commit history cache, `diff` silence diagnostics (`No suggestions after evaluating …`), the follow-up fix benchmark (`backtest --follow-ups`), Evidence Explorer (`explain` and `map --include-patches`), finding families across `scan`, `diff`, and `map`, the versioned `schemaVersion: 1` JSON output contract ([docs/json.md](docs/json.md) and [`schema/`](schema)), the programmatic `openRepository()` library API and `imports` / `importGraph` ([docs/api.md](docs/api.md) and [`schema/import-graph.schema.json`](schema/import-graph.schema.json)), relationship verdicts (`.repo-archaeology.verdicts.json`), historical contributor and `CODEOWNERS` context (`--owners`), the precomputed `map` layout engine and opt-in FRAME/12 `--style rich` terminal and Investigation Board (`Briefing` + `Atlas` + `Field Guide`) map view (a pair-centered Briefing plate laid out by one engine shared by the report and the browser, and an Atlas overview that groups dense frames by folder and explains frames hidden by filters), mechanical revert/reapply filtering (`--include-reverts` to opt out), `diff --format markdown --json-out`, and the official composite GitHub Action (`action.yml`). See [ROADMAP.md](https://github.com/lbrodie11/repo-archaeology/blob/main/ROADMAP.md) for upcoming milestones and project direction.
 
 Repo Archaeology currently understands JavaScript and TypeScript imports. Other file types still participate in history analysis, but their import relationships may be marked **unchecked**.
 
@@ -595,6 +595,7 @@ To work on the project:
 
 ```bash
 npm install
+npx playwright install chromium   # optional: without it the map browser tests skip themselves
 npm test
 npm run typecheck
 npm run build
@@ -603,6 +604,10 @@ npm run bench:history
 node scripts/smoke-pack.mjs
 npm run dev -- scan -C ../some-repo
 ```
+
+The Briefing plate layout lives in `src/map/plate-layout.ts` and is also compiled into `src/map/plate-layout.browser.ts` for the HTML report. After changing the engine, run `npm run build:plate-layout`; `npm run build` and the tests fail if the two are out of step.
+
+The map browser tests include seeded random-interaction stress tests for the Briefing plate (`test/map-plate-stress.test.ts`) and the Atlas (`test/map-atlas-stress.test.ts`). To explore beyond the fixed CI walk, set `RA_STRESS_SEED` (another walk), `RA_STRESS_STEPS` (length: number of steps for the plate test, a multiplier for the Atlas test), or `RA_STRESS_HTML=<path>` (run the plate walk against any rich map, such as one generated from a real repository).
 
 ## License
 
