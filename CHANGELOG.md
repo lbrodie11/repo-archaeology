@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Research
+- **RA-18 surface pilot (research only, verdict NOT CORRECT, [`docs/research/surface-pilot.md`](docs/research/surface-pilot.md)):** A preregistered pilot asked "what did this PR change about what a file exports, and which untouched files still use it?".
+  - **What was built:** an internal, unpublished analysis in [`src/surface/`](src/surface/), excluded from the build and from `dist`. It reads each changed file's syntactic export surface at base and head (`createSourceFile` only), with names, kinds, required and total parameters, required properties, opaque `export *` and static CommonJS forms. It then finds untouched consumers through the existing resolver, with a compiler-coverage label per consumer. Research scripts in [`scripts/surface-pilot/`](scripts/surface-pilot/) generate seeded mutations in hono, eslint and vuejs/core, using a TypeScript language-service oracle as ground truth. They also replay 400 real PRs, and the raw records are committed under [`docs/research/data/surface-pilot/`](docs/research/data/surface-pilot/).
+  - **Result:** no false positives (0/360 contract-preserving controls). Removal recall was 0.80 in hono and vuejs/core and 0.04 in eslint, so the verdict is NOT CORRECT. A labeled post-hoc check shows that every positive whose consumer names the export directly or through explicit re-exports was detected (212/212). The misses come from the preregistered oracle's reference-based ground truth, from namespace imports, and from `export *`.
+  - **Relevance:** real PRs rarely produce the fact. 1 of 200 hono PRs and 0 of 200 eslint PRs had an untouched consumer of a removed or changed export.
+  - **Not affected:** no CLI command, JSON field, schema, library export or v1 output changed, and runtime dependencies are unchanged.
+
 ## [0.10.0] - 2026-11-10
 
 ### Added

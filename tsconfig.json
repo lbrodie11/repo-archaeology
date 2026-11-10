@@ -16,5 +16,6 @@
     "sourceMap": false,
     "newLine": "lf"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/surface/**"]
 }

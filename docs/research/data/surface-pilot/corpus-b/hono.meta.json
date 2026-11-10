@@ -1,0 +1,15 @@
+{
+  "repo": "hono",
+  "url": "https://github.com/honojs/hono.git",
+  "pin": "eb754bd5ef22c63f1634a4c374a86be086f85710",
+  "horizon": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+  "prSource": "gutter-stage0",
+  "prs": 200,
+  "machine": {
+    "node": "v20.19.0",
+    "platform": "darwin-arm64",
+    "cpu": "Apple M2",
+    "cpus": 8,
+    "memoryGb": 8
+  }
+}

@@ -1,2 +1,4 @@
 # Golden snapshots are compared byte-for-byte (test/golden.test.ts); keep LF on every platform.
 test/fixtures/golden/** text eol=lf
+# RA-18: the report test regenerates the results section and results.json byte-for-byte; keep LF on every platform.
+docs/research/** text eol=lf

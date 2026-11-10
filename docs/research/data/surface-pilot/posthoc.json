@@ -1,0 +1,2525 @@
+{
+  "note": "POST-HOC, written after the corpus-A results; not part of the preregistered rule.",
+  "items": [
+    {
+      "id": "hono-p001",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p002",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p003",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p004",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p005",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p006",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p007",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p008",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p009",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p010",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p011",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p012",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p013",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p014",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p015",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p016",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p017",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p018",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p019",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p020",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p021",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p022",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p023",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p024",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p025",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p026",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p027",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p028",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p029",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p030",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "hono-p031",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p032",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p033",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p034",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p035",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p036",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p037",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p038",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p039",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p040",
+      "repo": "hono",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p041",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p042",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p043",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p044",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p045",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p046",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p047",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p048",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p049",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p050",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p051",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p052",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p053",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p054",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p055",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p056",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p057",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p058",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p059",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p060",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p061",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p062",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p063",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p064",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "only-namespace"
+    },
+    {
+      "id": "hono-p065",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p066",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p067",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p068",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p069",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p070",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p071",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p072",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "hono-p073",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p074",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p075",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p076",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p077",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p078",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p079",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p080",
+      "repo": "hono",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p081",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "hono-p082",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p083",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p084",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p085",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "hono-p086",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p087",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p088",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p089",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p090",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p091",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p092",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p093",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p094",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p095",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p096",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p097",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p098",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p099",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p100",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p101",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p102",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p103",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p104",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p105",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p106",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p107",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p108",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p109",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p110",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p111",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p112",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p113",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p114",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p115",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p116",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p117",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p118",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p119",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "hono-p120",
+      "repo": "hono",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "eslint-p001",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p002",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p003",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p004",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p005",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p006",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p007",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p008",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p009",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p010",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p011",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p012",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p013",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p014",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p015",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p016",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p017",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p018",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p019",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p020",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p021",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p022",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p023",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p024",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p025",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p026",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p027",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p028",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p029",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p030",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p031",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p032",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p033",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p034",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p035",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p036",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p037",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "eslint-p038",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "eslint-p039",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p040",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p041",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p042",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p043",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p044",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p045",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p046",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p047",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p048",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p049",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p050",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p051",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p052",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p053",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p054",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p055",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p056",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p057",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p058",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p059",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p060",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p061",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p062",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p063",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p064",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "eslint-p065",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p066",
+      "repo": "eslint",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p067",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p068",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p069",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p070",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p071",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p072",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p073",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p074",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p075",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p076",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p077",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p078",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p079",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p080",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p081",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p082",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p083",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p084",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p085",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p086",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p087",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p088",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p089",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p090",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p091",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p092",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p093",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p094",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p095",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p096",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p097",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p098",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p099",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p100",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p101",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p102",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p103",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p104",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p105",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p106",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p107",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p108",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p109",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-namespace"
+    },
+    {
+      "id": "eslint-p110",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p111",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p112",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p113",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p114",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p115",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p116",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p117",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p118",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p119",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "eslint-p120",
+      "repo": "eslint",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p001",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p002",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p003",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p004",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p005",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p006",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p007",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p008",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p009",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p010",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p011",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p012",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p013",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p014",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p015",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p016",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p017",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p018",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p019",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p020",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p021",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p022",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p023",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p024",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p025",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p026",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p027",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p028",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p029",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p030",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p031",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p032",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p033",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p034",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p035",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p036",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p037",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p038",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p039",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p040",
+      "repo": "vue-core",
+      "kind": "remove-export",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p041",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p042",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p043",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p044",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p045",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p046",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p047",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p048",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p049",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p050",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p051",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p052",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p053",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p054",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p055",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p056",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p057",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p058",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p059",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p060",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p061",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p062",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p063",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p064",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p065",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p066",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p067",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p068",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p069",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p070",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p071",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p072",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p073",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p074",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p075",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p076",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p077",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p078",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p079",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p080",
+      "repo": "vue-core",
+      "kind": "add-required-param",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p081",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p082",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p083",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p084",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p085",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p086",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p087",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p088",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p089",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "no-import-found"
+    },
+    {
+      "id": "vue-core-p090",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p091",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p092",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p093",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p094",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p095",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p096",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p097",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p098",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p099",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p100",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p101",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p102",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p103",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p104",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p105",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named-via-barrel"
+    },
+    {
+      "id": "vue-core-p106",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p107",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p108",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": false,
+      "category": "only-via-export-star"
+    },
+    {
+      "id": "vue-core-p109",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p110",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p111",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p112",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p113",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p114",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p115",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p116",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p117",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p118",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p119",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    },
+    {
+      "id": "vue-core-p120",
+      "repo": "vue-core",
+      "kind": "add-required-prop",
+      "detected": true,
+      "category": "named"
+    }
+  ]
+}

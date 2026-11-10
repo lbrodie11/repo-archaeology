@@ -1,0 +1,2703 @@
+{
+  "corpusA": [
+    {
+      "repo": "eslint",
+      "removal": {
+        "n": 114,
+        "k": 4,
+        "rate": 0.03508771929824561
+      },
+      "signature": {
+        "n": 6,
+        "k": 1,
+        "rate": 0.16666666666666666
+      },
+      "byKind": {
+        "remove-export": {
+          "n": 114,
+          "k": 4,
+          "rate": 0.03508771929824561
+        },
+        "add-required-param": {
+          "n": 6,
+          "k": 1,
+          "rate": 0.16666666666666666
+        },
+        "edit-body": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "reorder": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "rename-local": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "add-optional-param": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "split-export": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "add-export": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        }
+      },
+      "falsePositive": {
+        "n": 120,
+        "k": 0,
+        "rate": 0
+      },
+      "uncertainShare": {
+        "n": 260,
+        "k": 242,
+        "rate": 0.9307692307692308
+      },
+      "oracleConsumerRecall": {
+        "n": 30972,
+        "k": 5,
+        "rate": 0.00016143613586465193
+      },
+      "failures": [
+        {
+          "id": "eslint-p001",
+          "kind": "remove-export",
+          "file": "lib/rules/no-warning-comments.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p002",
+          "kind": "remove-export",
+          "file": "lib/rules/no-with.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p003",
+          "kind": "remove-export",
+          "file": "lib/rules/no-promise-executor-return.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p004",
+          "kind": "remove-export",
+          "file": "lib/rules/default-case-last.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p005",
+          "kind": "remove-export",
+          "file": "lib/rules/no-use-before-define.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p006",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-numeric-literals.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p007",
+          "kind": "remove-export",
+          "file": "lib/rules/no-eval.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p008",
+          "kind": "remove-export",
+          "file": "lib/rules/no-extend-native.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p009",
+          "kind": "remove-export",
+          "file": "lib/rules/no-new-object.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p010",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-computed-key.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p011",
+          "kind": "remove-export",
+          "file": "lib/rules/for-direction.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p012",
+          "kind": "remove-export",
+          "file": "lib/rules/no-sparse-arrays.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p013",
+          "kind": "remove-export",
+          "file": "lib/rules/id-blacklist.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p014",
+          "kind": "remove-export",
+          "file": "lib/rules/newline-after-var.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p015",
+          "kind": "remove-export",
+          "file": "lib/rules/no-self-assign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p016",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-catch.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p017",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-reflect.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p018",
+          "kind": "remove-export",
+          "file": "lib/rules/no-continue.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p019",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-arrow-callback.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p020",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-concat.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p021",
+          "kind": "remove-export",
+          "file": "lib/rules/no-unused-vars.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p022",
+          "kind": "remove-export",
+          "file": "lib/rules/no-duplicate-imports.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p023",
+          "kind": "remove-export",
+          "file": "lib/rules/no-unsafe-optional-chaining.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p024",
+          "kind": "remove-export",
+          "file": "lib/rules/linebreak-style.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p025",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-regex-literals.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p026",
+          "kind": "remove-export",
+          "file": "lib/rules/comma-dangle.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p027",
+          "kind": "remove-export",
+          "file": "lib/rules/no-control-regex.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p028",
+          "kind": "remove-export",
+          "file": "lib/rules/space-unary-ops.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p029",
+          "kind": "remove-export",
+          "file": "lib/rules/no-irregular-whitespace.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p030",
+          "kind": "remove-export",
+          "file": "lib/rules/no-loop-func.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p031",
+          "kind": "remove-export",
+          "file": "lib/rules/max-lines-per-function.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p032",
+          "kind": "remove-export",
+          "file": "lib/rules/no-bitwise.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p034",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-call.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p035",
+          "kind": "remove-export",
+          "file": "lib/rules/class-methods-use-this.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p036",
+          "kind": "remove-export",
+          "file": "lib/rules/no-obj-calls.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p039",
+          "kind": "remove-export",
+          "file": "lib/languages/js/index.js",
+          "name": "validateLanguageOptions",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p040",
+          "kind": "remove-export",
+          "file": "lib/rules/no-sync.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p041",
+          "kind": "remove-export",
+          "file": "lib/rules/no-spaced-func.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p042",
+          "kind": "remove-export",
+          "file": "lib/rules/strict.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p043",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-template.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p044",
+          "kind": "remove-export",
+          "file": "lib/rules/no-func-assign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p045",
+          "kind": "remove-export",
+          "file": "lib/rules/dot-notation.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p047",
+          "kind": "remove-export",
+          "file": "lib/rules/complexity.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p048",
+          "kind": "remove-export",
+          "file": "lib/rules/no-invalid-this.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p049",
+          "kind": "remove-export",
+          "file": "lib/linter/code-path-analysis/debug-helpers.js",
+          "name": "enabled",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p050",
+          "kind": "remove-export",
+          "file": "lib/rules/semi.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p051",
+          "kind": "remove-export",
+          "file": "lib/rules/no-script-url.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p052",
+          "kind": "remove-export",
+          "file": "lib/rules/multiline-comment-style.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p053",
+          "kind": "remove-export",
+          "file": "lib/rules/no-implied-eval.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p054",
+          "kind": "remove-export",
+          "file": "lib/rules/template-curly-spacing.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p055",
+          "kind": "remove-export",
+          "file": "lib/rules/block-scoped-var.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p056",
+          "kind": "remove-export",
+          "file": "lib/rules/comma-style.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p057",
+          "kind": "remove-export",
+          "file": "lib/rules/no-mixed-spaces-and-tabs.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p058",
+          "kind": "remove-export",
+          "file": "lib/rules/no-multi-str.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p059",
+          "kind": "remove-export",
+          "file": "lib/rules/capitalized-comments.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p060",
+          "kind": "remove-export",
+          "file": "lib/rules/no-undef.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p061",
+          "kind": "add-required-param",
+          "file": "lib/shared/logging.js",
+          "name": "error",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p062",
+          "kind": "add-required-param",
+          "file": "lib/shared/runtime-info.js",
+          "name": "environment",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p063",
+          "kind": "add-required-param",
+          "file": "lib/shared/runtime-info.js",
+          "name": "version",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p065",
+          "kind": "add-required-param",
+          "file": "lib/linter/code-path-analysis/debug-helpers.js",
+          "name": "makeDotArrows",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p066",
+          "kind": "add-required-param",
+          "file": "lib/shared/logging.js",
+          "name": "info",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p067",
+          "kind": "remove-export",
+          "file": "lib/rules/one-var-declaration-per-line.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p068",
+          "kind": "remove-export",
+          "file": "lib/rules/padded-blocks.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p069",
+          "kind": "remove-export",
+          "file": "lib/rules/id-match.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p070",
+          "kind": "remove-export",
+          "file": "lib/rules/spaced-comment.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p071",
+          "kind": "remove-export",
+          "file": "lib/rules/no-inline-comments.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p072",
+          "kind": "remove-export",
+          "file": "lib/rules/one-var.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p073",
+          "kind": "remove-export",
+          "file": "lib/rules/no-unreachable-loop.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p074",
+          "kind": "remove-export",
+          "file": "lib/rules/function-call-argument-newline.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p075",
+          "kind": "remove-export",
+          "file": "lib/rules/no-constructor-return.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p076",
+          "kind": "remove-export",
+          "file": "lib/rules/space-before-blocks.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p077",
+          "kind": "remove-export",
+          "file": "lib/rules/no-object-constructor.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p078",
+          "kind": "remove-export",
+          "file": "lib/rules/no-new.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p079",
+          "kind": "remove-export",
+          "file": "lib/rules/padding-line-between-statements.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p080",
+          "kind": "remove-export",
+          "file": "lib/rules/arrow-parens.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p081",
+          "kind": "remove-export",
+          "file": "lib/rules/no-proto.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p082",
+          "kind": "remove-export",
+          "file": "lib/rules/no-label-var.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p083",
+          "kind": "remove-export",
+          "file": "lib/rules/id-length.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p084",
+          "kind": "remove-export",
+          "file": "lib/rules/no-labels.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p085",
+          "kind": "remove-export",
+          "file": "lib/shared/runtime-info.js",
+          "name": "environment",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p086",
+          "kind": "remove-export",
+          "file": "lib/rules/prefer-const.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p087",
+          "kind": "remove-export",
+          "file": "lib/rules/consistent-this.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p088",
+          "kind": "remove-export",
+          "file": "lib/rules/vars-on-top.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p089",
+          "kind": "remove-export",
+          "file": "lib/rules/no-lone-blocks.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p090",
+          "kind": "remove-export",
+          "file": "lib/rules/no-extra-bind.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p091",
+          "kind": "remove-export",
+          "file": "lib/rules/space-before-function-paren.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p092",
+          "kind": "remove-export",
+          "file": "lib/rules/wrap-iife.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p093",
+          "kind": "remove-export",
+          "file": "lib/rules/no-return-assign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p094",
+          "kind": "remove-export",
+          "file": "lib/rules/no-eq-null.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p095",
+          "kind": "remove-export",
+          "file": "lib/rules/init-declarations.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p096",
+          "kind": "remove-export",
+          "file": "lib/rules/no-unexpected-multiline.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p097",
+          "kind": "remove-export",
+          "file": "lib/rules/sort-vars.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p098",
+          "kind": "remove-export",
+          "file": "lib/rules/radix.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p099",
+          "kind": "remove-export",
+          "file": "lib/rules/no-alert.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p100",
+          "kind": "remove-export",
+          "file": "lib/rules/no-unsafe-negation.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p101",
+          "kind": "remove-export",
+          "file": "lib/rules/no-ex-assign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p102",
+          "kind": "remove-export",
+          "file": "lib/rules/no-sequences.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p103",
+          "kind": "remove-export",
+          "file": "lib/rules/yield-star-spacing.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p104",
+          "kind": "remove-export",
+          "file": "lib/rules/new-parens.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p105",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-assignment.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p106",
+          "kind": "remove-export",
+          "file": "lib/rules/no-multiple-empty-lines.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p107",
+          "kind": "remove-export",
+          "file": "lib/rules/function-paren-newline.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p108",
+          "kind": "remove-export",
+          "file": "lib/rules/no-useless-constructor.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p109",
+          "kind": "remove-export",
+          "file": "lib/linter/code-path-analysis/debug-helpers.js",
+          "name": "makeDotArrows",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p110",
+          "kind": "remove-export",
+          "file": "lib/rules/brace-style.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p111",
+          "kind": "remove-export",
+          "file": "lib/rules/no-param-reassign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p112",
+          "kind": "remove-export",
+          "file": "lib/rules/wrap-regex.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p113",
+          "kind": "remove-export",
+          "file": "lib/rules/max-lines.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p114",
+          "kind": "remove-export",
+          "file": "lib/rules/no-native-reassign.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p115",
+          "kind": "remove-export",
+          "file": "lib/rules/operator-assignment.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p116",
+          "kind": "remove-export",
+          "file": "lib/rules/no-undefined.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p117",
+          "kind": "remove-export",
+          "file": "lib/rules/block-spacing.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p118",
+          "kind": "remove-export",
+          "file": "lib/rules/no-whitespace-before-property.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p119",
+          "kind": "remove-export",
+          "file": "lib/rules/no-implicit-coercion.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "eslint-p120",
+          "kind": "remove-export",
+          "file": "lib/rules/no-extra-boolean-cast.js",
+          "name": "create",
+          "failure": "only-uncertain: namespace-import"
+        }
+      ],
+      "failureClasses": {
+        "add-required-param: only-uncertain: namespace-import": 5,
+        "remove-export: only-uncertain: namespace-import": 110
+      },
+      "medianMs": 356
+    },
+    {
+      "repo": "hono",
+      "removal": {
+        "n": 40,
+        "k": 32,
+        "rate": 0.8
+      },
+      "signature": {
+        "n": 80,
+        "k": 79,
+        "rate": 0.9875
+      },
+      "byKind": {
+        "remove-export": {
+          "n": 40,
+          "k": 32,
+          "rate": 0.8
+        },
+        "add-required-param": {
+          "n": 40,
+          "k": 40,
+          "rate": 1
+        },
+        "add-required-prop": {
+          "n": 40,
+          "k": 39,
+          "rate": 0.975
+        },
+        "edit-body": {
+          "n": 21,
+          "k": 0,
+          "rate": 0
+        },
+        "reorder": {
+          "n": 21,
+          "k": 0,
+          "rate": 0
+        },
+        "rename-local": {
+          "n": 21,
+          "k": 0,
+          "rate": 0
+        },
+        "add-optional-param": {
+          "n": 21,
+          "k": 0,
+          "rate": 0
+        },
+        "split-export": {
+          "n": 16,
+          "k": 0,
+          "rate": 0
+        },
+        "add-export": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        }
+      },
+      "falsePositive": {
+        "n": 120,
+        "k": 0,
+        "rate": 0
+      },
+      "uncertainShare": {
+        "n": 330,
+        "k": 12,
+        "rate": 0.03636363636363636
+      },
+      "oracleConsumerRecall": {
+        "n": 285,
+        "k": 255,
+        "rate": 0.8947368421052632
+      },
+      "failures": [
+        {
+          "id": "hono-p003",
+          "kind": "remove-export",
+          "file": "src/adapter/aws-lambda/index.ts",
+          "name": "defaultIsContentTypeBinary",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p008",
+          "kind": "remove-export",
+          "file": "src/adapter/bun/index.ts",
+          "name": "websocket",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p010",
+          "kind": "remove-export",
+          "file": "src/adapter/bun/index.ts",
+          "name": "getConnInfo",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p026",
+          "kind": "remove-export",
+          "file": "src/jsx/dom/index.ts",
+          "name": "useImperativeHandle",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p027",
+          "kind": "remove-export",
+          "file": "src/jsx/dom/index.ts",
+          "name": "useMemo",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p028",
+          "kind": "remove-export",
+          "file": "src/adapter/aws-lambda/index.ts",
+          "name": "handle",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p030",
+          "kind": "remove-export",
+          "file": "src/utils/jwt/jwt.ts",
+          "name": "isTokenHeader",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "hono-p037",
+          "kind": "remove-export",
+          "file": "src/adapter/cloudflare-pages/index.ts",
+          "name": "serveStatic",
+          "failure": "no-consumer-found"
+        },
+        {
+          "id": "hono-p081",
+          "kind": "add-required-prop",
+          "file": "src/utils/jwt/jwt.ts",
+          "name": "TokenHeader",
+          "failure": "only-uncertain: namespace-import"
+        }
+      ],
+      "failureClasses": {
+        "add-required-prop: only-uncertain: namespace-import": 1,
+        "remove-export: no-consumer-found": 7,
+        "remove-export: only-uncertain: namespace-import": 1
+      },
+      "medianMs": 169
+    },
+    {
+      "repo": "vue-core",
+      "removal": {
+        "n": 40,
+        "k": 32,
+        "rate": 0.8
+      },
+      "signature": {
+        "n": 80,
+        "k": 72,
+        "rate": 0.9
+      },
+      "byKind": {
+        "remove-export": {
+          "n": 40,
+          "k": 32,
+          "rate": 0.8
+        },
+        "add-required-param": {
+          "n": 40,
+          "k": 33,
+          "rate": 0.825
+        },
+        "add-required-prop": {
+          "n": 40,
+          "k": 39,
+          "rate": 0.975
+        },
+        "edit-body": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "reorder": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "rename-local": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "add-optional-param": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "split-export": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        },
+        "add-export": {
+          "n": 20,
+          "k": 0,
+          "rate": 0
+        }
+      },
+      "falsePositive": {
+        "n": 120,
+        "k": 0,
+        "rate": 0
+      },
+      "uncertainShare": {
+        "n": 939,
+        "k": 548,
+        "rate": 0.5835995740149095
+      },
+      "oracleConsumerRecall": {
+        "n": 438,
+        "k": 327,
+        "rate": 0.7465753424657534
+      },
+      "failures": [
+        {
+          "id": "vue-core-p004",
+          "kind": "remove-export",
+          "file": "packages/runtime-core/src/index.ts",
+          "name": "defineModel",
+          "failure": "only-uncertain: namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p009",
+          "kind": "remove-export",
+          "file": "packages/server-renderer/src/index.ts",
+          "name": "renderToSimpleStream",
+          "failure": "only-uncertain: namespace-import"
+        },
+        {
+          "id": "vue-core-p011",
+          "kind": "remove-export",
+          "file": "packages/shared/src/domAttrConfig.ts",
+          "name": "isSSRSafeAttrName",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p013",
+          "kind": "remove-export",
+          "file": "packages/shared/src/domAttrConfig.ts",
+          "name": "propsToAttrMap",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p025",
+          "kind": "remove-export",
+          "file": "packages/runtime-dom/src/jsx.ts",
+          "name": "NativeElements",
+          "failure": "only-uncertain: namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p033",
+          "kind": "remove-export",
+          "file": "packages/shared/src/typeUtils.ts",
+          "name": "IfAny",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p034",
+          "kind": "remove-export",
+          "file": "packages/shared/src/general.ts",
+          "name": "isBuiltInDirective",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p038",
+          "kind": "remove-export",
+          "file": "packages/compiler-core/src/index.ts",
+          "name": "buildDirectiveArgs",
+          "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p042",
+          "kind": "add-required-param",
+          "file": "packages/shared/src/general.ts",
+          "name": "genCacheKey",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p046",
+          "kind": "add-required-param",
+          "file": "packages/compiler-core/src/ast.ts",
+          "name": "createReturnStatement",
+          "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p053",
+          "kind": "add-required-param",
+          "file": "packages/runtime-test/src/nodeOps.ts",
+          "name": "resetOps",
+          "failure": "only-uncertain: namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p057",
+          "kind": "add-required-param",
+          "file": "packages/shared/src/general.ts",
+          "name": "looseToNumber",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p058",
+          "kind": "add-required-param",
+          "file": "packages/shared/src/general.ts",
+          "name": "remove",
+          "failure": "only-uncertain: opaque-re-export"
+        },
+        {
+          "id": "vue-core-p062",
+          "kind": "add-required-param",
+          "file": "packages/runtime-test/src/serialize.ts",
+          "name": "serialize",
+          "failure": "only-uncertain: namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p064",
+          "kind": "add-required-param",
+          "file": "packages/compiler-core/src/babelUtils.ts",
+          "name": "isReferencedIdentifier",
+          "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+        },
+        {
+          "id": "vue-core-p108",
+          "kind": "add-required-prop",
+          "file": "packages/runtime-dom/src/jsx.ts",
+          "name": "ReservedProps",
+          "failure": "only-uncertain: namespace-import+opaque-re-export"
+        }
+      ],
+      "failureClasses": {
+        "add-required-param: only-uncertain: dynamic-import+namespace-import+opaque-re-export": 2,
+        "add-required-param: only-uncertain: namespace-import+opaque-re-export": 2,
+        "add-required-param: only-uncertain: opaque-re-export": 3,
+        "add-required-prop: only-uncertain: namespace-import+opaque-re-export": 1,
+        "remove-export: only-uncertain: dynamic-import+namespace-import+opaque-re-export": 1,
+        "remove-export: only-uncertain: namespace-import": 1,
+        "remove-export: only-uncertain: namespace-import+opaque-re-export": 2,
+        "remove-export: only-uncertain: opaque-re-export": 4
+      },
+      "medianMs": 165
+    }
+  ],
+  "pooled": {
+    "repo": "pooled",
+    "removal": {
+      "n": 194,
+      "k": 68,
+      "rate": 0.35051546391752575
+    },
+    "signature": {
+      "n": 166,
+      "k": 152,
+      "rate": 0.9156626506024096
+    },
+    "byKind": {
+      "remove-export": {
+        "n": 194,
+        "k": 68,
+        "rate": 0.35051546391752575
+      },
+      "add-required-param": {
+        "n": 86,
+        "k": 74,
+        "rate": 0.8604651162790697
+      },
+      "edit-body": {
+        "n": 61,
+        "k": 0,
+        "rate": 0
+      },
+      "reorder": {
+        "n": 61,
+        "k": 0,
+        "rate": 0
+      },
+      "rename-local": {
+        "n": 61,
+        "k": 0,
+        "rate": 0
+      },
+      "add-optional-param": {
+        "n": 61,
+        "k": 0,
+        "rate": 0
+      },
+      "split-export": {
+        "n": 56,
+        "k": 0,
+        "rate": 0
+      },
+      "add-export": {
+        "n": 60,
+        "k": 0,
+        "rate": 0
+      },
+      "add-required-prop": {
+        "n": 80,
+        "k": 78,
+        "rate": 0.975
+      }
+    },
+    "falsePositive": {
+      "n": 360,
+      "k": 0,
+      "rate": 0
+    },
+    "uncertainShare": {
+      "n": 1529,
+      "k": 802,
+      "rate": 0.5245258338783518
+    },
+    "oracleConsumerRecall": {
+      "n": 31695,
+      "k": 587,
+      "rate": 0.018520271336172896
+    },
+    "failures": [
+      {
+        "id": "eslint-p001",
+        "kind": "remove-export",
+        "file": "lib/rules/no-warning-comments.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p002",
+        "kind": "remove-export",
+        "file": "lib/rules/no-with.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p003",
+        "kind": "remove-export",
+        "file": "lib/rules/no-promise-executor-return.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p004",
+        "kind": "remove-export",
+        "file": "lib/rules/default-case-last.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p005",
+        "kind": "remove-export",
+        "file": "lib/rules/no-use-before-define.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p006",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-numeric-literals.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p007",
+        "kind": "remove-export",
+        "file": "lib/rules/no-eval.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p008",
+        "kind": "remove-export",
+        "file": "lib/rules/no-extend-native.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p009",
+        "kind": "remove-export",
+        "file": "lib/rules/no-new-object.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p010",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-computed-key.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p011",
+        "kind": "remove-export",
+        "file": "lib/rules/for-direction.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p012",
+        "kind": "remove-export",
+        "file": "lib/rules/no-sparse-arrays.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p013",
+        "kind": "remove-export",
+        "file": "lib/rules/id-blacklist.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p014",
+        "kind": "remove-export",
+        "file": "lib/rules/newline-after-var.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p015",
+        "kind": "remove-export",
+        "file": "lib/rules/no-self-assign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p016",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-catch.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p017",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-reflect.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p018",
+        "kind": "remove-export",
+        "file": "lib/rules/no-continue.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p019",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-arrow-callback.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p020",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-concat.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p021",
+        "kind": "remove-export",
+        "file": "lib/rules/no-unused-vars.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p022",
+        "kind": "remove-export",
+        "file": "lib/rules/no-duplicate-imports.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p023",
+        "kind": "remove-export",
+        "file": "lib/rules/no-unsafe-optional-chaining.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p024",
+        "kind": "remove-export",
+        "file": "lib/rules/linebreak-style.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p025",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-regex-literals.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p026",
+        "kind": "remove-export",
+        "file": "lib/rules/comma-dangle.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p027",
+        "kind": "remove-export",
+        "file": "lib/rules/no-control-regex.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p028",
+        "kind": "remove-export",
+        "file": "lib/rules/space-unary-ops.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p029",
+        "kind": "remove-export",
+        "file": "lib/rules/no-irregular-whitespace.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p030",
+        "kind": "remove-export",
+        "file": "lib/rules/no-loop-func.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p031",
+        "kind": "remove-export",
+        "file": "lib/rules/max-lines-per-function.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p032",
+        "kind": "remove-export",
+        "file": "lib/rules/no-bitwise.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p034",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-call.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p035",
+        "kind": "remove-export",
+        "file": "lib/rules/class-methods-use-this.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p036",
+        "kind": "remove-export",
+        "file": "lib/rules/no-obj-calls.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p039",
+        "kind": "remove-export",
+        "file": "lib/languages/js/index.js",
+        "name": "validateLanguageOptions",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p040",
+        "kind": "remove-export",
+        "file": "lib/rules/no-sync.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p041",
+        "kind": "remove-export",
+        "file": "lib/rules/no-spaced-func.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p042",
+        "kind": "remove-export",
+        "file": "lib/rules/strict.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p043",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-template.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p044",
+        "kind": "remove-export",
+        "file": "lib/rules/no-func-assign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p045",
+        "kind": "remove-export",
+        "file": "lib/rules/dot-notation.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p047",
+        "kind": "remove-export",
+        "file": "lib/rules/complexity.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p048",
+        "kind": "remove-export",
+        "file": "lib/rules/no-invalid-this.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p049",
+        "kind": "remove-export",
+        "file": "lib/linter/code-path-analysis/debug-helpers.js",
+        "name": "enabled",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p050",
+        "kind": "remove-export",
+        "file": "lib/rules/semi.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p051",
+        "kind": "remove-export",
+        "file": "lib/rules/no-script-url.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p052",
+        "kind": "remove-export",
+        "file": "lib/rules/multiline-comment-style.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p053",
+        "kind": "remove-export",
+        "file": "lib/rules/no-implied-eval.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p054",
+        "kind": "remove-export",
+        "file": "lib/rules/template-curly-spacing.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p055",
+        "kind": "remove-export",
+        "file": "lib/rules/block-scoped-var.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p056",
+        "kind": "remove-export",
+        "file": "lib/rules/comma-style.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p057",
+        "kind": "remove-export",
+        "file": "lib/rules/no-mixed-spaces-and-tabs.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p058",
+        "kind": "remove-export",
+        "file": "lib/rules/no-multi-str.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p059",
+        "kind": "remove-export",
+        "file": "lib/rules/capitalized-comments.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p060",
+        "kind": "remove-export",
+        "file": "lib/rules/no-undef.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p061",
+        "kind": "add-required-param",
+        "file": "lib/shared/logging.js",
+        "name": "error",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p062",
+        "kind": "add-required-param",
+        "file": "lib/shared/runtime-info.js",
+        "name": "environment",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p063",
+        "kind": "add-required-param",
+        "file": "lib/shared/runtime-info.js",
+        "name": "version",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p065",
+        "kind": "add-required-param",
+        "file": "lib/linter/code-path-analysis/debug-helpers.js",
+        "name": "makeDotArrows",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p066",
+        "kind": "add-required-param",
+        "file": "lib/shared/logging.js",
+        "name": "info",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p067",
+        "kind": "remove-export",
+        "file": "lib/rules/one-var-declaration-per-line.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p068",
+        "kind": "remove-export",
+        "file": "lib/rules/padded-blocks.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p069",
+        "kind": "remove-export",
+        "file": "lib/rules/id-match.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p070",
+        "kind": "remove-export",
+        "file": "lib/rules/spaced-comment.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p071",
+        "kind": "remove-export",
+        "file": "lib/rules/no-inline-comments.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p072",
+        "kind": "remove-export",
+        "file": "lib/rules/one-var.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p073",
+        "kind": "remove-export",
+        "file": "lib/rules/no-unreachable-loop.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p074",
+        "kind": "remove-export",
+        "file": "lib/rules/function-call-argument-newline.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p075",
+        "kind": "remove-export",
+        "file": "lib/rules/no-constructor-return.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p076",
+        "kind": "remove-export",
+        "file": "lib/rules/space-before-blocks.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p077",
+        "kind": "remove-export",
+        "file": "lib/rules/no-object-constructor.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p078",
+        "kind": "remove-export",
+        "file": "lib/rules/no-new.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p079",
+        "kind": "remove-export",
+        "file": "lib/rules/padding-line-between-statements.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p080",
+        "kind": "remove-export",
+        "file": "lib/rules/arrow-parens.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p081",
+        "kind": "remove-export",
+        "file": "lib/rules/no-proto.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p082",
+        "kind": "remove-export",
+        "file": "lib/rules/no-label-var.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p083",
+        "kind": "remove-export",
+        "file": "lib/rules/id-length.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p084",
+        "kind": "remove-export",
+        "file": "lib/rules/no-labels.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p085",
+        "kind": "remove-export",
+        "file": "lib/shared/runtime-info.js",
+        "name": "environment",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p086",
+        "kind": "remove-export",
+        "file": "lib/rules/prefer-const.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p087",
+        "kind": "remove-export",
+        "file": "lib/rules/consistent-this.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p088",
+        "kind": "remove-export",
+        "file": "lib/rules/vars-on-top.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p089",
+        "kind": "remove-export",
+        "file": "lib/rules/no-lone-blocks.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p090",
+        "kind": "remove-export",
+        "file": "lib/rules/no-extra-bind.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p091",
+        "kind": "remove-export",
+        "file": "lib/rules/space-before-function-paren.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p092",
+        "kind": "remove-export",
+        "file": "lib/rules/wrap-iife.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p093",
+        "kind": "remove-export",
+        "file": "lib/rules/no-return-assign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p094",
+        "kind": "remove-export",
+        "file": "lib/rules/no-eq-null.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p095",
+        "kind": "remove-export",
+        "file": "lib/rules/init-declarations.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p096",
+        "kind": "remove-export",
+        "file": "lib/rules/no-unexpected-multiline.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p097",
+        "kind": "remove-export",
+        "file": "lib/rules/sort-vars.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p098",
+        "kind": "remove-export",
+        "file": "lib/rules/radix.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p099",
+        "kind": "remove-export",
+        "file": "lib/rules/no-alert.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p100",
+        "kind": "remove-export",
+        "file": "lib/rules/no-unsafe-negation.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p101",
+        "kind": "remove-export",
+        "file": "lib/rules/no-ex-assign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p102",
+        "kind": "remove-export",
+        "file": "lib/rules/no-sequences.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p103",
+        "kind": "remove-export",
+        "file": "lib/rules/yield-star-spacing.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p104",
+        "kind": "remove-export",
+        "file": "lib/rules/new-parens.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p105",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-assignment.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p106",
+        "kind": "remove-export",
+        "file": "lib/rules/no-multiple-empty-lines.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p107",
+        "kind": "remove-export",
+        "file": "lib/rules/function-paren-newline.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p108",
+        "kind": "remove-export",
+        "file": "lib/rules/no-useless-constructor.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p109",
+        "kind": "remove-export",
+        "file": "lib/linter/code-path-analysis/debug-helpers.js",
+        "name": "makeDotArrows",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p110",
+        "kind": "remove-export",
+        "file": "lib/rules/brace-style.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p111",
+        "kind": "remove-export",
+        "file": "lib/rules/no-param-reassign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p112",
+        "kind": "remove-export",
+        "file": "lib/rules/wrap-regex.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p113",
+        "kind": "remove-export",
+        "file": "lib/rules/max-lines.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p114",
+        "kind": "remove-export",
+        "file": "lib/rules/no-native-reassign.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p115",
+        "kind": "remove-export",
+        "file": "lib/rules/operator-assignment.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p116",
+        "kind": "remove-export",
+        "file": "lib/rules/no-undefined.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p117",
+        "kind": "remove-export",
+        "file": "lib/rules/block-spacing.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p118",
+        "kind": "remove-export",
+        "file": "lib/rules/no-whitespace-before-property.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p119",
+        "kind": "remove-export",
+        "file": "lib/rules/no-implicit-coercion.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "eslint-p120",
+        "kind": "remove-export",
+        "file": "lib/rules/no-extra-boolean-cast.js",
+        "name": "create",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "hono-p003",
+        "kind": "remove-export",
+        "file": "src/adapter/aws-lambda/index.ts",
+        "name": "defaultIsContentTypeBinary",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p008",
+        "kind": "remove-export",
+        "file": "src/adapter/bun/index.ts",
+        "name": "websocket",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p010",
+        "kind": "remove-export",
+        "file": "src/adapter/bun/index.ts",
+        "name": "getConnInfo",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p026",
+        "kind": "remove-export",
+        "file": "src/jsx/dom/index.ts",
+        "name": "useImperativeHandle",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p027",
+        "kind": "remove-export",
+        "file": "src/jsx/dom/index.ts",
+        "name": "useMemo",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p028",
+        "kind": "remove-export",
+        "file": "src/adapter/aws-lambda/index.ts",
+        "name": "handle",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p030",
+        "kind": "remove-export",
+        "file": "src/utils/jwt/jwt.ts",
+        "name": "isTokenHeader",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "hono-p037",
+        "kind": "remove-export",
+        "file": "src/adapter/cloudflare-pages/index.ts",
+        "name": "serveStatic",
+        "failure": "no-consumer-found"
+      },
+      {
+        "id": "hono-p081",
+        "kind": "add-required-prop",
+        "file": "src/utils/jwt/jwt.ts",
+        "name": "TokenHeader",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "vue-core-p004",
+        "kind": "remove-export",
+        "file": "packages/runtime-core/src/index.ts",
+        "name": "defineModel",
+        "failure": "only-uncertain: namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p009",
+        "kind": "remove-export",
+        "file": "packages/server-renderer/src/index.ts",
+        "name": "renderToSimpleStream",
+        "failure": "only-uncertain: namespace-import"
+      },
+      {
+        "id": "vue-core-p011",
+        "kind": "remove-export",
+        "file": "packages/shared/src/domAttrConfig.ts",
+        "name": "isSSRSafeAttrName",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p013",
+        "kind": "remove-export",
+        "file": "packages/shared/src/domAttrConfig.ts",
+        "name": "propsToAttrMap",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p025",
+        "kind": "remove-export",
+        "file": "packages/runtime-dom/src/jsx.ts",
+        "name": "NativeElements",
+        "failure": "only-uncertain: namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p033",
+        "kind": "remove-export",
+        "file": "packages/shared/src/typeUtils.ts",
+        "name": "IfAny",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p034",
+        "kind": "remove-export",
+        "file": "packages/shared/src/general.ts",
+        "name": "isBuiltInDirective",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p038",
+        "kind": "remove-export",
+        "file": "packages/compiler-core/src/index.ts",
+        "name": "buildDirectiveArgs",
+        "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p042",
+        "kind": "add-required-param",
+        "file": "packages/shared/src/general.ts",
+        "name": "genCacheKey",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p046",
+        "kind": "add-required-param",
+        "file": "packages/compiler-core/src/ast.ts",
+        "name": "createReturnStatement",
+        "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p053",
+        "kind": "add-required-param",
+        "file": "packages/runtime-test/src/nodeOps.ts",
+        "name": "resetOps",
+        "failure": "only-uncertain: namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p057",
+        "kind": "add-required-param",
+        "file": "packages/shared/src/general.ts",
+        "name": "looseToNumber",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p058",
+        "kind": "add-required-param",
+        "file": "packages/shared/src/general.ts",
+        "name": "remove",
+        "failure": "only-uncertain: opaque-re-export"
+      },
+      {
+        "id": "vue-core-p062",
+        "kind": "add-required-param",
+        "file": "packages/runtime-test/src/serialize.ts",
+        "name": "serialize",
+        "failure": "only-uncertain: namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p064",
+        "kind": "add-required-param",
+        "file": "packages/compiler-core/src/babelUtils.ts",
+        "name": "isReferencedIdentifier",
+        "failure": "only-uncertain: dynamic-import+namespace-import+opaque-re-export"
+      },
+      {
+        "id": "vue-core-p108",
+        "kind": "add-required-prop",
+        "file": "packages/runtime-dom/src/jsx.ts",
+        "name": "ReservedProps",
+        "failure": "only-uncertain: namespace-import+opaque-re-export"
+      }
+    ],
+    "failureClasses": {
+      "add-required-param: only-uncertain: dynamic-import+namespace-import+opaque-re-export": 2,
+      "add-required-param: only-uncertain: namespace-import": 5,
+      "add-required-param: only-uncertain: namespace-import+opaque-re-export": 2,
+      "add-required-param: only-uncertain: opaque-re-export": 3,
+      "add-required-prop: only-uncertain: namespace-import": 1,
+      "add-required-prop: only-uncertain: namespace-import+opaque-re-export": 1,
+      "remove-export: no-consumer-found": 7,
+      "remove-export: only-uncertain: dynamic-import+namespace-import+opaque-re-export": 1,
+      "remove-export: only-uncertain: namespace-import": 112,
+      "remove-export: only-uncertain: namespace-import+opaque-re-export": 2,
+      "remove-export: only-uncertain: opaque-re-export": 4
+    },
+    "medianMs": 169
+  },
+  "corpusB": [
+    {
+      "repo": "eslint",
+      "prs": 200,
+      "analyzed": 200,
+      "errors": [],
+      "anyDelta": {
+        "n": 200,
+        "k": 5,
+        "rate": 0.025
+      },
+      "affected": {
+        "n": 200,
+        "k": 0,
+        "rate": 0
+      },
+      "unknownSurface": {
+        "n": 200,
+        "k": 17,
+        "rate": 0.085
+      },
+      "relevant": {
+        "n": 200,
+        "k": 0,
+        "rate": 0
+      },
+      "relevantWithUncertain": {
+        "n": 200,
+        "k": 0,
+        "rate": 0
+      },
+      "findings": [],
+      "beyondCompiler": [],
+      "beyondFollowed": {
+        "n": 0,
+        "k": 0,
+        "rate": null
+      },
+      "timing": {
+        "medianMs": 62,
+        "p95Ms": 101,
+        "maxMs": 266,
+        "slowest": [
+          {
+            "id": "#21101",
+            "ms": 266,
+            "sourceFiles": 1487,
+            "parsedImporters": 0
+          },
+          {
+            "id": "#21054",
+            "ms": 239,
+            "sourceFiles": 1487,
+            "parsedImporters": 0
+          },
+          {
+            "id": "#21210",
+            "ms": 153,
+            "sourceFiles": 1493,
+            "parsedImporters": 0
+          },
+          {
+            "id": "#21313",
+            "ms": 150,
+            "sourceFiles": 1491,
+            "parsedImporters": 0
+          },
+          {
+            "id": "#21261",
+            "ms": 133,
+            "sourceFiles": 1489,
+            "parsedImporters": 0
+          }
+        ]
+      }
+    },
+    {
+      "repo": "hono",
+      "prs": 200,
+      "analyzed": 200,
+      "errors": [],
+      "anyDelta": {
+        "n": 200,
+        "k": 15,
+        "rate": 0.075
+      },
+      "affected": {
+        "n": 200,
+        "k": 5,
+        "rate": 0.025
+      },
+      "unknownSurface": {
+        "n": 200,
+        "k": 0,
+        "rate": 0
+      },
+      "relevant": {
+        "n": 200,
+        "k": 1,
+        "rate": 0.005
+      },
+      "relevantWithUncertain": {
+        "n": 200,
+        "k": 1,
+        "rate": 0.005
+      },
+      "findings": [],
+      "beyondCompiler": [],
+      "beyondFollowed": {
+        "n": 0,
+        "k": 0,
+        "rate": null
+      },
+      "timing": {
+        "medianMs": 64,
+        "p95Ms": 92,
+        "maxMs": 313,
+        "slowest": [
+          {
+            "id": "#5512",
+            "ms": 313,
+            "sourceFiles": 459,
+            "parsedImporters": 5
+          },
+          {
+            "id": "#5154",
+            "ms": 306,
+            "sourceFiles": 388,
+            "parsedImporters": 40
+          },
+          {
+            "id": "#5463",
+            "ms": 192,
+            "sourceFiles": 448,
+            "parsedImporters": 6
+          },
+          {
+            "id": "#5442",
+            "ms": 191,
+            "sourceFiles": 392,
+            "parsedImporters": 0
+          },
+          {
+            "id": "#5466",
+            "ms": 188,
+            "sourceFiles": 451,
+            "parsedImporters": 4
+          }
+        ]
+      }
+    }
+  ],
+  "verdict": {
+    "correct": false,
+    "correctChecks": [
+      {
+        "scope": "pooled",
+        "removal": false,
+        "signature": true,
+        "falsePositive": true
+      },
+      {
+        "scope": "eslint",
+        "removal": false,
+        "signature": false,
+        "falsePositive": true
+      },
+      {
+        "scope": "hono",
+        "removal": false,
+        "signature": true,
+        "falsePositive": true
+      },
+      {
+        "scope": "vue-core",
+        "removal": false,
+        "signature": true,
+        "falsePositive": true
+      }
+    ],
+    "verdict": "NOT CORRECT",
+    "steps": [
+      "CORRECT does not hold (removal recall < 0.95 in pooled, eslint, hono, vue-core; signature/property recall < 0.90 in eslint): NOT CORRECT. The rule stops here; corpus B and timing below are reported, not decisive."
+    ]
+  },
+  "meta": {
+    "a": {
+      "eslint": {
+        "repo": "eslint",
+        "url": "https://github.com/eslint/eslint.git",
+        "pin": "11c66ba08381cb7cff7679d662c9f6654b6fe712",
+        "seed": 20261110,
+        "eligibleFiles": 389,
+        "candidatesSeen": {
+          "remove-export": 758,
+          "add-required-param": 367,
+          "add-required-prop": 0,
+          "edit-body": 367,
+          "reorder": 401,
+          "rename-local": 792,
+          "add-optional-param": 367,
+          "split-export": 60,
+          "add-export": 389
+        },
+        "shortfalls": {
+          "add-required-param": 54
+        },
+        "machine": {
+          "node": "v20.19.0",
+          "platform": "darwin-arm64",
+          "cpu": "Apple M2",
+          "cpus": 8,
+          "memoryGb": 8
+        }
+      },
+      "hono": {
+        "repo": "hono",
+        "url": "https://github.com/honojs/hono.git",
+        "pin": "eb754bd5ef22c63f1634a4c374a86be086f85710",
+        "seed": 20261110,
+        "eligibleFiles": 291,
+        "candidatesSeen": {
+          "remove-export": 1001,
+          "add-required-param": 354,
+          "add-required-prop": 120,
+          "edit-body": 292,
+          "reorder": 415,
+          "rename-local": 424,
+          "add-optional-param": 354,
+          "split-export": 16,
+          "add-export": 291
+        },
+        "shortfalls": {
+          "split-export": 4
+        },
+        "machine": {
+          "node": "v20.19.0",
+          "platform": "darwin-arm64",
+          "cpu": "Apple M2",
+          "cpus": 8,
+          "memoryGb": 8
+        }
+      },
+      "vue-core": {
+        "repo": "vue-core",
+        "url": "https://github.com/vuejs/core.git",
+        "pin": "8b479a89445868d474f17e2d837765e7c9ece5e4",
+        "seed": 20261110,
+        "eligibleFiles": 296,
+        "candidatesSeen": {
+          "remove-export": 1609,
+          "add-required-param": 576,
+          "add-required-prop": 236,
+          "edit-body": 536,
+          "reorder": 1111,
+          "rename-local": 873,
+          "add-optional-param": 576,
+          "split-export": 468,
+          "add-export": 296
+        },
+        "shortfalls": {},
+        "machine": {
+          "node": "v20.19.0",
+          "platform": "darwin-arm64",
+          "cpu": "Apple M2",
+          "cpus": 8,
+          "memoryGb": 8
+        }
+      }
+    },
+    "b": {
+      "eslint": {
+        "repo": "eslint",
+        "url": "https://github.com/eslint/eslint.git",
+        "pin": "11c66ba08381cb7cff7679d662c9f6654b6fe712",
+        "horizon": "0146008d6e99aa31dc62153c200e714f5afdcd0e",
+        "prSource": "squash-subjects",
+        "prs": 200,
+        "machine": {
+          "node": "v20.19.0",
+          "platform": "darwin-arm64",
+          "cpu": "Apple M2",
+          "cpus": 8,
+          "memoryGb": 8
+        }
+      },
+      "hono": {
+        "repo": "hono",
+        "url": "https://github.com/honojs/hono.git",
+        "pin": "eb754bd5ef22c63f1634a4c374a86be086f85710",
+        "horizon": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+        "prSource": "gutter-stage0",
+        "prs": 200,
+        "machine": {
+          "node": "v20.19.0",
+          "platform": "darwin-arm64",
+          "cpu": "Apple M2",
+          "cpus": 8,
+          "memoryGb": 8
+        }
+      }
+    }
+  },
+  "postHoc": {
+    "table": {
+      "pooled": {
+        "named": {
+          "n": 194,
+          "k": 194,
+          "rate": 1
+        },
+        "no-import-found": {
+          "n": 124,
+          "k": 7,
+          "rate": 0.056451612903225805
+        },
+        "named-via-barrel": {
+          "n": 18,
+          "k": 18,
+          "rate": 1
+        },
+        "only-namespace": {
+          "n": 11,
+          "k": 1,
+          "rate": 0.09090909090909091
+        },
+        "only-via-export-star": {
+          "n": 13,
+          "k": 0,
+          "rate": 0
+        }
+      },
+      "hono": {
+        "named": {
+          "n": 96,
+          "k": 96,
+          "rate": 1
+        },
+        "no-import-found": {
+          "n": 10,
+          "k": 3,
+          "rate": 0.3
+        },
+        "named-via-barrel": {
+          "n": 11,
+          "k": 11,
+          "rate": 1
+        },
+        "only-namespace": {
+          "n": 3,
+          "k": 1,
+          "rate": 0.3333333333333333
+        }
+      },
+      "eslint": {
+        "no-import-found": {
+          "n": 109,
+          "k": 2,
+          "rate": 0.01834862385321101
+        },
+        "named": {
+          "n": 3,
+          "k": 3,
+          "rate": 1
+        },
+        "only-namespace": {
+          "n": 8,
+          "k": 0,
+          "rate": 0
+        }
+      },
+      "vue-core": {
+        "named": {
+          "n": 95,
+          "k": 95,
+          "rate": 1
+        },
+        "no-import-found": {
+          "n": 5,
+          "k": 2,
+          "rate": 0.4
+        },
+        "only-via-export-star": {
+          "n": 13,
+          "k": 0,
+          "rate": 0
+        },
+        "named-via-barrel": {
+          "n": 7,
+          "k": 7,
+          "rate": 1
+        }
+      }
+    },
+    "syntacticallyReachable": {
+      "n": 212,
+      "k": 212,
+      "rate": 1
+    }
+  }
+}
