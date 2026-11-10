@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.9.0`)
+## Shipped Foundations (`v0.2.x` – `v0.10.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
@@ -34,6 +34,7 @@ Last updated: November 2026
 - **Pair-Centered Briefing Plate on One Shared Engine (`v0.7.0`):** The Briefing plate is laid out by a single deterministic engine used by both the report and the browser, in rows by relationship to the selected pair, with curved wires that avoid unrelated files and labels, width-aware compact plates, keyboard access, and trace-on-hover.
 - **Readable Atlas Overview (`v0.8.0`):** Dense Atlas frames draw as folder groups until opened or zoomed, frames hidden by filters explain themselves, captions and labels stay readable at any zoom, and `Reset view` reaches every frame; seeded browser stress tests cover the plate and the Atlas.
 - **Go and Python Import Analysis (`v0.9.0`):** Go and Python files get the same import checking as JS/TS, through one shared analysis pipeline, with dependency-free lexers that never execute code. Go resolves `go.mod`/`go.work` modules and replacements to package files; Python resolves source roots (`pyproject.toml`, `setup.cfg`, `setup.py` read as text) with the import system's package rules. When the analyzer is unsure, the pair stays unchecked, never a ghost wire.
+- **Per-Pair Track Record (`v0.10.0`):** Each `diff` suggestion carries a `trackRecord` for its exact directional pair, replayed over the baseline history with no future information: how often a change to the edited file without the suggested one was followed by a change to the suggested file within 48 hours. It is shown as counts (`Before: 5 times this changed without permissions.ts; it changed within 48 h after 4`), never as accuracy, and the replay uses the same weighting arithmetic and threshold test as `diff`.
 
 ---
 

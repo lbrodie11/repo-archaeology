@@ -8,7 +8,7 @@ import { globToRegExp } from '../util/glob.js';
 
 export const VERDICTS_FILE = '.repo-archaeology.verdicts.json';
 export const VERDICTS_SCHEMA_URL =
-  'https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.9.0/schema/verdicts.schema.json';
+  'https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.10.0/schema/verdicts.schema.json';
 export const MAX_VERDICTS_BYTES = 256 * 1024;
 export const MAX_VERDICT_REASON_LENGTH = 300;
 
