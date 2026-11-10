@@ -400,7 +400,7 @@ describe('Go relationships', () => {
     'broken/broken.go': 'package broken\nimport (\n\t"fmt"\n\tnot valid\n)\n',
   };
 
-  it('same-package pairs are unknown, cross-package pairs are direct with an import and ghost without', async () => {
+  it('same-package pairs are unknown, cross-package pairs are direct with an import, indirect via a package sibling, and ghost without', async () => {
     await withRepo(files, async (repo) => {
       const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
       try {
@@ -409,7 +409,8 @@ describe('Go relationships', () => {
         assert.equal(classifier.explain('store/store.go', 'store/cache.go', 'unknown'), 'same Go package: files share scope without imports');
         assert.equal(classifier.classify('store/store.go', 'model/model.go'), 'direct');
         assert.equal(classifier.explain('store/store.go', 'model/model.go', 'direct'), 'store.go imports package example.com/app/model (which includes model.go)');
-        assert.equal(classifier.classify('store/cache.go', 'model/model.go'), 'ghost');
+        // cache.go shares package store with store.go, which imports model: one step removed.
+        assert.equal(classifier.classify('store/cache.go', 'model/model.go'), 'indirect');
         assert.equal(classifier.classify('billing/billing.go', 'invoice/invoice.go'), 'ghost');
         // A malformed import block can hide an import: the pair stays unknown.
         assert.equal(classifier.classify('broken/broken.go', 'invoice/invoice.go'), 'unknown');
@@ -466,5 +467,52 @@ describe('Go relationships', () => {
         ctx.close?.();
       }
     });
+  });
+});
+
+describe('Go package scope and indirect links', () => {
+  it('a file whose package sibling imports the partner is indirect, not ghost', async () => {
+    await withRepo(
+      {
+        'go.mod': 'module example.com/app\n',
+        'gin.go': 'package app\nimport "example.com/app/render"\n',
+        'errors.go': 'package app\nimport "fmt"\n',
+        'render/data.go': 'package render\n',
+        'other/other.go': 'package other\n',
+      },
+      async (repo) => {
+        const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
+        try {
+          const c = ctx.classifier;
+          assert.equal(c.classify('errors.go', 'render/data.go'), 'indirect');
+          assert.equal(
+            c.explain('errors.go', 'render/data.go', 'indirect'),
+            'connected through gin.go: errors.go shares a Go package with gin.go, which imports package example.com/app/render',
+          );
+          assert.equal(c.classify('errors.go', 'other/other.go'), 'ghost');
+        } finally {
+          ctx.close?.();
+        }
+      },
+    );
+  });
+
+  it('an incomplete package sibling keeps the pair unknown', async () => {
+    await withRepo(
+      {
+        'go.mod': 'module example.com/app\n',
+        'a.go': 'package app\nimport (\n\t"fmt"\n\tnot valid\n)\n',
+        'b.go': 'package app\n',
+        'other/other.go': 'package other\n',
+      },
+      async (repo) => {
+        const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
+        try {
+          assert.equal(ctx.classifier.classify('b.go', 'other/other.go'), 'unknown');
+        } finally {
+          ctx.close?.();
+        }
+      },
+    );
   });
 });

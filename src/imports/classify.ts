@@ -1,7 +1,7 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
 import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from './analysis.js';
-import { isSameGoPackage } from './go.js';
+import { goAnalyzer, goPackageFiles, isSameGoPackage } from './go.js';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
   candidateFilePaths,
@@ -282,7 +282,7 @@ export class RelationshipClassifier {
    * round). "No import link" would be literally true for these pairs, but readers take
    * a ghost wire to mean hidden coupling, and this coupling is visible in the code.
    */
-  indirectLink(a: string, b: string): { linked?: { from: string; via: string; to: string }; uncertain: boolean } {
+  indirectLink(a: string, b: string): { linked?: { from: string; via: string; to: string; samePackage?: boolean }; uncertain: boolean } {
     let uncertain = false;
     for (const [from, to] of [[a, b], [b, a]] as const) {
       const vias = [...this.reachable(from).files].filter((via) => via !== a && via !== b).sort();
@@ -291,8 +291,22 @@ export class RelationshipClassifier {
         if (rvia.files.has(to)) return { linked: { from, via, to }, uncertain: false };
         if (rvia.incomplete) uncertain = true;
       }
+      // A Go file reaches whatever its package siblings import, through shared package scope.
+      for (const via of this.goPackageSiblings(from)) {
+        if (via === a || via === b) continue;
+        const rvia = this.reachable(via);
+        if (rvia.files.has(to)) return { linked: { from, via, to, samePackage: true }, uncertain: false };
+        if (rvia.incomplete || this.analyze(via).sourceUnavailable) uncertain = true;
+      }
     }
     return { uncertain };
+  }
+
+  /** The other non-test files of a Go file's package (sorted), or none for other files. */
+  private goPackageSiblings(file: string): string[] {
+    if (!file.endsWith('.go') || file.endsWith('_test.go')) return [];
+    const dir = posix.dirname(file) === '.' ? '' : posix.dirname(file);
+    return goPackageFiles(this.session.indexFor(goAnalyzer), dir).filter((sibling) => sibling !== file);
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
@@ -313,6 +327,11 @@ export class RelationshipClassifier {
       case 'indirect': {
         const link = this.indirectLink(a, b).linked;
         if (!link) return 'connected through one intermediate import';
+        if (link.samePackage) {
+          const edge = this.analyze(link.via).importEdges.get(link.to);
+          const target = edge?.via === 'go-package' ? `package ${edge.specifier}` : posix.basename(link.to);
+          return `connected through ${link.via}: ${posix.basename(link.from)} shares a Go package with ${posix.basename(link.via)}, which imports ${target}`;
+        }
         return `connected through ${link.via}: ${posix.basename(link.from)} imports ${posix.basename(link.via)}, which imports ${posix.basename(link.to)}`;
       }
       case 'ghost': {
