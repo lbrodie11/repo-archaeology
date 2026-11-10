@@ -266,6 +266,8 @@ export class RelationshipClassifier {
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
     const indirect = this.indirectLink(a, b);
     if (indirect.linked) return 'indirect';
+    // One may import the other, but the analyzer could not tell (only this pair is affected).
+    if (ra.uncertain.has(b) || rb.uncertain.has(a)) return 'unknown';
     // Files of one Go package share scope without importing each other: never a ghost.
     if (this.sameGoPackage(a, b)) return 'unknown';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
@@ -289,14 +291,20 @@ export class RelationshipClassifier {
       for (const via of vias) {
         const rvia = this.reachable(via);
         if (rvia.files.has(to)) return { linked: { from, via, to }, uncertain: false };
-        if (rvia.incomplete) uncertain = true;
+        if (rvia.incomplete || rvia.uncertain.has(to)) uncertain = true;
+      }
+      // A file this one may import could import the partner.
+      for (const via of this.reachable(from).uncertain.keys()) {
+        if (via === a || via === b) continue;
+        const rvia = this.reachable(via);
+        if (rvia.files.has(to) || rvia.uncertain.has(to) || rvia.incomplete) uncertain = true;
       }
       // A Go file reaches whatever its package siblings import, through shared package scope.
       for (const via of this.goPackageSiblings(from)) {
         if (via === a || via === b) continue;
         const rvia = this.reachable(via);
         if (rvia.files.has(to)) return { linked: { from, via, to, samePackage: true }, uncertain: false };
-        if (rvia.incomplete || this.analyze(via).sourceUnavailable) uncertain = true;
+        if (rvia.incomplete || rvia.uncertain.has(to) || this.analyze(via).sourceUnavailable) uncertain = true;
       }
     }
     return { uncertain };
@@ -357,6 +365,8 @@ export class RelationshipClassifier {
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
         if (this.sameGoPackage(a, b)) return 'same Go package: files share scope without imports';
+        const why = this.reachable(a).uncertain.get(b) ?? this.reachable(b).uncertain.get(a);
+        if (why !== undefined) return `could not tell whether one imports the other (${why})`;
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
         const reason = ia.analysis.incompleteReason ?? ib.analysis.incompleteReason;
@@ -480,12 +490,13 @@ export class RelationshipClassifier {
       for (const v of cached.visited) this.accessedInScope.add(v);
       return cached;
     }
-    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false };
+    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false, uncertain: new Map() };
     const visit = (current: string, depth: number) => {
       reach.visited.add(current);
       const info = this.analyze(current);
       // An unreadable barrel could re-export anything, so nothing can be ruled out.
       if (info.unresolved > 0 || info.sourceUnavailable || info.analysis.incomplete) reach.incomplete = true;
+      for (const { path, reason } of info.analysis.uncertain ?? []) if (!reach.uncertain.has(path)) reach.uncertain.set(path, reason);
       for (const target of [...info.imports, ...info.references]) {
         if (reach.files.has(target)) continue;
         reach.files.add(target);
@@ -529,6 +540,8 @@ interface Reach {
   files: Set<string>;
   visited: Set<string>;
   incomplete: boolean;
+  /** Files possibly imported (the analyzer could not tell), with why. */
+  uncertain: Map<string, string>;
 }
 
 function isIndexFile(path: string): boolean {

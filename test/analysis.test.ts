@@ -7,15 +7,8 @@ import { loadContext } from '../src/context.js';
 import { AnalysisSession, analyzeFile, isAnalyzablePath, LANGUAGE_ANALYZERS, setDefaultEdgeBudgetForTesting, type FileAnalysis } from '../src/imports/analysis.js';
 import type { RepoFiles } from '../src/imports/resolve.js';
 import { buildAppFixture, buildWorkspaceFixture } from './fixtures/import-fixtures.js';
-import { FixtureRepo } from './helpers.js';
+import { FixtureRepo, memoryFiles } from './helpers.js';
 
-function memoryFiles(files: Record<string, string>): RepoFiles {
-  return {
-    exists: (path) => Object.hasOwn(files, path),
-    read: (path) => (Object.hasOwn(files, path) ? files[path] : undefined),
-    list: () => Object.keys(files),
-  };
-}
 
 describe('shared import analysis pipeline', () => {
   it('registers TS/JS, Go and Python behind the LanguageAnalyzer registry', () => {
@@ -149,6 +142,7 @@ describe('classifier and import graph agree (Go and Python)', () => {
       unresolved: analysis.unresolved,
       dynamicLoads: analysis.dynamicLoads,
       warnings: analysis.warnings,
+      uncertain: analysis.uncertain,
     };
 
   /** Analyzes every candidate in sorted order (the graph's order) with both consumers and compares. */
@@ -186,14 +180,8 @@ describe('classifier and import graph agree (Go and Python)', () => {
 
   it('agree on every Go and Python file: incomplete input, symlinks, fan-out, initializers', async () => {
     const { incomplete } = await assertParity(fixture.repo);
-    assert.deepEqual(incomplete, [
-      'broken/broken.go',
-      'cmd/main.go',
-      'linkuser/use.go',
-      'src/shop/ambiguous.py',
-      'src/shop/broken.py',
-      'src/shop/computed.py',
-    ]);
+    // The fan-out tail, the mixed-package directory and the ambiguous from-import are per-target uncertainty now.
+    assert.deepEqual(incomplete, ['broken/broken.go', 'linkuser/use.go', 'src/shop/broken.py', 'src/shop/computed.py']);
   });
 
   it('agree at an older revision (--head)', async () => {

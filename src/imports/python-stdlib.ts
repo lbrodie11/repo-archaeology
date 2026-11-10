@@ -1,9 +1,17 @@
 /**
- * Top-level standard-library module names (CPython `sys.stdlib_module_names`, 3.14), as data.
+ * Top-level standard-library module names (CPython `sys.stdlib_module_names`, 3.14, plus modules removed in 3.12–3.13), as data.
  * Used only when a project manifest cannot be modeled: then a non-local, non-stdlib name
  * might be a remapped local package, so it is reported as unresolved instead of external.
  */
+/** Removed from recent releases (3.12: PEP 632 and asyncore/imp; 3.13: PEP 594), still imported by older code. */
+const REMOVED_STDLIB_MODULES = [
+  'distutils', 'imp', 'asynchat', 'asyncore', 'smtpd', 'aifc', 'audioop', 'cgi', 'cgitb', 'chunk', 'crypt', 'imghdr',
+  'mailcap', 'msilib', 'nis', 'nntplib', 'ossaudiodev', 'pipes', 'sndhdr', 'spwd', 'sunau', 'telnetlib', 'uu', 'xdrlib',
+  'lib2to3', 'binhex', 'formatter', 'parser', 'symbol', 'macpath', 'dummy_threading', '_dummy_thread',
+];
+
 export const PYTHON_STDLIB_MODULES: ReadonlySet<string> = new Set([
+  ...REMOVED_STDLIB_MODULES,
   '__future__', '_abc', '_aix_support', '_android_support', '_apple_support', '_ast', '_ast_unparse',
   '_asyncio', '_bisect', '_blake2', '_bz2', '_codecs', '_codecs_cn', '_codecs_hk', '_codecs_iso2022',
   '_codecs_jp', '_codecs_kr', '_codecs_tw', '_collections', '_collections_abc', '_colorize',

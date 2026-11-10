@@ -40,6 +40,12 @@ const EXTENSION_SWAPS: Record<string, string[]> = {
   '.cjs': ['.cts', '.d.cts'],
 };
 
+/** The directory of a repo-relative POSIX path, `''` for the repository root. */
+export function repoDirname(path: string): string {
+  const dir = posix.dirname(path);
+  return dir === '.' ? '' : dir;
+}
+
 /** Generates all candidate file paths that `resolveFile` probes for `base`. */
 export function candidateFilePaths(base: string): string[] {
   const normalized = posix.normalize(base);

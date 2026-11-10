@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import type { AnalysisSession, AnalysisTarget, ExtractedSpecifier, Extraction, LanguageAnalyzer, SpecifierResolution } from './analysis.js';
-import type { RepoFiles } from './tree-files.js';
+import { repoDirname as dirOf, type RepoFiles } from './tree-files.js';
 
 /**
  * Go import analysis (RA-10). Dependency-free and conservative:
@@ -66,6 +66,8 @@ export interface GoIndex {
   /** Regular `.go` files by directory, sorted. */
   goFilesByDir: Map<string, string[]>;
   headers: Map<string, GoFileHeader>;
+  /** `goPackage` results by directory. */
+  packages: Map<string, GoPackage>;
   visibleCache: Map<GoModule, [string, GoReplace][]>;
   warnings: string[];
 }
@@ -397,10 +399,6 @@ function readManifest(files: RepoFiles, path: string): { text?: string; error?: 
 }
 
 
-const dirOf = (path: string): string => {
-  const dir = posix.dirname(path);
-  return dir === '.' ? '' : dir;
-};
 
 const isUnder = (path: string, dir: string): boolean => dir === '' || path === dir || path.startsWith(`${dir}/`);
 
@@ -440,6 +438,7 @@ export function buildGoIndex(files: RepoFiles): GoIndex {
     brokenWorkDirs: new Map(),
     goFilesByDir: new Map(),
     headers: new Map(),
+    packages: new Map(),
     visibleCache: new Map(),
     warnings: [],
   };
@@ -637,11 +636,15 @@ export interface GoPackage {
  * packages, all of them stay and callers report the ambiguity instead of guessing.
  */
 export function goPackage(index: GoIndex, dir: string): GoPackage {
+  const cached = index.packages.get(dir);
+  if (cached) return cached;
   const members = (index.goFilesByDir.get(dir) ?? []).filter(
     (path) => !isExcludedGoName(path) && index.files.exists(path) && !goFileHeader(index, path).ignored,
   );
   const names = [...new Set(members.map((path) => goFileHeader(index, path).name).filter((name): name is string => name !== null))].sort();
-  return { members, names };
+  const pkg = { members, names };
+  index.packages.set(dir, pkg);
+  return pkg;
 }
 
 /** The member files of the package in `dir`. */
@@ -704,23 +707,23 @@ function resolveGoImport(from: string, importPath: string, index: GoIndex): Spec
     }
     const pkg = goPackage(index, dir);
     if (pkg.members.length === 0) return { kind: 'unresolved', reasonCode: 'target-missing' };
-    const targets: AnalysisTarget[] = pkg.members.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package' }));
-    const reasons: string[] = [];
-    let warning: string | undefined;
     if (pkg.names.length > 1) {
-      // Without evaluating build constraints we cannot tell which package is the real one.
-      reasons.push(`Go directory ${dir || '.'} holds files of several packages (${pkg.names.join(', ')})`);
+      // Without evaluating build constraints we cannot tell which package is the real one:
+      // every member may be imported, none certainly is.
+      const reason = `Go directory ${dir || '.'} holds files of several packages (${pkg.names.join(', ')})`;
+      return { kind: 'files', targets: [], uncertain: pkg.members.map((path) => ({ path, reason })) };
     }
+    const targets: AnalysisTarget[] = pkg.members.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package' }));
     if (pkg.members.length > MAX_GO_PACKAGE_FAN_OUT) {
-      reasons.push(`Go package ${importPath} has more than ${MAX_GO_PACKAGE_FAN_OUT} files`);
-      warning = `Go: package ${importPath} has ${pkg.members.length} files; import edges list the first ${MAX_GO_PACKAGE_FAN_OUT} and importers are reported as incomplete.`;
+      const reason = `Go package ${importPath} has more than ${MAX_GO_PACKAGE_FAN_OUT} files; edges list the first ${MAX_GO_PACKAGE_FAN_OUT}`;
+      return {
+        kind: 'files',
+        targets,
+        uncertain: pkg.members.slice(MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, reason })),
+        warning: `Go: package ${importPath} has ${pkg.members.length} files; import edges list the first ${MAX_GO_PACKAGE_FAN_OUT}, and pairs with the rest are reported as unchecked.`,
+      };
     }
-    return {
-      kind: 'files',
-      targets,
-      ...(reasons.length > 0 ? { incompleteReason: reasons.join('; ') } : {}),
-      ...(warning ? { warning } : {}),
-    };
+    return { kind: 'files', targets };
   }
 
   if (brokenWork) {

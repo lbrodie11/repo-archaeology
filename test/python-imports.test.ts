@@ -6,15 +6,8 @@ import { AnalysisSession, analyzeFile, type FileAnalysis } from '../src/imports/
 import { buildPythonIndex, extractPythonImports } from '../src/imports/python.js';
 import { parseTomlSubset, TomlScalar, TomlSubsetError } from '../src/imports/toml.js';
 import type { RepoFiles } from '../src/imports/resolve.js';
-import { FixtureRepo } from './helpers.js';
+import { FixtureRepo, memoryFiles } from './helpers.js';
 
-function memoryFiles(files: Record<string, string>): RepoFiles {
-  return {
-    exists: (path) => Object.hasOwn(files, path),
-    read: (path) => (Object.hasOwn(files, path) ? files[path] : undefined),
-    list: () => Object.keys(files),
-  };
-}
 
 function analyze(files: Record<string, string>, path: string): { analysis: FileAnalysis; session: AnalysisSession } {
   const repo = memoryFiles(files);
@@ -309,13 +302,26 @@ describe('Python source roots and resolution', () => {
     assert.equal(analysis.external, 1);
   });
 
-  it('reads setup.py only as text (never executed) and treats layout declarations there as unmodeled', () => {
+  it('reads setup.py and setup.cfg only as text (never executed) and models their common layouts', () => {
     const plain = buildPythonIndex(memoryFiles({ 'pkgs/a/setup.py': 'raise SystemExit("never run")\n', 'pkgs/a/a/__init__.py': '' }));
     assert.ok(plain.roots.includes('pkgs/a'));
     assert.deepEqual(plain.nameRoots.get('a'), ['pkgs/a']);
     assert.deepEqual(plain.layoutUncertain, []);
-    const remapped = buildPythonIndex(memoryFiles({ 'setup.py': 'setup(package_dir={"public": "impl"})\n', 'impl/__init__.py': '' }));
-    assert.equal(remapped.layoutUncertain.length, 1);
+    // The most common layouts are modeled, not flagged.
+    for (const [label, manifest] of [
+      ['setup.cfg package_dir = =src', { 'setup.cfg': '[metadata]\nname = app\n\n[options]\npackage_dir =\n    =src\npackages = find:\n\n[options.packages.find]\nwhere = src\n' }],
+      ['setup.py src layout', { 'setup.py': 'from setuptools import setup, find_packages\nsetup(package_dir={"": "src"}, packages=find_packages("src"), py_modules=["tool"])\n' }],
+    ] as const) {
+      const files = { ...manifest, 'src/app/__init__.py': '', 'src/app/a.py': 'import requests\nimport app\n' };
+      const { analysis } = analyze(files, 'src/app/a.py');
+      assert.equal(analysis.external, 1, label);
+      assert.equal(analysis.incomplete, false, label);
+      assert.deepEqual(targetsOf(analysis), ['src/app/__init__.py'], label);
+    }
+    const remapped = analyze({ 'setup.py': 'setup(package_dir={"public": "impl"})\n', 'impl/__init__.py': '', 'main.py': 'import public\n' }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(remapped), ['impl/__init__.py']);
+    const cfg = analyze({ 'setup.cfg': '[options]\npackage_dir =\n    public = impl\n', 'impl/__init__.py': '', 'main.py': 'import public\n' }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(cfg), ['impl/__init__.py']);
   });
 });
 
@@ -372,8 +378,9 @@ describe('Python import semantics (RA-10 review regressions)', () => {
       const analysis = analyze({ ...base, 'pkg/__init__.py': init }, 'main.py').analysis;
       if (ambiguous) {
         assert.deepEqual(targetsOf(analysis), ['pkg/__init__.py'], label);
-        assert.equal(analysis.incomplete, true, label);
-        assert.match(analysis.incompleteReason ?? '', /child may be an attribute of pkg\/__init__\.py or the submodule/, label);
+        // Only the possible submodule is uncertain; the rest of the file is still checked.
+        assert.equal(analysis.incomplete, false, label);
+        assert.deepEqual(analysis.uncertain, [{ path: 'pkg/child.py', reason: 'from pkg import child: child may be an attribute of pkg/__init__.py or the submodule' }], label);
       } else {
         assert.deepEqual(targetsOf(analysis), ['pkg/__init__.py', 'pkg/child.py'], label);
         assert.equal(analysis.incomplete, false, label);
@@ -400,8 +407,8 @@ describe('Python import semantics (RA-10 review regressions)', () => {
       ['dotted package-dir key', { 'pyproject.toml': '[tool.setuptools]\npackage-dir = {"public.sub" = "impl"}\n' }],
       ['TOML outside the subset', { 'pyproject.toml': '[tool.x]\nvalue = @nope\n' }],
       ['oversized pyproject', { 'pyproject.toml': `# ${'x'.repeat(70_000)}\n` }],
-      ['setup.py package_dir', { 'setup.py': 'setup(package_dir={"public": "impl"})\n' }],
-      ['hatch sources remap', { 'pyproject.toml': '[tool.hatch.build.targets.wheel.sources]\n"impl" = "public"\n' }],
+      ['computed setup.py package_dir', { 'setup.py': 'DIRS = {"public": "impl"}\nsetup(package_dir=DIRS)\n' }],
+      ['nested hatch source', { 'pyproject.toml': '[tool.hatch.build.targets.wheel.sources]\n"impl" = "public/sub"\n' }],
     ];
     for (const [label, manifest] of layouts) {
       const files = { ...manifest, 'impl/__init__.py': '', 'main.py': 'import public\nimport os\n' };
@@ -554,5 +561,123 @@ describe('Python relationships', () => {
       ),
       ['indirect'],
     );
+  });
+});
+
+describe('Python import semantics (second review regressions)', () => {
+  const base = { 'pkg/__init__.py': '', 'pkg/child.py': '', 'jobs/__init__.py': '', 'jobs/nightly.py': '', 'helper.py': '' };
+
+  it('__import__ with a fromlist also imports the listed submodules; computed or relative forms are dynamic loads', () => {
+    const listed = analyze({ ...base, 'main.py': "__import__('pkg', fromlist=['child'])\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(listed), ['pkg/__init__.py', 'pkg/child.py']);
+    assert.equal(listed.incomplete, false);
+    const positional = analyze({ ...base, 'main.py': "__import__('pkg', None, None, ('child',))\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(positional), ['pkg/__init__.py', 'pkg/child.py']);
+    const computed = analyze({ ...base, 'main.py': "__import__('pkg', fromlist=names)\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(computed), ['pkg/__init__.py']);
+    assert.equal(computed.dynamicLoads, 1);
+    const relative = analyze({ ...base, 'main.py': "__import__('child', globals(), locals(), [], 1)\n" }, 'main.py').analysis;
+    assert.equal(relative.dynamicLoads, 1);
+    assert.equal(relative.incomplete, true);
+  });
+
+  it('runpy, exec/eval and path-based loaders are followed or counted, never silently ignored', () => {
+    const runModule = analyze({ ...base, 'main.py': "import runpy\nrunpy.run_module('jobs.nightly')\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(runModule), ['jobs/__init__.py', 'jobs/nightly.py']);
+    const aliased = analyze({ ...base, 'main.py': "from runpy import run_module as run\nrun('jobs.nightly')\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(aliased), ['jobs/__init__.py', 'jobs/nightly.py']);
+    const execLiteral = analyze({ ...base, 'main.py': "exec('import helper')\n" }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(execLiteral), ['helper.py']);
+    assert.equal(execLiteral.incomplete, false);
+    for (const [label, source] of [
+      ['run_path', "import runpy\nrunpy.run_path('scripts/x.py')\n"],
+      ['exec of computed code', 'exec(code)\n'],
+      ['eval of computed code', 'value = eval(expression)\n'],
+      ['spec_from_file_location', "import importlib.util\nspec = importlib.util.spec_from_file_location('m', path)\n"],
+      ['aliased importlib.util', "import importlib.util as u\nspec = u.spec_from_file_location('m', path)\n"],
+      ['SourceFileLoader', "from importlib.machinery import SourceFileLoader\nSourceFileLoader('m', path).load_module()\n"],
+    ] as const) {
+      const analysis = analyze({ ...base, 'main.py': source }, 'main.py').analysis;
+      assert.ok(analysis.dynamicLoads >= 1, label);
+      assert.equal(analysis.incomplete, true, label);
+    }
+  });
+
+  it('a keyword argument or parameter named like a loader is not a load', () => {
+    for (const source of ['configure(import_module=True)\n', 'def run(import_module: bool = False):\n    return import_module\n', 'options = dict(exec=False)\n']) {
+      const analysis = analyze({ 'main.py': source }, 'main.py').analysis;
+      assert.equal(analysis.dynamicLoads, 0, source);
+      assert.equal(analysis.incomplete, false, source);
+    }
+  });
+
+  it('only module-level bindings in __init__.py can shadow a submodule', () => {
+    const cases: [string, string, boolean][] = [
+      ['function parameter', 'def configure(app, config=None):\n    config = config or {}\n    return config\n', false],
+      ['class attribute', 'class Settings:\n    config = None\n', false],
+      ['lazy import in a function', 'def load():\n    from .other import thing as config\n    return config\n', false],
+      ['module-level if block', 'import os\nif os.environ.get("X"):\n    config = None\n', true],
+      ['module-level try block', 'try:\n    from .fast import impl as config\nexcept ImportError:\n    pass\n', true],
+      ['global declaration', 'def setup():\n    global config\n    config = 1\n', true],
+    ];
+    for (const [label, init, ambiguous] of cases) {
+      const analysis = analyze({ 'pkg/__init__.py': init, 'pkg/config.py': '', 'main.py': 'from pkg import config\n' }, 'main.py').analysis;
+      if (ambiguous) {
+        assert.deepEqual(analysis.uncertain?.map((item) => item.path), ['pkg/config.py'], label);
+        assert.deepEqual(targetsOf(analysis), ['pkg/__init__.py'], label);
+      } else {
+        assert.deepEqual(targetsOf(analysis), ['pkg/__init__.py', 'pkg/config.py'], label);
+        assert.equal(analysis.uncertain, undefined, label);
+      }
+    }
+  });
+
+  it('an f-string format spec is literal text (quote fill characters lex), and its nested fields are code', () => {
+    const fill = analyze({ 'main.py': `v = f"{x:'^10}"\nw = f'{y:"<5}'\nimport helper\n`, 'helper.py': '' }, 'main.py').analysis;
+    assert.equal(fill.incomplete, false);
+    assert.deepEqual(targetsOf(fill), ['helper.py']);
+    const nested = analyze({ 'main.py': `v = f"{x!r:>{__import__('helper') and 5}}"\n`, 'helper.py': '' }, 'main.py').analysis;
+    assert.deepEqual(targetsOf(nested), ['helper.py']);
+    const date = analyze({ 'main.py': 'v = f"{when:%Y-%m-%d %H:%M}" # import os\n' }, 'main.py').analysis;
+    assert.equal(date.incomplete, false);
+    assert.equal(date.external, 0);
+  });
+
+  it('an unmodeled manifest only makes the names it declares uncertain, not every third-party import', () => {
+    const files = {
+      'examples/demo/pyproject.toml': '[tool.setuptools]\npackage-dir = {"public.sub" = "impl"}\n',
+      'examples/demo/impl/__init__.py': '',
+      'app/main.py': 'import requests\nimport public\n',
+    };
+    const { analysis } = analyze(files, 'app/main.py');
+    assert.equal(analysis.external, 1);
+    assert.deepEqual(analysis.unresolved, [{ specifier: 'public', reasonCode: 'unsupported-config' }]);
+  });
+});
+
+describe('Python relationships (second review regressions)', () => {
+  it('an ambiguous from-import keeps only that pair unknown; the file keeps its other ghosts', async () => {
+    const repo = new FixtureRepo();
+    try {
+      repo.commit({
+        message: 'initial',
+        write: { 'pkg/__init__.py': 'child = 1\n', 'pkg/child.py': '', 'main.py': 'from pkg import child\n', 'unrelated.py': '' },
+      });
+      const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
+      try {
+        const c = ctx.classifier;
+        assert.equal(c.classify('main.py', 'pkg/child.py'), 'unknown');
+        assert.equal(
+          c.explain('main.py', 'pkg/child.py', 'unknown'),
+          'could not tell whether one imports the other (from pkg import child: child may be an attribute of pkg/__init__.py or the submodule)',
+        );
+        assert.equal(c.classify('main.py', 'unrelated.py'), 'ghost');
+        assert.equal(c.classify('main.py', 'pkg/__init__.py'), 'direct');
+      } finally {
+        ctx.close?.();
+      }
+    } finally {
+      repo.cleanup();
+    }
   });
 });

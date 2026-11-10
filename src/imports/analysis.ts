@@ -56,6 +56,12 @@ export interface FileAnalysis {
   dynamicLoads: number;
   /** Diagnostics raised while resolving this file's imports (surfaced in `meta.warnings`). */
   warnings?: string[];
+  /**
+   * Files this file may import, but the analyzer cannot tell (a `from pkg import name`
+   * that may be an attribute, a Go directory with several package clauses, files past the
+   * fan-out cap). Pairs with these files stay `unknown`; the rest of the file is unaffected.
+   */
+  uncertain?: { path: string; reason: string }[];
 }
 
 /** What a language extractor found in one file, before resolution. */
@@ -80,8 +86,10 @@ export type SpecifierResolution =
       kind: 'files';
       /** May be empty: the import names no file (a Python namespace package). */
       targets: AnalysisTarget[];
-      /** The target list was cut short (fan-out budget): the importing file becomes `incomplete`. */
+      /** Something the import may load could not be pinned down to files: the importing file becomes `incomplete`. */
       incompleteReason?: string;
+      /** Files the import may load (not edges): pairs with them stay `unknown`. */
+      uncertain?: { path: string; reason: string }[];
       warning?: string;
     }
   | { kind: 'external'; warning?: string }
@@ -207,6 +215,7 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
   const seenEdges = new Set<string>();
   const seenUnresolved = new Set<string>();
   const warnings = new Set<string>();
+  const uncertain = new Map<string, string>();
   const markIncomplete = (reason: string) => {
     result.incompleteReason ??= reason;
   };
@@ -215,6 +224,7 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     if (resolved.warning) warnings.add(resolved.warning);
     if (resolved.kind === 'files') {
       if (resolved.incompleteReason) markIncomplete(resolved.incompleteReason);
+      for (const item of resolved.uncertain ?? []) if (item.path !== path && !uncertain.has(item.path)) uncertain.set(item.path, item.reason);
       const targets: AnalysisTarget[] = [];
       for (const target of resolved.targets) {
         if (target.path === path || !session.includes(target.path)) continue;
@@ -247,6 +257,9 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     }
   }
   if (warnings.size > 0) result.warnings = [...warnings].sort();
+  // A file that is also a certain target is not uncertain.
+  for (const edge of result.edges) for (const target of edge.targets) uncertain.delete(target.path);
+  if (uncertain.size > 0) result.uncertain = [...uncertain].sort(([a], [b]) => a.localeCompare(b)).map(([path, reason]) => ({ path, reason }));
   result.incomplete = result.unresolved.length > 0 || result.dynamicLoads > 0 || result.incompleteReason !== undefined;
   return result;
 }

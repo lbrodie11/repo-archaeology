@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import type { RepoFiles } from '../src/imports/tree-files.js';
 import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 
 export interface FixtureCommit {
@@ -74,4 +75,13 @@ export class FixtureRepo {
   cleanup(): void {
     rmSync(this.dir, { recursive: true, force: true });
   }
+}
+
+/** An in-memory `RepoFiles` reader over `path -> content` (every listed path is a regular file). */
+export function memoryFiles(files: Record<string, string>): RepoFiles {
+  return {
+    exists: (path) => Object.hasOwn(files, path),
+    read: (path) => (Object.hasOwn(files, path) ? files[path] : undefined),
+    list: () => Object.keys(files),
+  };
 }

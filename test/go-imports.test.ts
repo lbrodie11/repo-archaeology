@@ -7,15 +7,8 @@ import { loadContext } from '../src/context.js';
 import { AnalysisSession, analyzeFile, type FileAnalysis } from '../src/imports/analysis.js';
 import { buildGoIndex, extractGoImports, goPathWithin, MAX_GO_PACKAGE_FAN_OUT, parseGoModFile } from '../src/imports/go.js';
 import type { RepoFiles } from '../src/imports/resolve.js';
-import { FixtureRepo } from './helpers.js';
+import { FixtureRepo, memoryFiles } from './helpers.js';
 
-export function memoryFiles(files: Record<string, string>): RepoFiles {
-  return {
-    exists: (path) => Object.hasOwn(files, path),
-    read: (path) => (Object.hasOwn(files, path) ? files[path] : undefined),
-    list: () => Object.keys(files),
-  };
-}
 
 function analyze(files: Record<string, string>, path: string): { analysis: FileAnalysis; session: AnalysisSession } {
   const repo = memoryFiles(files);
@@ -331,7 +324,7 @@ describe('Go import resolution', () => {
     );
   });
 
-  it('truncates package fan-out deterministically and marks importers incomplete', () => {
+  it('truncates package fan-out deterministically; the files past the cap are uncertain, not the whole importer', () => {
     const files: Record<string, string> = { 'go.mod': 'module example.com/app\n' };
     for (let n = 0; n < MAX_GO_PACKAGE_FAN_OUT + 50; n++) files[`big/f${String(n).padStart(3, '0')}.go`] = 'package big\n';
     files['main.go'] = 'package main\nimport "example.com/app/big"\n';
@@ -341,7 +334,8 @@ describe('Go import resolution', () => {
     assert.deepEqual(first.edges, second.edges);
     assert.equal(first.edges[0]!.targets[0]!.path, 'big/f000.go');
     assert.equal(first.edges[0]!.targets.at(-1)!.path, 'big/f199.go');
-    assert.equal(first.incomplete, true);
+    assert.equal(first.incomplete, false);
+    assert.deepEqual(first.uncertain?.map((item) => item.path), Array.from({ length: 50 }, (_, n) => `big/f${String(n + 200).padStart(3, '0')}.go`));
     assert.match(first.warnings?.[0] ?? '', /package example\.com\/app\/big has 250 files/);
   });
 
@@ -595,16 +589,16 @@ describe('Go package identity (RA-10 review regressions)', () => {
     assert.equal(analysis.incomplete, false);
   });
 
-  it('several package clauses without an ignore tag keep every file and mark the importer incomplete', () => {
+  it('several package clauses without an ignore tag make every member uncertain (no edges, no guess)', () => {
     for (const [label, extra] of [
       ['tie', { 'pkg/other.go': 'package other\n' }],
       ['majority elsewhere', { 'pkg/m1.go': 'package main\n', 'pkg/m2.go': '//go:build tools\n\npackage main\n' }],
     ] as const) {
       const files = { 'go.mod': 'module example.com/app\n', 'main.go': 'package main\nimport "example.com/app/pkg"\n', 'pkg/real.go': 'package pkg\n', ...extra };
       const { analysis } = analyze(files, 'main.go');
-      assert.ok(targetsOf(analysis).includes('pkg/real.go'), label);
-      assert.equal(analysis.incomplete, true, label);
-      assert.match(analysis.incompleteReason ?? '', /holds files of several packages/, label);
+      assert.deepEqual(analysis.edges, [], label);
+      assert.ok(analysis.uncertain?.some((item) => item.path === 'pkg/real.go' && /holds files of several packages/.test(item.reason)), label);
+      assert.equal(analysis.incomplete, false, label);
     }
   });
 
