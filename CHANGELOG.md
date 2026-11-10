@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Choose which `.repo-archaeology.json` applies (RA-19):** By default the config comes from the code being analyzed, so a pull request could add its own config that ignores the file it forgot to change and hide its own omission (found in Gutter's GU-05 review). Two new global options, mutually exclusive (exit 2 when combined), let the caller decide instead:
+  - `--config-from <ref>` reads the file from that commit's tree, with or without `--head`, through the same checks as `--head` (regular file, 64 KB cap, valid settings). A missing file means no config. An invalid file or a ref that is not a commit is an error (exit 2) instead of a fallback. CI and review bots should pass the base branch: `diff --base origin/main --config-from origin/main`.
+  - `--no-config` reads no config file at all.
+  - Library parity: `openRepository({ configRef })`. Combining it with `useConfigFile: false` is a `ConfigError`.
+  - Explicit flags and `settings` still override config values.
+- **`meta.config` (additive, `schemaVersion: 1` unchanged):** every JSON output reports which config applied: `{ source: "working-tree" }`, `{ source: "ref", ref, sha }` (`--config-from`, or `--head <ref>` alone, which reads `<ref>`'s tree) or `{ source: "none" }`. Schema: `common.schema.json#/$defs/ConfigMeta`. Without either option, output is unchanged apart from this field; the golden snapshots differ only by it.
+
 ### Research
 - **RA-18 surface pilot (research only, verdict NOT CORRECT, [`docs/research/surface-pilot.md`](docs/research/surface-pilot.md)):** A preregistered pilot asked "what did this PR change about what a file exports, and which untouched files still use it?".
   - **What was built:** an internal, unpublished analysis in [`src/surface/`](src/surface/), excluded from the build and from `dist`. It reads each changed file's syntactic export surface at base and head (`createSourceFile` only), with names, kinds, required and total parameters, required properties, opaque `export *` and static CommonJS forms. It then finds untouched consumers through the existing resolver, with a compiler-coverage label per consumer. Research scripts in [`scripts/surface-pilot/`](scripts/surface-pilot/) generate seeded mutations in hono, eslint and vuejs/core, using a TypeScript language-service oracle as ground truth. They also replay 400 real PRs, and the raw records are committed under [`docs/research/data/surface-pilot/`](docs/research/data/surface-pilot/).
