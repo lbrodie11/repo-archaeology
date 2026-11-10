@@ -20,7 +20,7 @@ import {
   validatePartial,
   type Settings,
 } from '../config.js';
-import { loadContext, UsageError, type Context, type ProgressEvent } from '../context.js';
+import { loadContext, UsageError, type ConfigMeta, type Context, type ProgressEvent } from '../context.js';
 import { GitError } from '../git/run.js';
 import { IMPORT_UNRESOLVED_REASON_CODES, RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import { parseOriginWeightsSpec, type CommitOrigin, type OriginConfig, type OriginWeights } from '../model/origin.js';
@@ -56,6 +56,7 @@ export {
   VERDICTS_SCHEMA_URL,
   type CodeownersProvenance,
   type CommitOrigin,
+  type ConfigMeta,
   type ImportEdgeKind,
   type ImportGraphEdge,
   type ImportGraphUnresolved,
@@ -130,6 +131,11 @@ export interface OpenOptions {
   settings?: SettingsInput;
   /** Default `true`: merge `.repo-archaeology.json` under explicit `settings`. */
   useConfigFile?: boolean;
+  /**
+   * Read `.repo-archaeology.json` from this ref's tree (same as `--config-from <ref>`), instead of the
+   * working tree or `head`'s tree. Mutually exclusive with `useConfigFile: false` (`ConfigError`).
+   */
+  configRef?: string;
   /** Progress callback invoked during history loading and model construction. */
   onProgress?: (e: { phase: string; done?: number; total?: number }) => void;
   /** Cancel long history loads. */
@@ -336,12 +342,19 @@ export async function openRepository(opts: OpenOptions): Promise<Repository> {
   if (!opts || typeof opts.cwd !== 'string' || opts.cwd.trim() === '') {
     throw new UsageError('openRepository requires a non-empty `cwd` path.');
   }
+  if (opts.configRef !== undefined && opts.useConfigFile === false) {
+    throw new ConfigError('configRef cannot be combined with useConfigFile: false (use one or the other).');
+  }
+  if (opts.configRef !== undefined && typeof opts.configRef !== 'string') {
+    throw new UsageError('configRef must be a string naming a branch, tag or commit.');
+  }
   const flagSettings = normalizeSettingsInput(opts.settings);
   const internalOpts = opts as OpenOptions & { onSpawn?: (args: readonly string[], cwd: string) => void };
   const ctx = await loadContext(opts.cwd, flagSettings, {
     head: opts.head,
     base: opts.base,
     useConfigFile: opts.useConfigFile ?? true,
+    ...(opts.configRef !== undefined ? { configRef: opts.configRef } : {}),
     silent: true,
     onProgress: opts.onProgress,
     signal: opts.signal,

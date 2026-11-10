@@ -599,6 +599,10 @@
         "imports": {
           "$ref": "#/$defs/ImportsCoverageMeta"
         },
+        "config": {
+          "$ref": "#/$defs/ConfigMeta",
+          "description": "Which .repo-archaeology.json applied (RA-19). Optional; omitted by producers that predate RA-19."
+        },
         "settings": {
           "$ref": "#/$defs/Settings"
         },
@@ -613,6 +617,46 @@
           "description": "History cache usage for this run (RA-04). Optional; omitted by producers that predate RA-04."
         }
       }
+    },
+    "ConfigMeta": {
+      "type": "object",
+      "description": "Where .repo-archaeology.json was looked for. working-tree: the checked-out repository root. ref: a commit's tree (--config-from <ref>, or --head <ref>'s own tree), with ref as given and its resolved commit sha. none: config reading was disabled (--no-config, useConfigFile: false). A missing file at the source means no config.",
+      "oneOf": [
+        {
+          "required": [
+            "source",
+            "ref",
+            "sha"
+          ],
+          "properties": {
+            "source": {
+              "const": "ref"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            }
+          }
+        },
+        {
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "working-tree",
+                "none"
+              ]
+            }
+          }
+        }
+      ]
     },
     "CacheMeta": {
       "type": "object",

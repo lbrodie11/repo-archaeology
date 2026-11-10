@@ -17,7 +17,7 @@ import {
   verdictPrune,
 } from './commands/verdict.js';
 import { ConfigError, getInvalidConfigStyle, type Settings } from './config.js';
-import { loadContext, UsageError, type Context } from './context.js';
+import { loadContext, UsageError, type Context, type ContextOptions } from './context.js';
 import { workingTreeChanges } from './git/changes.js';
 import { remoteOriginUrl } from './git/repo.js';
 import { GitError } from './git/run.js';
@@ -118,6 +118,9 @@ function collectCompareOriginWeights(value: string, previous: string[] = []): st
 interface GlobalOptions {
   cwd?: string;
   head?: string;
+  /** `false` when `--no-config` was passed. */
+  config: boolean;
+  configFrom?: string;
   maxCommits?: number;
   since?: string;
   maxFiles?: number;
@@ -169,6 +172,16 @@ function settingsFrom(opts: GlobalOptions, cmd?: Command): Partial<Settings> {
   };
 }
 
+/** `--no-config` / `--config-from <ref>`: which `.repo-archaeology.json` applies (default: working tree, or `--head`'s tree). */
+function configOptionsFrom(opts: GlobalOptions): Pick<ContextOptions, 'useConfigFile' | 'configRef'> {
+  if (opts.config === false && opts.configFrom !== undefined) {
+    throw new UsageError('--no-config and --config-from cannot be used together.');
+  }
+  if (opts.config === false) return { useConfigFile: false };
+  if (opts.configFrom !== undefined) return { configRef: opts.configFrom };
+  return {};
+}
+
 function richRenderOptionsFrom(
   global: GlobalOptions,
   remoteUrl?: string,
@@ -199,10 +212,12 @@ async function loadTerminalContext(
     resolveStyleMode({ flag: global.style });
   }
   const settingsFlags = settingsFrom(global, options.cmd);
+  const configOptions = configOptionsFrom(global);
   if (options.isMachineOutput) {
     const ctx = await loadContext(global.cwd, settingsFlags, {
       base: options.base,
       head: global.head,
+      ...configOptions,
     });
     return { ctx, style: 'classic' };
   }
@@ -213,6 +228,7 @@ async function loadTerminalContext(
     const ctx = await loadContext(global.cwd, settingsFlags, {
       base: options.base,
       head: global.head,
+      ...configOptions,
       onSettingsResolved: (settings) => {
         resolvedStyle = resolveStyleMode({
           flag: global.style,
@@ -247,6 +263,8 @@ program
   .version(version)
   .option('-C, --cwd <path>', 'run as if started in <path>')
   .option('--head <ref>', 'analyze repository at <ref> without checking it out')
+  .option('--no-config', 'do not read any .repo-archaeology.json')
+  .option('--config-from <ref>', "read .repo-archaeology.json from <ref>'s tree instead (CI and review bots: use the base branch)")
   .option('--max-commits <n>', 'analyze at most this many recent commits (default 5000)', positiveInt)
   .option('--since <date>', 'only use commits after this date, e.g. "2 years ago" or 2024-01-01')
   .option('--max-files <n>', 'skip commits that touch more files than this, like formatting sweeps (default 25)', positiveInt)
@@ -480,7 +498,7 @@ program
       throw new UsageError('--follow-up-window requires --follow-ups.');
     }
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head, ...configOptionsFrom(global) });
     if (global.json) {
       printVersionedJson(
         await createRepository(ctx).backtest({
@@ -505,7 +523,7 @@ program
   .option('-f, --files <path...>', 'restrict from to these files plus every file that imports them')
   .action(async (opts: { files?: string[] }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head, ...configOptionsFrom(global) });
     if (global.json) {
       printVersionedJson(await createRepository(ctx).importGraph({ files: opts.files }));
     } else {
@@ -526,7 +544,7 @@ program
   .option('--no-open', 'write the file without opening a browser')
   .action(async (opts: { out?: string; edges: number; kinds: Relationship[]; includePatches?: boolean; showSilenced?: boolean; style?: StyleMode; open: boolean }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
-    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head });
+    const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head, ...configOptionsFrom(global) });
     const options = {
       ...opts,
       style: opts.style ?? global.style,

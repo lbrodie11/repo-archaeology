@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import type { Context } from '../context.js';
+import type { ConfigMeta, Context } from '../context.js';
 import type {
   HiddenBridge,
   ImportResolutionVia,
@@ -122,6 +122,8 @@ export interface Meta {
   verdicts?: VerdictsMeta;
   /** Scoped import resolution coverage for files inspected during this command. */
   imports?: ImportsCoverageMeta;
+  /** Where `.repo-archaeology.json` was read from (`--no-config`, `--config-from <ref>`, `--head`, or the working tree). */
+  config?: ConfigMeta;
   settings: {
     maxCommits: number;
     since?: string;
@@ -184,6 +186,7 @@ export function buildMeta(ctx: Context): Meta {
       file: VERDICTS_FILE,
     },
     ...(importsCoverage !== undefined ? { imports: importsCoverage } : {}),
+    ...(ctx.config !== undefined ? { config: { ...ctx.config } } : {}),
     settings: {
       maxCommits: s.maxCommits,
       since: s.since,
