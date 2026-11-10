@@ -37,6 +37,9 @@
         "not-exported": 1
       }
     },
+    "config": {
+      "source": "working-tree"
+    },
     "settings": {
       "maxCommits": 5000,
       "maxFilesPerCommit": 25,

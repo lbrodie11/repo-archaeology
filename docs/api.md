@@ -71,10 +71,22 @@ export interface OpenOptions {
   base?: string;                // merge-base isolation, same as --base
   settings?: Partial<Settings>; // same keys as .repo-archaeology.json / CLI flags (maxCommits, maxFiles, minShared, minConfidence, halfLife, skipCommits, ignore, defaultIgnores, cache: { dir?, enabled? })
   useConfigFile?: boolean;      // default true: merge .repo-archaeology.json under explicit settings
+  configRef?: string;           // read .repo-archaeology.json from this ref's tree instead (same as --config-from <ref>)
   onProgress?: (e: { phase: string; done?: number; total?: number }) => void;
   signal?: AbortSignal;         // cancel long history loads (rejects with AbortError)
 }
 ```
+
+#### Choosing which `.repo-archaeology.json` applies (`useConfigFile`, `configRef`)
+
+By default the session reads `.repo-archaeology.json` from the code being analyzed: the working tree, or `head`'s tree when `head` is set (an invalid file at `head` falls back to the working tree with a warning). When the code under analysis is someone else's change, such as a pull request in a review bot, it should not choose its own settings:
+
+- **`configRef: '<base>'`** (CLI `--config-from <base>`): reads the file from that commit's tree with the same validation as the working-tree file (regular file, at most 64 KB, valid settings). A missing file means no config. An invalid file rejects with `ConfigError` (no fallback), and a ref that does not name a commit rejects with `UsageError`. It works with or without `head`: `openRepository({ cwd, head: prHead, base: prBase, configRef: prBase })` analyzes the PR head with the base branch's config.
+- **`useConfigFile: false`** (CLI `--no-config`): no config file at all, only defaults plus `settings`.
+- Passing both `configRef` and `useConfigFile: false` rejects with `ConfigError`.
+- Explicit `settings` override config values in every mode.
+
+Every result reports the config that applied in `meta.config` (`{ source: 'working-tree' }`, `{ source: 'ref', ref, sha }` or `{ source: 'none' }`; see [`docs/json.md`](./json.md#51-common-meta-object-commonschemajsondefsmeta)), so callers can check it.
 
 ### `Repository`
 

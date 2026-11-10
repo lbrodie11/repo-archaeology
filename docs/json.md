@@ -15,7 +15,7 @@ Every JSON payload emitted by Repo Archaeology includes a top-level contract env
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.10.0"
+    "version": "0.11.0"
   }
 }
 ```
@@ -100,6 +100,7 @@ Present on `scan`, `diff`, `file`, `explain`, `backtest`, and bare `repo-archaeo
 | `origins` | `{ human, agent, bot }` | Optional (always emitted since RA-08) | Counts of analyzed commits classified as `human`, `agent`, or `bot` (optional in `schemaVersion: 1` for backward compatibility with older v1 payloads). |
 | `verdicts` | `{ loaded, active, expired, file }` | Optional (always emitted since RA-11) | Summary of `.repo-archaeology.verdicts.json`: total `loaded` entries, `active` entries, `expired` (`until < today`) entries, and `file: ".repo-archaeology.verdicts.json"`. |
 | `imports` | `ImportsCoverageMeta` | Optional | Import resolution coverage and unresolved diagnostics for commands that perform import classification (`scan`, `diff`, `file`, `map`, `explain`, `imports`, and bare `repo-archaeology`). Omitted on `backtest`. |
+| `config` | `{ source: "working-tree" \| "ref" \| "none", ref?: string, sha?: string }` | Optional (always emitted by the CLI and library since RA-19) | Which `.repo-archaeology.json` applied (`common.schema.json#/$defs/ConfigMeta`), so a caller can verify that the code under review did not choose its own settings. `"working-tree"`: the file at the checked-out repository root. `"ref"`: the file in a commit's tree, with `ref` as given and `sha` the resolved 40–64 hex commit; set by `--config-from <ref>` / `configRef`, and by `--head <ref>` alone (which reads `<ref>`'s own tree; when that file is invalid the run falls back to the working tree, reports `"working-tree"` and adds a warning). `"none"`: config reading was disabled (`--no-config` / `useConfigFile: false`). `source` names where the file was looked for, not whether one existed: a missing file at that source means no config. |
 | `settings` | `Settings` | Yes | Active analysis settings (`maxCommits`, `maxFilesPerCommit`, `minShared`, `minConfidence`, `ignore`, `useDefaultIgnores`, and optional `since`, `halfLifeDays`, `skipCommits`, `skipReverts`, `origin`, `owners`). |
 | `warnings` | `string[]` | Yes | History warnings (e.g., shallow clone warning or merge fallback warning). |
 | `cache` | `{ enabled: boolean, hits: integer, misses: integer, dir?: string }` | Optional (always emitted by the CLI since RA-04) | History cache usage for this run (`common.schema.json#/$defs/CacheMeta`). `hits` counts needed commits served from the persistent raw-commit cache; `misses` counts commits parsed from `git log` in this run (all of them when `enabled: false`, i.e. `--no-cache`). `dir` is relative to the repository root with POSIX separators, or the literal `"$REPO_ARCHAEOLOGY_CACHE_DIR"` when that environment variable chose the directory; it is never an absolute path and is omitted when no relative path exists (e.g. another drive on Windows). Cached and `--no-cache` runs are otherwise identical, so consumers comparing outputs should exclude `meta.cache`. Cache rebuilds (corruption, checksum mismatch, version change) and read-only shallow clones add a message to `warnings`. |
@@ -196,7 +197,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
   "schemaVersion": 1,
   "tool": {
     "name": "repo-archaeology",
-    "version": "0.10.0"
+    "version": "0.11.0"
   },
   "meta": {
     "tool": "repo-archaeology",

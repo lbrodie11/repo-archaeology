@@ -61,6 +61,11 @@ export interface ContextOptions {
   head?: string;
   /** Whether to merge `.repo-archaeology.json` under explicit settings (default: `true`). */
   useConfigFile?: boolean;
+  /**
+   * Read `.repo-archaeology.json` from this commit's tree instead of the working tree (or `head`'s tree).
+   * Mutually exclusive with `useConfigFile: false`.
+   */
+  configRef?: string;
   /** Suppress terminal progress output on `stderr` (used in library API mode). */
   silent?: boolean;
   /** Progress callback invoked during history loading and model construction. */
@@ -116,6 +121,20 @@ export interface Context {
   closeSession?: () => void;
   /** Resolved history cache configuration, reused when the baseline is retrained. */
   historyCache?: HistoryCacheOptions | false;
+  /** Where `.repo-archaeology.json` was read from for this context (reported as `meta.config`). */
+  config?: ConfigMeta;
+}
+
+/**
+ * Where `.repo-archaeology.json` was looked for. `working-tree`: the checked-out repository root.
+ * `ref`: a commit's tree (`--config-from <ref>`, or `--head <ref>`'s own tree), with the ref as given
+ * and its resolved commit SHA. `none`: config reading was disabled (`--no-config`, `useConfigFile: false`).
+ * A missing file at the chosen source means no config; the source is reported either way.
+ */
+export interface ConfigMeta {
+  source: 'working-tree' | 'ref' | 'none';
+  ref?: string;
+  sha?: string;
 }
 
 export function isInsideCacheDir(path: string, inRepoDir?: string): boolean {
@@ -179,6 +198,47 @@ export async function resolveHead(root: string, head: string): Promise<string> {
     return await resolveCommit(root, trimmed);
   } catch {
     throw new UsageError(`"${head}" is not a branch, tag or commit in this repository.`);
+  }
+}
+
+/**
+ * Validates and resolves `--config-from <ref>` (library: `configRef`) to a commit SHA.
+ * Rejects empty values, values starting with `-`, and refs that do not name a commit with UsageError.
+ */
+export async function resolveConfigRef(root: string, ref: string): Promise<string> {
+  const trimmed = ref.trim();
+  if (trimmed === '' || trimmed.startsWith('-')) {
+    throw new UsageError(`Invalid --config-from revision "${ref}": revision cannot be empty or start with "-".`);
+  }
+  try {
+    return await resolveCommit(root, trimmed);
+  } catch {
+    throw new UsageError(`--config-from: "${ref}" is not a branch, tag or commit in this repository.`);
+  }
+}
+
+/**
+ * Reads `.repo-archaeology.json` from `<ref>`'s tree with the same validation as `--head`
+ * (regular file, size cap, schema). A missing file means no config; an invalid one throws ConfigError.
+ */
+export async function loadConfigFromRef(
+  root: string,
+  ref: string,
+  signal?: AbortSignal,
+): Promise<{ settings: Partial<Settings>; meta: ConfigMeta }> {
+  const sha = await resolveConfigRef(root, ref);
+  if (signal?.aborted) throw createAbortError(signal);
+  const treeFiles = parseLsTree(
+    await runGit(root, ['ls-tree', '-z', '--end-of-options', sha, '--', CONFIG_FILE], { signal }),
+  );
+  const settings = await loadConfigFromHeadTree(root, sha, treeFiles, signal);
+  return { settings, meta: { source: 'ref', ref, sha } };
+}
+
+/** `configRef` and `useConfigFile: false` ask for two different things; refuse to guess. */
+function assertConfigOptions(options?: ContextOptions): void {
+  if (options?.configRef !== undefined && options.useConfigFile === false) {
+    throw new ConfigError('configRef cannot be combined with useConfigFile: false (use one or the other).');
   }
 }
 
@@ -334,7 +394,9 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
   if (!(await hasCommits(root))) throw new GitError('This repository has no commits yet, so there is no history to analyze.');
   if (signal?.aborted) throw createAbortError(signal);
 
+  assertConfigOptions(options);
   const useConfigFile = options?.useConfigFile ?? true;
+  const configRef = options?.configRef;
   const emitStderrProgress = !options?.silent && !options?.onProgress;
 
   const headRef = options?.head;
@@ -353,12 +415,18 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     if (signal?.aborted) throw createAbortError(signal);
     let fileConfig: Partial<Settings> = {};
     let configWarning: string | undefined;
-    if (useConfigFile) {
+    let config: ConfigMeta = { source: 'none' };
+    if (configRef !== undefined) {
+      // An explicitly chosen config source fails closed: no fallback to another file.
+      ({ settings: fileConfig, meta: config } = await loadConfigFromRef(root, configRef, signal));
+    } else if (useConfigFile) {
       try {
         fileConfig = await loadConfigFromHeadTree(root, headSha, currentFiles, signal);
+        config = { source: 'ref', ref: headRef, sha: headSha };
       } catch (err) {
         if (!(err instanceof ConfigError)) throw err;
         fileConfig = loadConfigFile(root);
+        config = { source: 'working-tree' };
         configWarning = `Ignoring invalid ${CONFIG_FILE} at ${headRef} (${err.message}); using working-tree configuration instead.`;
       }
     }
@@ -423,10 +491,18 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
       close: options?.keepOpen ? () => {} : () => treeFiles.close(),
       closeSession: () => treeFiles.close(),
       historyCache,
+      config,
     };
   }
 
-  const fileConfig = useConfigFile ? loadConfigFile(root) : {};
+  let fileConfig: Partial<Settings> = {};
+  let config: ConfigMeta = { source: 'none' };
+  if (configRef !== undefined) {
+    ({ settings: fileConfig, meta: config } = await loadConfigFromRef(root, configRef, signal));
+  } else if (useConfigFile) {
+    fileConfig = loadConfigFile(root);
+    config = { source: 'working-tree' };
+  }
   const settings = resolveSettings(fileConfig, flags);
   compileSkipPattern(settings.skipCommits, '--skip-commits', settings.skipCommitPrefixes); // fail fast on a bad pattern, before reading history
   options?.onSettingsResolved?.(settings);
@@ -492,6 +568,7 @@ export async function loadContext(cwdOption: string | undefined, flags: Partial<
     headVerdicts,
     open: () => classifier.resetScope(),
     historyCache,
+    config,
   };
 }
 

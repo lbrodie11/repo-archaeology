@@ -240,7 +240,7 @@ jobs:
 
       - name: Check for overlooked companion files
         id: archaeology
-        uses: lbrodie11/repo-archaeology@v0.10.0
+        uses: lbrodie11/repo-archaeology@v0.11.0
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
@@ -255,9 +255,9 @@ jobs:
   - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
   - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
   - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
-  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.10.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.10.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
+  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.11.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.11.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
   - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is resolved to its canonical absolute path and honoured, while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated into separate empty config files. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
-  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.10.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.11.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
 
 ### `explain`
 
@@ -319,7 +319,7 @@ repo-archaeology diff --head <sha> --base <sha>
 repo-archaeology backtest --head v1.2.0
 ```
 
-`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). If `<ref>` contains a `.repo-archaeology.json` that the current version rejects, Repo Archaeology falls back to the working-tree configuration and records a warning in `meta.warnings`. JSON outputs include `meta.head: { ref, sha }`.
+`diff --head <ref>` requires `--base <ref>`, and bare `repo-archaeology --head <ref>` runs `scan` at `<ref>`. When `--head <ref>` resolves to the currently checked-out `HEAD` on a dirty working tree, uncommitted changes and untracked files are ignored and a warning is recorded in `meta.warnings` (`"Working tree has uncommitted changes; uncommitted changes were ignored because --head was specified."`). If `<ref>` contains a `.repo-archaeology.json` that the current version rejects, Repo Archaeology falls back to the working-tree configuration and records a warning in `meta.warnings`. To analyze `<ref>` with another commit's config (for example a pull request head with the base branch's settings), add `--config-from <base>`; see [Choosing which config applies](#choosing-which-config-applies---no-config---config-from-ref). JSON outputs include `meta.head: { ref, sha }` and `meta.config`.
 
 ### Library API (`openRepository`) & `imports`
 
@@ -401,6 +401,8 @@ Global options work with every command:
 | `--include-reverts` | `false` | Include mechanical `git revert` and `Reapply` commits (`Revert "…"` and `Reapply "…"`, skipped by default and counted in `meta.revertsSkipped`) |
 | `--half-life <days>` | | Weight recent commits more |
 | `--head <ref>` | | Analyze repository at `<ref>` without checking it out |
+| `--no-config` | | Do not read any `.repo-archaeology.json` (see [Choosing which config applies](#choosing-which-config-applies---no-config---config-from-ref)) |
+| `--config-from <ref>` | | Read `.repo-archaeology.json` from `<ref>`'s tree instead of the working tree or `--head`'s tree; CI and review bots should pass the base branch |
 | `--origin-weights <spec>` | `human=1,agent=1,bot=1` | Weight commits by origin, e.g. `bot=0,agent=0.5` (values in `[0, 1]`) |
 | `--style <mode>` | `classic` | Visual style for terminal output and `map`: `classic` (default) or `rich` (FRAME/12 editorial terminal hierarchy and Investigation Board + Atlas map; also settable via `REPO_ARCHAEOLOGY_STYLE` for personal preference, or `"style"` in `.repo-archaeology.json` as a team-wide default) |
 | `--ascii` | | Use ASCII-only box rules, arrows, and separators in `--style rich` output |
@@ -433,6 +435,26 @@ Settings can also live in `.repo-archaeology.json` at the repository root (flags
 ```
 
 The config file is part of the repository, so it is treated as untrusted input: it must be a small regular file, `maxFilesPerCommit` is capped at 1000, and `skipCommits` patterns that can backtrack catastrophically (quantifiers vulnerable to polynomial/exponential ReDoS, repeated groups with alternation, or backreferences) are refused. For safe prefix-based skipping without regexes, use `skipCommitPrefixes`. Command-line flags are not restricted.
+
+### Choosing which config applies (`--no-config`, `--config-from <ref>`)
+
+By default the config comes from the code being analyzed: the working tree, or `<ref>`'s tree with `--head <ref>`. That is right on your own machine, but in a review it lets the change under review choose its own settings. A pull request could add a `.repo-archaeology.json` that ignores the file it forgot to change, and its own omission would disappear from the review. Two global options let the caller decide instead:
+
+| You are… | Use | Config that applies |
+| --- | --- | --- |
+| Working in your own checkout | (nothing) | The working tree's file, or `<ref>`'s with `--head <ref>` |
+| A CI job or review bot analyzing someone else's change | `--config-from <base>` | The file in the base commit's tree, already reviewed and merged |
+| Comparing against defaults, or debugging a config | `--no-config` | None: defaults plus your flags |
+
+```bash
+# Review a pull request with the settings the base branch already agreed on
+repo-archaeology diff --base origin/main --config-from origin/main
+
+# Same, without checking the PR out
+repo-archaeology diff --head <pr-sha> --base <base-sha> --config-from <base-sha>
+```
+
+`--config-from <ref>` reads the file from the commit's tree, never from disk, with the same checks as the working-tree file (a regular file, at most 64 KB, valid settings). If the commit has no `.repo-archaeology.json`, no config applies. An invalid file there is an error (exit 2), not a silent fallback, and so is a ref that is not a commit. The two options cannot be combined, and flags still override config values either way. Every JSON output records the config that applied in `meta.config`, e.g. `{ "source": "ref", "ref": "origin/main", "sha": "…" }`, `{ "source": "working-tree" }` or `{ "source": "none" }`, so a bot can verify it. The library equivalents are `openRepository({ configRef })` and `openRepository({ useConfigFile: false })` ([`docs/api.md`](docs/api.md)).
 
 ## History cache
 

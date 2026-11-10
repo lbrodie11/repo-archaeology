@@ -114,7 +114,7 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       version: string;
       files: string[];
     };
-    assert.equal(pkg.version, '0.10.0');
+    assert.equal(pkg.version, '0.11.0');
     assert.equal(getToolVersion(), pkgVersion);
     assert.ok(pkg.files.includes('schema'), 'package.json files array must include "schema"');
   });
@@ -1083,6 +1083,80 @@ describe('RA-06 trackRecord JSON contract', () => {
     for (const [label, value] of invalid) {
       const clean = JSON.parse(JSON.stringify(value));
       assert.notDeepEqual(errorsFor(clean), [], `schema should reject ${label}`);
+    }
+  });
+});
+
+describe('RA-19 meta.config JSON contract', () => {
+  it('every command reports a schema-valid meta.config for the working tree, --no-config and --config-from', () => {
+    const r = new FixtureRepo();
+    try {
+      r.write('src/a.ts', 'export const a = 0;\n');
+      r.write('src/b.ts', 'export const b = 0;\n');
+      r.write('.repo-archaeology.json', JSON.stringify({ minShared: 2 }));
+      r.git('add', '.');
+      r.commit({ message: 'root' });
+      for (let i = 1; i <= 34; i++) r.touch(i % 2 === 0 ? ['src/a.ts', 'src/b.ts'] : ['src/a.ts']);
+      r.write('src/a.ts', 'export const a = 99;\n');
+      const sha = r.git('rev-parse', 'HEAD').trim();
+      const commands: [string[], string][] = [
+        [['scan'], 'scan.schema.json'],
+        [['diff'], 'diff.schema.json'],
+        [['file', 'src/a.ts'], 'file.schema.json'],
+        [['explain', 'src/a.ts', 'src/b.ts'], 'explain.schema.json'],
+        [['backtest'], 'backtest.schema.json'],
+        [['imports'], 'import-graph.schema.json'],
+        [['map', '--no-open', '-o', join(r.dir, '.git', 'map.html')], 'map.schema.json'],
+        [[], 'default.schema.json'],
+      ];
+      const sources: [string[], unknown][] = [
+        [[], { source: 'working-tree' }],
+        [['--no-config'], { source: 'none' }],
+        [['--config-from', 'HEAD'], { source: 'ref', ref: 'HEAD', sha }],
+      ];
+      for (const [flags, expected] of sources) {
+        for (const [args, schemaFile] of commands) {
+          const res = runCli([...args, '--json', '--no-cache', ...flags], r.dir);
+          assert.equal(res.code, 0, `${args.join(' ')} ${flags.join(' ')}: ${res.stderr}`);
+          const out = JSON.parse(res.stdout);
+          assert.equal(out.schemaVersion, JSON_SCHEMA_VERSION);
+          assert.deepEqual(out.meta.config, expected, `${args.join(' ') || '(default)'} ${flags.join(' ')}`);
+          assertMatchesSchema(out, schemaFile);
+          // Payloads from producers that predate RA-19 (no meta.config) stay valid.
+          const legacy = structuredClone(out);
+          delete legacy.meta.config;
+          assertMatchesSchema(legacy, schemaFile);
+        }
+      }
+    } finally {
+      r.cleanup();
+    }
+  });
+
+  it('the ConfigMeta schema accepts exactly the three documented shapes', () => {
+    const schemaRef = { $ref: 'common.schema.json#/$defs/ConfigMeta' };
+    const errorsFor = (value: unknown): string[] => {
+      const errors: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, value, schemaRef, 'common.schema.json', '$', errors);
+      return errors;
+    };
+    const sha = 'a'.repeat(40);
+    assert.deepEqual(errorsFor({ source: 'working-tree' }), []);
+    assert.deepEqual(errorsFor({ source: 'none' }), []);
+    assert.deepEqual(errorsFor({ source: 'ref', ref: 'origin/main', sha }), []);
+    assert.deepEqual(errorsFor({ source: 'ref', ref: 'v1', sha: 'b'.repeat(64) }), []);
+    const invalid: [string, unknown][] = [
+      ['unknown source', { source: 'file' }],
+      ['missing source', { ref: 'main', sha }],
+      ['ref without sha', { source: 'ref', ref: 'main' }],
+      ['ref without ref', { source: 'ref', sha }],
+      ['empty ref', { source: 'ref', ref: '', sha }],
+      ['short sha', { source: 'ref', ref: 'main', sha: 'abc1234' }],
+      ['uppercase sha', { source: 'ref', ref: 'main', sha: 'A'.repeat(40) }],
+      ['not an object', 'working-tree'],
+    ];
+    for (const [label, value] of invalid) {
+      assert.notDeepEqual(errorsFor(value), [], `schema should reject ${label}`);
     }
   });
 });
