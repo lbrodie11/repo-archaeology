@@ -334,7 +334,25 @@
       "alsoLinkedFrom": [
         "schema/explain.schema.json",
         "schema/file.schema.json"
-      ]
+      ],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 5,
+        "coChanged": 6,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 2,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "src/map/template.ts",
@@ -386,7 +404,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 12,
+        "coChanged": 5,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 3,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "schema/common.schema.json",
@@ -443,7 +479,25 @@
         "schema/explain.schema.json",
         "schema/file.schema.json",
         "schema/map.schema.json"
-      ]
+      ],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 6,
+        "coChanged": 5,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 3,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "src/action/runner.ts",
@@ -495,7 +549,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 6,
+        "coChanged": 0,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 1,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "test/json-contract.test.ts",
@@ -551,7 +623,25 @@
         "schema/common.schema.json",
         "schema/explain.schema.json",
         "schema/file.schema.json"
-      ]
+      ],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 10,
+        "coChanged": 3,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 4,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "schema/common.schema.json",
@@ -603,7 +693,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 5,
+        "coChanged": 3,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 2,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "src/action/runner.ts",
@@ -655,7 +763,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 6,
+        "coChanged": 0,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 1,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "src/action/runner.ts",
@@ -707,7 +833,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 6,
+        "coChanged": 0,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 1,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     },
     {
       "from": "src/action/runner.ts",
@@ -759,7 +903,25 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 6,
+        "coChanged": 0,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2026-11-08",
+          "to": "2026-11-09",
+          "commits": 55,
+          "trainingCommits": 56
+        },
+        "excluded": {
+          "censored": 1,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
     }
   ],
   "families": []

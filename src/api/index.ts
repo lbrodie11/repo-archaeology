@@ -146,6 +146,10 @@ export interface Repository {
     base?: string;
     applyBranchVerdicts?: boolean;
     owners?: boolean;
+    /** Compute per-pair track records on suggestions (default `true`). `false` skips the replay entirely. */
+    trackRecord?: boolean;
+    /** Track-record follow-up window: a whole number of hours from 1 to 720 (default 48). */
+    trackWindowHours?: number;
   }): Promise<DiffJson>;
   scan(opts?: {
     limit?: number;
@@ -250,6 +254,8 @@ export function createRepository(ctx: Context): Repository {
         kinds: opts?.kinds ?? [...RELATIONSHIPS],
         applyBranchVerdicts: opts?.applyBranchVerdicts,
         owners: opts?.owners,
+        trackRecord: opts?.trackRecord,
+        trackWindowHours: opts?.trackWindowHours,
       });
       return withJsonContract(result);
     },

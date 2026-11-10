@@ -35,6 +35,7 @@ import {
 } from './terminal-safety.js';
 import {
   DISCLAIMER,
+  formatTrackRecordLine,
   NAMES,
   weightingLabel,
   type EvidenceView,
@@ -642,6 +643,8 @@ export function formatRichDiff(result: DiffResult, renderOpts: RichRenderOptions
       lines.push(`    ${formatRichVerdict(s.verdict, styler)}`);
     }
     lines.push(...renderRichSuggestionOwnership(s, styler, caps.unicode));
+    const trackLine = formatTrackRecordLine(s, sanitizeRichText);
+    if (trackLine) lines.push(trackLine.dim ? styler.dim(`    ${trackLine.text}`) : `    ${trackLine.text}`);
     const explainCmd = formatExplainCommand(
       s.from,
       s.to,

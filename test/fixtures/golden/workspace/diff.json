@@ -189,7 +189,10 @@
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "reason": "limited_history"
+      }
     }
   ],
   "families": []

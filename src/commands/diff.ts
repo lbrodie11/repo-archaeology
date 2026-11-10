@@ -14,12 +14,24 @@ import {
   type SuggestionOwner,
   type SuggestionOwnersSample,
 } from '../model/owners.js';
+import {
+  DEFAULT_TRACK_WINDOW_HOURS,
+  isValidTrackWindow,
+  MAX_TRACK_WINDOW_HOURS,
+  MIN_TRACK_WINDOW_HOURS,
+  pairKey,
+  replayPairs,
+  toTrackRecord,
+  type ReplayPair,
+  type TrackRecord,
+} from '../model/track-record.js';
 import { isSameVerdictEntry, VerdictMatcher } from '../model/verdicts.js';
 import {
   attachAllEvidence,
   buildMeta,
   describeStrength,
   DISCLAIMER,
+  formatTrackRecordLine,
   formatVerdictAnnotation,
   printEvidence,
   printHeader,
@@ -43,6 +55,12 @@ export interface DiffOptions {
   owners?: boolean;
   /** Optional preloaded `CodeownersMatcher` (used when `suggestMissing` is called directly). */
   codeowners?: CodeownersMatcher;
+  /** Compute per-pair track records for suggestions (default `true`; `--no-track-record` sets `false`). */
+  trackRecord?: boolean;
+  /** Follow-up window for track records, in whole hours from 1 to 720 (default 48; `--track-window`). */
+  trackWindowHours?: number;
+  /** @internal Test seam: replaces `replayPairs` so tests can assert it is (not) called. */
+  replayPairs?: typeof replayPairs;
 }
 
 export interface ChangedFileView extends ChangedFile {
@@ -64,6 +82,11 @@ export interface Suggestion extends RelationshipView {
   ownersSample?: SuggestionOwnersSample;
   /** Designated GitHub `@user` or `@org/team` handles from `CODEOWNERS` (present when `owners` enrichment is enabled and a matching rule exists). */
   codeowners?: string[];
+  /**
+   * How often a threshold trigger for this exact directional pair (`from → to`) was followed by a
+   * change to `to` within `windowHours`, replayed over the baseline history (absent with `--no-track-record`).
+   */
+  trackRecord?: TrackRecord;
 }
 
 export interface DiffFamilyView extends FindingFamilyView {
@@ -658,10 +681,66 @@ export function suggestMissing(
   };
 }
 
+/** `diff`'s thin/partial-baseline flag (the same definition as `silence.limitedHistory`). */
+export function baselineHistoryIsLimited(ctx: Context): boolean {
+  const commitsAnalyzed = ctx.history?.commits.length ?? 0;
+  const shallowHistory = ctx.shallow ?? (ctx.warnings ?? []).includes(SHALLOW_WARNING);
+  const truncatedByMaxCommits = ctx.history?.stats?.truncated === true;
+  const limitedBySince = ctx.history?.stats?.truncatedBySince === true;
+  const thin = ctx.history !== undefined && commitsAnalyzed < Math.max(ctx.thresholds.minShared, MIN_FULL_HISTORY_COMMITS);
+  return shallowHistory || truncatedByMaxCommits || limitedBySince || thin;
+}
+
+export function validateTrackWindow(hours: unknown): number {
+  if (hours === undefined) return DEFAULT_TRACK_WINDOW_HOURS;
+  if (!isValidTrackWindow(hours)) {
+    throw new UsageError(
+      `--track-window must be a whole number of hours from ${MIN_TRACK_WINDOW_HOURS} to ${MAX_TRACK_WINDOW_HOURS}.`,
+    );
+  }
+  return hours;
+}
+
+/**
+ * Attaches `trackRecord` to each suggestion by replaying only the suggestions' primary
+ * directional pairs (`from → to`; `alsoLinkedFrom` sources are not aggregated in).
+ */
+function attachTrackRecords(
+  ctx: Context,
+  changed: readonly ChangedFileView[],
+  suggestions: Suggestion[],
+  windowHours: number,
+  replay: typeof replayPairs,
+): void {
+  if (suggestions.length === 0) return;
+  const historyPathOf = new Map<string, string>();
+  for (const file of changed) {
+    if (file.historyPath !== undefined && !historyPathOf.has(file.path)) historyPathOf.set(file.path, file.historyPath);
+  }
+  const pairs: ReplayPair[] = [];
+  const keys: (string | undefined)[] = [];
+  for (const s of suggestions) {
+    const from = historyPathOf.get(s.from);
+    if (from === undefined) {
+      keys.push(undefined);
+      continue;
+    }
+    pairs.push({ from, to: s.to });
+    keys.push(pairKey(from, s.to));
+  }
+  const replays = replay(ctx, pairs, { windowHours, limitedHistory: baselineHistoryIsLimited(ctx) });
+  suggestions.forEach((s, i) => {
+    const key = keys[i];
+    const result = key !== undefined ? replays.get(key) : undefined;
+    if (result) s.trackRecord = toTrackRecord(result);
+  });
+}
+
 export async function diff(ctx: Context, options: DiffOptions, changes?: ChangedFile[]): Promise<DiffResult> {
   if (ctx.head && !options.base && changes === undefined) {
     throw new UsageError('diff --head requires --base <ref>.');
   }
+  const trackWindowHours = validateTrackWindow(options.trackWindowHours);
   ctx.open?.();
   try {
     const isolatedCtx = await isolateBaselineContext(ctx, options.base);
@@ -716,6 +795,9 @@ export async function diff(ctx: Context, options: DiffOptions, changes?: Changed
       changes,
       { ...options, codeowners },
     );
+    if (options.trackRecord !== false) {
+      attachTrackRecords(effectiveCtx, changed, suggestions, trackWindowHours, options.replayPairs ?? replayPairs);
+    }
     const silencedCount = verdicts?.silenced ?? 0;
     const mergedVerdicts =
       silencedCount > 0 || addedInBranch > 0
@@ -831,6 +913,8 @@ export function printDiff(result: DiffResult): void {
     console.log(c.dim(`    ${terminalText(s.why)}`));
     if (s.verdict) console.log(`    ${formatVerdictAnnotation(s.verdict)}`);
     printSuggestionOwnership(s);
+    const trackLine = formatTrackRecordLine(s, terminalText);
+    if (trackLine) console.log(trackLine.dim ? c.dim(`    ${trackLine.text}`) : `    ${trackLine.text}`);
     printEvidence(s);
     console.log();
   }
