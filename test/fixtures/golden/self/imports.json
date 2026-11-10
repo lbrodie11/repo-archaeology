@@ -31,6 +31,11 @@
       "expired": 0,
       "file": ".repo-archaeology.verdicts.json"
     },
+    "config": {
+      "source": "ref",
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
     "settings": {
       "maxCommits": 5000,
       "maxFilesPerCommit": 25,
