@@ -50,20 +50,32 @@ describe('RA-19: choosing which .repo-archaeology.json applies', () => {
   let mainSha: string;
   let prSha: string;
 
-  const gitIn = (args: string[], input?: string): string =>
-    execFileSync('git', args, { cwd: repo.dir, encoding: 'utf8', input, env: sanitizeGitEnv(process.env) });
+  const gitIn = (args: string[], extraEnv: Record<string, string> = {}): string =>
+    execFileSync('git', args, { cwd: repo.dir, encoding: 'utf8', env: sanitizeGitEnv(process.env, extraEnv) });
 
-  /** A branch off `main` whose only change is `.repo-archaeology.json` with the given mode and content (no checkout). */
+  /**
+   * A branch off `main` whose only change is `.repo-archaeology.json` with the given mode and content, built
+   * without a checkout. No git command reads stdin: piping into `git hash-object --stdin` through
+   * execFileSync hangs intermittently (see 62b579b), so the blob comes from a file and the tree from a
+   * temporary index.
+   */
   const branchWithConfig = (name: string, mode: '100644' | '120000', content: string): string => {
-    const blob = gitIn(['hash-object', '-w', '--stdin'], content).trim();
-    const entries = gitIn(['ls-tree', 'main'])
-      .split('\n')
-      .filter((line) => line !== '' && !line.endsWith(`\t${CONFIG}`));
-    entries.push(`${mode} blob ${blob}\t${CONFIG}`);
-    const tree = gitIn(['mktree'], `${entries.join('\n')}\n`).trim();
-    const commit = gitIn(['commit-tree', tree, '-p', 'main', '-m', `config: ${name}`]).trim();
-    repo.git('branch', name, commit);
-    return commit;
+    const gitDir = join(repo.dir, '.git');
+    const blobFile = join(gitDir, `ra19-${name}.blob`);
+    const index = { GIT_INDEX_FILE: join(gitDir, `ra19-${name}.index`) };
+    writeFileSync(blobFile, content);
+    try {
+      const blob = gitIn(['hash-object', '-w', '--', blobFile]).trim();
+      gitIn(['read-tree', 'main'], index);
+      gitIn(['update-index', '--add', '--cacheinfo', `${mode},${blob},${CONFIG}`], index);
+      const tree = gitIn(['write-tree'], index).trim();
+      const commit = gitIn(['commit-tree', tree, '-p', 'main', '-m', `config: ${name}`]).trim();
+      repo.git('branch', name, commit);
+      return commit;
+    } finally {
+      rmSync(blobFile, { force: true });
+      rmSync(index.GIT_INDEX_FILE, { force: true });
+    }
   };
 
   before(() => {
