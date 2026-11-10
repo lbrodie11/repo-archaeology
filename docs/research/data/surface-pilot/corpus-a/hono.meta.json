@@ -1,0 +1,28 @@
+{
+  "repo": "hono",
+  "url": "https://github.com/honojs/hono.git",
+  "pin": "eb754bd5ef22c63f1634a4c374a86be086f85710",
+  "seed": 20261110,
+  "eligibleFiles": 291,
+  "candidatesSeen": {
+    "remove-export": 1001,
+    "add-required-param": 354,
+    "add-required-prop": 120,
+    "edit-body": 292,
+    "reorder": 415,
+    "rename-local": 424,
+    "add-optional-param": 354,
+    "split-export": 16,
+    "add-export": 291
+  },
+  "shortfalls": {
+    "split-export": 4
+  },
+  "machine": {
+    "node": "v20.19.0",
+    "platform": "darwin-arm64",
+    "cpu": "Apple M2",
+    "cpus": 8,
+    "memoryGb": 8
+  }
+}

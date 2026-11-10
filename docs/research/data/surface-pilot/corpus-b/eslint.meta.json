@@ -1,0 +1,15 @@
+{
+  "repo": "eslint",
+  "url": "https://github.com/eslint/eslint.git",
+  "pin": "11c66ba08381cb7cff7679d662c9f6654b6fe712",
+  "horizon": "0146008d6e99aa31dc62153c200e714f5afdcd0e",
+  "prSource": "squash-subjects",
+  "prs": 200,
+  "machine": {
+    "node": "v20.19.0",
+    "platform": "darwin-arm64",
+    "cpu": "Apple M2",
+    "cpus": 8,
+    "memoryGb": 8
+  }
+}

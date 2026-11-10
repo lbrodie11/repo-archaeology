@@ -1,0 +1,26 @@
+{
+  "repo": "vue-core",
+  "url": "https://github.com/vuejs/core.git",
+  "pin": "8b479a89445868d474f17e2d837765e7c9ece5e4",
+  "seed": 20261110,
+  "eligibleFiles": 296,
+  "candidatesSeen": {
+    "remove-export": 1609,
+    "add-required-param": 576,
+    "add-required-prop": 236,
+    "edit-body": 536,
+    "reorder": 1111,
+    "rename-local": 873,
+    "add-optional-param": 576,
+    "split-export": 468,
+    "add-export": 296
+  },
+  "shortfalls": {},
+  "machine": {
+    "node": "v20.19.0",
+    "platform": "darwin-arm64",
+    "cpu": "Apple M2",
+    "cpus": 8,
+    "memoryGb": 8
+  }
+}
