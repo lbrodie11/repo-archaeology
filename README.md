@@ -206,6 +206,8 @@ repo-archaeology diff --base main --format markdown --json-out diff.json
 repo-archaeology diff --exit-code   # exit 1 when something looks missed (for hooks/CI)
 ```
 
+Each suggestion also carries a **track record** for its exact directional pair: replaying the baseline history, how often a change to the file you edited *without* the suggested file was followed by a change to the suggested file within 48 hours. It is printed as counts, for example `Before: 5 times this changed without permissions.ts; it changed within 48 h after 4 (not proof those were fixes).` It is evidence about follow-up changes, not proof that those were fixes or that the suggestion is right. Use `--track-window <hours>` (1–720) to change the window and `--no-track-record` to skip it; see [`docs/json.md`](docs/json.md#521-track-record-suggestionstrackrecord-commonschemajsondefstrackrecord) for the exact definitions.
+
 Pass `--owners` (or set `"owners": { "enabled": true }` in `.repo-archaeology.json`; override with `--no-owners`) to enrich each suggested companion file with **People who may have context** (up to `owners.max` recent human contributors within `owners.lookbackDays`, canonicalized via `.mailmap` and excluding bots/non-human agents, without exposing email addresses) and **Designated code owners** from `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS` (read from `merge-base` when `--base` is used, and rendered with a zero-width break after `@` so copying output into a PR comment never pings teammates).
 
 ### GitHub Action (Pull Request Summaries)
@@ -405,6 +407,8 @@ Global options work with every command:
 | `--no-links` | | Disable OSC 8 clickable commit-receipt hyperlinks in `--style rich` output |
 | `--full-evidence` | | Inline all supporting commit receipts without an `Additional receipts` split in `--style rich` output |
 | `--owners` / `--no-owners` | `false` | Enrich `diff` suggestions with recent human contributor context and `CODEOWNERS` handles |
+| `--no-track-record` | | Skip the per-pair track record on `diff` suggestions |
+| `--track-window <hours>` | `48` | Track-record follow-up window for `diff`, a whole number of hours from 1 to 720 |
 | `--no-cache` | | Neither read nor write the [history cache](#history-cache) |
 | `-C, --cwd <path>` | | Run as if started in `<path>` |
 

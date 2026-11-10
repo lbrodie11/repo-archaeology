@@ -184,7 +184,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
 | `evaluation` | `DiffEvaluation` | Yes | Reproducibility metadata: `commitsAnalyzed`, `effectiveOptions`, and optional `targetBranchRef`, `headSha`, `mergeBaseSha`, `baselineSha`. |
 | `changed` | `ChangedFileView[]` | Yes | Evaluated changed files (`path`, `deleted`, `sources`, `hasHistory`, and optional `oldPath`, `added`, `historyPath`). |
 | `totalSuggestions` | `integer` | Yes | Total number of qualifying companion suggestions before `--limit` truncation. |
-| `suggestions` | `DiffSuggestion[]` | Yes | Ranked untouched companion files (`RelationshipView` plus `alsoLinkedFrom: string[]`), capped at `--limit`. |
+| `suggestions` | `DiffSuggestion[]` | Yes | Ranked untouched companion files (`RelationshipView` plus `alsoLinkedFrom: string[]` and the optional `trackRecord`, see [5.2.1](#521-track-record-suggestionstrackrecord-commonschemajsondefstrackrecord)), capped at `--limit`. |
 | `families` | `DiffFamilyView[]` | Yes | Parallel-implementation finding families touched by the change (`FindingFamilyView` plus `changedMembers` and `suggestedMembers`). |
 | `verdicts` | `{ silenced: integer, addedInBranch?: integer }` | Optional | Present when at least one qualifying suggestion was silenced by an `expected` verdict (`silenced > 0`) or when `diff --base` detected verdict entries added/changed on the branch (`addedInBranch > 0`). |
 | `silence` | `SilenceDiagnostics` | Optional | Present when `suggestions.length === 0`. Explains why no recommendations were emitted (`primaryReason`, `reasons`, `details`, filter counts, and optional `verdicts: { silenced, addedInBranch? }`). |
@@ -292,12 +292,60 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
           "origin": "human"
         }
       ],
-      "alsoLinkedFrom": []
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 5,
+        "confirmed": 4,
+        "triggers": 7,
+        "coChanged": 7,
+        "precision": 0.8,
+        "interval": { "low": 0.3755, "high": 0.9638 },
+        "windowHours": 48,
+        "evaluated": { "from": "2026-03-01", "to": "2026-11-01", "commits": 400, "trainingCommits": 1600 },
+        "excluded": { "censored": 1, "targetDeleted": 0, "clockSkew": 0 }
+      }
     }
   ],
   "families": []
 }
 ```
+
+#### 5.2.1 Track record (`suggestions[].trackRecord`, `common.schema.json#/$defs/TrackRecord`)
+
+`diff` (and the bare command's auto-diff) attaches an optional `trackRecord` to every suggestion. It answers one question about the suggestion's **primary directional pair** (`from → to`): *when this pair triggered before, did `to` change soon after?* It is **observational evidence, not correctness**: it says "the last 5 times `from` changed without `to` while the model linked them, `to` changed within 48 h on 4 occasions". It does not say those changes were fixes, or that the warning was right 80% of the time. `--no-track-record` (API: `trackRecord: false`) skips the replay entirely and omits the field.
+
+It takes one of three shapes:
+
+| Shape | When |
+| --- | --- |
+| `{ fired, confirmed, triggers, coChanged, precision, interval, windowHours, evaluated, excluded }` | At least one completed episode (`fired ≥ 1`). |
+| `{ fired: 0, reason: "never_fired", triggers?, coChanged?, windowHours?, evaluated?, excluded? }` | The window was evaluable, but no episode completed. Gutter needs only `fired` and `reason`; the optional fields are context (for example `triggers > 0` with every episode censored). |
+| `{ reason: "limited_history" }` | Fewer than 30 commits could be replayed, or `diff`'s thin/partial-baseline flag is set (shallow clone, `--max-commits`/`--since` truncation, or fewer than 50 usable baseline commits: the same definition as `silence.limitedHistory`). |
+
+Definitions:
+
+- **History and order.** The replay uses exactly the commits the `diff` baseline model trains on: history up to `evaluation.baselineSha` (the merge-base with `--base`, otherwise `HEAD`; `--head` respected), after the model's own filters (ignores, `--skip-commits`, `--max-files` sweeps, the revert policy, `--since`, `--max-commits`). Commits are ordered by committer time (`commitTime`) with git-log tie-breaks, exactly as `backtest --follow-ups` does, and every duration uses committer time. Feature-branch commits are never replayed, and the working tree plays no part.
+- **Evaluation window.** With `N` usable commits, `W = min(2000, max(200, round(0.2 × N)))`, clamped so that at least `T = max(30, ceil(N / 2))` commits stay before the window: `W = min(W, N − T)`. If `W < 30`, the result is `limited_history`. The `N − W` commits before the window only build the initial state (`evaluated.trainingCommits`); `evaluated.commits` is `W`, and `evaluated.from`/`to` are the committer dates of the first and last replayed commit.
+
+  | N | W | Commits before W |
+  | ---: | ---: | ---: |
+  | 29 | limited | — |
+  | 60 | 30 | 30 |
+  | 100 | 50 | 50 |
+  | 230 | 115 | 115 |
+  | 2,000 | 400 | 1,600 |
+  | 20,000 | 2,000 | 18,000 |
+- **Replay.** For each window commit `c`, triggers are evaluated on state built only from commits strictly before `c`, then `c` is added. That state equals a `CoChangeModel` freshly built from the same prefix with the same options, including `--half-life` and origin weights (recency decay is applied lazily and exactly).
+- **Pair.** Only the primary `from → to`; `alsoLinkedFrom` sources are not aggregated in. File identities follow renames, so a renamed file keeps its history, and a file deleted and later re-created at the same path is a different file.
+- **Trigger.** At commit `c`: `c` touches `from`, does not touch `to`, `to` has not been deleted, and `to` qualifies as a companion of `from` under the same `minShared`/`minConfidence` thresholds `diff` uses. This is a *threshold trigger*: it does not replay `diff`'s other filters as of `c` (historical import classification, verdicts, `--kinds`), so a pair `diff` would have hidden at the time can still trigger.
+- **Episodes.** A trigger opens an episode, which closes when `to` changes or when `windowHours` pass. Further triggers while an episode is open count only in `triggers`, so a short branch that touches `from` four times is one warning, not four. `fired` counts episodes; `confirmed` counts episodes in which `to` changed in a commit strictly after the opening trigger in replay order with `0 ≤ commitTime(c′) − commitTime(c) ≤ windowHours` (exactly 48 h confirms; 48 h + 1 s does not; equal timestamps confirm only when the `to` commit comes later in replay order). A rename of `to` counts as a change to it.
+- **Exclusions** (`excluded`, not in `fired`): `censored`, the episode's window extends past the newest replayed commit (applied whatever the outcome, so late confirmations cannot inflate the rate); `targetDeleted`, `to` was deleted within the window (a deletion is not a confirmation); `clockSkew`, a negative time delta. Because commits are ordered by committer time, `clockSkew` stays 0 in practice; it guards externally ordered timelines. A commit the model filters out (sweep, skipped subject, revert per policy) neither triggers nor confirms.
+- **`coChanged`** (context): window commits touching both files while `to` qualified.
+- **Rate.** `precision = confirmed / fired`, rounded to 4 decimals, is an observed follow-up rate; the name is kept for Gutter's contract and does not mean accuracy. `interval` is the 95% Wilson interval for `confirmed / fired` (`low` floored, `high` ceiled to 4 decimals). It is descriptive only: episodes from one repository are not independent samples.
+- **Invariants:** `0 ≤ confirmed ≤ fired ≤ triggers`; `0 ≤ interval.low ≤ precision ≤ interval.high ≤ 1`. The schema bounds each field; `test/json-contract.test.ts` checks the cross-field relations.
+- **Window size.** `--track-window <hours>` (API: `trackWindowHours`) takes a whole number from 1 to 720 (default 48); anything else is a usage error (exit 2).
+
+Text output (classic, `--style rich` and Markdown, including Action summaries) adds one line per suggestion when `fired > 0`, counts first, for example `Before: 5 times this changed without permissions.ts; it changed within 48 h after 4 (not proof those were fixes).` (with `small sample;` before the caveat when `fired < 5`), one dim line `No earlier triggers in the last 400 commits.` for `never_fired`, and nothing for `limited_history`. The rate is never shown as a percentage or described as accuracy, correctness or chance.
 
 ---
 

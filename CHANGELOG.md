@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Per-pair track record on `diff` suggestions (RA-06, [`src/model/track-record.ts`](src/model/track-record.ts)):** each suggestion gets an optional, additive `trackRecord` (`schemaVersion: 1` unchanged): replaying the baseline history in commit order with no future information, how often a threshold trigger for that exact `from → to` pair (`from` changed without `to` while the model linked them) was followed by a change to `to` within 48 hours (`fired`, `confirmed`, `triggers`, `coChanged`, `precision`, `interval`, `windowHours`, `evaluated`, `excluded`), or `{ fired: 0, reason: "never_fired" }` / `{ reason: "limited_history" }`. Classic, `--style rich` and Markdown output add one counts-first line per suggestion ("Before: 5 times this changed without permissions.ts; it changed within 48 h after 4 (not proof those were fixes)."). New `diff` flags `--no-track-record` and `--track-window <hours>` (1–720), and `repo.diff({ trackRecord, trackWindowHours })`. Definitions are in [`docs/json.md`](docs/json.md#521-track-record-suggestionstrackrecord-commonschemajsondefstrackrecord).
+
 ## [0.9.0] - 2026-11-10
 
 ### Added
