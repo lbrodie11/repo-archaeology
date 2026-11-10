@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - **Go:**
     - Imports resolve against every `go.mod` (nested ones included), local `replace` directives and a root `go.work`, with complete-segment module matching.
     - An import links to the imported package's non-test files (`via: "go-package"`; `explain` says `imports package <path>`).
-    - Two files in the same package directory share scope without imports, so their pair is `unknown` (`same Go package: files share scope without imports`), never `ghost`.
+    - Two files in the same package directory share scope without imports, so their pair is `unknown` (`same Go package: files share scope without imports`), never `ghost`. For the same reason, a file whose package sibling imports the partner counts as `indirect` (`shares a Go package with X, which imports package P`).
   - **Python:**
     - Imports resolve against the source roots: the repository root, `src/`, project directories, and `pyproject.toml` setuptools, poetry and hatch settings, read with a minimal TOML subset reader.
     - Absolute imports are resolved by elimination against that local namespace, so a local module shadows the standard library and no dependency list is needed.

@@ -355,3 +355,24 @@ describe('Python relationships', () => {
     }
   });
 });
+
+describe('Python heuristic wording', () => {
+  it('explains a from-import of a name defined in a module as heuristic', async () => {
+    const repo = new FixtureRepo();
+    try {
+      repo.commit({ message: 'initial', write: { 'pkg/__init__.py': '', 'pkg/app.py': 'from .models import User\n', 'pkg/models.py': 'User = 1\n' } });
+      const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
+      try {
+        assert.equal(ctx.classifier.classify('pkg/app.py', 'pkg/models.py'), 'direct');
+        assert.equal(
+          ctx.classifier.explain('pkg/app.py', 'pkg/models.py', 'direct'),
+          'app.py imports models.py (heuristic: the imported name is probably defined in it, not a submodule)',
+        );
+      } finally {
+        ctx.close?.();
+      }
+    } finally {
+      repo.cleanup();
+    }
+  });
+});

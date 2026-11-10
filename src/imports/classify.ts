@@ -512,7 +512,7 @@ function importWording(from: string, to: string, info: FileImports): string {
   const suffix = !info.heuristicImports.has(to)
     ? ''
     : edge?.via === 'python-module'
-      ? ' (heuristic: the imported name is probably an attribute of the package, not a submodule)'
+      ? ' (heuristic: the imported name is probably defined in it, not a submodule)'
       : ' (via heuristic source remap)';
   return `${posix.basename(from)} imports ${posix.basename(to)}${suffix}`;
 }
