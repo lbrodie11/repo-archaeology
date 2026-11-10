@@ -3977,11 +3977,17 @@ const RICH_CLIENT = String.raw`
     requestDraw();
   }
 
+  // Space the view buttons take at the top of the canvas (they wrap to two rows on narrow screens)
+  var stageOverlay = typeof document.querySelector === 'function' ? document.querySelector('.stage-overlay') : null;
+  function toolbarClearance() {
+    var h = stageOverlay && stageOverlay.offsetHeight ? stageOverlay.offsetTop + stageOverlay.offsetHeight : 0;
+    return Math.max(44, Math.min(140, h + 4));
+  }
   function rectBounds(minX, minY, maxX, maxY, padPx) {
     var w = Math.max(1, size.w);
     var h = Math.max(1, size.h);
     var pad = padPx != null ? padPx : 64;
-    var topClearance = 44;
+    var topClearance = toolbarClearance();
     var availH = Math.max(120, h - topClearance);
     var spanW = Math.max(1, maxX - minX + pad * 2);
     var spanH = Math.max(1, maxY - minY + pad * 2);
@@ -4021,7 +4027,7 @@ const RICH_CLIENT = String.raw`
         var s = Math.min(widthScale, FIT_MIN_READABLE_SCALE);
         cam.scale = s;
         cam.x = (minX + maxX) / 2;
-        cam.y = minY + (Math.max(1, size.h) / 2 - 80) / s;
+        cam.y = minY + (Math.max(1, size.h) / 2 - toolbarClearance() - 36) / s;
         var bottom = cam.y + Math.max(1, size.h) / 2 / s;
         var shown = 0;
         frames.forEach(function (f) { if (f.y + f.h <= bottom) shown++; });
@@ -4822,6 +4828,10 @@ const RICH_CLIENT = String.raw`
           : (bodyH >= 60
             ? [hiddenText, 'hidden by filters', 'click to show']
             : (bodyH >= 30 ? [hiddenText + ' hidden', 'click to show'] : ['hidden · click']));
+        if (lines.some(function (line) { return line.length * 7.2 > bodyW; })) {
+          var hiddenCount = cf.edges.length;
+          lines = bodyH >= 34 ? ['+' + hiddenCount + ' hidden', 'click to show'] : ['+' + hiddenCount + ' hidden'];
+        }
         ctx.textAlign = 'center';
         var lineH = 16 / k;
         var cy = cf.y + headerH + (cf.h - headerH) / 2 - ((lines.length - 1) * lineH) / 2;
@@ -4835,7 +4845,7 @@ const RICH_CLIENT = String.raw`
         });
         ctx.textAlign = 'start';
         cf._note = lines.join(' / ');
-      } else if (cf.agg && bodyW >= 300) {
+      } else if (cf.agg && bodyW >= 300 && bodyH >= 170) {
         ctx.font = (11 / k) + 'px ' + colors.fontMono;
         ctx.fillStyle = colors.ink2;
         cf._note = 'Grouped by folder at this zoom · click a group, or zoom in, to see files';

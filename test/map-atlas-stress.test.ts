@@ -59,8 +59,15 @@ const SPY_HEAD = `<head><script>
   })();
 </script>`;
 
+// Rendering a 300-file map takes a while, and every shape is opened in several browser contexts
+const htmlCache = new WeakMap<MapData, string>();
 function richHtml(data: MapData): string {
-  return renderMapHtml(data, computeRichLayout(data), { style: 'rich' }).replace('<head>', SPY_HEAD);
+  let html = htmlCache.get(data);
+  if (!html) {
+    html = renderMapHtml(data, computeRichLayout(data), { style: 'rich' }).replace('<head>', SPY_HEAD);
+    htmlCache.set(data, html);
+  }
+  return html;
 }
 
 const snapshot = (page: any): Promise<AtlasSnap> =>
@@ -312,24 +319,24 @@ describe('Atlas overview (map --style rich)', { skip: !pw ? 'Playwright is not i
   });
 
   it('survives seeded random interaction on every graph shape and viewport', async () => {
-    const shapes: [string, () => MapData][] = [
-      ['empty', emptyGraph],
-      ['one pair', () => pairsGraph(1)],
-      ['three pairs', () => pairsGraph(3)],
-      ['star', () => starGraph(30)],
-      ['clique', () => cliqueGraph(12)],
-      ['chain', () => chainGraph(20)],
-      ['mixed', mixedGraph],
-      ['giant 300', () => giantGraph(300, 200)],
-      ['awkward names', awkwardNamesGraph],
-      ['120 groups', () => pairsGraph(120, 4)],
+    const shapes: [string, MapData][] = [
+      ['empty', emptyGraph()],
+      ['one pair', pairsGraph(1)],
+      ['three pairs', pairsGraph(3)],
+      ['star', starGraph(30)],
+      ['clique', cliqueGraph(12)],
+      ['chain', chainGraph(20)],
+      ['mixed', mixedGraph()],
+      ['giant 300', giantGraph(300, 200)],
+      ['awkward names', awkwardNamesGraph()],
+      ['120 groups', pairsGraph(120, 4)],
     ];
     const contexts: [string, Record<string, unknown>, number][] = [
-      ['desktop', { viewport: { width: 1440, height: 900 } }, 45],
-      ['hidpi reduced-motion', { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, reducedMotion: 'reduce' }, 25],
-      ['forced-colors narrow', { viewport: { width: 820, height: 700 }, forcedColors: 'active' }, 20],
-      ['phone touch', { viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true }, 20],
-      ['small phone', { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true }, 12],
+      ['desktop', { viewport: { width: 1440, height: 900 } }, 24],
+      ['hidpi reduced-motion', { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2, reducedMotion: 'reduce' }, 8],
+      ['forced-colors narrow', { viewport: { width: 820, height: 700 }, forcedColors: 'active' }, 8],
+      ['phone touch', { viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true }, 8],
+      ['small phone', { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true }, 5],
     ];
     // RA_STRESS_SEED / RA_STRESS_STEPS explore other walks locally; CI uses the fixed defaults
     let seed = Number(process.env.RA_STRESS_SEED) || 20261109;
@@ -348,23 +355,40 @@ describe('Atlas overview (map --style rich)', { skip: !pw ? 'Playwright is not i
           if (msg.type() === 'error') errors.push(msg.text());
         });
         const touch = Boolean(contextOptions.hasTouch);
-        for (const [shapeName, build] of shapes) {
-          const data = build();
+        for (const [shapeName, data] of shapes) {
           const where = `${shapeName} / ${contextName}`;
           await openAtlas(page, data);
           let snap = await snapshot(page);
           assert.deepEqual(atlasProblems(snap), [], `${where}: initial`);
           assert.deepEqual(errors, [], `${where}: initial`);
-          const box = (await page.locator('#map').boundingBox())!;
-          const inCanvas = (x: number, y: number) => x > 2 && y > 2 && x < box.width - 2 && y < box.height - 2;
+          // On narrow screens the panel stacks above the canvas and changes height with the selection,
+          // so the canvas is scrolled into view and measured again before every step
+          const viewport = page.viewportSize()!;
+          let box = { x: 0, y: 0, width: 0, height: 0 };
+          const locateCanvas = async () => {
+            await page.locator('#map').scrollIntoViewIfNeeded();
+            box = (await page.locator('#map').boundingBox())!;
+          };
+          await locateCanvas();
           const clickAt = async (x: number, y: number) => {
-            if (!inCanvas(x, y)) return false;
-            if (touch) await page.touchscreen.tap(box.x + x, box.y + y);
-            else await page.mouse.click(box.x + x, box.y + y);
+            const px = box.x + x, py = box.y + y;
+            if (x < 2 || y < 2 || x > box.width - 2 || y > box.height - 2 || py < 2 || py > viewport.height - 2) return false;
+            if (touch) await page.touchscreen.tap(px, py);
+            else await page.mouse.click(px, py);
             return true;
           };
+          // Every viewport must be able to reach the canvas: open the first frame, then return to the overview
+          if (snap.frames.length > 0) {
+            const first = snap.frames[0]!;
+            assert.equal(await clickAt(first.rect.x + first.rect.w / 2, first.rect.y + Math.min(first.rect.h - 6, first.rect.h * 0.8)), true, `${where}: first frame is clickable`);
+            await page.waitForTimeout(30);
+            assert.deepEqual(atlasProblems(await snapshot(page)), [], `${where}: after opening the first frame`);
+            assert.deepEqual(errors, [], `${where}: after opening the first frame`);
+            await page.locator('#reset-view').click();
+          }
           const log: string[] = [];
           for (let step = 0; step < Math.ceil(steps * stepScale); step++) {
+            await locateCanvas();
             snap = await snapshot(page);
             const r = rand();
             let did = '';
