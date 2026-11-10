@@ -90,6 +90,17 @@ export type SpecifierResolution =
 /** At most this many internal edge targets per session for budgeted (fan-out) analyzers. */
 export const MAX_SESSION_INTERNAL_EDGES = 200_000;
 
+let defaultEdgeBudget = MAX_SESSION_INTERNAL_EDGES;
+
+/**
+ * Test hook: the edge budget new sessions start with (`undefined` restores the default).
+ * The budget is spent in analysis order, so two sessions agree on truncation only when
+ * they analyze files in the same order (the import graph uses sorted path order).
+ */
+export function setDefaultEdgeBudgetForTesting(budget: number | undefined): void {
+  defaultEdgeBudget = budget ?? MAX_SESSION_INTERNAL_EDGES;
+}
+
 /**
  * Consumer policy. The classifier and the import graph historically differ in two
  * edge cases (kept as-is so TS/JS output stays byte-identical):
@@ -123,7 +134,7 @@ export class AnalysisSession {
   private readonly indexes = new Map<string, unknown>();
   /** Internal edges emitted so far by budgeted analyzers. */
   budgetedEdges = 0;
-  edgeBudget = MAX_SESSION_INTERNAL_EDGES;
+  edgeBudget = defaultEdgeBudget;
 
   constructor(
     readonly files: RepoFiles,

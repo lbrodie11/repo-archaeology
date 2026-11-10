@@ -48,7 +48,11 @@ describe('--head reads Go and Python manifests from the selected revision', () =
       };
 
       const old = await edgesAt(oldSha);
-      assert.deepEqual(old.edges, ['app.py -> lib/pkg/mod.py (python-module)', 'main.go -> db/db.go (go-package)']);
+      assert.deepEqual(old.edges, [
+        'app.py -> lib/pkg/__init__.py (python-module)',
+        'app.py -> lib/pkg/mod.py (python-module)',
+        'main.go -> db/db.go (go-package)',
+      ]);
       assert.deepEqual(old.unresolved, []);
 
       const head = await edgesAt('HEAD');
@@ -56,6 +60,43 @@ describe('--head reads Go and Python manifests from the selected revision', () =
       // and lib/ is no longer a declared root, so `pkg` is an in-repo package of unknown layout.
       assert.deepEqual(head.edges, []);
       assert.deepEqual(head.unresolved, ['app.py: pkg unknown-package']);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  it('go.work replacements come from the analyzed revision', async () => {
+    const repo = new FixtureRepo();
+    try {
+      repo.commit({
+        message: 'workspace with a replacement',
+        write: {
+          'go.work': 'go 1.22\nuse ./app\nreplace example.com/lib => ./lib\n',
+          'app/go.mod': 'module example.com/app\nrequire example.com/lib v0.0.0\n',
+          'app/main.go': 'package main\nimport "example.com/lib/util"\n',
+          'lib/go.mod': 'module example.com/lib\n',
+          'lib/util/u.go': 'package util\n',
+        },
+      });
+      const oldSha = repo.git('rev-parse', 'HEAD').trim();
+      repo.commit({ message: 'drop the replacement', write: { 'go.work': 'go 1.22\nuse ./app\n' } });
+      const graphAt = async (head: string) => {
+        const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true, head });
+        try {
+          ctx.open?.();
+          const relationship = ctx.classifier.classify('app/main.go', 'lib/util/u.go');
+          return { graph: importGraph(ctx), relationship };
+        } finally {
+          ctx.close?.();
+        }
+      };
+      const old = await graphAt(oldSha);
+      assert.deepEqual(old.graph.edges.map((edge) => `${edge.from} -> ${edge.to}`), ['app/main.go -> lib/util/u.go']);
+      assert.equal(old.relationship, 'direct');
+      const head = await graphAt('HEAD');
+      assert.deepEqual(head.graph.edges, []);
+      // Without the replacement the require is a versioned dependency on an in-repo module.
+      assert.ok(head.graph.meta.warnings.some((warning) => warning.includes('imports in-repo module example.com/lib')));
     } finally {
       repo.cleanup();
     }

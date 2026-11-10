@@ -516,3 +516,134 @@ describe('Go package scope and indirect links', () => {
     );
   });
 });
+
+describe('Go workspaces (RA-10 review regressions)', () => {
+  const lib = { 'lib/go.mod': 'module example.com/lib\n', 'lib/util/u.go': 'package util\n' };
+  const app = { 'app/go.mod': 'module example.com/app\nrequire example.com/lib v0.0.0\n', 'app/main.go': 'package main\nimport "example.com/lib/util"\n' };
+
+  it('applies go.work replacements whose target is not a use member', () => {
+    const { analysis } = analyze({ ...lib, ...app, 'go.work': 'go 1.22\nuse ./app\nreplace example.com/lib => ./lib\n' }, 'app/main.go');
+    assert.deepEqual(targetsOf(analysis), ['lib/util/u.go']);
+    assert.equal(analysis.incomplete, false);
+  });
+
+  it('go.work replacements take precedence over a member go.mod replacement', () => {
+    const files = {
+      ...lib,
+      'fork/go.mod': 'module example.com/lib\n',
+      'fork/util/u.go': 'package util\n',
+      'app/go.mod': 'module example.com/app\nreplace example.com/lib => ../fork\n',
+      'app/main.go': 'package main\nimport "example.com/lib/util"\n',
+      'go.work': 'go 1.22\nuse ./app\nreplace example.com/lib => ./lib\n',
+    };
+    assert.deepEqual(targetsOf(analyze(files, 'app/main.go').analysis), ['lib/util/u.go']);
+    // Outside the workspace (no go.work), the module's own replacement applies.
+    const { 'go.work': _work, ...noWork } = files;
+    assert.deepEqual(targetsOf(analyze(noWork, 'app/main.go').analysis), ['fork/util/u.go']);
+    // A versioned go.work replacement makes the import an external dependency.
+    assert.equal(analyze({ ...files, 'go.work': 'go 1.22\nuse ./app\nreplace example.com/lib => example.com/lib v1.2.3\n' }, 'app/main.go').analysis.external, 1);
+  });
+
+  it('conflicting member replacements, replaced workspace modules and replace targets without go.mod are unresolved', () => {
+    const conflict = {
+      ...lib,
+      'fork/go.mod': 'module example.com/lib\n',
+      'fork/util/u.go': 'package util\n',
+      ...app,
+      'app/go.mod': 'module example.com/app\nreplace example.com/lib => ../lib\n',
+      'tool/go.mod': 'module example.com/tool\nreplace example.com/lib => ../fork\n',
+      'go.work': 'go 1.22\nuse (\n\t./app\n\t./tool\n)\n',
+    };
+    const conflicted = analyze(conflict, 'app/main.go').analysis;
+    assert.deepEqual(conflicted.edges, []);
+    assert.deepEqual(conflicted.unresolved, [{ specifier: 'example.com/lib/util', reasonCode: 'unsupported-config' }]);
+    const memberReplaced = analyze({ ...lib, ...app, 'go.work': 'go 1.22\nuse (\n\t./app\n\t./lib\n)\nreplace example.com/lib => ./lib\n' }, 'app/main.go').analysis;
+    assert.equal(memberReplaced.incomplete, true);
+    const noGoMod = analyze({ 'lib/util/u.go': 'package util\n', ...app, 'go.work': 'go 1.22\nuse ./app\nreplace example.com/lib => ./lib\n' }, 'app/main.go').analysis;
+    assert.deepEqual(noGoMod.unresolved, [{ specifier: 'example.com/lib/util', reasonCode: 'unsupported-config' }]);
+  });
+
+  it('an unusable or nested go.work keeps cross-module imports unresolved, never external', () => {
+    const big = `go 1.22\nuse ./app\n${'// padding\n'.repeat(7000)}`;
+    for (const [label, work] of [
+      ['oversized', { 'go.work': big }],
+      ['unparseable', { 'go.work': 'go 1.22\nuse (\n' }],
+      ['use without go.mod', { 'go.work': 'go 1.22\nuse ./app\nuse ./missing\n' }],
+      ['nested', { 'app/go.work': 'go 1.22\nuse .\nreplace example.com/lib => ../lib\n' }],
+    ] as const) {
+      const { analysis } = analyze({ ...lib, ...app, 'app/extra.go': 'package main\nimport "fmt"\n', ...work }, 'app/main.go');
+      assert.deepEqual(analysis.unresolved, [{ specifier: 'example.com/lib/util', reasonCode: 'unsupported-config' }], label);
+      assert.equal(analysis.incomplete, true, label);
+      // The standard library stays external.
+      assert.equal(analyze({ ...lib, ...app, 'app/extra.go': 'package main\nimport "fmt"\n', ...work }, 'app/extra.go').analysis.incomplete, false, label);
+    }
+  });
+});
+
+describe('Go package identity (RA-10 review regressions)', () => {
+  it('ignore-tagged generators are never members, even when they outnumber the real files', () => {
+    const files = {
+      'go.mod': 'module example.com/app\n',
+      'main.go': 'package main\nimport "example.com/app/pkg"\n',
+      'pkg/real.go': 'package pkg\n',
+      'pkg/gen1.go': '//go:build ignore\n\npackage main\n',
+      'pkg/gen2.go': '// +build ignore\n\npackage main\n',
+      'pkg/_scratch.go': 'package main\n',
+    };
+    const { analysis } = analyze(files, 'main.go');
+    assert.deepEqual(targetsOf(analysis), ['pkg/real.go']);
+    assert.equal(analysis.incomplete, false);
+  });
+
+  it('several package clauses without an ignore tag keep every file and mark the importer incomplete', () => {
+    for (const [label, extra] of [
+      ['tie', { 'pkg/other.go': 'package other\n' }],
+      ['majority elsewhere', { 'pkg/m1.go': 'package main\n', 'pkg/m2.go': '//go:build tools\n\npackage main\n' }],
+    ] as const) {
+      const files = { 'go.mod': 'module example.com/app\n', 'main.go': 'package main\nimport "example.com/app/pkg"\n', 'pkg/real.go': 'package pkg\n', ...extra };
+      const { analysis } = analyze(files, 'main.go');
+      assert.ok(targetsOf(analysis).includes('pkg/real.go'), label);
+      assert.equal(analysis.incomplete, true, label);
+      assert.match(analysis.incompleteReason ?? '', /holds files of several packages/, label);
+    }
+  });
+
+  it('a package name that differs from its folder, and build-tag alternatives, are one package', () => {
+    const files = {
+      'go.mod': 'module example.com/app\n',
+      'main.go': 'package main\nimport "example.com/app/v2"\n',
+      'v2/api.go': 'package api\n',
+      'v2/api_linux.go': '//go:build linux\n\npackage api\n',
+      'v2/api_other.go': '//go:build !linux\n\npackage api\n',
+    };
+    const { analysis } = analyze(files, 'main.go');
+    assert.deepEqual(targetsOf(analysis), ['v2/api.go', 'v2/api_linux.go', 'v2/api_other.go']);
+    assert.equal(analysis.incomplete, false);
+  });
+
+  it('same-package suppression and sibling reachability use the package clause, not just the folder', async () => {
+    await withRepo(
+      {
+        'go.mod': 'module example.com/app\n',
+        'pkg/gen.go': '//go:build ignore\n\npackage main\n',
+        'pkg/real.go': 'package pkg\nimport "example.com/app/other"\n',
+        'pkg/real2.go': 'package pkg\n',
+        'other/o.go': 'package other\n',
+      },
+      async (repo) => {
+        const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true });
+        try {
+          const c = ctx.classifier;
+          // Positive: same package → unknown; a package sibling's import → indirect.
+          assert.equal(c.classify('pkg/real.go', 'pkg/real2.go'), 'unknown');
+          assert.equal(c.classify('pkg/real2.go', 'other/o.go'), 'indirect');
+          // Negative: the ignore-tagged generator is not in package pkg.
+          assert.equal(c.classify('pkg/gen.go', 'pkg/real.go'), 'ghost');
+          assert.equal(c.classify('pkg/gen.go', 'other/o.go'), 'ghost');
+        } finally {
+          ctx.close?.();
+        }
+      },
+    );
+  });
+});

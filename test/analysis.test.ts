@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { importGraph } from '../src/commands/imports.js';
+import { getOrBuildImportGraphIndex, importGraph } from '../src/commands/imports.js';
 import { loadContext } from '../src/context.js';
-import { AnalysisSession, analyzeFile, isAnalyzablePath, LANGUAGE_ANALYZERS } from '../src/imports/analysis.js';
+import { AnalysisSession, analyzeFile, isAnalyzablePath, LANGUAGE_ANALYZERS, setDefaultEdgeBudgetForTesting, type FileAnalysis } from '../src/imports/analysis.js';
 import type { RepoFiles } from '../src/imports/resolve.js';
 import { buildAppFixture, buildWorkspaceFixture } from './fixtures/import-fixtures.js';
-import type { FixtureRepo } from './helpers.js';
+import { FixtureRepo } from './helpers.js';
 
 function memoryFiles(files: Record<string, string>): RepoFiles {
   return {
@@ -98,6 +98,116 @@ describe('classifier and import graph agree (every TS/JS fixture file)', () => {
       } finally {
         ctx.close?.();
       }
+    }
+  });
+});
+
+describe('classifier and import graph agree (Go and Python)', () => {
+  /** Go and Python files covering incomplete input, symlinks, package fan-out and initializers. */
+  function buildPolyglotFixture(): { repo: FixtureRepo; oldSha: string } {
+    const repo = new FixtureRepo();
+    const write: Record<string, string> = {
+      'go.mod': 'module example.com/app\n',
+      'cmd/main.go': 'package main\nimport (\n\t"fmt"\n\t"example.com/app/big"\n\t"example.com/app/mixed"\n\t"example.com/app/store"\n)\n',
+      'store/store.go': 'package store\nimport "example.com/app/model"\n',
+      'store/cache.go': 'package store\n',
+      'store/gen.go': '//go:build ignore\n\npackage main\nimport "example.com/app/model"\n',
+      'model/model.go': 'package model\n',
+      'mixed/a.go': 'package mixed\n',
+      'mixed/b.go': 'package other\n',
+      'broken/broken.go': 'package broken\nimport (\n\t"fmt"\n\tnot valid\n)\n',
+      'linkuser/use.go': 'package linkuser\nimport "example.com/app/linked"\n',
+      'src/shop/__init__.py': 'from . import pricing\ncart = None\n',
+      'src/shop/pricing.py': 'RATE = 1\n',
+      'src/shop/cart.py': 'from shop import pricing\nimport shop.tax\nimport requests\n',
+      'src/shop/tax.py': '',
+      'src/shop/ambiguous.py': 'from shop import cart\n',
+      'src/shop/loader.py': 'import importlib as il\nil.import_module("shop.tax")\nvalue = f"{__import__(\'shop.cart\')}"\n',
+      'src/shop/computed.py': 'from importlib import import_module as load\nload(name)\n',
+      'src/shop/broken.py': 'x = """never closed\n',
+    };
+    for (let n = 0; n < 210; n++) write[`big/f${String(n).padStart(3, '0')}.go`] = 'package big\n';
+    repo.commit({ message: 'old', write: { ...write, 'src/shop/cart.py': 'import shop.tax\n' } });
+    const oldSha = repo.git('rev-parse', 'HEAD').trim();
+    for (const [path, content] of Object.entries(write)) repo.write(path, content);
+    symlinkSync(join(repo.dir, 'model'), join(repo.dir, 'linked'));
+    symlinkSync(join(repo.dir, 'src', 'shop', 'tax.py'), join(repo.dir, 'src', 'shop', 'tax_alias.py'));
+    repo.git('add', '.');
+    repo.commit({ message: 'new' });
+    return { repo, oldSha };
+  }
+
+  const summary = (analysis: FileAnalysis | undefined) =>
+    analysis && {
+      language: analysis.language,
+      analyzable: analysis.analyzable,
+      sourceUnavailable: analysis.sourceUnavailable,
+      incomplete: analysis.incomplete,
+      incompleteReason: analysis.incompleteReason,
+      edges: analysis.edges,
+      external: analysis.external,
+      unresolved: analysis.unresolved,
+      dynamicLoads: analysis.dynamicLoads,
+      warnings: analysis.warnings,
+    };
+
+  /** Analyzes every candidate in sorted order (the graph's order) with both consumers and compares. */
+  async function assertParity(repo: FixtureRepo, head?: string): Promise<{ incomplete: string[]; edges: number }> {
+    const ctx = await loadContext(repo.dir, { cache: false } as never, { silent: true, ...(head ? { head } : {}) });
+    try {
+      ctx.open?.();
+      const files = [...ctx.currentFiles].filter((file) => isAnalyzablePath(file)).sort();
+      const classifier = files.map((file) => ctx.classifier.analyze(file).analysis);
+      const index = getOrBuildImportGraphIndex(ctx);
+      const incomplete: string[] = [];
+      let edges = 0;
+      files.forEach((file, n) => {
+        assert.deepEqual(summary(classifier[n]), summary(index.analysisOf(file) ?? classifier[n]), `analysis of ${file}`);
+        const graphEdges = (index.edgesByFrom.get(file) ?? []).map((edge) => edge.to);
+        const info = ctx.classifier.analyze(file);
+        assert.deepEqual([...new Set(graphEdges)].sort(), [...info.imports, ...info.references].sort(), `edges from ${file}`);
+        if (classifier[n]!.incomplete) incomplete.push(file);
+        edges += graphEdges.length;
+      });
+      return { incomplete, edges };
+    } finally {
+      ctx.close?.();
+    }
+  }
+
+  let fixture: { repo: FixtureRepo; oldSha: string };
+  before(() => {
+    fixture = buildPolyglotFixture();
+  });
+  after(() => {
+    setDefaultEdgeBudgetForTesting(undefined);
+    fixture.repo.cleanup();
+  });
+
+  it('agree on every Go and Python file: incomplete input, symlinks, fan-out, initializers', async () => {
+    const { incomplete } = await assertParity(fixture.repo);
+    assert.deepEqual(incomplete, [
+      'broken/broken.go',
+      'cmd/main.go',
+      'linkuser/use.go',
+      'src/shop/ambiguous.py',
+      'src/shop/broken.py',
+      'src/shop/computed.py',
+    ]);
+  });
+
+  it('agree at an older revision (--head)', async () => {
+    await assertParity(fixture.repo, fixture.oldSha);
+  });
+
+  it('agree when the session edge budget runs out (same analysis order)', async () => {
+    setDefaultEdgeBudgetForTesting(150);
+    try {
+      const { incomplete, edges } = await assertParity(fixture.repo);
+      assert.equal(edges, 150);
+      assert.ok(incomplete.includes('store/store.go'), 'files past the budget are incomplete');
+    } finally {
+      setDefaultEdgeBudgetForTesting(undefined);
     }
   });
 });

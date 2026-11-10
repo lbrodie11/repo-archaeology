@@ -1,7 +1,7 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
 import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from './analysis.js';
-import { goAnalyzer, goPackageFiles, isSameGoPackage } from './go.js';
+import { goAnalyzer, goPackageSiblings, isSameGoPackage } from './go.js';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
   candidateFilePaths,
@@ -267,7 +267,7 @@ export class RelationshipClassifier {
     const indirect = this.indirectLink(a, b);
     if (indirect.linked) return 'indirect';
     // Files of one Go package share scope without importing each other: never a ghost.
-    if (isSameGoPackage(a, b)) return 'unknown';
+    if (this.sameGoPackage(a, b)) return 'unknown';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
@@ -302,11 +302,19 @@ export class RelationshipClassifier {
     return { uncertain };
   }
 
-  /** The other non-test files of a Go file's package (sorted), or none for other files. */
+  /**
+   * The other files of a Go file's own package: same directory and `package` clause,
+   * never `_test.go`, ignore-tagged or `_`-prefixed files. Empty for other files.
+   */
   private goPackageSiblings(file: string): string[] {
-    if (!file.endsWith('.go') || file.endsWith('_test.go')) return [];
-    const dir = posix.dirname(file) === '.' ? '' : posix.dirname(file);
-    return goPackageFiles(this.session.indexFor(goAnalyzer), dir).filter((sibling) => sibling !== file);
+    if (!file.endsWith('.go')) return [];
+    return goPackageSiblings(this.session.indexFor(goAnalyzer), file);
+  }
+
+  /** Two files of one Go package share scope without imports. */
+  private sameGoPackage(a: string, b: string): boolean {
+    if (!a.endsWith('.go') || !b.endsWith('.go')) return false;
+    return isSameGoPackage(this.session.indexFor(goAnalyzer), a, b);
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
@@ -348,7 +356,7 @@ export class RelationshipClassifier {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
-        if (isSameGoPackage(a, b)) return 'same Go package: files share scope without imports';
+        if (this.sameGoPackage(a, b)) return 'same Go package: files share scope without imports';
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
         const reason = ia.analysis.incompleteReason ?? ib.analysis.incompleteReason;
@@ -505,15 +513,11 @@ export function parallelImplementation(a: string, b: string): HiddenBridge | und
   return { signal: 'parallel-implementation', value, filesUsing: 2 };
 }
 
-/** `a imports b` for `explain`: Go imports name the package, heuristic edges say so. */
+/** `a imports b` for `explain`: Go imports name the package; TS/JS heuristic remaps say so. */
 function importWording(from: string, to: string, info: FileImports): string {
   const edge = info.importEdges.get(to);
   if (edge?.via === 'go-package') return `${posix.basename(from)} imports package ${edge.specifier} (which includes ${posix.basename(to)})`;
-  const suffix = !info.heuristicImports.has(to)
-    ? ''
-    : edge?.via === 'python-module'
-      ? ' (heuristic: the imported name is probably defined in it, not a submodule)'
-      : ' (via heuristic source remap)';
+  const suffix = info.heuristicImports.has(to) ? ' (via heuristic source remap)' : '';
   return `${posix.basename(from)} imports ${posix.basename(to)}${suffix}`;
 }
 

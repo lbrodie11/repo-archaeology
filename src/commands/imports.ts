@@ -67,6 +67,8 @@ export interface ImportGraphIndex {
   readonly repoUnsupportedFiles: number;
   /** Import-analysis diagnostics for these files (`meta.warnings`). */
   warningsFor(files: readonly string[]): string[];
+  /** The shared pipeline's result for an indexed, analyzable file. */
+  analysisOf(path: string): FileAnalysis | undefined;
   /** Language id of a path, when a language analyzer handles it. */
   languageOf(path: string): string | undefined;
   indexFile(from: string): void;
@@ -187,6 +189,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     repoUnsupportedFiles,
     languageOf: (path) => session.analyzerFor(path)?.language(path),
     warningsFor: (files) => analysisWarnings(session, files.map((file) => analyses.get(file))),
+    analysisOf: (path) => analyses.get(path),
     indexFile,
   };
   sessionIndexCache.set(ctx, index);

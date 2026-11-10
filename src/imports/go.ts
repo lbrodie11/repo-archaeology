@@ -20,6 +20,13 @@ export const MAX_GO_MANIFEST_BYTES = 64 * 1024;
 export const MAX_GO_PACKAGE_FAN_OUT = 200;
 const MAX_GO_IMPORTS_PER_FILE = 10_000;
 
+/**
+ * Where a `replace` sends a module path: an in-repo module, a versioned (remote)
+ * module, or somewhere we cannot model (outside the repository, no usable go.mod,
+ * conflicting workspace replacements).
+ */
+export type GoReplace = GoModule | 'remote' | 'uncertain';
+
 export interface GoModule {
   /** Repo-relative directory of the go.mod (`''` for the root). */
   dir: string;
@@ -27,8 +34,15 @@ export interface GoModule {
   path?: string;
   /** Why the go.mod is unusable: its files are analyzed as incomplete. */
   broken?: string;
-  /** Local `replace` directives: replaced module path → module directory inside the repo. */
-  replaces: Map<string, GoModule>;
+  /** `replace` directives of this go.mod: replaced module path → target. */
+  replaces: Map<string, GoReplace>;
+}
+
+export interface GoFileHeader {
+  /** The `package` clause, or null when the file cannot be read or parsed. */
+  name: string | null;
+  /** `//go:build ignore` (or `// +build ignore`): never part of any package. */
+  ignored: boolean;
 }
 
 export interface GoIndex {
@@ -41,10 +55,18 @@ export interface GoIndex {
   allModulePaths: string[];
   /** Modules listed by the root `go.work` `use` directives. */
   workMembers: Set<GoModule>;
+  /** The root `go.work` `replace` directives (they override the members' go.mod replaces). */
+  workReplaces: Map<string, GoReplace>;
+  /**
+   * Why a go.work could not be modeled (unreadable, oversized, unparseable, or a `use`
+   * without a usable go.mod), by the directory it governs. Imports from modules under
+   * it that do not resolve within their own module are unresolved, not external.
+   */
+  brokenWorkDirs: Map<string, string>;
   /** Regular `.go` files by directory, sorted. */
   goFilesByDir: Map<string, string[]>;
-  packageNames: Map<string, string | null>;
-  visibleCache: Map<GoModule, [string, GoModule][]>;
+  headers: Map<string, GoFileHeader>;
+  visibleCache: Map<GoModule, [string, GoReplace][]>;
   warnings: string[];
 }
 
@@ -374,10 +396,37 @@ function readManifest(files: RepoFiles, path: string): { text?: string; error?: 
   return { text };
 }
 
+
 const dirOf = (path: string): string => {
   const dir = posix.dirname(path);
   return dir === '.' ? '' : dir;
 };
+
+const isUnder = (path: string, dir: string): boolean => dir === '' || path === dir || path.startsWith(`${dir}/`);
+
+/**
+ * `//go:build ignore` (or the legacy `// +build ignore`) before the package clause:
+ * the conventional marker for files that are never part of a package (generators).
+ * Other constraints are not evaluated: those files stay in (a conservative union).
+ */
+export function goBuildIgnored(text: string): boolean {
+  let legacyIgnore = false;
+  const lines = text.split('\n');
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n]!.trim();
+    if (line === '' || line === '﻿') continue;
+    if (line.startsWith('/*')) {
+      while (n < lines.length && !lines[n]!.includes('*/')) n++;
+      continue;
+    }
+    if (!line.startsWith('//')) break;
+    const build = /^\/\/go:build\s+(.+)$/.exec(line);
+    if (build) return build[1]!.trim() === 'ignore';
+    const legacy = /^\/\/\s*\+build\s+(.+)$/.exec(line);
+    if (legacy && legacy[1]!.trim() === 'ignore') legacyIgnore = true;
+  }
+  return legacyIgnore;
+}
 
 export function buildGoIndex(files: RepoFiles): GoIndex {
   const index: GoIndex = {
@@ -387,16 +436,20 @@ export function buildGoIndex(files: RepoFiles): GoIndex {
     duplicatePaths: new Set(),
     allModulePaths: [],
     workMembers: new Set(),
+    workReplaces: new Map(),
+    brokenWorkDirs: new Map(),
     goFilesByDir: new Map(),
-    packageNames: new Map(),
+    headers: new Map(),
     visibleCache: new Map(),
     warnings: [],
   };
   const all = [...files.list()].sort();
   const modFiles: string[] = [];
+  const workFiles: string[] = [];
   for (const path of all) {
     const base = posix.basename(path);
     if (base === 'go.mod') modFiles.push(path);
+    else if (base === 'go.work') workFiles.push(path);
     else if (path.endsWith('.go')) {
       const dir = dirOf(path);
       let list = index.goFilesByDir.get(dir);
@@ -446,42 +499,58 @@ export function buildGoIndex(files: RepoFiles): GoIndex {
   }
   index.allModulePaths.sort((a, b) => b.length - a.length || a.localeCompare(b));
 
+  /** A replace target, relative to the manifest's directory. */
+  const replaceTarget = (manifest: string, baseDir: string, from: string, to: string): GoReplace => {
+    if (!isLocalPathTarget(to)) return 'remote'; // a versioned replacement: still a dependency
+    const dir = localDir(baseDir, to);
+    if (dir === undefined) {
+      // The code lives outside the repository, so no file here can be its partner.
+      index.warnings.push(`Go: ${manifest} replaces ${from} with ${to}, which is outside the repository; it gets no local mapping.`);
+      return 'remote';
+    }
+    const target = index.moduleByDir.get(dir);
+    if (!target || target.broken) {
+      index.warnings.push(`Go: ${manifest} replaces ${from} with ${to}, which has no usable go.mod in the repository; imports of it are unresolved.`);
+      return 'uncertain';
+    }
+    return target;
+  };
   for (const [module, mod] of parsed) {
     const modFile = module.dir ? `${module.dir}/go.mod` : 'go.mod';
-    for (const { from, to } of mod.replaces) {
-      if (!isLocalPathTarget(to)) continue; // a versioned replacement: still a dependency
-      const dir = localDir(module.dir, to);
-      const target = dir !== undefined ? index.moduleByDir.get(dir) : undefined;
-      if (dir === undefined) {
-        index.warnings.push(`Go: ${modFile} replaces ${from} with ${to}, which is outside the repository; it gets no local mapping.`);
-      } else if (!target || target.broken) {
-        index.warnings.push(`Go: ${modFile} replaces ${from} with ${to}, which has no usable go.mod in the repository; it gets no local mapping.`);
-      } else {
-        module.replaces.set(from, target);
-      }
-    }
+    for (const { from, to } of mod.replaces) module.replaces.set(from, replaceTarget(modFile, module.dir, from, to));
   }
 
-  if (all.includes('go.work')) {
-    const manifest = files.exists('go.work') ? readManifest(files, 'go.work') : { error: 'not a regular file in the repository' };
+  for (const workFile of workFiles) {
+    const workDir = dirOf(workFile);
+    if (workDir !== '') {
+      // The go command uses the nearest go.work above the working directory; only the root one is modeled.
+      index.brokenWorkDirs.set(workDir, `${workFile} is not at the repository root`);
+      index.warnings.push(`Go: ${workFile} is a nested workspace, which is not modeled; cross-module imports under ${workDir} are unresolved.`);
+      continue;
+    }
+    const manifest = files.exists(workFile) ? readManifest(files, workFile) : { error: 'not a regular file in the repository' };
     if (manifest.text === undefined) {
-      index.warnings.push(`Go: go.work is ${manifest.error}, so it was not read.`);
-    } else {
-      const work = parseGoModFile(manifest.text);
-      if (work.error !== undefined) {
-        index.warnings.push(`Go: go.work could not be parsed (${work.error}); its use directives were ignored.`);
+      index.brokenWorkDirs.set('', `go.work is ${manifest.error}`);
+      index.warnings.push(`Go: go.work is ${manifest.error}, so it was not read; cross-module imports are unresolved.`);
+      continue;
+    }
+    const work = parseGoModFile(manifest.text);
+    if (work.error !== undefined) {
+      index.brokenWorkDirs.set('', 'go.work could not be parsed');
+      index.warnings.push(`Go: go.work could not be parsed (${work.error}); cross-module imports are unresolved.`);
+      continue;
+    }
+    for (const use of work.uses) {
+      const dir = localDir('', use.startsWith('.') ? use : `./${use}`);
+      const member = dir !== undefined ? index.moduleByDir.get(dir) : undefined;
+      if (!member || member.broken) {
+        index.brokenWorkDirs.set('', `go.work uses ${use}, which has no usable go.mod`);
+        index.warnings.push(`Go: go.work uses ${use}, which has no usable go.mod in the repository; cross-module imports are unresolved.`);
       } else {
-        for (const use of work.uses) {
-          const dir = localDir('', use.startsWith('.') ? use : `./${use}`);
-          const member = dir !== undefined ? index.moduleByDir.get(dir) : undefined;
-          if (!member || member.broken) {
-            index.warnings.push(`Go: go.work uses ${use}, which has no usable go.mod in the repository.`);
-          } else {
-            index.workMembers.add(member);
-          }
-        }
+        index.workMembers.add(member);
       }
     }
+    for (const { from, to } of work.replaces) index.workReplaces.set(from, replaceTarget('go.work', '', from, to));
   }
   return index;
 }
@@ -497,19 +566,38 @@ export function nearestGoModule(index: GoIndex, dir: string): GoModule | undefin
   }
 }
 
-/** Module paths an importing module can resolve locally, longest first. */
-function visibleModules(index: GoIndex, module: GoModule): [string, GoModule][] {
+/**
+ * Module paths an importing module can resolve, longest first, with what they resolve to.
+ * Outside a workspace: the module itself and its own `replace` directives. In a workspace
+ * (a `use` member of the root go.work): every member, the members' go.mod replacements
+ * (conflicting ones are uncertain), and the go.work replacements, which take precedence.
+ */
+function visibleModules(index: GoIndex, module: GoModule): [string, GoReplace][] {
   const cached = index.visibleCache.get(module);
   if (cached) return cached;
-  const map = new Map<string, GoModule>();
+  const map = new Map<string, GoReplace>();
   if (index.workMembers.has(module)) {
-    for (const member of [...index.workMembers]) {
-      if (member.path && !index.duplicatePaths.has(member.path)) map.set(member.path, member);
+    const memberPaths = new Set<string>();
+    for (const member of index.workMembers) {
+      if (member.path && !index.duplicatePaths.has(member.path)) {
+        map.set(member.path, member);
+        memberPaths.add(member.path);
+      }
     }
+    const fromMembers = new Map<string, GoReplace>();
+    for (const member of [...index.workMembers].sort((a, b) => a.dir.localeCompare(b.dir))) {
+      for (const [from, target] of member.replaces) {
+        const existing = fromMembers.get(from);
+        fromMembers.set(from, existing === undefined || existing === target ? target : 'uncertain');
+      }
+    }
+    for (const [from, target] of fromMembers) map.set(from, memberPaths.has(from) ? 'uncertain' : target);
+    // go.work replacements override the members' (replacing a workspace module itself is an error).
+    for (const [from, target] of index.workReplaces) map.set(from, memberPaths.has(from) ? 'uncertain' : target);
+  } else {
+    if (module.path && !index.duplicatePaths.has(module.path)) map.set(module.path, module);
+    for (const [from, target] of module.replaces) map.set(from, target);
   }
-  if (module.path && !index.duplicatePaths.has(module.path)) map.set(module.path, module);
-  // A module's own replace directives win over go.work for the paths they name.
-  for (const [from, target] of module.replaces) map.set(from, target);
   const visible = [...map].sort(([a], [b]) => b.length - a.length || a.localeCompare(b));
   index.visibleCache.set(module, visible);
   return visible;
@@ -520,39 +608,65 @@ export function goPathWithin(importPath: string, modulePath: string): boolean {
   return importPath === modulePath || importPath.startsWith(`${modulePath}/`);
 }
 
-function packageNameOf(index: GoIndex, path: string): string | null {
-  const cached = index.packageNames.get(path);
-  if (cached !== undefined) return cached;
+export function goFileHeader(index: GoIndex, path: string): GoFileHeader {
+  const cached = index.headers.get(path);
+  if (cached) return cached;
   const text = index.files.read(path);
-  const name = text === undefined ? null : (extractGoImports(text).packageName ?? null);
-  index.packageNames.set(path, name);
-  return name;
+  const header: GoFileHeader =
+    text === undefined ? { name: null, ignored: false } : { name: extractGoImports(text).packageName ?? null, ignored: goBuildIgnored(text) };
+  index.headers.set(path, header);
+  return header;
+}
+
+/** Files the go command never builds into a package: tests and `_`/`.`-prefixed names. */
+const isExcludedGoName = (path: string) => {
+  const base = posix.basename(path);
+  return base.endsWith('_test.go') || base.startsWith('_') || base.startsWith('.');
+};
+
+export interface GoPackage {
+  /** Regular, non-test, non-ignored `.go` files directly in the directory, sorted. */
+  members: string[];
+  /** Distinct `package` clauses among the members (unreadable files have none). */
+  names: string[];
 }
 
 /**
- * The files of the package in `dir`: regular, non-test `.go` files directly in it.
- * Files with a minority `package` clause (a `//go:build ignore` generator in
- * `package main`, say) are excluded. Build constraints are not evaluated: every
- * file is included (a conservative union).
+ * The package in `dir`. Build constraints other than `ignore` are not evaluated, so
+ * every other file is a member (a conservative union). When members declare different
+ * packages, all of them stay and callers report the ambiguity instead of guessing.
  */
+export function goPackage(index: GoIndex, dir: string): GoPackage {
+  const members = (index.goFilesByDir.get(dir) ?? []).filter(
+    (path) => !isExcludedGoName(path) && index.files.exists(path) && !goFileHeader(index, path).ignored,
+  );
+  const names = [...new Set(members.map((path) => goFileHeader(index, path).name).filter((name): name is string => name !== null))].sort();
+  return { members, names };
+}
+
+/** The member files of the package in `dir`. */
 export function goPackageFiles(index: GoIndex, dir: string): string[] {
-  const candidates = (index.goFilesByDir.get(dir) ?? []).filter((path) => !path.endsWith('_test.go') && index.files.exists(path));
-  if (candidates.length <= 1) return candidates;
-  const counts = new Map<string, number>();
-  for (const path of candidates) {
-    const name = packageNameOf(index, path);
-    if (name !== null) counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-  if (counts.size <= 1) return candidates;
-  const dirName = posix.basename(dir);
-  const [main] = [...counts].sort(
-    ([a, x], [b, y]) => y - x || Number(b === dirName) - Number(a === dirName) || a.localeCompare(b),
-  )[0]!;
-  // Unreadable files stay in: dropping a real package file could turn its pair into a false ghost.
-  return candidates.filter((path) => {
-    const name = packageNameOf(index, path);
-    return name === null || name === main;
-  });
+  return goPackage(index, dir).members;
+}
+
+/** Whether a file belongs to its directory's package (not a test, not ignore-tagged, not `_`-prefixed). */
+function isPackageMember(index: GoIndex, path: string): boolean {
+  return path.endsWith('.go') && !isExcludedGoName(path) && !goFileHeader(index, path).ignored;
+}
+
+/** Two files of one Go package (same directory and `package` clause): they share scope without imports. */
+export function isSameGoPackage(index: GoIndex, a: string, b: string): boolean {
+  if (a === b || dirOf(a) !== dirOf(b) || !isPackageMember(index, a) || !isPackageMember(index, b)) return false;
+  const nameA = goFileHeader(index, a).name;
+  const nameB = goFileHeader(index, b).name;
+  // An unreadable package clause could be the same package.
+  return nameA === null || nameB === null || nameA === nameB;
+}
+
+/** The other members of a Go file's own package (same `package` clause), sorted. */
+export function goPackageSiblings(index: GoIndex, file: string): string[] {
+  if (!isPackageMember(index, file)) return [];
+  return goPackage(index, dirOf(file)).members.filter((other) => isSameGoPackage(index, file, other));
 }
 
 function resolveGoImport(from: string, importPath: string, index: GoIndex): SpecifierResolution {
@@ -564,32 +678,56 @@ function resolveGoImport(from: string, importPath: string, index: GoIndex): Spec
   if (!fromModule) return { kind: 'unresolved', reasonCode: 'unsupported-config' };
   if (fromModule.broken) return { kind: 'unresolved', reasonCode: 'unsupported-config' };
 
-  for (const [modulePath, module] of visibleModules(index, fromModule)) {
+  const brokenWork = [...index.brokenWorkDirs.keys()].some((dir) => isUnder(fromModule.dir, dir));
+  // Without a usable workspace file, only the importing module's own packages are certain.
+  const visible: [string, GoReplace][] = brokenWork
+    ? fromModule.path && !index.duplicatePaths.has(fromModule.path)
+      ? [[fromModule.path, fromModule]]
+      : []
+    : visibleModules(index, fromModule);
+
+  for (const [modulePath, target] of visible) {
     if (!goPathWithin(importPath, modulePath)) continue;
+    if (target === 'remote') return { kind: 'external' };
+    if (target === 'uncertain') return { kind: 'unresolved', reasonCode: 'unsupported-config' };
+    const module = target;
     const remainder = importPath.slice(modulePath.length).replace(/^\//, '');
     const dir = remainder ? (module.dir ? `${module.dir}/${remainder}` : remainder) : module.dir;
     const owner = nearestGoModule(index, dir);
     if (owner !== module) {
       // The directory belongs to a nested module: a versioned dependency, unless that module is visible too.
+      if (brokenWork) return { kind: 'unresolved', reasonCode: 'unsupported-config' };
       return {
         kind: 'external',
         warning: `Go: imports in-repo module ${owner?.path ?? dir} without a local replace/go.work (resolved as an external dependency).`,
       };
     }
-    const packageFiles = goPackageFiles(index, dir);
-    if (packageFiles.length === 0) return { kind: 'unresolved', reasonCode: 'target-missing' };
-    const targets: AnalysisTarget[] = packageFiles.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package' }));
-    if (packageFiles.length > MAX_GO_PACKAGE_FAN_OUT) {
-      return {
-        kind: 'files',
-        targets,
-        incompleteReason: `Go package ${importPath} has more than ${MAX_GO_PACKAGE_FAN_OUT} files`,
-        warning: `Go: package ${importPath} has ${packageFiles.length} files; import edges list the first ${MAX_GO_PACKAGE_FAN_OUT} and importers are reported as incomplete.`,
-      };
+    const pkg = goPackage(index, dir);
+    if (pkg.members.length === 0) return { kind: 'unresolved', reasonCode: 'target-missing' };
+    const targets: AnalysisTarget[] = pkg.members.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package' }));
+    const reasons: string[] = [];
+    let warning: string | undefined;
+    if (pkg.names.length > 1) {
+      // Without evaluating build constraints we cannot tell which package is the real one.
+      reasons.push(`Go directory ${dir || '.'} holds files of several packages (${pkg.names.join(', ')})`);
     }
-    return { kind: 'files', targets };
+    if (pkg.members.length > MAX_GO_PACKAGE_FAN_OUT) {
+      reasons.push(`Go package ${importPath} has more than ${MAX_GO_PACKAGE_FAN_OUT} files`);
+      warning = `Go: package ${importPath} has ${pkg.members.length} files; import edges list the first ${MAX_GO_PACKAGE_FAN_OUT} and importers are reported as incomplete.`;
+    }
+    return {
+      kind: 'files',
+      targets,
+      ...(reasons.length > 0 ? { incompleteReason: reasons.join('; ') } : {}),
+      ...(warning ? { warning } : {}),
+    };
   }
 
+  if (brokenWork) {
+    // Any non-standard-library path might be a workspace module or replacement we could not read.
+    const stdlibLike = !importPath.split('/')[0]!.includes('.') && !index.allModulePaths.some((path) => goPathWithin(importPath, path));
+    return stdlibLike ? { kind: 'external' } : { kind: 'unresolved', reasonCode: 'unsupported-config' };
+  }
   for (const duplicate of index.duplicatePaths) {
     if (goPathWithin(importPath, duplicate)) return { kind: 'unresolved', reasonCode: 'ambiguous-package' };
   }
@@ -613,7 +751,7 @@ export const goAnalyzer: LanguageAnalyzer<GoIndex> = {
   indexWarnings: (index) => index.warnings,
   extract(text, path, index): Extraction {
     const parsed = extractGoImports(text);
-    if (parsed.packageName !== undefined) index.packageNames.set(path, parsed.packageName);
+    index.headers.set(path, { name: parsed.packageName ?? null, ignored: goBuildIgnored(text) });
     const imports: ExtractedSpecifier[] = parsed.imports.map(({ path: specifier }) => ({ specifier, kind: 'static' }));
     const module = nearestGoModule(index, dirOf(path));
     const incompleteReason =
@@ -630,8 +768,3 @@ export const goAnalyzer: LanguageAnalyzer<GoIndex> = {
     return resolveGoImport(from, item.specifier, index);
   },
 };
-
-/** Two non-test Go files in one directory are one package: they share scope without importing each other. */
-export function isSameGoPackage(a: string, b: string): boolean {
-  return a.endsWith('.go') && b.endsWith('.go') && !a.endsWith('_test.go') && !b.endsWith('_test.go') && dirOf(a) === dirOf(b);
-}
