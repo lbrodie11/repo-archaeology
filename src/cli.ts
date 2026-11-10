@@ -2,7 +2,7 @@
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { createRepository } from './api/index.js';
 import { backtest, printBacktest } from './commands/backtest.js';
-import { diff, printDiff } from './commands/diff.js';
+import { diff, printDiff, validateTrackWindow } from './commands/diff.js';
 import { explain, printExplain } from './commands/explain.js';
 import { fileReport, printFile } from './commands/file.js';
 import { importGraph, printImports } from './commands/imports.js';
@@ -63,6 +63,13 @@ function positiveNumber(value: string): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) throw new InvalidArgumentError('Expected a positive number.');
   return n;
+}
+
+/** `--track-window`: a whole number of hours from 1 to 720; anything else is a usage error (exit 2). */
+function parseTrackWindow(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = /^\d+$/.test(value.trim()) ? Number(value.trim()) : Number.NaN;
+  return validateTrackWindow(Number.isFinite(n) ? n : value);
 }
 
 function dateValue(value: string): number {
@@ -305,6 +312,8 @@ program
   .option('--apply-branch-verdicts', 'apply verdicts added or changed on this branch before merging (when using --base)')
   .option('--owners', 'include recent human contributor context and CODEOWNERS on diff suggestions')
   .option('--no-owners', 'disable contributor context and CODEOWNERS on diff suggestions')
+  .option('--no-track-record', 'skip the per-pair track record (replay of earlier triggers) on suggestions')
+  .option('--track-window <hours>', 'track-record follow-up window in whole hours, 1 to 720 (default 48)')
   .option('--exit-code', 'exit with status 1 when there are suggestions (for hooks and CI)')
   .action(
     async (
@@ -317,10 +326,13 @@ program
         applyBranchVerdicts?: boolean;
         owners?: boolean;
         exitCode?: boolean;
+        trackRecord: boolean;
+        trackWindow?: string;
       },
       cmd: Command,
     ) => {
       const global = cmd.optsWithGlobals<GlobalOptions>();
+      const trackWindowHours = parseTrackWindow(opts.trackWindow);
       if (global.json && opts.format === 'markdown') {
         throw new UsageError(
           '--json and --format markdown cannot be used together on stdout; use --format markdown --json-out <file> instead.',
@@ -337,7 +349,12 @@ program
       });
       try {
         if (global.json || opts.format === 'markdown') {
-          const result = await createRepository(ctx).diff({ ...opts, owners: ownersFlag });
+          const result = await createRepository(ctx).diff({
+            ...opts,
+            owners: ownersFlag,
+            trackRecord: opts.trackRecord,
+            trackWindowHours,
+          });
           spinner?.stop();
           if (opts.jsonOut !== undefined) {
             writeJsonContractFile(opts.jsonOut, result);
@@ -358,7 +375,7 @@ program
           }
           if (opts.exitCode && result.suggestions.length > 0) process.exitCode = 1;
         } else {
-          const result = await diff(ctx, { ...opts, owners: ownersFlag });
+          const result = await diff(ctx, { ...opts, owners: ownersFlag, trackRecord: opts.trackRecord, trackWindowHours });
           spinner?.stop();
           if (opts.jsonOut !== undefined) {
             writeJsonContractFile(opts.jsonOut, result);

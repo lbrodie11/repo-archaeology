@@ -2,7 +2,7 @@ import { formatExplainCommand } from '../commands/explain.js';
 import type { DiffFamilyView, DiffResult, SilenceDiagnostics, Suggestion } from '../commands/diff.js';
 import type { Settings } from '../config.js';
 import { formatOriginWeightsSpec, hasNonDefaultOriginWeights } from '../model/origin.js';
-import { formatIntervalCi, NAMES, weightingLabel } from './views.js';
+import { formatIntervalCi, formatTrackRecordLine, NAMES, weightingLabel } from './views.js';
 import { pct, plural, shortHash } from '../util/term.js';
 
 /**
@@ -224,6 +224,9 @@ function renderSuggestionBlock(
       );
     }
   }
+
+  const trackLine = formatTrackRecordLine(s, (name) => formatMarkdownCode(name));
+  if (trackLine) lines.push(trackLine.dim ? `   - _${trackLine.text}_` : `   - ${trackLine.text}`);
 
   const topCommits = s.evidence.slice(0, 3);
   for (const ev of topCommits) {

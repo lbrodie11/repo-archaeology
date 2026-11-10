@@ -94,6 +94,39 @@ function checkWilsonInterval(value: unknown, path: string, errors: string[]): vo
   }
 }
 
+/**
+ * RA-06 `trackRecord` (optional, additive). Gutter GU-06 reads `fired`, `interval.low`,
+ * `precision` and `reason`; GU-10 compares `fired` with `trackRecordMinFired`.
+ */
+const GUTTER_TRACK_RECORD_REASONS = ['never_fired', 'limited_history'] as const;
+
+function checkTrackRecord(value: unknown, path: string, errors: string[]): void {
+  if (!isRecord(value)) {
+    errors.push(`Gutter contract error at '${path}': expected optional object, got ${JSON.stringify(value)}`);
+    return;
+  }
+  if ('reason' in value) {
+    if (!GUTTER_TRACK_RECORD_REASONS.includes(value.reason as (typeof GUTTER_TRACK_RECORD_REASONS)[number])) {
+      errors.push(
+        `Gutter contract error at '${path}.reason': expected one of ${GUTTER_TRACK_RECORD_REASONS.join(', ')}, got ${JSON.stringify(value.reason)}`,
+      );
+    }
+    if (value.reason === 'never_fired' && value.fired !== 0) {
+      errors.push(`Gutter contract error at '${path}.fired': expected 0 with reason never_fired, got ${JSON.stringify(value.fired)}`);
+    }
+    return;
+  }
+  for (const field of ['fired', 'confirmed', 'windowHours'] as const) {
+    if (!Number.isInteger(value[field]) || (value[field] as number) < 0) {
+      errors.push(`Gutter contract error at '${path}.${field}': expected non-negative integer, got ${JSON.stringify(value[field])}`);
+    }
+  }
+  if (!isFiniteNumber(value.precision) || value.precision < 0 || value.precision > 1) {
+    errors.push(`Gutter contract error at '${path}.precision': expected number in [0, 1], got ${JSON.stringify(value.precision)}`);
+  }
+  checkWilsonInterval(value.interval, `${path}.interval`, errors);
+}
+
 function checkCommonEnvelopeAndMeta(payload: Record<string, unknown>, errors: string[]): void {
   if (payload.schemaVersion !== 1) {
     errors.push(
@@ -230,6 +263,10 @@ function validateGutterDiffContract(payload: unknown): string[] {
         errors.push(
           `Gutter contract error at '${prefix}.alsoLinkedFrom': expected optional string[], got ${JSON.stringify(item.alsoLinkedFrom)}`,
         );
+      }
+
+      if ('trackRecord' in item && item.trackRecord !== undefined) {
+        checkTrackRecord(item.trackRecord, `${prefix}.trackRecord`, errors);
       }
     });
   }
@@ -725,6 +762,27 @@ describe('Gutter consumer contract guard (diff --json & backtest --json)', () =>
         expectedPath: 'families[0].changedMembers',
         mutate: (doc) => {
           doc.families[0].changedMembers = 'not-an-array';
+        },
+      },
+      {
+        label: 'removed suggestions[0].trackRecord.fired',
+        expectedPath: 'suggestions[0].trackRecord.fired',
+        mutate: (doc) => {
+          doc.suggestions[0].trackRecord = { confirmed: 1, precision: 0.5, interval: { low: 0.1, high: 0.9 }, windowHours: 48 };
+        },
+      },
+      {
+        label: 'retyped suggestions[0].trackRecord.interval.low',
+        expectedPath: 'suggestions[0].trackRecord.interval.low',
+        mutate: (doc) => {
+          doc.suggestions[0].trackRecord = { fired: 2, confirmed: 1, precision: 0.5, interval: { low: '0.1', high: 0.9 }, windowHours: 48 };
+        },
+      },
+      {
+        label: 'renamed suggestions[0].trackRecord.reason',
+        expectedPath: 'suggestions[0].trackRecord.reason',
+        mutate: (doc) => {
+          doc.suggestions[0].trackRecord = { reason: 'not_enough_history' };
         },
       },
       {

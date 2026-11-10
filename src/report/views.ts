@@ -16,12 +16,13 @@ import {
   type OriginShare,
 } from '../model/origin.js';
 import type { OwnersConfig } from '../model/owners.js';
+import type { TrackRecord } from '../model/track-record.js';
 import {
   VERDICTS_FILE,
   type RelationshipVerdictView,
   type VerdictsMeta,
 } from '../model/verdicts.js';
-import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
+import { roundInterval, wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 export type {
@@ -275,12 +276,7 @@ function round(x: number): number {
   return Math.round(x * 1000) / 1000;
 }
 
-export function roundInterval(interval: WilsonInterval): WilsonInterval {
-  return {
-    low: Math.floor(interval.low * 10000) / 10000,
-    high: Math.ceil(interval.high * 10000) / 10000,
-  };
-}
+export { roundInterval } from '../util/stats.js';
 
 export function formatIntervalCi(interval: WilsonInterval, raw = false): string {
   return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100 + 1e-9)}–${Math.ceil(interval.high * 100 - 1e-9)}%)`;
@@ -334,6 +330,50 @@ export function describeStrength(view: RelationshipView): string {
     ? `${view.shared} of ${view.fromChanges} commits ${formatIntervalCi(view.interval, true)} (${pct(view.confidence)} ${wLabel})`
     : `${view.shared} of ${view.fromChanges} commits (${pct(view.confidence)}) ${formatIntervalCi(view.interval)}`;
   return `${countsAndRate} · last together ${timeAgo(Date.parse(view.lastTogether) / 1000)}`;
+}
+
+/** `trackRecord.fired` below this is labelled "small sample" in every renderer. */
+export const TRACK_RECORD_SMALL_SAMPLE = 5;
+
+/**
+ * The one-line track-record summary shared by the classic, rich and Markdown renderers, so the
+ * wording cannot drift: counts first, never framed as accuracy. `name` formats the target's
+ * file name for the output medium (terminal sanitizing or Markdown code). Accepts every shape
+ * `common.schema.json#/$defs/TrackRecord` allows. Returns `undefined` when nothing should be
+ * printed: no track record, `limited_history`, or a `never_fired` record without
+ * `evaluated.commits` (no window size to report).
+ */
+export function formatTrackRecordLine(
+  s: { to: string; trackRecord?: TrackRecord },
+  name: (fileName: string) => string = (x) => x,
+): { text: string; dim: boolean } | undefined {
+  const tr = s.trackRecord;
+  if (!tr || !('fired' in tr)) return undefined;
+  if ('reason' in tr) {
+    // Every field but `fired` and `reason` is optional on the wire: say only what is present.
+    const commits = tr.evaluated?.commits;
+    if (typeof commits !== 'number') return undefined;
+    const excluded = tr.excluded;
+    const unresolved = excluded ? excluded.censored + excluded.targetDeleted + excluded.clockSkew : undefined;
+    if (tr.triggers === 0) {
+      return { text: `No earlier triggers in the last ${commits} commits.`, dim: true };
+    }
+    if (typeof tr.triggers === 'number' && typeof unresolved === 'number' && unresolved > 0) {
+      return {
+        text: `No completed earlier triggers in the last ${commits} commits (${unresolved} too recent or left out).`,
+        dim: true,
+      };
+    }
+    // Trigger counts unknown: `fired: 0` still means no completed episode in the window.
+    return { text: `No completed earlier triggers in the last ${commits} commits.`, dim: true };
+  }
+  const target = name(posix.basename(s.to));
+  const times = tr.fired === 1 ? '1 time' : `${tr.fired} times`;
+  const caveat = tr.fired < TRACK_RECORD_SMALL_SAMPLE ? 'small sample; not proof those were fixes' : 'not proof those were fixes';
+  return {
+    text: `Before: ${times} this changed without ${target}; it changed within ${tr.windowHours} h after ${tr.confirmed} (${caveat}).`,
+    dim: false,
+  };
 }
 
 export const DISCLAIMER = 'Historical signal, not proof: check whether the change really needs these files.';
