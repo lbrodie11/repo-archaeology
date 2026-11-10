@@ -30,10 +30,12 @@ export const DATA_DIR = resolve(import.meta.dirname, '..', '..', 'docs', 'resear
 
 const FIXED_DATE = '1793232000 +0000'; // 2026-10-30, so mutation commit ids are reproducible
 
-function git(gitDir: string, args: string[], input?: string, env: Record<string, string> = {}): string {
+function git(gitDir: string, args: string[], env: Record<string, string> = {}): string {
   return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
     cwd: gitDir,
-    input,
+    // No stdin at all: piping `input` to `hash-object --stdin` hung intermittently (Node 20, worker threads alive).
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 120_000,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     env: sanitizeGitEnv(process.env, { GIT_OPTIONAL_LOCKS: '0', ...env }),
@@ -53,12 +55,14 @@ export function commitMutation(gitDir: string, pin: string, path: string, text: 
       GIT_AUTHOR_DATE: FIXED_DATE,
       GIT_COMMITTER_DATE: FIXED_DATE,
     };
-    git(gitDir, ['read-tree', pin], undefined, env);
+    git(gitDir, ['read-tree', pin], env);
     const mode = git(gitDir, ['ls-tree', pin, '--', path]).split(' ')[0] || '100644';
-    const blob = git(gitDir, ['hash-object', '-w', '--stdin'], text).trim();
-    git(gitDir, ['update-index', '--cacheinfo', `${mode},${blob},${path}`], undefined, env);
-    const tree = git(gitDir, ['write-tree'], undefined, env).trim();
-    const sha = git(gitDir, ['commit-tree', tree, '-p', pin, '-m', `RA-18 mutation ${id}`], undefined, env).trim();
+    const blobFile = join(scratch, 'blob');
+    writeFileSync(blobFile, text);
+    const blob = git(gitDir, ['hash-object', '-w', '--no-filters', '--', blobFile]).trim();
+    git(gitDir, ['update-index', '--cacheinfo', `${mode},${blob},${path}`], env);
+    const tree = git(gitDir, ['write-tree'], env).trim();
+    const sha = git(gitDir, ['commit-tree', tree, '-p', pin, '-m', `RA-18 mutation ${id}`], env).trim();
     git(gitDir, ['update-ref', `refs/surface-pilot/${id}`, sha]);
     return sha;
   } finally {
