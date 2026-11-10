@@ -12,6 +12,12 @@
  *
  * Options: --commits <n> --files <n> --sweep <fraction> --repeats <n> --max-commits <n> --keep
  * The analysis uses `--max-commits` = all commits by default, so the full history is read.
+ *
+ * Track-record mode (RA-06): `--track-record` times `diff` with and without `--no-track-record`
+ * (interleaved, median of `--repeats`), cold (empty cache) and warm. By default it uses the
+ * synthetic repository; `--repo <dir> --diff-args "<args>"` benchmarks an existing repository
+ * instead (for example `--repo . --diff-args "diff --base <sha>~1 --head <sha>"`). The cache
+ * always lives in a temporary directory.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,6 +38,9 @@ const { values: args } = parseArgs({
     repeats: { type: 'string', default: '3' },
     'max-commits': { type: 'string' },
     keep: { type: 'boolean', default: false },
+    'track-record': { type: 'boolean', default: false },
+    repo: { type: 'string' },
+    'diff-args': { type: 'string', default: 'diff' },
   },
 });
 const COMMITS = Number(args.commits);
@@ -175,8 +184,9 @@ function timeRun(cwd, cmdArgs, cacheDir, maxCommitsOverride = MAX_COMMITS) {
   });
   const ms = Number(process.hrtime.bigint() - start) / 1e6;
   if (r.status !== 0 && !(cmdArgs[0] === 'diff' && r.status === 1)) throw new Error(`${cmdArgs.join(' ')} failed: ${r.stderr}`);
-  const meta = JSON.parse(r.stdout).meta;
-  return { ms, cache: meta.cache, commitsRead: meta.commitsRead };
+  const payload = JSON.parse(r.stdout);
+  const meta = payload.meta;
+  return { ms, cache: meta.cache, commitsRead: meta.commitsRead, payload };
 }
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -245,8 +255,74 @@ function timeRawStages(cwd, cacheDir, maxCommits = MAX_COMMITS) {
   return JSON.parse(r.stdout);
 }
 
+/** RA-06: median added wall time of the per-pair track record, cold and warm cache. */
+function benchTrackRecord(repo, cacheDir, diffArgs) {
+  const times = { coldOn: [], coldOff: [], warmOn: [], warmOff: [] };
+  let sample;
+  for (let rep = 0; rep < REPEATS; rep++) {
+    rmSync(cacheDir, { recursive: true, force: true });
+    const coldOn = timeRun(repo, diffArgs, cacheDir);
+    times.coldOn.push(coldOn.ms);
+    rmSync(cacheDir, { recursive: true, force: true });
+    times.coldOff.push(timeRun(repo, [...diffArgs, '--no-track-record'], cacheDir).ms);
+    // Warm: the cache is now populated; alternate the order to spread drift evenly.
+    const pairOrder = rep % 2 === 0 ? ['on', 'off'] : ['off', 'on'];
+    for (const which of pairOrder) {
+      if (which === 'on') {
+        const warmOn = timeRun(repo, diffArgs, cacheDir);
+        times.warmOn.push(warmOn.ms);
+        sample = warmOn.payload;
+      } else {
+        times.warmOff.push(timeRun(repo, [...diffArgs, '--no-track-record'], cacheDir).ms);
+      }
+    }
+  }
+  const suggestions = sample?.suggestions ?? [];
+  const records = suggestions.map((s) => s.trackRecord).filter(Boolean);
+  const summary = records.map((t) => (t.reason ? t.reason : `${t.fired}/${t.confirmed}`)).join(', ');
+  console.log(`commits analyzed: ${sample?.meta?.commitsAnalyzed} · suggestions: ${suggestions.length} · track records (fired/confirmed or reason): ${summary || 'none'}`);
+  const window = records.find((t) => t.evaluated)?.evaluated;
+  if (window) console.log(`replayed window: ${window.commits} commits after ${window.trainingCommits} training commits`);
+  console.log('');
+  console.log('| Cache | Without (`--no-track-record`) | With track record | Added | Added % |');
+  console.log('| :--- | ---: | ---: | ---: | ---: |');
+  for (const [label, on, off] of [['cold', times.coldOn, times.coldOff], ['warm', times.warmOn, times.warmOff]]) {
+    const mOn = median(on);
+    const mOff = median(off);
+    console.log(`| ${label} | ${mOff.toFixed(0)} ms | ${mOn.toFixed(0)} ms | ${(mOn - mOff).toFixed(0)} ms | ${(((mOn - mOff) / mOff) * 100).toFixed(1)}% |`);
+  }
+  console.log('');
+}
+
 async function main() {
   const work = mkdtempSync(join(tmpdir(), 'ra-bench-history-'));
+  if (args['track-record']) {
+    const cacheDir = join(work, 'cache');
+    const diffArgs = args['diff-args'].split(/\s+/).filter(Boolean);
+    try {
+      if (args.repo) {
+        const repo = resolve(args.repo);
+        const sha = git(repo, 'rev-parse', 'HEAD').trim();
+        console.log(`Track-record benchmark on ${repo} at ${sha.slice(0, 12)} · \`${diffArgs.join(' ')}\``);
+        console.log(`git: ${git(repo, '--version').trim()} · node ${process.version} · ${process.platform}/${process.arch} · repeats=${REPEATS} (median) · --max-commits ${MAX_COMMITS}\n`);
+        benchTrackRecord(repo, cacheDir, diffArgs);
+      } else {
+        const repo = join(work, 'repo');
+        git(work, 'init', '-q', '-b', 'main', repo);
+        const state = newState();
+        await fastImport(repo, state, COMMITS);
+        git(repo, 'checkout', '-q', '-f', 'main');
+        writeFileSync(join(repo, state.clusters[3][0]), `export const v = -1; // edited\n`);
+        console.log(`Track-record benchmark on a synthetic repository: ${COMMITS} commits over ${FILES} files (${SWEEP * 100}% sweeps) · \`${diffArgs.join(' ')}\``);
+        console.log(`git: ${git(repo, '--version').trim()} · node ${process.version} · ${process.platform}/${process.arch} · repeats=${REPEATS} (median) · --max-commits ${MAX_COMMITS}\n`);
+        benchTrackRecord(repo, cacheDir, diffArgs);
+      }
+    } finally {
+      if (args.keep) console.log(`Kept benchmark directory at ${work}`);
+      else rmSync(work, { recursive: true, force: true });
+    }
+    return;
+  }
   const repo = join(work, 'repo');
   const cacheDir = join(work, 'cache');
   try {
