@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **One Import-Analysis Pipeline ([`src/imports/analysis.ts`](src/imports/analysis.ts)):** Relationship classification (`scan`, `diff`, `file`, `explain`, `map`) and the import graph (`imports`) now read every file through the same `analyzeFile` step and a `LanguageAnalyzer` registry, instead of each calling the TypeScript extractor and resolver on its own, so the two cannot drift apart. No output changes: golden JSON snapshots of every command on two fixtures and on this repository's own history ([`test/golden.test.ts`](test/golden.test.ts)) are byte-identical before and after, and a parity test checks that both see the same edges for every fixture file.
+
 ## [0.8.0] - 2026-11-10
 
 ### Added
