@@ -343,8 +343,10 @@ export const TRACK_RECORD_SMALL_SAMPLE = 5;
 /**
  * The one-line track-record summary shared by the classic, rich and Markdown renderers, so the
  * wording cannot drift: counts first, never framed as accuracy. `name` formats the target's
- * file name for the output medium (terminal sanitizing or Markdown code). Returns `undefined`
- * when nothing should be printed (no track record, or `limited_history`).
+ * file name for the output medium (terminal sanitizing or Markdown code). Accepts every shape
+ * `common.schema.json#/$defs/TrackRecord` allows. Returns `undefined` when nothing should be
+ * printed: no track record, `limited_history`, or a `never_fired` record without
+ * `evaluated.commits` (no window size to report).
  */
 export function formatTrackRecordLine(
   s: { to: string; trackRecord?: TrackRecord },
@@ -353,15 +355,22 @@ export function formatTrackRecordLine(
   const tr = s.trackRecord;
   if (!tr || !('fired' in tr)) return undefined;
   if ('reason' in tr) {
-    const commits = tr.evaluated.commits;
-    const unresolved = tr.excluded.censored + tr.excluded.targetDeleted + tr.excluded.clockSkew;
-    if (tr.triggers === 0 || unresolved === 0) {
+    // Every field but `fired` and `reason` is optional on the wire: say only what is present.
+    const commits = tr.evaluated?.commits;
+    if (typeof commits !== 'number') return undefined;
+    const excluded = tr.excluded;
+    const unresolved = excluded ? excluded.censored + excluded.targetDeleted + excluded.clockSkew : undefined;
+    if (tr.triggers === 0) {
       return { text: `No earlier triggers in the last ${commits} commits.`, dim: true };
     }
-    return {
-      text: `No completed earlier triggers in the last ${commits} commits (${unresolved} too recent or left out).`,
-      dim: true,
-    };
+    if (typeof tr.triggers === 'number' && typeof unresolved === 'number' && unresolved > 0) {
+      return {
+        text: `No completed earlier triggers in the last ${commits} commits (${unresolved} too recent or left out).`,
+        dim: true,
+      };
+    }
+    // Trigger counts unknown: `fired: 0` still means no completed episode in the window.
+    return { text: `No completed earlier triggers in the last ${commits} commits.`, dim: true };
   }
   const target = name(posix.basename(s.to));
   const times = tr.fired === 1 ? '1 time' : `${tr.fired} times`;
