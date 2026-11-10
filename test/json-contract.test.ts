@@ -927,6 +927,74 @@ describe('JSON output contract (v1) and JSON Schemas', () => {
       r.cleanup();
     }
   });
+
+  it('validates RA-10 Go and Python output: via "go-package"/"python-module", languages go/python, meta.warnings', () => {
+    // A hand-built object carrying the new values validates against the updated schema.
+    const edgeSchema = resolveSchemaNodeForTest('import-graph.schema.json#/$defs/ImportGraphEdge');
+    for (const via of ['go-package', 'python-module']) {
+      const errors: string[] = [];
+      validateSchemaNode(SCHEMA_DIR, { from: 'a.go', to: 'b/b.go', specifier: 'example.com/app/b', kind: 'static', via }, edgeSchema, 'import-graph.schema.json', '$', errors);
+      assert.deepEqual(errors, [], via);
+    }
+    const unknownVia: string[] = [];
+    validateSchemaNode(SCHEMA_DIR, { from: 'a', to: 'b', specifier: 'b', kind: 'static', via: 'not-a-via' }, edgeSchema, 'import-graph.schema.json', '$', unknownVia);
+    assert.ok(unknownVia.length > 0, 'the enum is still closed within one schema release');
+
+    const r = new FixtureRepo();
+    try {
+      r.commit({
+        message: 'initial',
+        write: {
+          'go.mod': 'module example.com/app\nreplace example.com/gone => ../outside\n',
+          'store/store.go': 'package store\nimport "example.com/app/model"\n',
+          'store/cache.go': 'package store\n',
+          'model/model.go': 'package model\n',
+          'src/shop/__init__.py': '',
+          'src/shop/cart.py': 'from shop import pricing\nimport requests\n',
+          'src/shop/pricing.py': 'RATE = 1\n',
+          'web/app.ts': 'export const x = 1;\n',
+        },
+      });
+      for (let i = 0; i < 4; i++) {
+        r.commit({
+          message: `change ${i}`,
+          write: {
+            'store/store.go': `package store\nimport "example.com/app/model"\n// ${i}\n`,
+            'store/cache.go': `package store\n// ${i}\n`,
+            'src/shop/cart.py': `from shop import pricing\nimport requests\n# ${i}\n`,
+            'src/shop/pricing.py': `RATE = ${i}\n`,
+          },
+        });
+      }
+      const imports = runCli(['imports', '--json'], r.dir);
+      assert.equal(imports.code, 0, imports.stderr);
+      const graph = JSON.parse(imports.stdout);
+      assertMatchesSchema(graph, 'import-graph.schema.json');
+      assert.deepEqual(graph.languages, ['go', 'python', 'typescript']);
+      assert.deepEqual(
+        graph.edges.map((edge: { from: string; to: string; via: string }) => `${edge.from}>${edge.to}:${edge.via}`),
+        ['src/shop/cart.py>src/shop/pricing.py:python-module', 'store/store.go>model/model.go:go-package'],
+      );
+      assert.ok(graph.meta.warnings.some((warning: string) => warning.includes('replaces example.com/gone with ../outside')));
+      assert.equal(graph.meta.imports.filesScanned, 7);
+
+      const flags = ['--min-shared', '2', '--min-confidence', '0.3'];
+      const scan = runCli(['scan', '--json', ...flags], r.dir);
+      assert.equal(scan.code, 0, scan.stderr);
+      assertMatchesSchema(JSON.parse(scan.stdout), 'scan.schema.json');
+      const explain = runCli(['explain', 'store/store.go', 'store/cache.go', '--json', ...flags], r.dir);
+      assert.equal(explain.code, 0, explain.stderr);
+      const explainJson = JSON.parse(explain.stdout);
+      assertMatchesSchema(explainJson, 'explain.schema.json');
+      assert.match(JSON.stringify(explainJson), /same Go package: files share scope without imports/);
+      const direct = runCli(['explain', 'src/shop/cart.py', 'src/shop/pricing.py', '--json', ...flags], r.dir);
+      assert.equal(direct.code, 0, direct.stderr);
+      assertMatchesSchema(JSON.parse(direct.stdout), 'explain.schema.json');
+      assert.match(direct.stdout, /cart\.py imports pricing\.py/);
+    } finally {
+      r.cleanup();
+    }
+  });
 });
 
 function resolveSchemaNodeForTest(ref: string): JsonSchemaNode {

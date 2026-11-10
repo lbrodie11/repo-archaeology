@@ -40,6 +40,9 @@ Repo Archaeology follows a strict schema versioning policy for `--json` and `--j
    - [`test/json-contract.test.ts`](../test/json-contract.test.ts) and [`scripts/smoke-pack.mjs`](../scripts/smoke-pack.mjs) validate CLI and packed tarball outputs against the Draft 2020-12 schemas in [`schema/`](../schema) via the shared validator in [`scripts/schema-validator.mjs`](../scripts/schema-validator.mjs).
    - [`test/consumer-gutter.test.ts`](../test/consumer-gutter.test.ts) freezes the exact `diff --json` and `backtest --json` field paths, types, relationship kinds (`ghost`, `unknown`, `indirect`, `direct`, `test`), `silence.primaryReason` codes (`no_changed_files`, `limited_repo_history`, `no_history_for_changed_files`, `no_cochange_partners`, `all_companions_touched`, `silenced_by_verdicts`, `filtered_by_thresholds`, `filtered_by_kinds`), and strategy names (`co-change`, `popularity, same changes`) consumed by Gutter (`lbrodie11/gutter`). Removing, renaming, or retyping any of these frozen values requires a coordinated Gutter release.
 
+4. **Growing Value Sets:**
+   - The value sets of `via` (`ImportResolutionVia`), `reasonCode` (`ImportUnresolvedReasonCode`) and the top-level `languages` array of `imports --json` may grow within `schemaVersion: 1` when new resolution strategies or languages are added (RA-10 added `via` values `"go-package"` and `"python-module"` and the languages `"go"` and `"python"`). Each release's schemas list that release's values. Consumers must tolerate unknown values (treat an unknown `via` as "resolved somehow" and an unknown `reasonCode` as "unresolved"), as Gutter's contract already does for checklist kinds.
+
 ---
 
 ## 3. JSON Schema Files (`schema/`)
@@ -415,11 +418,13 @@ When `repo-archaeology --json` is invoked with no subcommand, it inspects the wo
 | `tool` | `{ name, version }` | Yes | Tool name and semver version. |
 | `meta` | `Meta` | Yes | Repository metadata (including `meta.imports` with `scope: "repository"` when unfiltered or `scope: "analyzed-files"` when `--files` is passed). |
 | `files` | `string[]` | Yes | Sorted repository-relative paths included in the graph (`from` candidates). When `files` filter is passed, includes the requested files plus every file that imports them (passing a path outside the repository or a path not present at head throws `UsageError`). |
-| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind, via?, heuristic? }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"`, `via` is `"relative" \| "paths" \| "workspace" \| "exports" \| "imports"`, `heuristic` is `boolean` (`true` when resolved via a heuristic `dist/` → `src/` remap or unconfigured `"source"` export condition), and `to` is an internal file present at head. |
+| `edges` | `ImportGraphEdge[]` | Yes | Internal dependency edges (`{ from, to, specifier, kind, via?, heuristic? }`) where `kind` is `"static" \| "dynamic" \| "reexport" \| "require"`, `via` is `"relative" \| "paths" \| "workspace" \| "exports" \| "imports" \| "go-package" \| "python-module"` (`"go-package"`: a Go import resolved to one of the imported package's non-test files, one edge per file; `"python-module"`: a Python import resolved to a module, and to every regular-package `__init__.py` on its path; the set may grow, see §2), `heuristic` is `boolean` (`true` when resolved via a heuristic `dist/` → `src/` remap or unconfigured `"source"` export condition, TS/JS only), and `to` is an internal file present at head. |
 | `unresolved` | `ImportGraphUnresolved[]` | Yes | Unresolved module specifiers (`{ from, specifier, reason, reasonCode? }`), preserving `reason: "unmatched"` for `schemaVersion: 1` compatibility and adding `reasonCode`: `"alias-unmatched" \| "unknown-package" \| "target-missing" \| "not-exported" \| "invalid-target" \| "unsupported-config" \| "ambiguous-package"`. |
-| `languages` | `string[]` | Yes | Sorted list of detected source languages (`"javascript"`, `"typescript"`). |
+| `languages` | `string[]` | Yes | Sorted list of detected source languages (`"go"`, `"javascript"`, `"python"`, `"typescript"`; the set may grow, see §2). |
 
 ---
+
+Go and Python (RA-10): `meta.imports` counters (`filesScanned`, `internalEdges`, `external`, `unresolved`, `dynamicLoads`, `unsupportedFiles`, `heuristicEdges`, `unresolvedByReason`) include `.go` and `.py` files. Index and resolution diagnostics are appended to `meta.warnings` (for example `Go: module path … is declared by more than one go.mod`, `Go: imports in-repo module … without a local replace/go.work`, `Go: … replaces … which is outside the repository`, `Python: pyproject.toml uses TOML outside the supported subset (unsupported-config: …)`, and fan-out or session edge-budget notices). The same warnings appear in `scan`, `diff`, `file`, `explain` and `map` output for the files those commands analyzed. See the README's *Language support* section for what each language resolves.
 
 ## 6. Usage Examples (`jq` & Automation)
 

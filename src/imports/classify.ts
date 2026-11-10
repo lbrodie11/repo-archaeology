@@ -1,6 +1,7 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
-import { AnalysisSession, analyzeFile, type FileAnalysis } from './analysis.js';
+import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from './analysis.js';
+import { goAnalyzer, goPackageSiblings, isSameGoPackage } from './go.js';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
   candidateFilePaths,
@@ -55,6 +56,8 @@ const BARREL_DEPTH = 3;
 interface FileImports {
   /** The shared pipeline's result this summary was built from. */
   analysis: FileAnalysis;
+  /** First edge seen per imported file: wording for `explain` (Go packages, Python heuristics). */
+  importEdges: Map<string, { specifier: string; via: ImportResolutionVia; heuristic: boolean }>;
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
@@ -180,6 +183,12 @@ export class RelationshipClassifier {
     this.session = new AnalysisSession(files);
   }
 
+  /** Import-analysis diagnostics (`meta.warnings`) for the files analyzed in the current scope. */
+  analysisWarnings(): string[] {
+    if (this.accessedInScope.size === 0) return [];
+    return analysisWarnings(this.session, [...this.accessedInScope].map((file) => this.cache.get(file)?.analysis));
+  }
+
   /** Clears the per-operation file access set while preserving parsed AST caches. */
   resetScope(): void {
     this.accessedInScope.clear();
@@ -257,6 +266,10 @@ export class RelationshipClassifier {
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
     const indirect = this.indirectLink(a, b);
     if (indirect.linked) return 'indirect';
+    // One may import the other, but the analyzer could not tell (only this pair is affected).
+    if (ra.uncertain.has(b) || rb.uncertain.has(a)) return 'unknown';
+    // Files of one Go package share scope without importing each other: never a ghost.
+    if (this.sameGoPackage(a, b)) return 'unknown';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
@@ -271,17 +284,45 @@ export class RelationshipClassifier {
    * round). "No import link" would be literally true for these pairs, but readers take
    * a ghost wire to mean hidden coupling, and this coupling is visible in the code.
    */
-  indirectLink(a: string, b: string): { linked?: { from: string; via: string; to: string }; uncertain: boolean } {
+  indirectLink(a: string, b: string): { linked?: { from: string; via: string; to: string; samePackage?: boolean }; uncertain: boolean } {
     let uncertain = false;
     for (const [from, to] of [[a, b], [b, a]] as const) {
       const vias = [...this.reachable(from).files].filter((via) => via !== a && via !== b).sort();
       for (const via of vias) {
         const rvia = this.reachable(via);
         if (rvia.files.has(to)) return { linked: { from, via, to }, uncertain: false };
-        if (rvia.incomplete) uncertain = true;
+        if (rvia.incomplete || rvia.uncertain.has(to)) uncertain = true;
+      }
+      // A file this one may import could import the partner.
+      for (const via of this.reachable(from).uncertain.keys()) {
+        if (via === a || via === b) continue;
+        const rvia = this.reachable(via);
+        if (rvia.files.has(to) || rvia.uncertain.has(to) || rvia.incomplete) uncertain = true;
+      }
+      // A Go file reaches whatever its package siblings import, through shared package scope.
+      for (const via of this.goPackageSiblings(from)) {
+        if (via === a || via === b) continue;
+        const rvia = this.reachable(via);
+        if (rvia.files.has(to)) return { linked: { from, via, to, samePackage: true }, uncertain: false };
+        if (rvia.incomplete || rvia.uncertain.has(to) || this.analyze(via).sourceUnavailable) uncertain = true;
       }
     }
     return { uncertain };
+  }
+
+  /**
+   * The other files of a Go file's own package: same directory and `package` clause,
+   * never `_test.go`, ignore-tagged or `_`-prefixed files. Empty for other files.
+   */
+  private goPackageSiblings(file: string): string[] {
+    if (!file.endsWith('.go')) return [];
+    return goPackageSiblings(this.session.indexFor(goAnalyzer), file);
+  }
+
+  /** Two files of one Go package share scope without imports. */
+  private sameGoPackage(a: string, b: string): boolean {
+    if (!a.endsWith('.go') || !b.endsWith('.go')) return false;
+    return isSameGoPackage(this.session.indexFor(goAnalyzer), a, b);
   }
 
   /** Why a pair was classified as it was, in plain words (for reports). */
@@ -293,14 +334,8 @@ export class RelationshipClassifier {
       case 'direct': {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
-        if (ia.imports.has(b)) {
-          const suffix = ia.heuristicImports.has(b) ? ' (via heuristic source remap)' : '';
-          return `${posix.basename(a)} imports ${posix.basename(b)}${suffix}`;
-        }
-        if (ib.imports.has(a)) {
-          const suffix = ib.heuristicImports.has(a) ? ' (via heuristic source remap)' : '';
-          return `${posix.basename(b)} imports ${posix.basename(a)}${suffix}`;
-        }
+        if (ia.imports.has(b)) return importWording(a, b, ia);
+        if (ib.imports.has(a)) return importWording(b, a, ib);
         if (ia.references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
         if (ib.references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
@@ -308,6 +343,11 @@ export class RelationshipClassifier {
       case 'indirect': {
         const link = this.indirectLink(a, b).linked;
         if (!link) return 'connected through one intermediate import';
+        if (link.samePackage) {
+          const edge = this.analyze(link.via).importEdges.get(link.to);
+          const target = edge?.via === 'go-package' ? `package ${edge.specifier}` : posix.basename(link.to);
+          return `connected through ${link.via}: ${posix.basename(link.from)} shares a Go package with ${posix.basename(link.via)}, which imports ${target}`;
+        }
         return `connected through ${link.via}: ${posix.basename(link.from)} imports ${posix.basename(link.via)}, which imports ${posix.basename(link.to)}`;
       }
       case 'ghost': {
@@ -324,8 +364,13 @@ export class RelationshipClassifier {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
+        if (this.sameGoPackage(a, b)) return 'same Go package: files share scope without imports';
+        const why = this.reachable(a).uncertain.get(b) ?? this.reachable(b).uncertain.get(a);
+        if (why !== undefined) return `could not tell whether one imports the other (${why})`;
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
+        const reason = ia.analysis.incompleteReason ?? ib.analysis.incompleteReason;
+        if (reason !== undefined) return `import analysis was incomplete (${reason}), so a dependency link cannot be ruled out`;
         return 'some imports or path references could not be resolved, so a dependency link cannot be ruled out';
       }
     }
@@ -359,6 +404,7 @@ export class RelationshipClassifier {
       analysis,
       analyzable: analysis.analyzable,
       sourceUnavailable: analysis.sourceUnavailable,
+      importEdges: new Map(),
       imports: new Set(),
       heuristicImports: new Set(),
       references: new Set(),
@@ -381,6 +427,9 @@ export class RelationshipClassifier {
           continue;
         }
         result.imports.add(target.path);
+        if (!result.importEdges.has(target.path)) {
+          result.importEdges.set(target.path, { specifier: edge.specifier, via: target.via, heuristic: Boolean(target.heuristic) });
+        }
         if (target.heuristic) {
           result.heuristicImports.add(target.path);
           result.heuristicEdges++;
@@ -441,12 +490,13 @@ export class RelationshipClassifier {
       for (const v of cached.visited) this.accessedInScope.add(v);
       return cached;
     }
-    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false };
+    const reach: Reach = { files: new Set(), visited: new Set(), incomplete: false, uncertain: new Map() };
     const visit = (current: string, depth: number) => {
       reach.visited.add(current);
       const info = this.analyze(current);
       // An unreadable barrel could re-export anything, so nothing can be ruled out.
-      if (info.unresolved > 0 || info.sourceUnavailable) reach.incomplete = true;
+      if (info.unresolved > 0 || info.sourceUnavailable || info.analysis.incomplete) reach.incomplete = true;
+      for (const { path, reason } of info.analysis.uncertain ?? []) if (!reach.uncertain.has(path)) reach.uncertain.set(path, reason);
       for (const target of [...info.imports, ...info.references]) {
         if (reach.files.has(target)) continue;
         reach.files.add(target);
@@ -474,6 +524,14 @@ export function parallelImplementation(a: string, b: string): HiddenBridge | und
   return { signal: 'parallel-implementation', value, filesUsing: 2 };
 }
 
+/** `a imports b` for `explain`: Go imports name the package; TS/JS heuristic remaps say so. */
+function importWording(from: string, to: string, info: FileImports): string {
+  const edge = info.importEdges.get(to);
+  if (edge?.via === 'go-package') return `${posix.basename(from)} imports package ${edge.specifier} (which includes ${posix.basename(to)})`;
+  const suffix = info.heuristicImports.has(to) ? ' (via heuristic source remap)' : '';
+  return `${posix.basename(from)} imports ${posix.basename(to)}${suffix}`;
+}
+
 function referencePriority(kind: SourceReferenceKind): number {
   return kind === 'environment' ? 0 : kind === 'api-route' ? 1 : kind === 'event' ? 2 : 3;
 }
@@ -482,6 +540,8 @@ interface Reach {
   files: Set<string>;
   visited: Set<string>;
   incomplete: boolean;
+  /** Files possibly imported (the analyzer could not tell), with why. */
+  uncertain: Map<string, string>;
 }
 
 function isIndexFile(path: string): boolean {

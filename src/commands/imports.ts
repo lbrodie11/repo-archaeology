@@ -1,6 +1,6 @@
 import { ignorePatterns } from '../config.js';
 import { toRepoPath, UsageError, type Context } from '../context.js';
-import { AnalysisSession, analyzeFile } from '../imports/analysis.js';
+import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from '../imports/analysis.js';
 import { workingTreeFiles } from '../imports/classify.js';
 import {
   IMPORT_UNRESOLVED_REASON_CODES,
@@ -65,6 +65,10 @@ export interface ImportGraphIndex {
   readonly importersByTarget: Map<string, Set<string>>;
   readonly languages: string[];
   readonly repoUnsupportedFiles: number;
+  /** Import-analysis diagnostics for these files (`meta.warnings`). */
+  warningsFor(files: readonly string[]): string[];
+  /** The shared pipeline's result for an indexed, analyzable file. */
+  analysisOf(path: string): FileAnalysis | undefined;
   /** Language id of a path, when a language analyzer handles it. */
   languageOf(path: string): string | undefined;
   indexFile(from: string): void;
@@ -90,6 +94,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   const statsByFrom = new Map<string, IndexedFileStats>();
   const importersByTarget = new Map<string, Set<string>>();
   const languageSet = new Set<string>();
+  const analyses = new Map<string, FileAnalysis>();
   let repoUnsupportedFiles = 0;
 
   const addImporter = (target: string, importer: string): void => {
@@ -117,6 +122,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
       return;
     }
     if (analysis.language) languageSet.add(analysis.language);
+    analyses.set(from, analysis);
 
     const fileEdges: ImportGraphEdge[] = [];
     for (const edge of analysis.edges) {
@@ -182,6 +188,8 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     languages: [...languageSet].sort(),
     repoUnsupportedFiles,
     languageOf: (path) => session.analyzerFor(path)?.language(path),
+    warningsFor: (files) => analysisWarnings(session, files.map((file) => analyses.get(file))),
+    analysisOf: (path) => analyses.get(path),
     indexFile,
   };
   sessionIndexCache.set(ctx, index);
@@ -249,6 +257,12 @@ function buildGraphCoverage(
   };
 }
 
+function graphMeta(ctx: Context, index: ImportGraphIndex, files: readonly string[], coverage: ImportsCoverageMeta): Meta {
+  const meta = buildMeta(ctx);
+  const extra = index.warningsFor(files).filter((warning) => !meta.warnings.includes(warning));
+  return { ...meta, imports: coverage, ...(extra.length > 0 ? { warnings: [...meta.warnings, ...extra] } : {}) };
+}
+
 export function importGraph(ctx: Context, options: ImportGraphOptions = {}): ImportGraphResult {
   ctx.open?.();
   try {
@@ -260,7 +274,7 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
       const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
       const coverage = buildGraphCoverage(index, files, edges, unresolved, 'repository');
       return {
-        meta: { ...buildMeta(ctx), imports: coverage },
+        meta: graphMeta(ctx, index, files, coverage),
         files,
         edges,
         unresolved,
@@ -296,7 +310,7 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
     const coverage = buildGraphCoverage(index, files, edges, unresolved, 'analyzed-files');
 
     return {
-      meta: { ...buildMeta(ctx), imports: coverage },
+      meta: graphMeta(ctx, index, files, coverage),
       files,
       edges,
       unresolved,

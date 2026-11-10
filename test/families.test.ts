@@ -1008,15 +1008,15 @@ describe('Stage 2 Feature 2: Finding Families', () => {
 
   it('17. P1 regression: builds complete families even when uncheckedCap or map --edges truncates displayed pairwise edges', async () => {
     const r = createRepo();
-    // Create 4 sibling Python drivers (6 'unknown' pairs) + 1 checked TS ghost pair so hasPrimary is true
+    // Create 4 sibling Ruby drivers (6 'unknown' pairs: Ruby imports are not analyzed; Python ones are since RA-10) + 1 checked TS ghost pair so hasPrimary is true
     for (let i = 1; i <= 5; i++) {
       r.commit({
-        message: `sync 4 python drivers ${i}`,
+        message: `sync 4 ruby drivers ${i}`,
         write: {
-          'drivers/postgres/client.py': `VERSION = ${i}\n`,
-          'drivers/mysql/client.py': `VERSION = ${i}\n`,
-          'drivers/sqlite/client.py': `VERSION = ${i}\n`,
-          'drivers/duckdb/client.py': `VERSION = ${i}\n`,
+          'drivers/postgres/client.rb': `VERSION = ${i}\n`,
+          'drivers/mysql/client.rb': `VERSION = ${i}\n`,
+          'drivers/sqlite/client.rb': `VERSION = ${i}\n`,
+          'drivers/duckdb/client.rb': `VERSION = ${i}\n`,
         },
       });
     }

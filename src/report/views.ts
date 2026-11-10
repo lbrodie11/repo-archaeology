@@ -148,6 +148,11 @@ export interface CacheMeta {
   dir?: string;
 }
 
+function mergeWarnings(base: readonly string[], extra: readonly string[]): string[] {
+  if (extra.length === 0) return base as string[];
+  return [...base, ...extra.filter((warning) => !base.includes(warning))];
+}
+
 export function buildMeta(ctx: Context): Meta {
   const { stats } = ctx.history;
   const s = ctx.settings;
@@ -192,7 +197,8 @@ export function buildMeta(ctx: Context): Meta {
       ...(s.origin !== undefined ? { origin: s.origin } : {}),
       ...(s.owners !== undefined ? { owners: s.owners } : {}),
     },
-    warnings: ctx.warnings,
+    // Import-analysis diagnostics (Go/Python manifests, budgets) for the files analyzed in this operation.
+    warnings: mergeWarnings(ctx.warnings, ctx.classifier.analysisWarnings()),
     ...(ctx.history.cache !== undefined
       ? {
           cache: {
