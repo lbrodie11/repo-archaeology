@@ -245,8 +245,8 @@ function explainSilence(
   const insufficientRepoHistory = hasHistoryCount && commitsAnalyzed < thresholds.minShared;
   const thinRepoHistory =
     hasHistoryCount && commitsAnalyzed >= thresholds.minShared && commitsAnalyzed < MIN_FULL_HISTORY_COMMITS;
-  const limitedHistory =
-    shallowHistory || truncatedByMaxCommits || limitedBySince || insufficientRepoHistory || thinRepoHistory;
+  // One rule, shared with the RA-06 track record's `limited_history`; the parts above only word the details.
+  const limitedHistory = baselineHistoryIsLimited(ctx);
   const withHistory = changed.filter((f) => f.hasHistory && f.historyPath !== undefined);
 
   const appendLimitedHistoryDetails = (target: string[]) => {

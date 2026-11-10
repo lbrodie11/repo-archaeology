@@ -22,7 +22,7 @@ import {
   type RelationshipVerdictView,
   type VerdictsMeta,
 } from '../model/verdicts.js';
-import { wilsonInterval, type WilsonInterval } from '../util/stats.js';
+import { roundInterval, wilsonInterval, type WilsonInterval } from '../util/stats.js';
 import { c, isoDate, pct, plural, shortHash, terminalText, timeAgo } from '../util/term.js';
 
 export type {
@@ -276,12 +276,7 @@ function round(x: number): number {
   return Math.round(x * 1000) / 1000;
 }
 
-export function roundInterval(interval: WilsonInterval): WilsonInterval {
-  return {
-    low: Math.floor(interval.low * 10000) / 10000,
-    high: Math.ceil(interval.high * 10000) / 10000,
-  };
-}
+export { roundInterval } from '../util/stats.js';
 
 export function formatIntervalCi(interval: WilsonInterval, raw = false): string {
   return `(${raw ? 'raw ' : ''}95% CI ${Math.floor(interval.low * 100 + 1e-9)}–${Math.ceil(interval.high * 100 - 1e-9)}%)`;

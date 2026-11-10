@@ -40,6 +40,17 @@ export function wilsonInterval(
   return { low, high };
 }
 
+/**
+ * Rounds an interval outward to 4 decimals (low floored, high ceiled), so the rounded interval
+ * still contains every point the exact one did.
+ */
+export function roundInterval(interval: WilsonInterval): WilsonInterval {
+  return {
+    low: Math.floor(interval.low * 10000) / 10000,
+    high: Math.ceil(interval.high * 10000) / 10000,
+  };
+}
+
 export function median(values: readonly number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);

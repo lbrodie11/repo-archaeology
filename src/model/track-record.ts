@@ -1,14 +1,14 @@
 import type { Context } from '../context.js';
 import { MIN_COMMITS_FOR_BACKTEST } from '../commands/backtest.js';
 import { DEFAULT_FOLLOW_UP_WINDOW_HOURS } from '../commands/followup-benchmark.js';
-import { wilsonInterval } from '../util/stats.js';
+import { roundInterval, wilsonInterval } from '../util/stats.js';
 import { isoDate } from '../util/term.js';
 import {
   combineOriginCounts,
   companionQualifies,
   compareChronological,
   confidenceRatio,
-  DecayedSum,
+  RecencyClock,
   type Thresholds,
 } from './cochange.js';
 import type { HistoryCommit } from './history.js';
@@ -147,25 +147,22 @@ export function chronologicalTimeline(commits: readonly HistoryCommit[]): Histor
 
 /**
  * Weighted counter that follows `CoChangeModel`'s numerical policy: integer per-origin counts
- * (exact, order-independent) plus, with a half-life, a `DecayedSum` fed in replay order.
+ * (exact, order-independent) plus, with a half-life, an epoch-relative sum driven by the
+ * replay's `RecencyClock` (the same operations a model built from the same prefix performs).
  */
 class WeightCounter {
   readonly counts: OriginCounts = { human: 0, agent: 0, bot: 0 };
   count = 0;
-  private readonly decayed?: DecayedSum;
+  /** Epoch-relative recency sum (only meaningful with a half-life). */
+  recency = 0;
 
-  constructor(
-    halfLifeSeconds: number | undefined,
-    private readonly weights: Required<OriginWeights>,
-  ) {
-    if (halfLifeSeconds !== undefined) this.decayed = new DecayedSum(halfLifeSeconds);
-  }
+  constructor(private readonly weights: Required<OriginWeights>) {}
 
-  add(commit: HistoryCommit, reference: number): void {
-    const origin = commit.origin ?? 'human';
+  /** Adds a commit; `term` is its `origin weight × clock.termScale(time)` with a half-life. */
+  add(commit: HistoryCommit, term: number): void {
     this.count++;
-    this.counts[origin]++;
-    this.decayed?.add(this.weights[origin], commit.commitTime, reference);
+    this.counts[commit.origin ?? 'human']++;
+    this.recency += term;
   }
 
   /** `PairStat.originWeight`: the origin-weighted count. */
@@ -174,8 +171,8 @@ class WeightCounter {
   }
 
   /** `PairStat.weight` / `changeWeight` as a model built from the same prefix holds it. */
-  weight(reference: number): number {
-    return this.decayed ? this.decayed.value(reference) : this.originWeight();
+  weight(readScale: number | undefined): number {
+    return readScale === undefined ? this.originWeight() : this.recency * readScale;
   }
 }
 
@@ -209,7 +206,8 @@ export function replayTimeline(
   const useOriginWeights = hasNonDefaultOriginWeights(options.originWeights);
   // Default weights resolve to all 1s, so the unweighted case is the same integer arithmetic.
   const originWeights = useOriginWeights ? resolveOriginWeights(options.originWeights) : resolveOriginWeights();
-  const counter = () => new WeightCounter(halfLifeSeconds, originWeights);
+  const counter = () => new WeightCounter(originWeights);
+  const clock = halfLifeSeconds !== undefined ? new RecencyClock(halfLifeSeconds) : undefined;
 
   const windowStart = timeline[plan.training];
   const windowEnd = timeline[timeline.length - 1];
@@ -256,7 +254,17 @@ export function replayTimeline(
     }
   }
 
+  const counters: WeightCounter[] = [...fromWeight.values(), ...states.map((state) => state.shared)];
   let reference = Number.NEGATIVE_INFINITY;
+
+  /** Moves time forward to `commit` (every commit, relevant or not, exactly as the model does). */
+  const advance = (commit: HistoryCommit): void => {
+    if (commit.commitTime > reference) reference = commit.commitTime;
+    if (!clock) return;
+    const rescale = clock.advance(commit.commitTime);
+    if (rescale !== 1) for (const c of counters) c.recency *= rescale;
+  };
+
   /**
    * Same test, on the same numbers, as `CoChangeModel.companions(from, thresholds)` for the single
    * partner `to` (a pair exists only once it has a shared commit).
@@ -265,16 +273,18 @@ export function replayTimeline(
     const shared = state.shared;
     if (shared.count === 0) return false;
     const effectiveShared = useOriginWeights ? shared.originWeight() : shared.count;
-    const confidence = confidenceRatio(shared.weight(reference), fromWeight.get(state.pair.from)!.weight(reference));
+    const read = clock?.readScale(reference);
+    const confidence = confidenceRatio(shared.weight(read), fromWeight.get(state.pair.from)!.weight(read));
     return companionQualifies(effectiveShared, confidence, options.thresholds);
   };
 
   /** Adds `commit` to the per-pair state (mirrors `CoChangeModel.addCommit` for the tracked counters). */
   const addCommit = (commit: HistoryCommit, files: ReadonlySet<string>): void => {
-    if (commit.commitTime > reference) reference = commit.commitTime;
+    advance(commit);
+    const term = clock ? originWeights[commit.origin ?? 'human'] * clock.termScale(commit.commitTime) : 0;
     for (const [from, weight] of fromWeight) {
       if (!files.has(from)) continue;
-      weight.add(commit, reference);
+      weight.add(commit, term);
       if (stats) stats.stateUpdates++;
     }
     for (const file of files) {
@@ -282,7 +292,7 @@ export function replayTimeline(
       if (!touched) continue;
       for (const state of touched) {
         if (file !== state.pair.from || !files.has(state.pair.to)) continue;
-        state.shared.add(commit, reference);
+        state.shared.add(commit, term);
         if (stats) stats.stateUpdates++;
       }
     }
@@ -311,7 +321,7 @@ export function replayTimeline(
     const commit = timeline[i]!;
     const files = touchedFiles(commit);
     if (!files) {
-      if (commit.commitTime > reference) reference = commit.commitTime;
+      advance(commit);
       continue;
     }
     addCommit(commit, files);
@@ -337,7 +347,7 @@ export function replayTimeline(
     }
     const files = touchedFiles(commit);
     if (!files) {
-      if (commit.commitTime > reference) reference = commit.commitTime;
+      advance(commit);
       continue;
     }
     for (const state of byFileStates(files, byFile)) {
@@ -477,17 +487,13 @@ export function toTrackRecord(replay: PairReplay): TrackRecord {
     excluded,
   };
   if (fired === 0) return { fired: 0, reason: 'never_fired', ...common };
-  const interval = wilsonInterval(confirmed, fired);
   return {
     fired,
     confirmed,
     triggers: replay.triggers,
     coChanged: replay.coChanged,
     precision: round4(confirmed / fired),
-    interval: {
-      low: Math.floor(interval.low * 10000) / 10000,
-      high: Math.ceil(interval.high * 10000) / 10000,
-    },
+    interval: roundInterval(wilsonInterval(confirmed, fired)),
     windowHours: replay.windowHours,
     evaluated: replay.evaluated,
     excluded,

@@ -668,6 +668,47 @@ describe('RA-06 track record: numerical boundaries (shared weight policy with Co
     assert.equal(shuffled.confidence(shuffled.pair(shuffled.id('A')!, shuffled.id('B')!)!, shuffled.id('A')!), prefix.confidence(prefix.pair(a, b)!, a));
   });
 
+  it('recency: the epoch clock rescales without changing decisions, matches the closed form, and ignores input order', () => {
+    // Half-life of 0.002 days (~173 s) over hourly commits: the epoch moves every ~24 hours.
+    const halfLifeDays = 0.002;
+    const settings = { halfLifeDays, originWeights: { human: 1, agent: 0.1, bot: 0.3 } };
+    const t = new Timeline();
+    let state = 5;
+    const rand = () => ((state = (state * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const origins: CommitOrigin[] = ['human', 'agent', 'bot'];
+    for (let i = 0; i < 90; i++) {
+      const r = rand();
+      t.add(r < 0.4 ? ['A', 'B'] : r < 0.7 ? ['A'] : ['B'], { dt: 1 + Math.floor(rand() * 30), origin: origins[i % 3] });
+    }
+    const ordered = chronologicalTimeline(t.newestFirst());
+    assert.ok(
+      (ordered[ordered.length - 1]!.commitTime - ordered[0]!.commitTime) / (halfLifeDays * 86400) > 512 * 3,
+      'the fixture spans several epoch moves',
+    );
+    for (const minConfidence of [0.3, 0.5, 0.7]) {
+      assertMatchesReference(t, AB, { minShared: 1, minConfidence }, settings, `tiny half-life ${minConfidence}`);
+      assertMatchesReference(t, { from: 'B', to: 'A' }, { minShared: 1, minConfidence }, settings, `tiny half-life B→A ${minConfidence}`);
+    }
+
+    // Closed form with a moderate half-life: Σ w · 2^(−(R − t) / h), within float tolerance.
+    const moderate = { halfLifeDays: 3, originWeights: { human: 1, agent: 0.1, bot: 0.3 } };
+    const model = new CoChangeModel(t.newestFirst(), moderate);
+    const R = ordered[ordered.length - 1]!.commitTime;
+    const weightOf = (c: HistoryCommit) => moderate.originWeights[c.origin ?? 'human'] * 0.5 ** ((R - c.commitTime) / (3 * 86400));
+    const expectA = ordered.filter((c) => c.files.includes('A')).reduce((sum, c) => sum + weightOf(c), 0);
+    const expectAB = ordered.filter((c) => c.files.includes('A') && c.files.includes('B')).reduce((sum, c) => sum + weightOf(c), 0);
+    const a = model.id('A')!;
+    const b = model.id('B')!;
+    assert.ok(Math.abs(model.changeWeight[a]! - expectA) <= 1e-12 * expectA, `changeWeight ${model.changeWeight[a]} vs ${expectA}`);
+    assert.ok(Math.abs(model.pair(a, b)!.weight - expectAB) <= 1e-12 * expectAB, `pair weight ${model.pair(a, b)!.weight} vs ${expectAB}`);
+
+    // Bit-identical weights whatever order the commits are handed to the model in.
+    const reversed = new CoChangeModel([...t.newestFirst()].reverse(), moderate);
+    const a2 = reversed.id('A')!;
+    assert.equal(reversed.changeWeight[a2], model.changeWeight[a]);
+    assert.equal(reversed.pair(a2, reversed.id('B')!)!.weight, model.pair(a, b)!.weight);
+  });
+
   const weightSets: [string, OriginWeights][] = [
     ['1/0.1/0.3', { human: 1, agent: 0.1, bot: 0.3 }],
     ['0.7/0.3/0.1', { human: 0.7, agent: 0.3, bot: 0.1 }],

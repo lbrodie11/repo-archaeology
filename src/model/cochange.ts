@@ -31,6 +31,8 @@ export interface PairStat {
   evidence: number[];
   /** Indices into `model.commits`, newest first (capped at `FULL_EVIDENCE_LIMIT`). */
   allEvidence?: number[];
+  /** Creation order of the pair within its model (dense, 0-based); indexes internal per-pair arrays. */
+  readonly ordinal: number;
 }
 
 export type WeightingMode = 'none' | 'recency' | 'origin' | 'recency+origin';
@@ -65,8 +67,8 @@ export interface ModelOptions {
  *
  * - Origin-only and unweighted: a weight is `Σ count[origin] × weight[origin]` over integer
  *   per-origin counts, in the fixed term order human, agent, bot (`combineOriginCounts`).
- * - Recency (with or without origin weights): a `DecayedSum` fed in one canonical chronological
- *   order (`compareChronological`) and rebased lazily to the newest commit time seen so far.
+ * - Recency (with or without origin weights): epoch-relative sums driven by a `RecencyClock`, fed
+ *   in one canonical chronological order (`compareChronological`).
  * - Thresholds: `companionQualifies` is the single `minShared` / `minConfidence` test.
  */
 
@@ -87,30 +89,42 @@ export function compareChronological(x: HistoryCommit, y: HistoryCommit): number
   );
 }
 
+/** How far (in half-lives) the recency epoch may fall behind before every sum is rescaled. */
+export const RECENCY_EPOCH_SPAN_HALF_LIVES = 512;
+
 /**
- * A recency-weighted sum `Σ w · 2^(−(R − t) / halfLife)` kept relative to the newest commit time
- * seen when it was last updated and rescaled lazily, so it can be read at any later reference
- * time `R`. Feed it in `compareChronological` order with `reference` = the running newest
- * commit time; the result then does not depend on how the caller is structured.
+ * Deterministic clock for recency weights `Σ w · 2^(−(R − t) / halfLife)`. Sums are kept relative
+ * to an epoch (an earlier commit time): a commit adds `w · termScale(t)`, a plain addition, and a
+ * read multiplies by `readScale(R)`. When a commit lands more than
+ * `RECENCY_EPOCH_SPAN_HALF_LIVES` half-lives after the epoch, `advance` moves the epoch and returns
+ * the factor every sum must be multiplied by (1 otherwise). The epoch moves only as a function of
+ * the commit-time sequence, so `CoChangeModel` and the track-record replay, fed the same commits
+ * in `compareChronological` order, perform the same floating-point operations on every counter.
  */
-export class DecayedSum {
-  private sum = 0;
-  private at = Number.NEGATIVE_INFINITY;
+export class RecencyClock {
+  private epoch = Number.NEGATIVE_INFINITY;
 
-  constructor(private readonly halfLifeSeconds: number) {}
+  constructor(readonly halfLifeSeconds: number) {}
 
-  private scale(delta: number): number {
-    return delta <= 0 ? 1 : 0.5 ** (delta / this.halfLifeSeconds);
+  advance(time: number): number {
+    if (this.epoch === Number.NEGATIVE_INFINITY) {
+      this.epoch = time;
+      return 1;
+    }
+    const delta = time - this.epoch;
+    if (delta <= RECENCY_EPOCH_SPAN_HALF_LIVES * this.halfLifeSeconds) return 1;
+    this.epoch = time;
+    return 0.5 ** (delta / this.halfLifeSeconds);
   }
 
-  add(weight: number, time: number, reference: number): void {
-    const base = this.at === Number.NEGATIVE_INFINITY ? 0 : this.sum * this.scale(reference - this.at);
-    this.sum = base + weight * this.scale(reference - time);
-    this.at = reference;
+  /** Multiplier for a commit at `time` (call `advance(time)` first). */
+  termScale(time: number): number {
+    return 2 ** ((time - this.epoch) / this.halfLifeSeconds);
   }
 
-  value(reference: number): number {
-    return this.at === Number.NEGATIVE_INFINITY ? 0 : this.sum * this.scale(reference - this.at);
+  /** Multiplier that turns an epoch-relative sum into weights relative to `reference`. */
+  readScale(reference: number): number {
+    return this.epoch === Number.NEGATIVE_INFINITY ? 0 : 0.5 ** ((reference - this.epoch) / this.halfLifeSeconds);
   }
 }
 
@@ -153,6 +167,14 @@ export class CoChangeModel {
   private readonly originWeights: Required<OriginWeights>;
   private readonly hasOriginWeights: boolean;
   private readonly commitList: HistoryCommit[];
+  /** Number of pairs created so far (the next `PairStat.ordinal`). */
+  private pairCount = 0;
+  /**
+   * Only while a half-life model is being built: each commit's unique file ids and the ordinals of
+   * its pairs, so the chronological recency pass needs no map lookups.
+   */
+  private commitIds: number[][] = [];
+  private commitPairs: number[][] = [];
 
   constructor(
     commits: readonly HistoryCommit[],
@@ -168,32 +190,39 @@ export class CoChangeModel {
   }
 
   /**
-   * Recency weights (see the numerical policy above): one `DecayedSum` per file and per pair,
-   * fed in canonical chronological order and read at the model's reference time.
+   * Recency weights (see the numerical policy above): epoch-relative sums per file and per pair,
+   * fed in canonical chronological order and read at the model's reference time. Reuses the file
+   * ids and pair ordinals the main pass recorded, so it adds one exponentiation per commit.
    */
   private applyRecencyWeights(): void {
-    const halfLife = this.halfLifeSeconds!;
-    const order = this.commitList.map((_, i) => i).sort((x, y) => compareChronological(this.commitList[x]!, this.commitList[y]!) || x - y);
-    const fileSums = this.files.map(() => new DecayedSum(halfLife));
-    const pairSums = new Map<PairStat, DecayedSum>();
+    const commits = this.commitList;
+    const order = commits.map((_, i) => i).sort((x, y) => compareChronological(commits[x]!, commits[y]!) || x - y);
+    const clock = new RecencyClock(this.halfLifeSeconds!);
+    const fileSum = new Float64Array(this.files.length);
+    const pairSum = new Float64Array(this.pairCount);
     let reference = Number.NEGATIVE_INFINITY;
     for (const index of order) {
-      const commit = this.commitList[index]!;
-      if (commit.commitTime > reference) reference = commit.commitTime;
-      const weight = this.originWeightOf(commit);
-      const ids = [...new Set(commit.files.map((f) => this.ids.get(f)!))];
-      for (const id of ids) fileSums[id]!.add(weight, commit.commitTime, reference);
-      for (let i = 0; i < ids.length; i++) {
-        for (let j = i + 1; j < ids.length; j++) {
-          const stat = this.adjacency[Math.min(ids[i]!, ids[j]!)]!.get(Math.max(ids[i]!, ids[j]!))!;
-          let sum = pairSums.get(stat);
-          if (!sum) pairSums.set(stat, (sum = new DecayedSum(halfLife)));
-          sum.add(weight, commit.commitTime, reference);
-        }
+      const commit = commits[index]!;
+      const time = commit.commitTime;
+      if (time > reference) reference = time;
+      const rescale = clock.advance(time);
+      if (rescale !== 1) {
+        for (let i = 0; i < fileSum.length; i++) fileSum[i]! *= rescale;
+        for (let i = 0; i < pairSum.length; i++) pairSum[i]! *= rescale;
+      }
+      const term = this.originWeightOf(commit) * clock.termScale(time);
+      for (const id of this.commitIds[index]!) fileSum[id]! += term;
+      for (const k of this.commitPairs[index]!) pairSum[k]! += term;
+    }
+    const read = clock.readScale(reference);
+    for (let id = 0; id < this.files.length; id++) this.changeWeight[id] = fileSum[id]! * read;
+    for (let a = 0; a < this.adjacency.length; a++) {
+      for (const [b, stat] of this.adjacency[a]!) {
+        if (b > a) stat.weight = pairSum[stat.ordinal]! * read;
       }
     }
-    fileSums.forEach((sum, id) => (this.changeWeight[id] = sum.value(reference)));
-    for (const [stat, sum] of pairSums) stat.weight = sum.value(reference);
+    this.commitIds = [];
+    this.commitPairs = [];
   }
 
   get commits(): readonly HistoryCommit[] {
@@ -356,12 +385,20 @@ export class CoChangeModel {
     const originWeight = this.originWeightOf(commit);
     const weight = this.weightOf(commit, originWeight);
     const ids = [...new Set(commit.files.map((f) => this.intern(f)))];
+    const pairOrdinals: number[] | undefined = this.halfLifeSeconds !== undefined ? [] : undefined;
+    if (pairOrdinals) {
+      this.commitIds[index] = ids;
+      this.commitPairs[index] = pairOrdinals;
+    }
     for (const id of ids) {
       this.changeCount[id]!++;
       const counts = this.changeOriginCounts[id]!;
       counts[origin]++;
-      // Recency weights are filled in by `applyRecencyWeights` once every commit is known.
-      if (this.halfLifeSeconds === undefined) this.changeWeight[id] = combineOriginCounts(counts, this.originWeights);
+      // Recency weights are filled in by `applyRecencyWeights` once every commit is known; without
+      // origin weights the weighted count is exactly the integer count.
+      if (this.halfLifeSeconds === undefined) {
+        this.changeWeight[id] = this.hasOriginWeights ? combineOriginCounts(counts, this.originWeights) : this.changeCount[id]!;
+      }
       this.changeWeightSq[id]! += weight * weight;
       this.lastTime[id] = Math.max(this.lastTime[id]!, commit.time);
       const authors = this.authors[id]!;
@@ -383,14 +420,16 @@ export class CoChangeModel {
             lastTime: 0,
             evidence: [],
             allEvidence: [],
+            ordinal: this.pairCount++,
           };
           this.adjacency[a]!.set(b, stat);
           this.adjacency[b]!.set(a, stat);
         }
         stat.count++;
         stat.originCounts[origin]++;
-        stat.originWeight = combineOriginCounts(stat.originCounts, this.originWeights);
+        stat.originWeight = this.hasOriginWeights ? combineOriginCounts(stat.originCounts, this.originWeights) : stat.count;
         if (this.halfLifeSeconds === undefined) stat.weight = stat.originWeight;
+        pairOrdinals?.push(stat.ordinal);
         stat.lastTime = Math.max(stat.lastTime, commit.time);
         this.addEvidence(stat, index);
       }
