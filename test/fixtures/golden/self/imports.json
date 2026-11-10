@@ -1,0 +1,3401 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "head": {
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
+    "commitsRead": 116,
+    "commitsAnalyzed": 113,
+    "sweepsSkipped": 3,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 150,
+    "oldestCommit": "2026-10-16",
+    "newestCommit": "2026-11-10",
+    "origins": {
+      "human": 99,
+      "agent": 14,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [],
+    "imports": {
+      "scope": "repository",
+      "filesScanned": 95,
+      "internalEdges": 463,
+      "external": 247,
+      "unresolved": 0,
+      "dynamicLoads": 1,
+      "unsupportedFiles": 44,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    }
+  },
+  "files": [
+    "scripts/bench-history.mjs",
+    "scripts/bench-map.mjs",
+    "scripts/build-plate-layout.d.mts",
+    "scripts/build-plate-layout.mjs",
+    "scripts/design-concepts.mjs",
+    "scripts/generate-brand-assets.ts",
+    "scripts/release-helper.d.mts",
+    "scripts/release-helper.mjs",
+    "scripts/schema-validator.d.mts",
+    "scripts/schema-validator.mjs",
+    "scripts/smoke-pack.d.mts",
+    "scripts/smoke-pack.mjs",
+    "src/action/runner.ts",
+    "src/api/index.ts",
+    "src/cli.ts",
+    "src/commands/backtest.ts",
+    "src/commands/diff.ts",
+    "src/commands/explain.ts",
+    "src/commands/file.ts",
+    "src/commands/followup-benchmark.ts",
+    "src/commands/imports.ts",
+    "src/commands/map.ts",
+    "src/commands/scan.ts",
+    "src/commands/verdict.ts",
+    "src/config.ts",
+    "src/context.ts",
+    "src/errors.ts",
+    "src/git/cache.ts",
+    "src/git/changes.ts",
+    "src/git/log.ts",
+    "src/git/patch.ts",
+    "src/git/repo.ts",
+    "src/git/run.ts",
+    "src/imports/classify.ts",
+    "src/imports/package-exports.ts",
+    "src/imports/references.ts",
+    "src/imports/resolve.ts",
+    "src/imports/tree-files.ts",
+    "src/imports/typescript.ts",
+    "src/imports/workspaces.ts",
+    "src/map/copy.ts",
+    "src/map/layout.ts",
+    "src/map/plate-layout.browser.ts",
+    "src/map/plate-layout.ts",
+    "src/map/template.ts",
+    "src/model/cochange.ts",
+    "src/model/families.ts",
+    "src/model/history.ts",
+    "src/model/origin.ts",
+    "src/model/owners.ts",
+    "src/model/verdicts.ts",
+    "src/report/contract.ts",
+    "src/report/glossary.ts",
+    "src/report/markdown.ts",
+    "src/report/terminal-rich.ts",
+    "src/report/terminal-safety.ts",
+    "src/report/views.ts",
+    "src/style/frame12.ts",
+    "src/util/glob.ts",
+    "src/util/stats.ts",
+    "src/util/term.ts",
+    "test/api.test.ts",
+    "test/brand-assets.test.ts",
+    "test/cache.test.ts",
+    "test/commands.test.ts",
+    "test/consumer-gutter.test.ts",
+    "test/explain.test.ts",
+    "test/families.test.ts",
+    "test/fixtures/atlas-graphs.ts",
+    "test/fixtures/map-synthetic.ts",
+    "test/fixtures/plate-fixture.ts",
+    "test/github-action.test.ts",
+    "test/head.test.ts",
+    "test/helpers.ts",
+    "test/history.test.ts",
+    "test/imports.test.ts",
+    "test/json-contract.test.ts",
+    "test/map-atlas-stress.test.ts",
+    "test/map-copy.test.ts",
+    "test/map-engine.test.ts",
+    "test/map-plate-interaction.test.ts",
+    "test/map-plate-stress.test.ts",
+    "test/map-rich.test.ts",
+    "test/markdown.test.ts",
+    "test/owners.test.ts",
+    "test/plate-layout-bundle.test.ts",
+    "test/plate-layout.test.ts",
+    "test/regressions.test.ts",
+    "test/release.test.ts",
+    "test/review2.test.ts",
+    "test/review3.test.ts",
+    "test/review4.test.ts",
+    "test/terminal-rich.test.ts",
+    "test/units.test.ts",
+    "test/verdicts.test.ts"
+  ],
+  "edges": [
+    {
+      "from": "scripts/bench-history.mjs",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "./schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/bench-map.mjs",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "../test/fixtures/map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/design-concepts.mjs",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/design-concepts.mjs",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/design-concepts.mjs",
+      "to": "src/map/copy.ts",
+      "specifier": "../src/map/copy.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/design-concepts.mjs",
+      "to": "src/style/frame12.ts",
+      "specifier": "../src/style/frame12.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/smoke-pack.mjs",
+      "to": "scripts/release-helper.mjs",
+      "specifier": "./release-helper.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "scripts/smoke-pack.mjs",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "./schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "../commands/backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/imports.ts",
+      "specifier": "../commands/imports.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "../model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/report/contract.ts",
+      "specifier": "../report/contract.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/api/index.ts",
+      "specifier": "./api/index.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "./commands/backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "./commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "./commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "./commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/imports.ts",
+      "specifier": "./commands/imports.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "./commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "./commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/commands/verdict.ts",
+      "specifier": "./commands/verdict.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/config.ts",
+      "specifier": "./config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/context.ts",
+      "specifier": "./context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "./git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "./git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "./imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "./model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/report/contract.ts",
+      "specifier": "./report/contract.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/report/markdown.ts",
+      "specifier": "./report/markdown.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/report/terminal-rich.ts",
+      "specifier": "./report/terminal-rich.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "./style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/cli.ts",
+      "to": "src/util/term.ts",
+      "specifier": "./util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/commands/followup-benchmark.ts",
+      "specifier": "./followup-benchmark.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "../git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/families.ts",
+      "specifier": "../model/families.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "../model/owners.js",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "../model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/diff.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "../git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/git/patch.ts",
+      "specifier": "../git/patch.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/explain.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/file.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/file.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/file.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/file.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "./backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "../imports/typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "../util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/imports.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "./explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "./scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/git/patch.ts",
+      "specifier": "../git/patch.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/model/families.ts",
+      "specifier": "../model/families.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/map.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/model/families.ts",
+      "specifier": "../model/families.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/verdict.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/verdict.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/verdict.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "../git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/verdict.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/commands/verdict.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "src/errors.ts",
+      "specifier": "./errors.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "src/git/cache.ts",
+      "specifier": "./git/cache.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "./model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "./model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/config.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "./style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/config.ts",
+      "specifier": "./config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/errors.ts",
+      "specifier": "./errors.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/git/cache.ts",
+      "specifier": "./git/cache.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "./git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "./git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "./imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "./imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "./model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/model/history.ts",
+      "specifier": "./model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "./model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "./model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/report/contract.ts",
+      "specifier": "./report/contract.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "./util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/context.ts",
+      "to": "src/util/term.ts",
+      "specifier": "./util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/cache.ts",
+      "to": "src/git/log.ts",
+      "specifier": "./log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/cache.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/changes.ts",
+      "to": "src/git/log.ts",
+      "specifier": "./log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/changes.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "./repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/changes.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/log.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/patch.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/patch.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/git/repo.ts",
+      "to": "src/git/run.ts",
+      "specifier": "./run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/imports/references.ts",
+      "specifier": "./references.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "./resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "./typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/package-exports.ts",
+      "to": "src/imports/tree-files.ts",
+      "specifier": "./tree-files.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/package-exports.ts",
+      "to": "src/imports/workspaces.ts",
+      "specifier": "./workspaces.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/references.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "./typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/resolve.ts",
+      "to": "src/imports/package-exports.ts",
+      "specifier": "./package-exports.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/resolve.ts",
+      "to": "src/imports/tree-files.ts",
+      "specifier": "./tree-files.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/resolve.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "./typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/resolve.ts",
+      "to": "src/imports/workspaces.ts",
+      "specifier": "./workspaces.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/tree-files.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "../git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/tree-files.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/workspaces.ts",
+      "to": "src/imports/tree-files.ts",
+      "specifier": "./tree-files.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/imports/workspaces.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "../util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/map/plate-layout.ts",
+      "specifier": "./plate-layout.js",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/map/plate-layout.ts",
+      "specifier": "./plate-layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/report/glossary.ts",
+      "specifier": "../report/glossary.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/copy.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/layout.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/layout.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/layout.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/map/copy.ts",
+      "specifier": "./copy.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "./layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/map/plate-layout.browser.ts",
+      "specifier": "./plate-layout.browser.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/report/glossary.ts",
+      "specifier": "../report/glossary.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/cochange.ts",
+      "to": "src/model/history.ts",
+      "specifier": "./history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/cochange.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "./origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/cochange.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "./cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/families.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/git/cache.ts",
+      "specifier": "../git/cache.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/git/log.ts",
+      "specifier": "../git/log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "../git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "./origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "./owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/history.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "../util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/owners.ts",
+      "to": "src/git/repo.ts",
+      "specifier": "../git/repo.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/owners.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/owners.ts",
+      "to": "src/model/history.ts",
+      "specifier": "./history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/owners.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "./origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/owners.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/verdicts.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/verdicts.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "../git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/verdicts.ts",
+      "to": "src/model/history.ts",
+      "specifier": "./history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/model/verdicts.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "../util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/contract.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/report/contract.ts",
+      "specifier": "./contract.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/report/views.ts",
+      "specifier": "./views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/glossary.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/report/views.ts",
+      "specifier": "./views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/config.ts",
+      "specifier": "../config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/git/patch.ts",
+      "specifier": "../git/patch.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/model/families.ts",
+      "specifier": "../model/families.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/report/terminal-safety.ts",
+      "specifier": "./terminal-safety.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/report/views.ts",
+      "specifier": "./views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-rich.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-safety.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/terminal-safety.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/context.ts",
+      "specifier": "../context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "../model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/report/views.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/style/frame12.ts",
+      "to": "src/errors.ts",
+      "specifier": "../errors.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/api.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/api.test.ts",
+      "to": "src/api/index.ts",
+      "specifier": "../src/api/index.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/api.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/brand-assets.test.ts",
+      "to": "scripts/generate-brand-assets.ts",
+      "specifier": "../scripts/generate-brand-assets.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "src/git/cache.ts",
+      "specifier": "../src/git/cache.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "src/git/log.ts",
+      "specifier": "../src/git/log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "../src/commands/backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../src/commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/followup-benchmark.ts",
+      "specifier": "../src/commands/followup-benchmark.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/commands.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/consumer-gutter.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/consumer-gutter.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../src/commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/git/patch.ts",
+      "specifier": "../src/git/patch.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../src/git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/explain.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "src/model/families.ts",
+      "specifier": "../src/model/families.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/families.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/atlas-graphs.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/atlas-graphs.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/atlas-graphs.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../../src/util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/atlas-graphs.ts",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "./map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/map-synthetic.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/map-synthetic.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/map-synthetic.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../../src/util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/fixtures/plate-fixture.ts",
+      "to": "test/helpers.ts",
+      "specifier": "../helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/github-action.test.ts",
+      "to": "src/action/runner.ts",
+      "specifier": "../src/action/runner.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/github-action.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "../src/commands/backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../src/commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../src/commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/git/run.ts",
+      "specifier": "../src/git/run.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/head.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/helpers.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/history.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "src/api/index.ts",
+      "specifier": "../src/api/index.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "src/imports/references.ts",
+      "specifier": "../src/imports/references.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../src/imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "../src/imports/typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/imports.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "test/json-contract.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/json-contract.test.ts",
+      "to": "src/report/contract.ts",
+      "specifier": "../src/report/contract.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/json-contract.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-atlas-stress.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-atlas-stress.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-atlas-stress.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-atlas-stress.test.ts",
+      "to": "test/fixtures/atlas-graphs.ts",
+      "specifier": "./fixtures/atlas-graphs.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-atlas-stress.test.ts",
+      "to": "test/fixtures/plate-fixture.ts",
+      "specifier": "./fixtures/plate-fixture.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/map/copy.ts",
+      "specifier": "../src/map/copy.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/report/glossary.ts",
+      "specifier": "../src/report/glossary.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../src/report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-copy.test.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../src/util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-engine.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-engine.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-engine.test.ts",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "./fixtures/map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-plate-interaction.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-plate-interaction.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-plate-interaction.test.ts",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "./fixtures/map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-plate-interaction.test.ts",
+      "to": "test/fixtures/plate-fixture.ts",
+      "specifier": "./fixtures/plate-fixture.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-plate-stress.test.ts",
+      "to": "test/fixtures/plate-fixture.ts",
+      "specifier": "./fixtures/plate-fixture.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../src/style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../src/util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/map-rich.test.ts",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "./fixtures/map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/markdown.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/markdown.test.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../src/commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/markdown.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/markdown.test.ts",
+      "to": "src/report/markdown.ts",
+      "specifier": "../src/report/markdown.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/markdown.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/owners.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/owners.test.ts",
+      "to": "src/api/index.ts",
+      "specifier": "../src/api/index.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/owners.test.ts",
+      "to": "src/model/owners.ts",
+      "specifier": "../src/model/owners.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/owners.test.ts",
+      "to": "src/report/markdown.ts",
+      "specifier": "../src/report/markdown.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/owners.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "scripts/build-plate-layout.mjs",
+      "specifier": "../scripts/build-plate-layout.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/map/copy.ts",
+      "specifier": "../src/map/copy.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/map/layout.ts",
+      "specifier": "../src/map/layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/map/plate-layout.browser.ts",
+      "specifier": "../src/map/plate-layout.browser.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/map/plate-layout.ts",
+      "specifier": "../src/map/plate-layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout-bundle.test.ts",
+      "to": "test/fixtures/map-synthetic.ts",
+      "specifier": "./fixtures/map-synthetic.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/plate-layout.test.ts",
+      "to": "src/map/plate-layout.ts",
+      "specifier": "../src/map/plate-layout.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/git/log.ts",
+      "specifier": "../src/git/log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../src/imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/regressions.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/release.test.ts",
+      "to": "scripts/release-helper.mjs",
+      "specifier": "../scripts/release-helper.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/release.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/release.test.ts",
+      "to": "scripts/smoke-pack.mjs",
+      "specifier": "../scripts/smoke-pack.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/release.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "../src/git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../src/imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "../src/imports/typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../src/util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review2.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "dynamic",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../src/imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/imports/typescript.ts",
+      "specifier": "../src/imports/typescript.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review3.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/imports/resolve.ts",
+      "specifier": "../src/imports/resolve.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/review4.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../src/commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../src/commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/errors.ts",
+      "specifier": "../src/errors.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/report/terminal-rich.ts",
+      "specifier": "../src/report/terminal-rich.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/style/frame12.ts",
+      "specifier": "../src/style/frame12.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../src/util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/terminal-rich.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/commands/backtest.ts",
+      "specifier": "../src/commands/backtest.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/git/changes.ts",
+      "specifier": "../src/git/changes.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/git/log.ts",
+      "specifier": "../src/git/log.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/map/template.ts",
+      "specifier": "../src/map/template.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/model/cochange.ts",
+      "specifier": "../src/model/cochange.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/model/history.ts",
+      "specifier": "../src/model/history.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/model/origin.ts",
+      "specifier": "../src/model/origin.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/report/markdown.ts",
+      "specifier": "../src/report/markdown.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/report/views.ts",
+      "specifier": "../src/report/views.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/util/glob.ts",
+      "specifier": "../src/util/glob.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/util/stats.ts",
+      "specifier": "../src/util/stats.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "src/util/term.ts",
+      "specifier": "../src/util/term.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/units.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "scripts/schema-validator.mjs",
+      "specifier": "../scripts/schema-validator.mjs",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/api/index.ts",
+      "specifier": "../src/api/index.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/diff.ts",
+      "specifier": "../src/commands/diff.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/explain.ts",
+      "specifier": "../src/commands/explain.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/file.ts",
+      "specifier": "../src/commands/file.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/map.ts",
+      "specifier": "../src/commands/map.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/scan.ts",
+      "specifier": "../src/commands/scan.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/commands/verdict.ts",
+      "specifier": "../src/commands/verdict.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/config.ts",
+      "specifier": "../src/config.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/context.ts",
+      "specifier": "../src/context.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/imports/classify.ts",
+      "specifier": "../src/imports/classify.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/model/verdicts.ts",
+      "specifier": "../src/model/verdicts.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "src/report/markdown.ts",
+      "specifier": "../src/report/markdown.js",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "test/verdicts.test.ts",
+      "to": "test/helpers.ts",
+      "specifier": "./helpers.js",
+      "kind": "static",
+      "via": "relative"
+    }
+  ],
+  "unresolved": [],
+  "languages": [
+    "javascript",
+    "typescript"
+  ]
+}

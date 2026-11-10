@@ -1,0 +1,590 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "head": {
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
+    "commitsRead": 116,
+    "commitsAnalyzed": 113,
+    "sweepsSkipped": 3,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 150,
+    "oldestCommit": "2026-10-16",
+    "newestCommit": "2026-11-10",
+    "origins": {
+      "human": 99,
+      "agent": 14,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 11,
+      "internalEdges": 96,
+      "external": 16,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 1,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "path": "src/imports/classify.ts",
+  "changes": 16,
+  "churnPercentile": 0.9266666666666666,
+  "medianChanges": 4,
+  "lastChanged": "2026-11-08",
+  "authors": [
+    {
+      "author": "Repo Archaeology",
+      "commits": 16,
+      "share": 1
+    }
+  ],
+  "companions": [
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/imports/resolve.ts",
+      "relationship": "direct",
+      "why": "classify.ts imports resolve.ts",
+      "shared": 8,
+      "fromChanges": 16,
+      "toChanges": 13,
+      "confidence": 0.5,
+      "reverseConfidence": 0.615,
+      "interval": {
+        "low": 0.2799,
+        "high": 0.7201
+      },
+      "reverseInterval": {
+        "low": 0.3552,
+        "high": 0.823
+      },
+      "score": 0.28,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.875,
+        "agent": 0.125,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+          "origin": "human"
+        },
+        {
+          "hash": "f9bcbee8be6e5ecd12e867866373eaa946692bcd",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(imports): implement workspace-aware package exports, #imports, and source remapping (RA-09A)",
+          "origin": "human"
+        },
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/map/template.ts",
+      "relationship": "direct",
+      "why": "template.ts imports classify.ts",
+      "shared": 8,
+      "fromChanges": 16,
+      "toChanges": 35,
+      "confidence": 0.5,
+      "reverseConfidence": 0.229,
+      "interval": {
+        "low": 0.2799,
+        "high": 0.7201
+      },
+      "reverseInterval": {
+        "low": 0.1206,
+        "high": 0.3902
+      },
+      "score": 0.28,
+      "weighted": false,
+      "lastTogether": "2026-10-20",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.875,
+        "agent": 0.125,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "42bd3fb219f87a0ff136bb9245c2f9397aafbbdf",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): scope extended config check, add undrawn pair evidence, and restore keyboard focus",
+          "origin": "human"
+        },
+        {
+          "hash": "9ae9a1cbe7b216a01d5a36d791cb64bd63cbfe61",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): surface undrawn families in map overview and refine commit labels",
+          "origin": "human"
+        },
+        {
+          "hash": "2264b995501083cc984f813fe895eac9fe4f4c10",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): address review findings on family completeness, diff symmetry, and map stats",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "test/imports.test.ts",
+      "relationship": "test",
+      "why": "a test that changes with this code",
+      "shared": 7,
+      "fromChanges": 16,
+      "toChanges": 8,
+      "confidence": 0.438,
+      "reverseConfidence": 0.875,
+      "interval": {
+        "low": 0.2309,
+        "high": 0.6683
+      },
+      "reverseInterval": {
+        "low": 0.5291,
+        "high": 0.9776
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.857,
+        "agent": 0.143,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+          "origin": "human"
+        },
+        {
+          "hash": "f9bcbee8be6e5ecd12e867866373eaa946692bcd",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(imports): implement workspace-aware package exports, #imports, and source remapping (RA-09A)",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/cli.ts",
+      "relationship": "direct",
+      "why": "cli.ts imports classify.ts",
+      "shared": 7,
+      "fromChanges": 16,
+      "toChanges": 25,
+      "confidence": 0.438,
+      "reverseConfidence": 0.28,
+      "interval": {
+        "low": 0.2309,
+        "high": 0.6683
+      },
+      "reverseInterval": {
+        "low": 0.1428,
+        "high": 0.4758
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.857,
+        "agent": 0.143,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+          "origin": "human"
+        },
+        {
+          "hash": "163920e93b95460abc77cd3a220b063e9f99cc6a",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix(cli,config,imports): address reviewer feedback on args, redos, aliases and exports",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/commands/diff.ts",
+      "relationship": "direct",
+      "why": "diff.ts imports classify.ts",
+      "shared": 7,
+      "fromChanges": 16,
+      "toChanges": 19,
+      "confidence": 0.438,
+      "reverseConfidence": 0.368,
+      "interval": {
+        "low": 0.2309,
+        "high": 0.6683
+      },
+      "reverseInterval": {
+        "low": 0.1914,
+        "high": 0.5897
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.857,
+        "agent": 0.143,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+          "origin": "human"
+        },
+        {
+          "hash": "9ae9a1cbe7b216a01d5a36d791cb64bd63cbfe61",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): surface undrawn families in map overview and refine commit labels",
+          "origin": "human"
+        },
+        {
+          "hash": "2264b995501083cc984f813fe895eac9fe4f4c10",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): address review findings on family completeness, diff symmetry, and map stats",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/commands/map.ts",
+      "relationship": "direct",
+      "why": "map.ts imports classify.ts",
+      "shared": 7,
+      "fromChanges": 16,
+      "toChanges": 20,
+      "confidence": 0.438,
+      "reverseConfidence": 0.35,
+      "interval": {
+        "low": 0.2309,
+        "high": 0.6683
+      },
+      "reverseInterval": {
+        "low": 0.1811,
+        "high": 0.5672
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+          "origin": "human"
+        },
+        {
+          "hash": "42bd3fb219f87a0ff136bb9245c2f9397aafbbdf",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): scope extended config check, add undrawn pair evidence, and restore keyboard focus",
+          "origin": "human"
+        },
+        {
+          "hash": "2264b995501083cc984f813fe895eac9fe4f4c10",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): address review findings on family completeness, diff symmetry, and map stats",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "README.md",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 16,
+      "toChanges": 53,
+      "confidence": 0.375,
+      "reverseConfidence": 0.113,
+      "interval": {
+        "low": 0.1848,
+        "high": 0.6136
+      },
+      "reverseInterval": {
+        "low": 0.0529,
+        "high": 0.2258
+      },
+      "score": 0.185,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+          "origin": "human"
+        },
+        {
+          "hash": "163920e93b95460abc77cd3a220b063e9f99cc6a",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix(cli,config,imports): address reviewer feedback on args, redos, aliases and exports",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/commands/scan.ts",
+      "relationship": "direct",
+      "why": "scan.ts imports classify.ts",
+      "shared": 6,
+      "fromChanges": 16,
+      "toChanges": 8,
+      "confidence": 0.375,
+      "reverseConfidence": 0.75,
+      "interval": {
+        "low": 0.1848,
+        "high": 0.6136
+      },
+      "reverseInterval": {
+        "low": 0.4092,
+        "high": 0.9286
+      },
+      "score": 0.185,
+      "weighted": false,
+      "lastTogether": "2026-10-20",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.833,
+        "agent": 0.167,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9ae9a1cbe7b216a01d5a36d791cb64bd63cbfe61",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): surface undrawn families in map overview and refine commit labels",
+          "origin": "human"
+        },
+        {
+          "hash": "2264b995501083cc984f813fe895eac9fe4f4c10",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): address review findings on family completeness, diff symmetry, and map stats",
+          "origin": "human"
+        },
+        {
+          "hash": "fcd9c9d7dba31a62e47e93806a1b183fd8d43dda",
+          "date": "2026-10-18",
+          "author": "Repo Archaeology",
+          "subject": "feat: implement Finding Families across scan, diff, and visual map",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/imports/typescript.ts",
+      "relationship": "direct",
+      "why": "classify.ts imports typescript.ts",
+      "shared": 5,
+      "fromChanges": 16,
+      "toChanges": 6,
+      "confidence": 0.313,
+      "reverseConfidence": 0.833,
+      "interval": {
+        "low": 0.1416,
+        "high": 0.556
+      },
+      "reverseInterval": {
+        "low": 0.4364,
+        "high": 0.97
+      },
+      "score": 0.142,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "f9bcbee8be6e5ecd12e867866373eaa946692bcd",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(imports): implement workspace-aware package exports, #imports, and source remapping (RA-09A)",
+          "origin": "human"
+        },
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "163920e93b95460abc77cd3a220b063e9f99cc6a",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix(cli,config,imports): address reviewer feedback on args, redos, aliases and exports",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/imports/classify.ts",
+      "to": "src/report/views.ts",
+      "relationship": "direct",
+      "why": "views.ts imports classify.ts",
+      "shared": 4,
+      "fromChanges": 16,
+      "toChanges": 15,
+      "confidence": 0.25,
+      "reverseConfidence": 0.267,
+      "interval": {
+        "low": 0.1018,
+        "high": 0.495
+      },
+      "reverseInterval": {
+        "low": 0.1089,
+        "high": 0.5196
+      },
+      "score": 0.102,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.75,
+        "agent": 0.25,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+          "origin": "human"
+        },
+        {
+          "hash": "fcd9c9d7dba31a62e47e93806a1b183fd8d43dda",
+          "date": "2026-10-18",
+          "author": "Repo Archaeology",
+          "subject": "feat: implement Finding Families across scan, diff, and visual map",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    }
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 5,
+      "internalEdges": 6,
+      "external": 2,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ]
+  },
+  "path": "src/db.ts",
+  "changes": 11,
+  "churnPercentile": 0.95,
+  "medianChanges": 6,
+  "lastChanged": "2024-02-01",
+  "authors": [
+    {
+      "author": "Test",
+      "commits": 11,
+      "share": 1
+    }
+  ],
+  "companions": [
+    {
+      "from": "src/db.ts",
+      "to": "src/ui/panel.tsx",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 11,
+      "toChanges": 6,
+      "confidence": 0.545,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.28,
+      "weighted": false,
+      "lastTogether": "2024-02-01",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1293d66ce0651e72d854f1d98e15998a521776e5",
+          "date": "2024-02-01",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "19af81a4da01631b336d903ccd018dc3f57cf205",
+          "date": "2024-01-25",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "4482ad89e26c3c5c4c86c949b01161408e6b22fa",
+          "date": "2024-01-18",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (2)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/db.ts",
+      "to": "src/api.test.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 6,
+      "fromChanges": 11,
+      "toChanges": 6,
+      "confidence": 0.545,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.28,
+      "weighted": false,
+      "lastTogether": "2024-01-31",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9dd6620ed1e55731ec29858ef2fe0dff48a2de8b",
+          "date": "2024-01-31",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "7fbfdd53ca3e328958b26a8920b3b6d234325e10",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (2)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    },
+    {
+      "from": "src/db.ts",
+      "to": "src/api.ts",
+      "relationship": "direct",
+      "why": "api.ts imports db.ts",
+      "shared": 6,
+      "fromChanges": 11,
+      "toChanges": 6,
+      "confidence": 0.545,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.28,
+      "weighted": false,
+      "lastTogether": "2024-01-31",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9dd6620ed1e55731ec29858ef2fe0dff48a2de8b",
+          "date": "2024-01-31",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "7fbfdd53ca3e328958b26a8920b3b6d234325e10",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (2)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": true
+    }
+  ]
+}

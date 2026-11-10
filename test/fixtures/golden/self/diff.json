@@ -1,0 +1,766 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "head": {
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
+    "commitsRead": 114,
+    "commitsAnalyzed": 111,
+    "sweepsSkipped": 3,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 150,
+    "oldestCommit": "2026-10-16",
+    "newestCommit": "2026-11-09",
+    "origins": {
+      "human": 99,
+      "agent": 12,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 34,
+      "internalEdges": 198,
+      "external": 39,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 6,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Branch history contains merge commits; using net branch diff without per-commit lineage replay."
+    ]
+  },
+  "base": "fac8ea0",
+  "evaluation": {
+    "targetBranchRef": "fac8ea0",
+    "headSha": "21d4d843331328076b45dc17c24f262e14bfe59a",
+    "mergeBaseSha": "fac8ea04da5551b1bd4ae39bf13d92223834136b",
+    "baselineSha": "fac8ea04da5551b1bd4ae39bf13d92223834136b",
+    "commitsAnalyzed": 111,
+    "effectiveOptions": {
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25
+    }
+  },
+  "changed": [
+    {
+      "path": "CHANGELOG.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "hasHistory": false
+    },
+    {
+      "path": "README.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "README.md",
+      "hasHistory": true
+    },
+    {
+      "path": "ROADMAP.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "ROADMAP.md",
+      "hasHistory": true
+    },
+    {
+      "path": "docs/json.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "docs/json.md",
+      "hasHistory": true
+    },
+    {
+      "path": "package-lock.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "hasHistory": false
+    },
+    {
+      "path": "package.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "package.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/backtest.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/backtest.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/common.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/common.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/default.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/default.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/diff.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/diff.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/explain.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/explain.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/file.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/file.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/import-graph.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/import-graph.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/map.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/map.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/scan.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/scan.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "schema/verdicts.schema.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "schema/verdicts.schema.json",
+      "hasHistory": true
+    },
+    {
+      "path": "src/action/runner.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/action/runner.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/map/template.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/map/template.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/model/verdicts.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/model/verdicts.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "test/json-contract.test.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "test/json-contract.test.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "test/map-atlas-stress.test.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "test/map-atlas-stress.test.ts",
+      "hasHistory": true
+    }
+  ],
+  "totalSuggestions": 9,
+  "suggestions": [
+    {
+      "from": "schema/common.schema.json",
+      "to": "src/report/views.ts",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 9,
+      "fromChanges": 15,
+      "toChanges": 15,
+      "confidence": 0.6,
+      "reverseConfidence": 0.6,
+      "interval": {
+        "low": 0.3574,
+        "high": 0.8018
+      },
+      "reverseInterval": {
+        "low": 0.3574,
+        "high": 0.8018
+      },
+      "score": 0.357,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.889,
+        "agent": 0.111,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [
+        "schema/explain.schema.json",
+        "schema/file.schema.json"
+      ]
+    },
+    {
+      "from": "src/map/template.ts",
+      "to": "src/commands/map.ts",
+      "relationship": "direct",
+      "why": "template.ts imports map.ts",
+      "shared": 17,
+      "fromChanges": 34,
+      "toChanges": 20,
+      "confidence": 0.5,
+      "reverseConfidence": 0.85,
+      "interval": {
+        "low": 0.3406,
+        "high": 0.6594
+      },
+      "reverseInterval": {
+        "low": 0.6395,
+        "high": 0.9477
+      },
+      "score": 0.341,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.882,
+        "agent": 0.118,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "9a6d7592a2316d09bcac501a629bd90533b51275",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "feat(map): improve Briefing legibility, suffix families, and revert filtering",
+          "origin": "human"
+        },
+        {
+          "hash": "62bda67036b17490d0212cf9a3ff3299901f0763",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(map): add FRAME/12 contact-sheet dig map style (--style rich, RA-16)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    },
+    {
+      "from": "schema/common.schema.json",
+      "to": "src/cli.ts",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 8,
+      "fromChanges": 15,
+      "toChanges": 25,
+      "confidence": 0.533,
+      "reverseConfidence": 0.32,
+      "interval": {
+        "low": 0.3011,
+        "high": 0.752
+      },
+      "reverseInterval": {
+        "low": 0.172,
+        "high": 0.5159
+      },
+      "score": 0.301,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.875,
+        "agent": 0.125,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        },
+        {
+          "hash": "6153e22df9a0c11cf43c940a1e1451f6b229dfb0",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cache): add persistent, incremental raw-commit history cache (RA-04)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [
+        "schema/backtest.schema.json",
+        "schema/explain.schema.json",
+        "schema/file.schema.json",
+        "schema/map.schema.json"
+      ]
+    },
+    {
+      "from": "src/action/runner.ts",
+      "to": "test/github-action.test.ts",
+      "relationship": "test",
+      "why": "a test that changes with this code",
+      "shared": 6,
+      "fromChanges": 12,
+      "toChanges": 7,
+      "confidence": 0.5,
+      "reverseConfidence": 0.857,
+      "interval": {
+        "low": 0.2537,
+        "high": 0.7463
+      },
+      "reverseInterval": {
+        "low": 0.4868,
+        "high": 0.9744
+      },
+      "score": 0.254,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1c0e29097b4918ba00b153023be40e3b0f6d0ce7",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,explain): fix double-dot containment, separate npmrc layers, resolve relative npmrc, and support working-tree renames without --base",
+          "origin": "human"
+        },
+        {
+          "hash": "0138267f12370d38da9e152a3e5dd9c56972ee60",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(explain,action,markdown): resolve rename lineage, warn on dirty tree, preserve external npmrc, and add smoke workflow",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    },
+    {
+      "from": "test/json-contract.test.ts",
+      "to": "src/report/markdown.ts",
+      "relationship": "test",
+      "why": "a test that changes with this code",
+      "shared": 8,
+      "fromChanges": 20,
+      "toChanges": 10,
+      "confidence": 0.4,
+      "reverseConfidence": 0.8,
+      "interval": {
+        "low": 0.2188,
+        "high": 0.6135
+      },
+      "reverseInterval": {
+        "low": 0.4901,
+        "high": 0.9434
+      },
+      "score": 0.219,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        },
+        {
+          "hash": "2df3d5a20aee91f5388e2d4effc122ae49c0d46c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin,config): reject optional-quantifier group ReDoS, share riskySkipPattern, and match Renovate Bot",
+          "origin": "human"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [
+        "schema/common.schema.json",
+        "schema/explain.schema.json",
+        "schema/file.schema.json"
+      ]
+    },
+    {
+      "from": "schema/common.schema.json",
+      "to": "src/context.ts",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 15,
+      "toChanges": 18,
+      "confidence": 0.4,
+      "reverseConfidence": 0.333,
+      "interval": {
+        "low": 0.1982,
+        "high": 0.6426
+      },
+      "reverseInterval": {
+        "low": 0.1627,
+        "high": 0.5626
+      },
+      "score": 0.198,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.833,
+        "agent": 0.167,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "2dc2b78485f1d9f037571fc2d5b0092c286f0b4a",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(contract): add import edge via/heuristic, unresolved reasonCode, and scoped meta.imports coverage (RA-09B)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    },
+    {
+      "from": "src/action/runner.ts",
+      "to": "src/report/contract.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 5,
+      "fromChanges": 12,
+      "toChanges": 6,
+      "confidence": 0.417,
+      "reverseConfidence": 0.833,
+      "interval": {
+        "low": 0.1932,
+        "high": 0.6805
+      },
+      "reverseInterval": {
+        "low": 0.4364,
+        "high": 0.97
+      },
+      "score": 0.193,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1c0e29097b4918ba00b153023be40e3b0f6d0ce7",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,explain): fix double-dot containment, separate npmrc layers, resolve relative npmrc, and support working-tree renames without --base",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        },
+        {
+          "hash": "c08b08cdf0a48fc87c347080b0de943fb77b52b2",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,schema): address PR #6 review findings and update roadmaps",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    },
+    {
+      "from": "src/action/runner.ts",
+      "to": "test/markdown.test.ts",
+      "relationship": "test",
+      "why": "a test that changes with this code",
+      "shared": 5,
+      "fromChanges": 12,
+      "toChanges": 7,
+      "confidence": 0.417,
+      "reverseConfidence": 0.714,
+      "interval": {
+        "low": 0.1932,
+        "high": 0.6805
+      },
+      "reverseInterval": {
+        "low": 0.3589,
+        "high": 0.9178
+      },
+      "score": 0.193,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1c0e29097b4918ba00b153023be40e3b0f6d0ce7",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,explain): fix double-dot containment, separate npmrc layers, resolve relative npmrc, and support working-tree renames without --base",
+          "origin": "human"
+        },
+        {
+          "hash": "0138267f12370d38da9e152a3e5dd9c56972ee60",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(explain,action,markdown): resolve rename lineage, warn on dirty tree, preserve external npmrc, and add smoke workflow",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    },
+    {
+      "from": "src/action/runner.ts",
+      "to": "action.yml",
+      "relationship": "unknown",
+      "why": "involves project configuration, which code uses without importing",
+      "shared": 5,
+      "fromChanges": 12,
+      "toChanges": 6,
+      "confidence": 0.417,
+      "reverseConfidence": 0.833,
+      "interval": {
+        "low": 0.1932,
+        "high": 0.6805
+      },
+      "reverseInterval": {
+        "low": 0.4364,
+        "high": 0.97
+      },
+      "score": 0.193,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "0138267f12370d38da9e152a3e5dd9c56972ee60",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(explain,action,markdown): resolve rename lineage, warn on dirty tree, preserve external npmrc, and add smoke workflow",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        },
+        {
+          "hash": "c08b08cdf0a48fc87c347080b0de943fb77b52b2",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,schema): address PR #6 review findings and update roadmaps",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": []
+    }
+  ],
+  "families": []
+}

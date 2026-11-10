@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ],
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 3,
+      "internalEdges": 5,
+      "external": 2,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    }
+  },
+  "files": [
+    "src/api.ts",
+    "src/index.ts",
+    "src/lib/util.ts"
+  ],
+  "edges": [
+    {
+      "from": "src/api.ts",
+      "to": "src/db.ts",
+      "specifier": "./db",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api.ts",
+      "to": "src/lib/util.ts",
+      "specifier": "@/lib/util",
+      "kind": "static",
+      "via": "paths"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "src/api.ts",
+      "specifier": "./api",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "src/lib/util.ts",
+      "specifier": "./lib/util",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/lib/util.ts",
+      "to": "src/lib/config.ts",
+      "specifier": "#lib/config",
+      "kind": "static",
+      "via": "imports"
+    }
+  ],
+  "unresolved": [],
+  "languages": [
+    "typescript"
+  ]
+}

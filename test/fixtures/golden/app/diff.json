@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 32,
+    "commitsAnalyzed": 32,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-01",
+    "origins": {
+      "human": 32,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 32 usable commits: results will be thin until the project has more history."
+    ]
+  },
+  "base": "HEAD~4",
+  "evaluation": {
+    "targetBranchRef": "HEAD~4",
+    "headSha": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+    "mergeBaseSha": "1293d66ce0651e72d854f1d98e15998a521776e5",
+    "baselineSha": "1293d66ce0651e72d854f1d98e15998a521776e5",
+    "commitsAnalyzed": 32,
+    "effectiveOptions": {
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25
+    }
+  },
+  "changed": [
+    {
+      "path": "README.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "README.md",
+      "hasHistory": true
+    },
+    {
+      "path": "src/globals.d.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/globals.d.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/legacy.cjs",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/legacy.cjs",
+      "hasHistory": true
+    },
+    {
+      "path": "src/lib/config.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/lib/config.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/lib/util.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/lib/util.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/loader.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/loader.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/missing.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/missing.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/types.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/types.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/ui/button.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/ui/button.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "styles/main.css",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "styles/main.css",
+      "hasHistory": true
+    }
+  ],
+  "totalSuggestions": 0,
+  "suggestions": [],
+  "families": [],
+  "silence": {
+    "primaryReason": "filtered_by_thresholds",
+    "reasons": [
+      "filtered_by_thresholds",
+      "all_companions_touched",
+      "limited_repo_history"
+    ],
+    "changedFiles": 10,
+    "changedWithHistory": 10,
+    "changedInsufficientHistory": 0,
+    "rawCompanions": 20,
+    "qualifyingCompanions": 10,
+    "touchedCompanions": 10,
+    "filteredByThreshold": 10,
+    "filteredByKind": 0,
+    "deletedCompanions": 0,
+    "shallowHistory": false,
+    "limitedHistory": true,
+    "commitsAnalyzed": 32,
+    "verdicts": {
+      "silenced": 0
+    },
+    "details": [
+      "10 untouched co-change partners (src/db.ts, src/ui/panel.tsx, src/api.test.ts, +7 more) fell below thresholds (requires ≥2 shared and ≥30% confidence; strongest was 1 shared at 20% confidence).",
+      "10 qualifying historical companions (src/lib/util.ts, src/ui/button.tsx, src/types.ts, +7 more) are already included in this changeset.",
+      "Analysis is based on a thin baseline history (32 usable baseline commits, fewer than 50)."
+    ]
+  }
+}

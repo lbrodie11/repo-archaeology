@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ],
+    "imports": {
+      "scope": "repository",
+      "filesScanned": 16,
+      "internalEdges": 10,
+      "external": 2,
+      "unresolved": 3,
+      "dynamicLoads": 1,
+      "unsupportedFiles": 4,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {
+        "target-missing": 2,
+        "not-exported": 1
+      }
+    }
+  },
+  "files": [
+    "src/api.test.ts",
+    "src/api.ts",
+    "src/billing.ts",
+    "src/db.ts",
+    "src/globals.d.ts",
+    "src/index.ts",
+    "src/legacy-helper.cjs",
+    "src/legacy.cjs",
+    "src/lib/config.ts",
+    "src/lib/util.ts",
+    "src/loader.ts",
+    "src/missing.ts",
+    "src/types.ts",
+    "src/ui/button.tsx",
+    "src/ui/panel.tsx",
+    "templates/invoice.ts"
+  ],
+  "edges": [
+    {
+      "from": "src/api.test.ts",
+      "to": "src/api.ts",
+      "specifier": "./api",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api.ts",
+      "to": "src/db.ts",
+      "specifier": "./db",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/api.ts",
+      "to": "src/lib/util.ts",
+      "specifier": "@/lib/util",
+      "kind": "static",
+      "via": "paths"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "src/api.ts",
+      "specifier": "./api",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/index.ts",
+      "to": "src/lib/util.ts",
+      "specifier": "./lib/util",
+      "kind": "reexport",
+      "via": "relative"
+    },
+    {
+      "from": "src/legacy.cjs",
+      "to": "src/legacy-helper.cjs",
+      "specifier": "./legacy-helper.cjs",
+      "kind": "require",
+      "via": "relative"
+    },
+    {
+      "from": "src/lib/util.ts",
+      "to": "src/lib/config.ts",
+      "specifier": "#lib/config",
+      "kind": "static",
+      "via": "imports"
+    },
+    {
+      "from": "src/types.ts",
+      "to": "src/globals.d.ts",
+      "specifier": "./globals.d.ts",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/ui/button.tsx",
+      "to": "src/index.ts",
+      "specifier": "../index",
+      "kind": "static",
+      "via": "relative"
+    },
+    {
+      "from": "src/ui/panel.tsx",
+      "to": "src/ui/button.tsx",
+      "specifier": "./button",
+      "kind": "static",
+      "via": "relative"
+    }
+  ],
+  "unresolved": [
+    {
+      "from": "src/missing.ts",
+      "specifier": "./nope",
+      "reason": "unmatched",
+      "reasonCode": "target-missing"
+    },
+    {
+      "from": "src/missing.ts",
+      "specifier": "@/nothing",
+      "reason": "unmatched",
+      "reasonCode": "target-missing"
+    },
+    {
+      "from": "src/missing.ts",
+      "specifier": "#unknown",
+      "reason": "unmatched",
+      "reasonCode": "not-exported"
+    }
+  ],
+  "languages": [
+    "javascript",
+    "typescript"
+  ]
+}

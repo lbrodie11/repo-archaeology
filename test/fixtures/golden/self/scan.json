@@ -1,0 +1,1446 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "head": {
+      "ref": "21d4d843331328076b45dc17c24f262e14bfe59a",
+      "sha": "21d4d843331328076b45dc17c24f262e14bfe59a"
+    },
+    "commitsRead": 116,
+    "commitsAnalyzed": 113,
+    "sweepsSkipped": 3,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 150,
+    "oldestCommit": "2026-10-16",
+    "newestCommit": "2026-11-10",
+    "origins": {
+      "human": 99,
+      "agent": 14,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 57,
+      "internalEdges": 263,
+      "external": 89,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 22,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "counts": {
+    "ghost": 22,
+    "unknown": 193,
+    "indirect": 22,
+    "direct": 74,
+    "test": 106
+  },
+  "qualifying": 417,
+  "classified": 417,
+  "truncated": false,
+  "relationships": [
+    {
+      "from": "src/model/verdicts.ts",
+      "to": "src/action/runner.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 13,
+      "confidence": 1,
+      "reverseConfidence": 0.462,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.232,
+        "high": 0.7086
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.5,
+        "agent": 0.5,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/followup-benchmark.ts",
+      "to": "src/commands/diff.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 3,
+      "toChanges": 19,
+      "confidence": 1,
+      "reverseConfidence": 0.158,
+      "interval": {
+        "low": 0.4385,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.0552,
+        "high": 0.3757
+      },
+      "score": 0.439,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "6f03ff8122450618bff872c0a677c4a1d198851f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): expose origin, originShare, meta.origins, and backtest weight comparisons",
+          "origin": "human"
+        },
+        {
+          "hash": "d170e4a85494d0eb46a29bb361fd388223646e50",
+          "date": "2026-10-17",
+          "author": "Repo Archaeology",
+          "subject": "fix: address PR #1 review feedback for follow-up pairing, model guards, and --since truncation",
+          "origin": "human"
+        },
+        {
+          "hash": "5ff71f1edd1c57c1069898e2d32f37bfd2bf50d9",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "feat: add explain-my-silence diagnostics and follow-up benchmark",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/report/contract.ts",
+      "to": "src/action/runner.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 5,
+      "fromChanges": 6,
+      "toChanges": 13,
+      "confidence": 0.833,
+      "reverseConfidence": 0.385,
+      "interval": {
+        "low": 0.4364,
+        "high": 0.97
+      },
+      "reverseInterval": {
+        "low": 0.177,
+        "high": 0.6448
+      },
+      "score": 0.436,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1c0e29097b4918ba00b153023be40e3b0f6d0ce7",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,explain): fix double-dot containment, separate npmrc layers, resolve relative npmrc, and support working-tree renames without --base",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        },
+        {
+          "hash": "c08b08cdf0a48fc87c347080b0de943fb77b52b2",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,schema): address PR #6 review findings and update roadmaps",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/scan.ts",
+      "to": "src/commands/diff.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 5,
+      "fromChanges": 8,
+      "toChanges": 19,
+      "confidence": 0.625,
+      "reverseConfidence": 0.263,
+      "interval": {
+        "low": 0.3057,
+        "high": 0.8632
+      },
+      "reverseInterval": {
+        "low": 0.118,
+        "high": 0.488
+      },
+      "score": 0.306,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c057b6e8620c27b7e371671af47dd327a234b82c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cli,context): support --head <ref> across all commands and emit meta.head in JSON",
+          "origin": "human"
+        },
+        {
+          "hash": "9ae9a1cbe7b216a01d5a36d791cb64bd63cbfe61",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): surface undrawn families in map overview and refine commit labels",
+          "origin": "human"
+        },
+        {
+          "hash": "2264b995501083cc984f813fe895eac9fe4f4c10",
+          "date": "2026-10-20",
+          "author": "Repo Archaeology",
+          "subject": "fix(families): address review findings on family completeness, diff symmetry, and map stats",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/model/origin.ts",
+      "to": "src/git/log.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 4,
+      "toChanges": 7,
+      "confidence": 0.75,
+      "reverseConfidence": 0.429,
+      "interval": {
+        "low": 0.3006,
+        "high": 0.9545
+      },
+      "reverseInterval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "score": 0.301,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "9bd309e4168931c63965e0a92f740e37a595552b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): parse git trailers, classify commit origins, and support opt-in weighting",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/commands/map.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 7,
+      "toChanges": 20,
+      "confidence": 0.571,
+      "reverseConfidence": 0.2,
+      "interval": {
+        "low": 0.2504,
+        "high": 0.8418
+      },
+      "reverseInterval": {
+        "low": 0.0806,
+        "high": 0.4161
+      },
+      "score": 0.25,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "6f03ff8122450618bff872c0a677c4a1d198851f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): expose origin, originShare, meta.origins, and backtest weight comparisons",
+          "origin": "human"
+        },
+        {
+          "hash": "c057b6e8620c27b7e371671af47dd327a234b82c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cli,context): support --head <ref> across all commands and emit meta.head in JSON",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/api/index.ts",
+      "to": "src/git/log.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 5,
+      "toChanges": 7,
+      "confidence": 0.6,
+      "reverseConfidence": 0.429,
+      "interval": {
+        "low": 0.2307,
+        "high": 0.8824
+      },
+      "reverseInterval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        },
+        {
+          "hash": "89bf2f92c54c363deca77a159be28bdb0cba7a6d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "chore(api): inject onSpawn observer and document shared AST import parser",
+          "origin": "human"
+        },
+        {
+          "hash": "780e0df18875a822e07197fcb6ab38940ceb6d50",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(api): add openRepository() library session API and importGraph (RA-03)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/git/changes.ts",
+      "to": "src/imports/resolve.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 5,
+      "toChanges": 13,
+      "confidence": 0.6,
+      "reverseConfidence": 0.231,
+      "interval": {
+        "low": 0.2307,
+        "high": 0.8824
+      },
+      "reverseInterval": {
+        "low": 0.0817,
+        "high": 0.5026
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "780e0df18875a822e07197fcb6ab38940ceb6d50",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(api): add openRepository() library session API and importGraph (RA-03)",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/git/changes.ts",
+      "to": "src/imports/typescript.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 5,
+      "toChanges": 6,
+      "confidence": 0.6,
+      "reverseConfidence": 0.5,
+      "interval": {
+        "low": 0.2307,
+        "high": 0.8824
+      },
+      "reverseInterval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "780e0df18875a822e07197fcb6ab38940ceb6d50",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(api): add openRepository() library session API and importGraph (RA-03)",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/model/cochange.ts",
+      "to": "src/config.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 8,
+      "toChanges": 14,
+      "confidence": 0.5,
+      "reverseConfidence": 0.286,
+      "interval": {
+        "low": 0.2152,
+        "high": 0.7848
+      },
+      "reverseInterval": {
+        "low": 0.1172,
+        "high": 0.5465
+      },
+      "score": 0.215,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "b740a25bbf5ec4993e343a2b9eb0c47f64838b2f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(terminal): address PR #18 review feedback for --style rich",
+          "origin": "human"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "9bd309e4168931c63965e0a92f740e37a595552b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): parse git trailers, classify commit origins, and support opt-in weighting",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/imports/typescript.ts",
+      "to": "src/config.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 6,
+      "toChanges": 14,
+      "confidence": 0.5,
+      "reverseConfidence": 0.214,
+      "interval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "reverseInterval": {
+        "low": 0.0757,
+        "high": 0.4759
+      },
+      "score": 0.188,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "163920e93b95460abc77cd3a220b063e9f99cc6a",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix(cli,config,imports): address reviewer feedback on args, redos, aliases and exports",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/imports/typescript.ts",
+      "to": "src/git/run.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 6,
+      "toChanges": 10,
+      "confidence": 0.5,
+      "reverseConfidence": 0.3,
+      "interval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "reverseInterval": {
+        "low": 0.1077,
+        "high": 0.6033
+      },
+      "score": 0.188,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c0d7721c1a659c6cdccc6da1bf5acdbc58f81f2d",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(api,imports): address PR #12 review feedback (Windows CI, exports, close guard, CJS dynamic import)",
+          "origin": "human"
+        },
+        {
+          "hash": "780e0df18875a822e07197fcb6ab38940ceb6d50",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(api): add openRepository() library session API and importGraph (RA-03)",
+          "origin": "human"
+        },
+        {
+          "hash": "14481a5cc2e36616b1b34cb137ecfbb2d1149b44",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "fix: address external review (hangs, indirect imports, history accuracy)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/git/repo.ts",
+      "to": "src/imports/classify.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 6,
+      "toChanges": 16,
+      "confidence": 0.5,
+      "reverseConfidence": 0.188,
+      "interval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "reverseInterval": {
+        "low": 0.0659,
+        "high": 0.4301
+      },
+      "score": 0.188,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.667,
+        "agent": 0.333,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "f8718cd756e7a1a8a5519340f983f8cb0e2e9756",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(head): require --base for diff --head, load config and modes from head tree, and harden cat-file lifecycle",
+          "origin": "human"
+        },
+        {
+          "hash": "76889e7c06f24ed496f54241f161d2333f9ce189",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(imports): add git-tree-backed RepoFiles using a single git cat-file --batch process",
+          "origin": "human"
+        },
+        {
+          "hash": "4ea6d145b543b97c9c111f3c3a693826ce467a3a",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "Fix six correctness issues from external review, add CI",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "src/report/contract.ts",
+      "to": "src/report/markdown.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 6,
+      "toChanges": 10,
+      "confidence": 0.5,
+      "reverseConfidence": 0.3,
+      "interval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "reverseInterval": {
+        "low": 0.1077,
+        "high": 0.6033
+      },
+      "score": 0.188,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        },
+        {
+          "hash": "c08b08cdf0a48fc87c347080b0de943fb77b52b2",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,schema): address PR #6 review findings and update roadmaps",
+          "origin": "human"
+        },
+        {
+          "hash": "b1ecb54e668454440e9f231001812ea0cb18ead5",
+          "date": "2026-11-01",
+          "author": "Repo Archaeology",
+          "subject": "feat: add v1 JSON output contract, Markdown PR renderer, and GitHub Action (v0.3.0)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/map/template.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 10,
+      "toChanges": 35,
+      "confidence": 0.4,
+      "reverseConfidence": 0.114,
+      "interval": {
+        "low": 0.1681,
+        "high": 0.6874
+      },
+      "reverseInterval": {
+        "low": 0.0453,
+        "high": 0.2596
+      },
+      "score": 0.168,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.75,
+        "agent": 0.25,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "d6168b914872f60b8a81916327779c29cdebe51f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(report,map): round Wilson intervals outward and label raw 95% CI when weighted",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/commands/map.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 10,
+      "toChanges": 20,
+      "confidence": 0.4,
+      "reverseConfidence": 0.2,
+      "interval": {
+        "low": 0.1681,
+        "high": 0.6874
+      },
+      "reverseInterval": {
+        "low": 0.0806,
+        "high": 0.4161
+      },
+      "score": 0.168,
+      "weighted": false,
+      "lastTogether": "2026-11-09",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.75,
+        "agent": 0.25,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "e8750b33c683471fda5e9a9bafee488d22484b2f",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "fix(map): address PR #21 review on revert filtering, suffix families, and Briefing disclosure",
+          "origin": "agent"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "d6168b914872f60b8a81916327779c29cdebe51f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(report,map): round Wilson intervals outward and label raw 95% CI when weighted",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/report/markdown.ts",
+      "to": "src/action/runner.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 10,
+      "toChanges": 13,
+      "confidence": 0.4,
+      "reverseConfidence": 0.308,
+      "interval": {
+        "low": 0.1681,
+        "high": 0.6874
+      },
+      "reverseInterval": {
+        "low": 0.1268,
+        "high": 0.5764
+      },
+      "score": 0.168,
+      "weighted": false,
+      "lastTogether": "2026-11-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "0138267f12370d38da9e152a3e5dd9c56972ee60",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(explain,action,markdown): resolve rename lineage, warn on dirty tree, preserve external npmrc, and add smoke workflow",
+          "origin": "human"
+        },
+        {
+          "hash": "eba63035325f001ddd305251d1c8372d4bddbcdc",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,contract): isolate bootstrap, escape error summaries, and refine Verify baseline",
+          "origin": "human"
+        },
+        {
+          "hash": "c08b08cdf0a48fc87c347080b0de943fb77b52b2",
+          "date": "2026-11-02",
+          "author": "Repo Archaeology",
+          "subject": "fix(action,markdown,schema): address PR #6 review findings and update roadmaps",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/git/log.ts",
+      "to": "src/report/views.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 7,
+      "toChanges": 15,
+      "confidence": 0.429,
+      "reverseConfidence": 0.2,
+      "interval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "reverseInterval": {
+        "low": 0.0704,
+        "high": 0.4519
+      },
+      "score": 0.158,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a3498392271773a90ea505f16de3745f3f7546ad",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(owners): add historical contributor context and CODEOWNERS (RA-12)",
+          "origin": "human"
+        },
+        {
+          "hash": "6153e22df9a0c11cf43c940a1e1451f6b229dfb0",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cache): add persistent, incremental raw-commit history cache (RA-04)",
+          "origin": "human"
+        },
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/map/template.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 7,
+      "toChanges": 35,
+      "confidence": 0.429,
+      "reverseConfidence": 0.086,
+      "interval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "reverseInterval": {
+        "low": 0.0295,
+        "high": 0.2238
+      },
+      "score": 0.158,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 0.667,
+        "agent": 0.333,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "f378d1adeb4b0e8c4fd9a09ed0380531d24e4978",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "Improve discovery ranking and add ghost diagnostics",
+          "origin": "human"
+        },
+        {
+          "hash": "9f6116bacef15ea827688313773da78edde4d7bf",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "Review passes 1-3: monorepo self-imports, test links, fair backtest baseline, map polish",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/commands/explain.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 7,
+      "toChanges": 13,
+      "confidence": 0.429,
+      "reverseConfidence": 0.231,
+      "interval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "reverseInterval": {
+        "low": 0.0817,
+        "high": 0.5026
+      },
+      "score": 0.158,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "79ac5afe8ef9ee2ceee4fc3893d528ce3a10f87b",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "fix(origin): bound default patterns, guard regex safety, label weighting modes, and keep v1 schema additions optional",
+          "origin": "human"
+        },
+        {
+          "hash": "6f03ff8122450618bff872c0a677c4a1d198851f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): expose origin, originShare, meta.origins, and backtest weight comparisons",
+          "origin": "human"
+        },
+        {
+          "hash": "c057b6e8620c27b7e371671af47dd327a234b82c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cli,context): support --head <ref> across all commands and emit meta.head in JSON",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/commands/diff.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 7,
+      "toChanges": 19,
+      "confidence": 0.429,
+      "reverseConfidence": 0.158,
+      "interval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "reverseInterval": {
+        "low": 0.0552,
+        "high": 0.3757
+      },
+      "score": 0.158,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "6f03ff8122450618bff872c0a677c4a1d198851f",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(origin): expose origin, originShare, meta.origins, and backtest weight comparisons",
+          "origin": "human"
+        },
+        {
+          "hash": "c057b6e8620c27b7e371671af47dd327a234b82c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cli,context): support --head <ref> across all commands and emit meta.head in JSON",
+          "origin": "human"
+        },
+        {
+          "hash": "5ff71f1edd1c57c1069898e2d32f37bfd2bf50d9",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "feat: add explain-my-silence diagnostics and follow-up benchmark",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/commands/backtest.ts",
+      "to": "src/commands/scan.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 7,
+      "toChanges": 8,
+      "confidence": 0.429,
+      "reverseConfidence": 0.375,
+      "interval": {
+        "low": 0.1582,
+        "high": 0.7496
+      },
+      "reverseInterval": {
+        "low": 0.1368,
+        "high": 0.6943
+      },
+      "score": 0.158,
+      "weighted": false,
+      "lastTogether": "2026-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.667,
+        "agent": 0.333,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c057b6e8620c27b7e371671af47dd327a234b82c",
+          "date": "2026-11-08",
+          "author": "Repo Archaeology",
+          "subject": "feat(cli,context): support --head <ref> across all commands and emit meta.head in JSON",
+          "origin": "human"
+        },
+        {
+          "hash": "f378d1adeb4b0e8c4fd9a09ed0380531d24e4978",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "Improve discovery ranking and add ghost diagnostics",
+          "origin": "human"
+        },
+        {
+          "hash": "9f6116bacef15ea827688313773da78edde4d7bf",
+          "date": "2026-10-16",
+          "author": "Repo Archaeology",
+          "subject": "Review passes 1-3: monorepo self-imports, test links, fair backtest baseline, map polish",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "schema/explain.schema.json",
+      "to": "schema/common.schema.json",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 11,
+      "fromChanges": 11,
+      "toChanges": 16,
+      "confidence": 1,
+      "reverseConfidence": 0.688,
+      "interval": {
+        "low": 0.7411,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.444,
+        "high": 0.8584
+      },
+      "score": 0.741,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.727,
+        "agent": 0.273,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "schema/file.schema.json",
+      "to": "schema/common.schema.json",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 11,
+      "fromChanges": 11,
+      "toChanges": 16,
+      "confidence": 1,
+      "reverseConfidence": 0.688,
+      "interval": {
+        "low": 0.7411,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.444,
+        "high": 0.8584
+      },
+      "score": 0.741,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.727,
+        "agent": 0.273,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "schema/explain.schema.json",
+      "to": "schema/file.schema.json",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 11,
+      "fromChanges": 11,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.7411,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.7411,
+        "high": 1
+      },
+      "score": 0.741,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.727,
+        "agent": 0.273,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "schema/backtest.schema.json",
+      "to": "schema/common.schema.json",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 10,
+      "fromChanges": 10,
+      "toChanges": 16,
+      "confidence": 1,
+      "reverseConfidence": 0.625,
+      "interval": {
+        "low": 0.7224,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.3864,
+        "high": 0.8152
+      },
+      "score": 0.722,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.7,
+        "agent": 0.3,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    },
+    {
+      "from": "schema/backtest.schema.json",
+      "to": "schema/explain.schema.json",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 10,
+      "fromChanges": 10,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.909,
+      "interval": {
+        "low": 0.7224,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6226,
+        "high": 0.9838
+      },
+      "score": 0.722,
+      "weighted": false,
+      "lastTogether": "2026-11-10",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 0.7,
+        "agent": 0.3,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "21d4d843331328076b45dc17c24f262e14bfe59a",
+          "date": "2026-11-10",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.8.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "0c128dcca8cdcc966884b5fd4dc73cb4d4c0235e",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.7.0",
+          "origin": "agent"
+        },
+        {
+          "hash": "f09539025fbf3e9acfc8cee6d66149a208e8c18d",
+          "date": "2026-11-09",
+          "author": "Repo Archaeology",
+          "subject": "chore(release): v0.6.0",
+          "origin": "agent"
+        }
+      ]
+    }
+  ],
+  "families": []
+}

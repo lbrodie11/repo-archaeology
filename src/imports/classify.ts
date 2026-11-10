@@ -1,11 +1,11 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { join, posix, sep, win32 } from 'node:path';
+import { join, posix, sep } from 'node:path';
+import { AnalysisSession, analyzeFile, type FileAnalysis } from './analysis.js';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
   candidateFilePaths,
   gitTreeFiles,
   IMPORT_UNRESOLVED_REASON_CODES,
-  ImportResolver,
   MAX_SOURCE_BYTES,
   type GitTreeFiles,
   type GitTreeFilesOptions,
@@ -14,7 +14,6 @@ import {
   type ImportUnresolvedReasonCode,
   type RepoFiles,
 } from './resolve.js';
-import { extractDetailedDependencies } from './typescript.js';
 
 export {
   gitTreeFiles,
@@ -49,10 +48,13 @@ export interface HiddenBridge {
   filesUsing: number;
 }
 
-const ANALYZABLE = /\.(?:[cm]?[jt]sx?)$/i;
+/** Files scanned for hidden-bridge signals (env vars, routes, events, exports): JS/TS only. */
+const BRIDGE_SOURCE = /\.(?:[cm]?[jt]sx?)$/i;
 const BARREL_DEPTH = 3;
 
 interface FileImports {
+  /** The shared pipeline's result this summary was built from. */
+  analysis: FileAnalysis;
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
@@ -164,7 +166,7 @@ export function workingTreeFiles(root: string, existing: ReadonlySet<string>): R
 }
 
 export class RelationshipClassifier {
-  private readonly resolver: ImportResolver;
+  private readonly session: AnalysisSession;
   private readonly cache = new Map<string, FileImports>();
   private readonly reachCache = new Map<string, Reach>();
   private readonly accessedInScope = new Set<string>();
@@ -175,7 +177,7 @@ export class RelationshipClassifier {
     private readonly files: RepoFiles,
     private readonly includeBridgeFile: (path: string) => boolean = () => true,
   ) {
-    this.resolver = new ImportResolver(files);
+    this.session = new AnalysisSession(files);
   }
 
   /** Clears the per-operation file access set while preserving parsed AST caches. */
@@ -352,90 +354,40 @@ export class RelationshipClassifier {
     this.accessedInScope.add(file);
     const cached = this.cache.get(file);
     if (cached) return cached;
+    const analysis = analyzeFile(file, this.files, this.session);
     const result: FileImports = {
-      analyzable: false,
-      sourceUnavailable: false,
+      analysis,
+      analyzable: analysis.analyzable,
+      sourceUnavailable: analysis.sourceUnavailable,
       imports: new Set(),
       heuristicImports: new Set(),
       references: new Set(),
-      unresolved: 0,
+      // A load whose target is computed at runtime could be the partner file.
+      unresolved: analysis.unresolved.length + analysis.dynamicLoads,
       internalEdges: 0,
       heuristicEdges: 0,
-      external: 0,
-      dynamicLoads: 0,
+      external: analysis.external,
+      dynamicLoads: analysis.dynamicLoads,
       unresolvedReasons: {},
     };
+    for (const { reasonCode } of analysis.unresolved) {
+      result.unresolvedReasons[reasonCode] = (result.unresolvedReasons[reasonCode] ?? 0) + 1;
+    }
+    for (const edge of analysis.edges) {
+      for (const target of edge.targets) {
+        result.internalEdges++;
+        if (edge.reference) {
+          result.references.add(target.path);
+          continue;
+        }
+        result.imports.add(target.path);
+        if (target.heuristic) {
+          result.heuristicImports.add(target.path);
+          result.heuristicEdges++;
+        }
+      }
+    }
     this.cache.set(file, result);
-    if (!ANALYZABLE.test(file)) return result;
-    const text = this.files.read(file);
-    if (text === undefined) {
-      result.sourceUnavailable = true;
-      return result;
-    }
-    result.analyzable = true;
-    const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, file);
-    // A load whose target is computed at runtime could be the partner file.
-    result.unresolved += nonLiteralLoads;
-    result.dynamicLoads += nonLiteralLoads;
-    const seenEdges = new Set<string>();
-    const seenUnresolved = new Set<string>();
-    for (const { specifier, kind, typeOnly } of imports) {
-      const resolved = this.resolver.resolveDetailed(
-        file,
-        specifier,
-        kind === 'require' ? 'require' : 'import',
-        { typeOnlyImport: Boolean(typeOnly) },
-      );
-      if (resolved.kind === 'file') {
-        if (resolved.path !== file) {
-          result.imports.add(resolved.path);
-          if (resolved.heuristic) {
-            result.heuristicImports.add(resolved.path);
-          }
-          const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
-          if (!seenEdges.has(edgeKey)) {
-            seenEdges.add(edgeKey);
-            result.internalEdges++;
-            if (resolved.heuristic) {
-              result.heuristicEdges++;
-            }
-          }
-        }
-      } else if (resolved.kind === 'external') {
-        result.external++;
-      } else if (resolved.kind === 'unresolved') {
-        if (!seenUnresolved.has(specifier)) {
-          seenUnresolved.add(specifier);
-          result.unresolved++;
-          result.unresolvedReasons[resolved.reasonCode] = (result.unresolvedReasons[resolved.reasonCode] ?? 0) + 1;
-        }
-      }
-    }
-    for (const referencePath of referencePaths) {
-      const path = referencePath.replace(/\\/g, '/');
-      const target = posix.normalize(posix.join(posix.dirname(file), path));
-      const invalid =
-        path === '' ||
-        posix.isAbsolute(path) ||
-        win32.parse(path).root !== '' ||
-        target === '..' ||
-        target.startsWith('../');
-      if (invalid || !this.files.exists(target)) {
-        if (!seenUnresolved.has(referencePath)) {
-          seenUnresolved.add(referencePath);
-          result.unresolved++;
-          const code: ImportUnresolvedReasonCode = invalid ? 'invalid-target' : 'target-missing';
-          result.unresolvedReasons[code] = (result.unresolvedReasons[code] ?? 0) + 1;
-        }
-      } else if (target !== file) {
-        result.references.add(target);
-        const edgeKey = `${target}\0${referencePath}\0static`;
-        if (!seenEdges.has(edgeKey)) {
-          seenEdges.add(edgeKey);
-          result.internalEdges++;
-        }
-      }
-    }
     return result;
   }
 
@@ -443,7 +395,7 @@ export class RelationshipClassifier {
     if (this.bridgeReferences && this.bridgeUses) return;
     const files: string[] = [];
     for (const file of this.files.list()) {
-      if (!ANALYZABLE.test(file) || !this.includeBridgeFile(file)) continue;
+      if (!BRIDGE_SOURCE.test(file) || !this.includeBridgeFile(file)) continue;
       files.push(file);
       if (files.length > MAX_BRIDGE_SOURCE_FILES) {
         this.bridgeReferences = new Map();

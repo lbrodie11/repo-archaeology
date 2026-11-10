@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<root>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 2,
+      "internalEdges": 0,
+      "external": 0,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ]
+  },
+  "from": "src/billing.ts",
+  "to": "templates/invoice.ts",
+  "relationship": "ghost",
+  "why": "shared configuration: both reference environment variable BILLING_PLAN (used in 2 files)",
+  "hiddenBridge": {
+    "signal": "shared-environment",
+    "value": "BILLING_PLAN",
+    "filesUsing": 2
+  },
+  "meetsThresholds": true,
+  "shared": 6,
+  "fromChanges": 6,
+  "toChanges": 6,
+  "confidence": 1,
+  "reverseConfidence": 1,
+  "interval": {
+    "low": 0.6096,
+    "high": 1
+  },
+  "reverseInterval": {
+    "low": 0.6096,
+    "high": 1
+  },
+  "score": 0.61,
+  "weighted": false,
+  "lastTogether": "2024-01-30",
+  "crossesDirectories": true,
+  "originShare": {
+    "human": 1,
+    "agent": 0,
+    "bot": 0
+  },
+  "sharedCommits": [
+    {
+      "hash": "25f5c3f7cfc5e28b9e8de3974a6b717d1367ece2",
+      "date": "2024-01-30",
+      "author": "Test",
+      "subject": "update src/billing.ts + templates/invoice.ts (4)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/billing.ts",
+        "path": "src/billing.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const PLAN = process.env.BILLING_PLAN;",
+              "-// src/billing.ts revision 52",
+              "+// src/billing.ts revision 69"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "templates/invoice.ts",
+        "path": "templates/invoice.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const template = process.env.BILLING_PLAN;",
+              "-// templates/invoice.ts revision 53",
+              "+// templates/invoice.ts revision 70"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "6f1ed9ac766198789d689fe399d9b79a6fd188e8",
+      "date": "2024-01-23",
+      "author": "Test",
+      "subject": "update src/billing.ts + templates/invoice.ts (3)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/billing.ts",
+        "path": "src/billing.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const PLAN = process.env.BILLING_PLAN;",
+              "-// src/billing.ts revision 35",
+              "+// src/billing.ts revision 52"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "templates/invoice.ts",
+        "path": "templates/invoice.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const template = process.env.BILLING_PLAN;",
+              "-// templates/invoice.ts revision 36",
+              "+// templates/invoice.ts revision 53"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "f53f0da18df0d7477f8d32ea97c1c1826993eacb",
+      "date": "2024-01-16",
+      "author": "Test",
+      "subject": "update src/billing.ts + templates/invoice.ts (2)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/billing.ts",
+        "path": "src/billing.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const PLAN = process.env.BILLING_PLAN;",
+              "-// src/billing.ts revision 18",
+              "+// src/billing.ts revision 35"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "templates/invoice.ts",
+        "path": "templates/invoice.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const template = process.env.BILLING_PLAN;",
+              "-// templates/invoice.ts revision 19",
+              "+// templates/invoice.ts revision 36"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    }
+  ],
+  "counterexamples": {
+    "fromWithoutToTotal": 0,
+    "toWithoutFromTotal": 0,
+    "fromWithoutTo": [],
+    "toWithoutFrom": []
+  },
+  "bounds": {
+    "maxCommits": 3,
+    "contextLines": 2,
+    "maxPatchBytes": 65536,
+    "maxHunksPerFile": 4,
+    "maxLinesPerHunk": 24,
+    "maxTotalPatchLines": 200,
+    "timeoutMs": 8000,
+    "commitsTruncated": true,
+    "outputTruncated": false,
+    "timedOut": false
+  },
+  "cliCommand": "npx repo-archaeology explain src/billing.ts templates/invoice.ts",
+  "disclaimer": "Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files."
+}

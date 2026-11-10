@@ -1,16 +1,15 @@
-import { posix, win32 } from 'node:path';
 import { ignorePatterns } from '../config.js';
 import { toRepoPath, UsageError, type Context } from '../context.js';
+import { AnalysisSession, analyzeFile } from '../imports/analysis.js';
 import { workingTreeFiles } from '../imports/classify.js';
 import {
   IMPORT_UNRESOLVED_REASON_CODES,
-  ImportResolver,
   type ImportResolutionVia,
   type ImportsCoverageMeta,
   type ImportUnresolvedReasonCode,
   type RepoFiles,
 } from '../imports/resolve.js';
-import { extractDetailedDependencies, type ImportEdgeKind } from '../imports/typescript.js';
+import type { ImportEdgeKind } from '../imports/typescript.js';
 import { buildMeta, printHeader, type Meta } from '../report/views.js';
 import { PathMatcher } from '../util/glob.js';
 import { c, plural, terminalText } from '../util/term.js';
@@ -58,14 +57,6 @@ interface IndexedFileStats {
   dynamicLoads: number;
 }
 
-const ANALYZABLE = /\.(?:[cm]?[jt]sx?)$/i;
-const TYPESCRIPT_EXT = /\.(?:[cm]?tsx?)$/i;
-
-function detectLanguage(path: string): 'typescript' | 'javascript' | undefined {
-  if (!ANALYZABLE.test(path)) return undefined;
-  return TYPESCRIPT_EXT.test(path) ? 'typescript' : 'javascript';
-}
-
 export interface ImportGraphIndex {
   readonly allFiles: string[];
   readonly edgesByFrom: Map<string, ImportGraphEdge[]>;
@@ -74,6 +65,8 @@ export interface ImportGraphIndex {
   readonly importersByTarget: Map<string, Set<string>>;
   readonly languages: string[];
   readonly repoUnsupportedFiles: number;
+  /** Language id of a path, when a language analyzer handles it. */
+  languageOf(path: string): string | undefined;
   indexFile(from: string): void;
 }
 
@@ -84,7 +77,11 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   if (existing) return existing;
 
   const repoFiles: RepoFiles = ctx.files ?? workingTreeFiles(ctx.root, ctx.currentFiles);
-  const resolver = new ImportResolver(repoFiles);
+  // The graph only links files in the analyzed tree, and flags path references to symlinked targets.
+  const session = new AnalysisSession(repoFiles, {
+    includeTarget: (path) => ctx.currentFiles.has(path),
+    checkInvalidReferenceTargets: true,
+  });
   const ignoreMatcher = new PathMatcher(ignorePatterns(ctx.settings));
 
   const allFiles: string[] = [];
@@ -106,113 +103,41 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
 
   const indexFile = (from: string): void => {
     if (edgesByFrom.has(from)) return;
-    if (!ANALYZABLE.test(from) || !ctx.currentFiles.has(from)) {
+    const analysis =
+      session.analyzerFor(from) !== undefined && ctx.currentFiles.has(from) ? analyzeFile(from, repoFiles, session) : undefined;
+    if (!analysis?.analyzable) {
       edgesByFrom.set(from, []);
       unresolvedByFrom.set(from, []);
       statsByFrom.set(from, {
         analyzable: false,
-        sourceUnavailable: false,
+        sourceUnavailable: analysis?.sourceUnavailable ?? false,
         external: 0,
         dynamicLoads: 0,
       });
       return;
     }
-    const text = repoFiles.read(from);
-    if (text === undefined) {
-      edgesByFrom.set(from, []);
-      unresolvedByFrom.set(from, []);
-      statsByFrom.set(from, {
-        analyzable: false,
-        sourceUnavailable: true,
-        external: 0,
-        dynamicLoads: 0,
-      });
-      return;
-    }
-    const lang = detectLanguage(from);
-    if (lang) languageSet.add(lang);
+    if (analysis.language) languageSet.add(analysis.language);
 
-    const { imports, referencePaths, nonLiteralLoads } = extractDetailedDependencies(text, from);
     const fileEdges: ImportGraphEdge[] = [];
-    const fileUnresolved: ImportGraphUnresolved[] = [];
-    const seenEdges = new Set<string>();
-    const seenUnresolved = new Set<string>();
-    let externalCount = 0;
-
-    for (const { specifier, kind, typeOnly } of imports) {
-      const resolved = resolver.resolveDetailed(
-        from,
-        specifier,
-        kind === 'require' ? 'require' : 'import',
-        { typeOnlyImport: Boolean(typeOnly) },
-      );
-      if (resolved.kind === 'file') {
-        if (resolved.path !== from && ctx.currentFiles.has(resolved.path)) {
-          const edgeKey = `${resolved.path}\0${specifier}\0${kind}`;
-          if (!seenEdges.has(edgeKey)) {
-            seenEdges.add(edgeKey);
-            fileEdges.push({
-              from,
-              to: resolved.path,
-              specifier,
-              kind,
-              via: resolved.via,
-              ...(resolved.heuristic ? { heuristic: true } : {}),
-            });
-            addImporter(resolved.path, from);
-          }
-        }
-      } else if (resolved.kind === 'external') {
-        externalCount++;
-      } else if (resolved.kind === 'unresolved') {
-        if (!seenUnresolved.has(specifier)) {
-          seenUnresolved.add(specifier);
-          fileUnresolved.push({
-            from,
-            specifier,
-            reason: 'unmatched',
-            reasonCode: resolved.reasonCode,
-          });
-        }
+    for (const edge of analysis.edges) {
+      for (const target of edge.targets) {
+        fileEdges.push({
+          from,
+          to: target.path,
+          specifier: edge.specifier,
+          kind: edge.kind,
+          via: target.via,
+          ...(target.heuristic ? { heuristic: true } : {}),
+        });
+        addImporter(target.path, from);
       }
     }
-
-    for (const referencePath of referencePaths) {
-      const normRef = referencePath.replace(/\\/g, '/');
-      const target = posix.normalize(posix.join(posix.dirname(from), normRef));
-      const escapedOrInvalid =
-        normRef === '' ||
-        posix.isAbsolute(normRef) ||
-        win32.parse(normRef).root !== '' ||
-        target === '..' ||
-        target.startsWith('../') ||
-        Boolean(repoFiles.isInvalidTarget?.(target, ''));
-      const missing = !escapedOrInvalid && (!repoFiles.exists(target) || !ctx.currentFiles.has(target));
-      if (escapedOrInvalid || missing) {
-        if (!seenUnresolved.has(referencePath)) {
-          seenUnresolved.add(referencePath);
-          fileUnresolved.push({
-            from,
-            specifier: referencePath,
-            reason: 'unmatched',
-            reasonCode: escapedOrInvalid ? 'invalid-target' : 'target-missing',
-          });
-        }
-      } else if (target !== from) {
-        const edgeKey = `${target}\0${referencePath}\0static`;
-        if (!seenEdges.has(edgeKey)) {
-          seenEdges.add(edgeKey);
-          fileEdges.push({
-            from,
-            to: target,
-            specifier: referencePath,
-            kind: 'static',
-            via: 'relative',
-          });
-          addImporter(target, from);
-        }
-      }
-    }
+    const fileUnresolved: ImportGraphUnresolved[] = analysis.unresolved.map(({ specifier, reasonCode }) => ({
+      from,
+      specifier,
+      reason: 'unmatched',
+      reasonCode,
+    }));
 
     fileEdges.sort(
       (a, b) =>
@@ -227,15 +152,15 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     statsByFrom.set(from, {
       analyzable: true,
       sourceUnavailable: false,
-      external: externalCount,
-      dynamicLoads: nonLiteralLoads,
+      external: analysis.external,
+      dynamicLoads: analysis.dynamicLoads,
     });
   };
 
   const candidates: string[] = [];
   for (const file of ctx.currentFiles) {
     if (ignoreMatcher.matches(file)) continue;
-    if (ANALYZABLE.test(file)) {
+    if (session.analyzerFor(file) !== undefined) {
       candidates.push(file);
     } else {
       repoUnsupportedFiles++;
@@ -256,6 +181,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     importersByTarget,
     languages: [...languageSet].sort(),
     repoUnsupportedFiles,
+    languageOf: (path) => session.analyzerFor(path)?.language(path),
     indexFile,
   };
   sessionIndexCache.set(ctx, index);
@@ -363,7 +289,7 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
     const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
     const langSet = new Set<string>();
     for (const f of files) {
-      const lang = detectLanguage(f);
+      const lang = index.languageOf(f);
       if (lang) langSet.add(lang);
     }
     const languages = langSet.size > 0 ? [...langSet].sort() : [...index.languages];
