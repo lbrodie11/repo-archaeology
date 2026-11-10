@@ -18,10 +18,10 @@ function memoryFiles(files: Record<string, string>): RepoFiles {
 }
 
 describe('shared import analysis pipeline', () => {
-  it('registers TS/JS behind the LanguageAnalyzer registry', () => {
+  it('registers TS/JS, Go and Python behind the LanguageAnalyzer registry', () => {
     assert.deepEqual(
       LANGUAGE_ANALYZERS.map((analyzer) => analyzer.id),
-      ['typescript'],
+      ['typescript', 'go', 'python'],
     );
     for (const path of ['a.ts', 'a.tsx', 'a.mts', 'a.cts', 'a.js', 'a.jsx', 'a.mjs', 'a.cjs']) assert.ok(isAnalyzablePath(path), path);
     for (const path of ['a.md', 'a.json', 'a.css']) assert.ok(!isAnalyzablePath(path), path);

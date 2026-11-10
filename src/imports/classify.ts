@@ -1,6 +1,7 @@
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, sep } from 'node:path';
-import { AnalysisSession, analyzeFile, type FileAnalysis } from './analysis.js';
+import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from './analysis.js';
+import { isSameGoPackage } from './go.js';
 import { extractSourceReferences, sourceReferenceKey, type SourceReference, type SourceReferenceKind } from './references.js';
 import {
   candidateFilePaths,
@@ -55,6 +56,8 @@ const BARREL_DEPTH = 3;
 interface FileImports {
   /** The shared pipeline's result this summary was built from. */
   analysis: FileAnalysis;
+  /** First edge seen per imported file: wording for `explain` (Go packages, Python heuristics). */
+  importEdges: Map<string, { specifier: string; via: ImportResolutionVia; heuristic: boolean }>;
   analyzable: boolean;
   sourceUnavailable: boolean;
   imports: Set<string>;
@@ -180,6 +183,12 @@ export class RelationshipClassifier {
     this.session = new AnalysisSession(files);
   }
 
+  /** Import-analysis diagnostics (`meta.warnings`) for the files analyzed in the current scope. */
+  analysisWarnings(): string[] {
+    if (this.accessedInScope.size === 0) return [];
+    return analysisWarnings(this.session, [...this.accessedInScope].map((file) => this.cache.get(file)?.analysis));
+  }
+
   /** Clears the per-operation file access set while preserving parsed AST caches. */
   resetScope(): void {
     this.accessedInScope.clear();
@@ -257,6 +266,8 @@ export class RelationshipClassifier {
     if (ra.files.has(b) || rb.files.has(a)) return 'direct';
     const indirect = this.indirectLink(a, b);
     if (indirect.linked) return 'indirect';
+    // Files of one Go package share scope without importing each other: never a ghost.
+    if (isSameGoPackage(a, b)) return 'unknown';
     // Manifests and tool config are "used" without imports (dependencies, build settings).
     if (isProjectConfig(a) || isProjectConfig(b)) return 'unknown';
     if (ia.sourceUnavailable || ib.sourceUnavailable) return 'unknown';
@@ -293,14 +304,8 @@ export class RelationshipClassifier {
       case 'direct': {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
-        if (ia.imports.has(b)) {
-          const suffix = ia.heuristicImports.has(b) ? ' (via heuristic source remap)' : '';
-          return `${posix.basename(a)} imports ${posix.basename(b)}${suffix}`;
-        }
-        if (ib.imports.has(a)) {
-          const suffix = ib.heuristicImports.has(a) ? ' (via heuristic source remap)' : '';
-          return `${posix.basename(b)} imports ${posix.basename(a)}${suffix}`;
-        }
+        if (ia.imports.has(b)) return importWording(a, b, ia);
+        if (ib.imports.has(a)) return importWording(b, a, ib);
         if (ia.references.has(b)) return `${posix.basename(a)} references ${posix.basename(b)} via a triple-slash path in the current code`;
         if (ib.references.has(a)) return `${posix.basename(b)} references ${posix.basename(a)} via a triple-slash path in the current code`;
         return 'linked through an index/barrel file';
@@ -324,8 +329,11 @@ export class RelationshipClassifier {
         const ia = this.analyze(a);
         const ib = this.analyze(b);
         if (isProjectConfig(a) || isProjectConfig(b)) return 'involves project configuration, which code uses without importing';
+        if (isSameGoPackage(a, b)) return 'same Go package: files share scope without imports';
         if (ia.sourceUnavailable || ib.sourceUnavailable) return 'source is unavailable, so an import link cannot be ruled out';
         if (!ia.analyzable || !ib.analyzable) return 'import status unknown because one or both file types are not supported';
+        const reason = ia.analysis.incompleteReason ?? ib.analysis.incompleteReason;
+        if (reason !== undefined) return `import analysis was incomplete (${reason}), so a dependency link cannot be ruled out`;
         return 'some imports or path references could not be resolved, so a dependency link cannot be ruled out';
       }
     }
@@ -359,6 +367,7 @@ export class RelationshipClassifier {
       analysis,
       analyzable: analysis.analyzable,
       sourceUnavailable: analysis.sourceUnavailable,
+      importEdges: new Map(),
       imports: new Set(),
       heuristicImports: new Set(),
       references: new Set(),
@@ -381,6 +390,9 @@ export class RelationshipClassifier {
           continue;
         }
         result.imports.add(target.path);
+        if (!result.importEdges.has(target.path)) {
+          result.importEdges.set(target.path, { specifier: edge.specifier, via: target.via, heuristic: Boolean(target.heuristic) });
+        }
         if (target.heuristic) {
           result.heuristicImports.add(target.path);
           result.heuristicEdges++;
@@ -446,7 +458,7 @@ export class RelationshipClassifier {
       reach.visited.add(current);
       const info = this.analyze(current);
       // An unreadable barrel could re-export anything, so nothing can be ruled out.
-      if (info.unresolved > 0 || info.sourceUnavailable) reach.incomplete = true;
+      if (info.unresolved > 0 || info.sourceUnavailable || info.analysis.incomplete) reach.incomplete = true;
       for (const target of [...info.imports, ...info.references]) {
         if (reach.files.has(target)) continue;
         reach.files.add(target);
@@ -472,6 +484,18 @@ export function parallelImplementation(a: string, b: string): HiddenBridge | und
   if (aDir === '.' || bDir === '.' || aDir === bDir || posix.dirname(aDir) !== posix.dirname(bDir)) return undefined;
   const value = name === posix.basename(b) ? name : `${posix.basename(a)} / ${posix.basename(b)}`;
   return { signal: 'parallel-implementation', value, filesUsing: 2 };
+}
+
+/** `a imports b` for `explain`: Go imports name the package, heuristic edges say so. */
+function importWording(from: string, to: string, info: FileImports): string {
+  const edge = info.importEdges.get(to);
+  if (edge?.via === 'go-package') return `${posix.basename(from)} imports package ${edge.specifier} (which includes ${posix.basename(to)})`;
+  const suffix = !info.heuristicImports.has(to)
+    ? ''
+    : edge?.via === 'python-module'
+      ? ' (heuristic: the imported name is probably an attribute of the package, not a submodule)'
+      : ' (via heuristic source remap)';
+  return `${posix.basename(from)} imports ${posix.basename(to)}${suffix}`;
 }
 
 function referencePriority(kind: SourceReferenceKind): number {

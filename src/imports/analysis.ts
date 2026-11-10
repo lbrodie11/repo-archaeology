@@ -1,5 +1,7 @@
 import { posix, win32 } from 'node:path';
 import type { ImportResolutionVia, ImportUnresolvedReasonCode } from './package-exports.js';
+import { goAnalyzer } from './go.js';
+import { pythonAnalyzer } from './python.js';
 import { ImportResolver } from './resolve.js';
 import type { RepoFiles } from './tree-files.js';
 import { extractDetailedDependencies, type ImportEdgeKind } from './typescript.js';
@@ -52,6 +54,8 @@ export interface FileAnalysis {
   external: number;
   unresolved: AnalysisUnresolved[];
   dynamicLoads: number;
+  /** Diagnostics raised while resolving this file's imports (surfaced in `meta.warnings`). */
+  warnings?: string[];
 }
 
 /** What a language extractor found in one file, before resolution. */
@@ -60,6 +64,8 @@ export interface ExtractedSpecifier {
   kind: ImportEdgeKind;
   typeOnly?: boolean;
   reference?: boolean;
+  /** Python `from <specifier> import <names>`: the imported names (`*` for a star import). */
+  names?: string[];
 }
 
 export interface Extraction {
@@ -70,9 +76,19 @@ export interface Extraction {
 }
 
 export type SpecifierResolution =
-  | { kind: 'files'; targets: AnalysisTarget[] }
-  | { kind: 'external' }
-  | { kind: 'unresolved'; reasonCode: ImportUnresolvedReasonCode };
+  | {
+      kind: 'files';
+      /** May be empty: the import names no file (a Python namespace package). */
+      targets: AnalysisTarget[];
+      /** The target list was cut short (fan-out budget): the importing file becomes `incomplete`. */
+      incompleteReason?: string;
+      warning?: string;
+    }
+  | { kind: 'external'; warning?: string }
+  | { kind: 'unresolved'; reasonCode: ImportUnresolvedReasonCode; warning?: string };
+
+/** At most this many internal edge targets per session for budgeted (fan-out) analyzers. */
+export const MAX_SESSION_INTERNAL_EDGES = 200_000;
 
 /**
  * Consumer policy. The classifier and the import graph historically differ in two
@@ -96,11 +112,18 @@ export interface LanguageAnalyzer<Index = unknown> {
   index(files: RepoFiles): Index;
   extract(text: string, path: string, index: Index): Extraction;
   resolve(from: string, item: ExtractedSpecifier, index: Index, session: AnalysisSession): SpecifierResolution;
+  /** Diagnostics found while building the index (duplicate modules, unsupported config). */
+  indexWarnings?(index: Index): readonly string[];
+  /** Count this analyzer's edges against `MAX_SESSION_INTERNAL_EDGES` (package fan-out languages). */
+  readonly budgeted?: boolean;
 }
 
 /** Per-consumer analysis state: the reader, the policy and each analyzer's lazily built index. */
 export class AnalysisSession {
   private readonly indexes = new Map<string, unknown>();
+  /** Internal edges emitted so far by budgeted analyzers. */
+  budgetedEdges = 0;
+  edgeBudget = MAX_SESSION_INTERNAL_EDGES;
 
   constructor(
     readonly files: RepoFiles,
@@ -122,6 +145,27 @@ export class AnalysisSession {
   includes(path: string): boolean {
     return this.policy.includeTarget ? this.policy.includeTarget(path) : true;
   }
+
+  /** Index warnings of every analyzer whose index was built in this session, in registry order. */
+  indexWarnings(): string[] {
+    const out: string[] = [];
+    for (const analyzer of this.analyzers) {
+      if (!this.indexes.has(analyzer.id) || !analyzer.indexWarnings) continue;
+      out.push(...analyzer.indexWarnings(this.indexes.get(analyzer.id)));
+    }
+    return out;
+  }
+}
+
+/**
+ * `meta.warnings` entries for a set of analyzed files: index warnings first, then each
+ * file's resolution warnings, deduplicated and sorted so output is deterministic.
+ */
+export function analysisWarnings(session: AnalysisSession, analyses: Iterable<FileAnalysis | undefined>): string[] {
+  const fileWarnings = new Set<string>();
+  for (const analysis of analyses) for (const warning of analysis?.warnings ?? []) fileWarnings.add(warning);
+  const index = [...new Set(session.indexWarnings())].sort();
+  return [...index, ...[...fileWarnings].filter((warning) => !index.includes(warning)).sort()];
 }
 
 /** Analyzes one file: extract its imports, resolve each, and summarize the result. */
@@ -151,14 +195,28 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
 
   const seenEdges = new Set<string>();
   const seenUnresolved = new Set<string>();
+  const warnings = new Set<string>();
+  const markIncomplete = (reason: string) => {
+    result.incompleteReason ??= reason;
+  };
   for (const item of extraction.imports) {
     const resolved = analyzer.resolve(path, item, index, session);
+    if (resolved.warning) warnings.add(resolved.warning);
     if (resolved.kind === 'files') {
+      if (resolved.incompleteReason) markIncomplete(resolved.incompleteReason);
       const targets: AnalysisTarget[] = [];
       for (const target of resolved.targets) {
         if (target.path === path || !session.includes(target.path)) continue;
         const edgeKey = `${target.path}\0${item.specifier}\0${item.kind}`;
         if (seenEdges.has(edgeKey)) continue;
+        if (analyzer.budgeted) {
+          if (session.budgetedEdges >= session.edgeBudget) {
+            markIncomplete('session internal-edge budget reached');
+            warnings.add(`Import analysis stopped adding edges after ${session.edgeBudget} internal edges; files past the budget are reported as incomplete.`);
+            break;
+          }
+          session.budgetedEdges++;
+        }
         seenEdges.add(edgeKey);
         targets.push(target);
       }
@@ -177,6 +235,7 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
       result.unresolved.push({ specifier: item.specifier, reasonCode: resolved.reasonCode });
     }
   }
+  if (warnings.size > 0) result.warnings = [...warnings].sort();
   result.incomplete = result.unresolved.length > 0 || result.dynamicLoads > 0 || result.incompleteReason !== undefined;
   return result;
 }
@@ -234,7 +293,11 @@ function resolveReferencePath(from: string, referencePath: string, session: Anal
 }
 
 /** Every registered language analyzer, in match order. */
-export const LANGUAGE_ANALYZERS: readonly LanguageAnalyzer[] = [typescriptAnalyzer as LanguageAnalyzer];
+export const LANGUAGE_ANALYZERS: readonly LanguageAnalyzer[] = [
+  typescriptAnalyzer as LanguageAnalyzer,
+  goAnalyzer as LanguageAnalyzer,
+  pythonAnalyzer as LanguageAnalyzer,
+];
 
 /** Whether any language analyzer handles this path (by extension). */
 export function isAnalyzablePath(path: string): boolean {

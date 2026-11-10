@@ -2,7 +2,7 @@ import { posix } from 'node:path';
 import { resolveFile, type RepoFiles } from './tree-files.js';
 import { discoverWorkspaces } from './workspaces.js';
 
-export type ImportResolutionVia = 'relative' | 'paths' | 'workspace' | 'exports' | 'imports';
+export type ImportResolutionVia = 'relative' | 'paths' | 'workspace' | 'exports' | 'imports' | 'go-package' | 'python-module';
 
 export type ImportUnresolvedReasonCode =
   | 'alias-unmatched'

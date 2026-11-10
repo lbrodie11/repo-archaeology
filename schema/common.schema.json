@@ -422,7 +422,9 @@
         "paths",
         "workspace",
         "exports",
-        "imports"
+        "imports",
+        "go-package",
+        "python-module"
       ]
     },
     "ImportUnresolvedReasonCode": {

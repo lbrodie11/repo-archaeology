@@ -386,7 +386,8 @@ export function buildMapData(ctx: Context, options: Pick<MapOptions, 'edges' | '
 
     const repoName = basename(ctx.root);
     // The map is meant to be shared, so it must not reveal where the repo lives on this machine.
-    const meta = { ...buildMeta(ctx), root: repoName, warnings: [...ctx.warnings] };
+    const baseMeta = buildMeta(ctx);
+    const meta = { ...baseMeta, root: repoName, warnings: [...baseMeta.warnings] };
     return {
       meta,
       repoName,
