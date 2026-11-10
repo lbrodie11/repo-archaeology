@@ -19,7 +19,12 @@ export const RICH_FRAME_PAD_TOP = 52;
 export const RICH_FRAME_PAD_BOTTOM = 28;
 export const WEAK_INTERVAL_THRESHOLD = 0.3;
 
-export type PriorityBand = 'surprising' | 'ghost' | 'other';
+/**
+ * `unchecked` holds components made only of unchecked (`unknown`) links while the map also has
+ * import-backed relationships: those links start hidden, so their frames sort last instead of
+ * opening the sheet with empty-looking frames.
+ */
+export type PriorityBand = 'surprising' | 'ghost' | 'other' | 'unchecked';
 
 export interface RichFrameLayout {
   /** Cut number label: "C-01", "C-02", ... */
@@ -916,7 +921,8 @@ function countGhostSubgroups(data: MapData, edgeIndices: readonly number[]): num
 /**
  * Contact-sheet layout (`--style rich`):
  * - Finds connected components over all edges in `data.edges`.
- * - Orders components by highest `overviewPriority`, then `score`, then `shared`.
+ * - Orders components by highest `overviewPriority`, then `score`, then `shared`; components whose
+ *   links are all hidden by default (unchecked-only) sort last in their own band.
  * - Labels frames `C-01`, `C-02`... with plain-text directional captions and `weak` markers.
  * - Runs RA-15's simulation inside each frame (`> 40` nodes gets full 12-column sheet width).
  * - Shelf-packs frames on a 12-column grid with exact FRAME/12 gutters (`12` horizontal,
@@ -999,6 +1005,8 @@ export function computeRichLayoutWithTiming(
 
   const visited = new Uint8Array(totalNodes);
   const rawComponents: RawComponent[] = [];
+  // Mirrors the map client's default filter: unchecked links start hidden when any other kind exists
+  const uncheckedHiddenByDefault = data.edges.some((e) => e.relationship !== 'unknown');
 
   for (let start = 0; start < totalNodes; start++) {
     if (!touched[start] || visited[start]) continue;
@@ -1058,7 +1066,12 @@ export function computeRichLayoutWithTiming(
 
     let band: PriorityBand;
     let bandRank: number;
-    if (overviewPriority >= 2) {
+    const onlyUnchecked =
+      uncheckedHiddenByDefault && edgeIndices.every((ei) => data.edges[ei]!.relationship === 'unknown');
+    if (onlyUnchecked) {
+      band = 'unchecked';
+      bandRank = -1;
+    } else if (overviewPriority >= 2) {
       band = 'surprising';
       bandRank = 2;
     } else if (overviewPriority >= 1 || ghostCount > 0) {

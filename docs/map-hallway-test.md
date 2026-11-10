@@ -90,3 +90,27 @@ The Briefing blueprint plate (`C-01`) changed from an arc around the selected pa
 | Unprompted confusion notes | Fewer for B (for example "why are some wires curved?", "what does this row mean?") |
 
 If B fails P2 or P3, revisit the plate key wording before the geometry. If P4 fails, check whether participants noticed the footer hint ("Point at a file to trace its wires") and the highlight it triggers.
+
+---
+
+## Atlas Overview Check (3–5 people)
+
+The Atlas overview changed from drawing every file of every group to level-of-detail rendering (folder groups for dense frames, explained empty frames, constant-size captions). The browser tests verify that nothing is blank, mislabeled or unreachable; they cannot verify that people find things faster. Run this with 3–5 developers who have not used Repo Archaeology, on a repository with at least one 25+ file group (for example a local clone of `shadcn-ui/ui`), comparing `repo-archaeology@0.7.0` (A) with the current build (B).
+
+### Tasks (time each, record the answer and the number of clicks)
+- **A1 · Largest group:** *"Which group of related files is the largest, and roughly what areas of the code does it span?"* Correct: the right frame and at least two of its folders.
+- **A2 · Find a file:** *"Find `<a file inside the large group>` and tell me one file it changes with."* Correct: file located (search or zoom) and a real neighbour named.
+- **A3 · Inspect a ghost wire:** *"Open a ghost-wire relationship and tell me which frame it belongs to and how often the two files changed together."* Correct: frame id matches the inspector's `Inspecting C-xx` line, counts read correctly.
+- **A4 · Explain an empty frame:** *"Why does frame `<an unchecked-only frame>` show no relationships, and how would you see them?"* Correct: names the filter and shows them.
+- **A5 · Back to the overview:** *"Get back to seeing every group."* Correct: `Reset view` (or equivalent) without reloading.
+
+### Decide
+
+| Metric | Keep B when |
+| :--- | :--- |
+| Task success (A1–A5) | B is at least as high as A on every task, and A4 is 100% |
+| Median time, A1 and A2 | B is at least 20% faster |
+| Interpretation errors | No participant reads a folder group as a single file, or group position as importance |
+| Clicks to complete A3 | B needs no more than A |
+
+If people misread folder groups as files, strengthen the double-ring marker or the "Grouped by folder" note before changing the thresholds.

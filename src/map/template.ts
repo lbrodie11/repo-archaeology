@@ -3838,12 +3838,29 @@ const RICH_CLIENT = String.raw`
 
   var m = data.meta;
   var span = m.oldestCommit && m.newestCommit ? ' between ' + m.oldestCommit + ' and ' + m.newestCommit : '';
+  var KIND_NOUNS = { ghost: 'ghost wire', unknown: 'unchecked link', indirect: 'indirect import', direct: 'import link', test: 'test link' };
+  // "3 unchecked links and 1 import link" for the relationships in a list that the filter bar hides
+  function describeHidden(list) {
+    var parts = [];
+    ORDER.forEach(function (kind) {
+      if (visible[kind]) return;
+      var c = 0;
+      for (var i = 0; i < list.length; i++) if (list[i].d.relationship === kind) c++;
+      if (c > 0) parts.push(plural(c, KIND_NOUNS[kind]));
+    });
+    if (parts.length <= 1) return parts.join('');
+    return parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+  }
   function updateSummary() {
     var shown = edges.filter(function (e) { return visible[e.d.relationship]; }).length;
+    var hiddenText = describeHidden(edges);
     document.getElementById('summary').textContent =
       'Analyzed ' + plural(m.commitsAnalyzed, 'commit') + span + '. Loaded ' + plural(edges.length, 'relationship') +
-      ' across ' + plural(frames.length, 'cut frame') + ' and showing ' + shown.toLocaleString('en-US') +
-      ' (each at least ' + m.settings.minShared + ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
+      ' across ' + plural(frames.length, 'cut frame') +
+      ' (each at least ' + m.settings.minShared + ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence). ' +
+      (hiddenText
+        ? 'Showing ' + shown.toLocaleString('en-US') + '; the filter bar hides ' + hiddenText + '.'
+        : 'Showing all ' + shown.toLocaleString('en-US') + '.');
   }
   updateSummary();
 
@@ -3852,16 +3869,26 @@ const RICH_CLIENT = String.raw`
   edges.forEach(function (e) {
     if (edgesByKind[e.d.relationship]) edgesByKind[e.d.relationship].push(e);
   });
+  // Bumped whenever filters change or a file is dragged, so cached folder groups are rebuilt
+  var layoutEpoch = 0;
   function syncActiveNodes() {
     activeNodesList = [];
+    layoutEpoch++;
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      var act = false;
+      var deg = 0;
+      var best = 0;
       for (var k = 0; k < n.edges.length; k++) {
-        if (visible[n.edges[k].d.relationship]) { act = true; break; }
+        var ne = n.edges[k];
+        if (!visible[ne.d.relationship]) continue;
+        deg++;
+        var w = (ne.d.overviewPriority || 0) * 100 + (ne.d.relationship === 'ghost' ? 50 : 0) + ne.lowBound * 10 + Math.min(50, ne.d.shared || 0) * 0.1;
+        if (w > best) best = w;
       }
-      n.active = act;
-      if (act) activeNodesList.push(n);
+      n.active = deg > 0;
+      // Which labels to keep when there is not room for all of them: strongest relationship, then degree
+      n.importance = best + deg;
+      if (n.active) activeNodesList.push(n);
     }
   }
   syncActiveNodes();
@@ -3950,11 +3977,17 @@ const RICH_CLIENT = String.raw`
     requestDraw();
   }
 
+  // Space the view buttons take at the top of the canvas (they wrap to two rows on narrow screens)
+  var stageOverlay = typeof document.querySelector === 'function' ? document.querySelector('.stage-overlay') : null;
+  function toolbarClearance() {
+    var h = stageOverlay && stageOverlay.offsetHeight ? stageOverlay.offsetTop + stageOverlay.offsetHeight : 0;
+    return Math.max(44, Math.min(140, h + 4));
+  }
   function rectBounds(minX, minY, maxX, maxY, padPx) {
     var w = Math.max(1, size.w);
     var h = Math.max(1, size.h);
     var pad = padPx != null ? padPx : 64;
-    var topClearance = 44;
+    var topClearance = toolbarClearance();
     var availH = Math.max(120, h - topClearance);
     var spanW = Math.max(1, maxX - minX + pad * 2);
     var spanH = Math.max(1, maxY - minY + pad * 2);
@@ -3966,18 +3999,43 @@ const RICH_CLIENT = String.raw`
     };
   }
 
+  // Below this scale frame contents are not readable, so "fit" shows the top rows at this scale instead
+  var FIT_MIN_READABLE_SCALE = 0.32;
+  var BASE_HINT = hintEl ? hintEl.textContent : '';
+  var fitInfo = { shown: 0, total: 0 };
+  function updateFitHint() {
+    if (!hintEl) return;
+    var base = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'Two fingers to pan and zoom' : BASE_HINT;
+    hintEl.textContent = fitInfo.shown < fitInfo.total
+      ? 'Showing the first ' + fitInfo.shown + ' of ' + fitInfo.total + ' groups. Drag, or zoom out, to reach the rest.'
+      : base;
+  }
   function fitSheet() {
+    fitInfo = { shown: frames.length, total: frames.length };
     if (frames.length > 0) {
-      var initialFrames = frames.slice(0, Math.min(frames.length, 12));
       var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      initialFrames.forEach(function (f) {
+      frames.forEach(function (f) {
         if (f.x < minX) minX = f.x;
         if (f.y < minY) minY = f.y;
         if (f.x + f.w > maxX) maxX = f.x + f.w;
         if (f.y + f.h > maxY) maxY = f.y + f.h;
       });
       var b = rectBounds(minX, minY, maxX, maxY, 36);
-      cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
+      var widthScale = Math.max(0.15, Math.min(2.0, Math.max(1, size.w) / Math.max(1, maxX - minX + 72)));
+      if (b.scale < FIT_MIN_READABLE_SCALE && widthScale > b.scale) {
+        // Too many groups to read at once: fit the sheet's width and start from the top rows
+        var s = Math.min(widthScale, FIT_MIN_READABLE_SCALE);
+        cam.scale = s;
+        cam.x = (minX + maxX) / 2;
+        cam.y = minY + (Math.max(1, size.h) / 2 - toolbarClearance() - 36) / s;
+        var bottom = cam.y + Math.max(1, size.h) / 2 / s;
+        var shown = 0;
+        frames.forEach(function (f) { if (f.y + f.h <= bottom) shown++; });
+        fitInfo.shown = Math.max(1, shown);
+      } else {
+        cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
+      }
+      updateFitHint();
       return;
     }
     if (activeNodesList.length > 0) {
@@ -3988,6 +4046,164 @@ const RICH_CLIENT = String.raw`
       });
       var nb = rectBounds(nMinX, nMinY, nMaxX, nMaxY, 80);
       cam.x = nb.x; cam.y = nb.y; cam.scale = nb.scale;
+    }
+  }
+
+  // ---- overview level of detail: folder groups for big frames, explained empty frames --------------
+  // A frame with at least this many files is drawn as folder groups until it has enough screen area
+  // per file to be read (AGG_MIN_PX2_PER_FILE), or until something inside it is selected or searched.
+  var AGG_MIN_NODES = 25;
+  var AGG_MIN_PX2_PER_FILE = 4000;
+  var AGG_MAX_GROUPS = 7;
+  function frameVisibleEdgeCount(f) {
+    var c = 0;
+    for (var i = 0; i < f.edges.length; i++) if (visible[f.edges[i].d.relationship]) c++;
+    return c;
+  }
+  function isEmptyFrame(f) {
+    return f.edges.length > 0 && frameVisibleEdgeCount(f) === 0;
+  }
+  function refreshAggFlags() {
+    var focused = [];
+    if (selectedNode && selectedNode.frame) focused.push(selectedNode.frame);
+    if (selectedEdge && selectedEdge.frame) focused.push(selectedEdge.frame);
+    if (selectedFamily && selectedFamily.nodes) {
+      selectedFamily.nodes.forEach(function (n) { if (n.frame) focused.push(n.frame); });
+    }
+    if (matches) matches.forEach(function (n) { if (n.frame) focused.push(n.frame); });
+    var k2 = cam.scale * cam.scale;
+    for (var i = 0; i < frames.length; i++) {
+      var f = frames[i];
+      f.agg = f.nodes.length >= AGG_MIN_NODES && focused.indexOf(f) < 0 && !isEmptyFrame(f) &&
+        (f.w * f.h * k2) / f.nodes.length < AGG_MIN_PX2_PER_FILE;
+    }
+  }
+  function detailScaleFor(f) {
+    return Math.sqrt((AGG_MIN_PX2_PER_FILE * f.nodes.length) / Math.max(1, f.w * f.h)) * 1.06;
+  }
+  // Folder groups for a frame: files grouped by the shallowest directory depth that separates them
+  // into at least five groups, capped at AGG_MAX_GROUPS (the smallest merge into "other folders").
+  // Groups are laid out left to right in the order of their files' average position, staggered over
+  // up to three rows, so the picture is the same at every zoom and labels have room.
+  function frameGroups(f) {
+    if (f._groups && f._groupsEpoch === layoutEpoch) return f._groups;
+    var active = f.nodes.filter(isActive);
+    var segs = active.map(function (n) { return n.safeDir === '(root)' || n.safeDir === '.' ? [] : n.safeDir.split('/'); });
+    var prefix = 0;
+    if (segs.length > 0) {
+      for (;;) {
+        var seg = segs[0][prefix];
+        if (seg === undefined || !segs.every(function (sg) { return sg[prefix] === seg; })) break;
+        prefix++;
+      }
+    }
+    var maxDepth = 1;
+    segs.forEach(function (sg) { maxDepth = Math.max(maxDepth, sg.length - prefix); });
+    var byKey = null;
+    for (var depth = 1; depth <= maxDepth; depth++) {
+      byKey = Object.create(null);
+      for (var i = 0; i < active.length; i++) {
+        var key = segs[i].slice(0, prefix + depth).join('/') || '(root)';
+        (byKey[key] || (byKey[key] = [])).push(active[i]);
+      }
+      if (Object.keys(byKey).length >= 5) break;
+    }
+    var list = Object.keys(byKey || {}).map(function (key) { return { key: key, members: byKey[key] }; });
+    list.sort(function (a, b) { return b.members.length - a.members.length || (a.key < b.key ? -1 : 1); });
+    if (list.length > AGG_MAX_GROUPS) {
+      var rest = list.slice(AGG_MAX_GROUPS - 1);
+      var merged = { key: plural(rest.length, 'other folder'), members: [], other: true };
+      rest.forEach(function (g) { merged.members = merged.members.concat(g.members); });
+      list = list.slice(0, AGG_MAX_GROUPS - 1).concat([merged]);
+    }
+    var groupOf = Object.create(null);
+    list.forEach(function (g, gi) {
+      var sx = 0;
+      g.members.forEach(function (n) { sx += n.x; groupOf[n.i] = gi; });
+      g.frame = f;
+      g.cx = sx / g.members.length;
+      g.r = 10 + 5.5 * Math.sqrt(g.members.length);
+      g.inner = 0;
+      var parts = g.key.split('/');
+      g.label = g.other ? g.key : (parts.length > 2 ? '…/' + parts.slice(-2).join('/') : g.key);
+      g.shortLabel = g.other ? g.key : parts[parts.length - 1];
+    });
+    var ordered = list.slice().sort(function (a, b) { return a.cx - b.cx || (a.key < b.key ? -1 : 1); });
+    var rowCount = ordered.length <= 3 ? 1 : (ordered.length <= 5 ? 2 : 3);
+    var innerLeft = f.x + f.pad.left;
+    var innerW = Math.max(1, f.w - f.pad.left - f.pad.right);
+    var maxR = 0;
+    ordered.forEach(function (g) { maxR = Math.max(maxR, g.r); });
+    var rowTop = f.y + f.pad.top + maxR;
+    var rowBottom = Math.max(rowTop, f.y + f.h - f.pad.bottom - maxR - 78);
+    ordered.forEach(function (g, oi) {
+      g.x = innerLeft + ((oi + 0.5) * innerW) / ordered.length;
+      g.y = rowCount === 1 ? (rowTop + rowBottom) / 2 : rowTop + ((oi % rowCount) * (rowBottom - rowTop)) / (rowCount - 1);
+      // Room for this group's label before it reaches the next group in a neighbouring slot
+      g.slotW = (Math.min(2, rowCount) * innerW) / ordered.length;
+    });
+    var linkByKey = Object.create(null);
+    var links = [];
+    f.edges.forEach(function (e) {
+      if (!visible[e.d.relationship]) return;
+      var a = groupOf[e.s.i], b = groupOf[e.t.i];
+      if (a === undefined || b === undefined) return;
+      if (a === b) { list[a].inner++; return; }
+      var lk = a < b ? a + ':' + b : b + ':' + a;
+      var link = linkByKey[lk];
+      if (!link) {
+        link = linkByKey[lk] = { a: list[Math.min(a, b)], b: list[Math.max(a, b)], count: 0, kinds: Object.create(null) };
+        links.push(link);
+      }
+      link.count++;
+      link.kinds[e.d.relationship] = (link.kinds[e.d.relationship] || 0) + 1;
+    });
+    links.forEach(function (link) {
+      var best = 'direct', bestCount = -1;
+      ORDER.forEach(function (kind) {
+        var c = link.kinds[kind] || 0;
+        if (c > bestCount) { best = kind; bestCount = c; }
+      });
+      link.kind = best;
+    });
+    f._groups = { groups: list, links: links };
+    f._groupsEpoch = layoutEpoch;
+    return f._groups;
+  }
+  function aggGroupAt(p) {
+    for (var i = 0; i < frames.length; i++) {
+      var f = frames[i];
+      if (!f.agg || p.x < f.x || p.x > f.x + f.w || p.y < f.y || p.y > f.y + f.h) continue;
+      var groups = frameGroups(f).groups;
+      for (var gi = groups.length - 1; gi >= 0; gi--) {
+        var g = groups[gi];
+        var r = g.r + 4 / cam.scale;
+        if ((p.x - g.x) * (p.x - g.x) + (p.y - g.y) * (p.y - g.y) <= r * r) return g;
+      }
+    }
+    return null;
+  }
+  // Zoom to a folder group's files at a scale where the frame shows individual files again
+  function flyToGroup(g) {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    g.members.forEach(function (n) {
+      minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
+      minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
+    });
+    var b = rectBounds(minX, minY, maxX, maxY, 70);
+    b.scale = Math.min(6, Math.max(b.scale, detailScaleFor(g.frame)));
+    b.x = (minX + maxX) / 2;
+    b.y = (minY + maxY) / 2 - 22 / b.scale;
+    flyToTarget(b);
+  }
+  // Turn on the relationship kinds a frame needs, through the filter buttons so every view updates
+  function showKindsOf(list) {
+    if (!toggles) return;
+    var btns = toggles.querySelectorAll('.toggle[data-kind]');
+    for (var i = 0; i < btns.length; i++) {
+      var kind = btns[i].getAttribute('data-kind');
+      if (visible[kind]) continue;
+      if (list.some(function (e) { return e.d.relationship === kind; })) btns[i].click();
     }
   }
 
@@ -4256,7 +4472,41 @@ const RICH_CLIENT = String.raw`
     }
   }
 
+  // Frame header band: 28 units tall in the sheet, but never under 22px on screen (so captions stay
+  // readable when zoomed out) and never more than half the frame
+  function frameHeaderH(f, k) {
+    return Math.min(Math.max(28, 22 / k), f.h * 0.5);
+  }
+  // Line grammar shared by file-to-file wires and group-to-group links
+  function applyKindStroke(kind, strokeWidth, isMarked, colors, k) {
+    if (kind === 'ghost') {
+      ctx.strokeStyle = colors.ink;
+      ctx.lineWidth = strokeWidth;
+      ctx.setLineDash([8 / k, 5 / k]);
+    } else if (kind === 'direct') {
+      ctx.strokeStyle = colors.ink;
+      ctx.lineWidth = strokeWidth;
+      ctx.setLineDash([]);
+    } else if (kind === 'indirect') {
+      ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
+      ctx.lineWidth = strokeWidth * 0.72;
+      ctx.setLineDash([]);
+    } else if (kind === 'unknown') {
+      ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
+      ctx.lineWidth = strokeWidth;
+      ctx.setLineDash([1.5 / k, 4 / k]);
+    } else {
+      // test: thin solid line with >= 3:1 contrast
+      ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
+      ctx.lineWidth = Math.max(0.9 / k, strokeWidth * 0.55);
+      ctx.setLineDash([]);
+    }
+  }
+  var lastDrawStats = { labels: 0, aggregated: 0, empty: 0, invalid: 0 };
+  var lastDrawMs = 0;
+
   function draw() {
+    var drawStart = performance.now();
     var dpr = size.dpr;
     var colors = getThemeColors();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4287,61 +4537,21 @@ const RICH_CLIENT = String.raw`
     var markerEdge = getMarkerEdge();
     var activeFrame = (selectedEdge && selectedEdge.frame) || (selectedNode && selectedNode.frame) || null;
 
-    // 1. Draw contact-sheet frames (cut-numbered boxes + captions)
+    refreshAggFlags();
+    var drawStats = { labels: 0, aggregated: 0, empty: 0, invalid: 0 };
+    var viewLeft = cam.x - size.w / 2 / k, viewRight = cam.x + size.w / 2 / k;
+    var viewTop = cam.y - size.h / 2 / k, viewBottom = cam.y + size.h / 2 / k;
+
+    // 1. Draw contact-sheet frame backgrounds (borders and captions are drawn last, above the graph)
     for (var fi = 0; fi < frames.length; fi++) {
       var f = frames[fi];
-      var isFrameSelected = activeFrame === f;
-      var isMarkerFrame = Boolean(markerEdge && markerEdge.frame === f);
+      f._empty = isEmptyFrame(f);
+      f._labelsUsed = 0;
+      f._labelBudget = Math.max(f.nodes.length <= 6 ? f.nodes.length : 2, Math.floor((f.w * k) * ((f.h - 28) * k) / 6800));
+      if (f.agg) drawStats.aggregated++;
+      if (f._empty) drawStats.empty++;
       ctx.fillStyle = colors.panel;
       ctx.fillRect(f.x, f.y, f.w, f.h);
-
-      ctx.strokeStyle = colors.rule;
-      ctx.lineWidth = (isFrameSelected ? 3.5 : 2) / k;
-      ctx.setLineDash([]);
-      ctx.strokeRect(f.x, f.y, f.w, f.h);
-
-      var headerH = 28;
-      ctx.beginPath();
-      ctx.moveTo(f.x, f.y + headerH);
-      ctx.lineTo(f.x + f.w, f.y + headerH);
-      ctx.lineWidth = 1.5 / k;
-      ctx.stroke();
-
-      // Count hidden edges in this frame when kind toggles filter out relationships
-      var hiddenInFrame = 0;
-      for (var fei = 0; fei < f.edges.length; fei++) {
-        if (!visible[f.edges[fei].d.relationship]) hiddenInFrame++;
-      }
-
-      // Cut badge and plain-text directional caption
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(f.x + 2, f.y + 2, Math.max(0, f.w - 4), headerH - 4);
-      ctx.clip();
-      var fontPx = Math.min(11, 13 / Math.max(1, k));
-      ctx.font = '700 ' + fontPx + 'px ' + colors.fontMono;
-      ctx.textBaseline = 'middle';
-      var fullCaption = f.caption + (hiddenInFrame > 0 ? ' · +' + hiddenInFrame + ' hidden by filter' : '');
-      var charW = fontPx * 0.62;
-      var maxChars = Math.max(18, Math.floor((f.w - 18) / charW));
-      var displayCaption = middleTruncate(fullCaption, maxChars);
-
-      // Highlight the single active finding's cut identifier chip with --f-marker background + --f-marker-ink text
-      if (isMarkerFrame && displayCaption.indexOf(f.id) === 0) {
-        var idW = ctx.measureText(f.id).width;
-        var chipPadX = 4;
-        var chipH = headerH - 8;
-        ctx.fillStyle = colors.marker;
-        ctx.fillRect(f.x + 6, f.y + 4, idW + chipPadX * 2, chipH);
-        ctx.fillStyle = colors.markerInk;
-        ctx.fillText(f.id, f.x + 6 + chipPadX, f.y + headerH / 2);
-        ctx.fillStyle = colors.ink;
-        ctx.fillText(displayCaption.slice(f.id.length), f.x + 6 + chipPadX * 2 + idW, f.y + headerH / 2);
-      } else {
-        ctx.fillStyle = colors.ink;
-        ctx.fillText(displayCaption, f.x + 8, f.y + headerH / 2);
-      }
-      ctx.restore();
     }
 
     // 2. Draw edges using line grammar and Wilson interval.low width (never using --f-marker as a stroke)
@@ -4350,6 +4560,8 @@ const RICH_CLIENT = String.raw`
       var kindEdges = edgesByKind[kind] || [];
       for (var ei = 0; ei < kindEdges.length; ei++) {
         var e = kindEdges[ei];
+        // Frames shown as folder groups draw their relationships between groups instead (step 3)
+        if (e.frame && e.frame.agg) continue;
         var lowWidth = (1.1 + e.lowBound * 3.0) / k;
         var isMarked = e === markerEdge;
         var strokeWidth = isMarked ? lowWidth + (highContrast ? 2.4 : 1.5) / k : lowWidth;
@@ -4371,41 +4583,50 @@ const RICH_CLIENT = String.raw`
         }
 
         ctx.globalAlpha = 1;
-        if (kind === 'ghost') {
-          ctx.strokeStyle = colors.ink;
-          ctx.lineWidth = strokeWidth;
-          ctx.setLineDash([8 / k, 5 / k]);
-          ctx.lineDashOffset = (isMarked && hasInteractiveFocusedGhost()) ? -dashPhase / k : 0;
-        } else if (kind === 'direct') {
-          ctx.strokeStyle = colors.ink;
-          ctx.lineWidth = strokeWidth;
-          ctx.setLineDash([]);
-          ctx.lineDashOffset = 0;
-        } else if (kind === 'indirect') {
-          ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
-          ctx.lineWidth = strokeWidth * 0.72;
-          ctx.setLineDash([]);
-          ctx.lineDashOffset = 0;
-        } else if (kind === 'unknown') {
-          ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
-          ctx.lineWidth = strokeWidth;
-          ctx.setLineDash([1.5 / k, 4 / k]);
-          ctx.lineDashOffset = 0;
-        } else {
-          // test: thin solid line with >= 3:1 contrast
-          ctx.strokeStyle = isMarked ? colors.ink : colors.ink2;
-          ctx.lineWidth = Math.max(0.9 / k, strokeWidth * 0.55);
-          ctx.setLineDash([]);
-          ctx.lineDashOffset = 0;
-        }
+        applyKindStroke(kind, strokeWidth, isMarked, colors, k);
+        ctx.lineDashOffset = (kind === 'ghost' && isMarked && hasInteractiveFocusedGhost()) ? -dashPhase / k : 0;
         ctx.stroke();
       }
     });
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;
 
-    // 3. Draw nodes: paper fill (or theme-aware >= 3:1 directory fill) + ink outline; 3px ink ring when selected
+    // 3. Frames too dense to read at this zoom: folder groups and the relationships between them
+    var groupLabels = [];
+    for (var afi = 0; afi < frames.length; afi++) {
+      var af = frames[afi];
+      if (!af.agg) continue;
+      var grouped = frameGroups(af);
+      grouped.links.forEach(function (link) {
+        ctx.beginPath();
+        ctx.moveTo(link.a.x, link.a.y);
+        ctx.lineTo(link.b.x, link.b.y);
+        applyKindStroke(link.kind, (1.3 + Math.min(4.2, Math.log(link.count + 1) / Math.LN2 * 0.9)) / k, false, colors, k);
+        ctx.lineDashOffset = 0;
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      grouped.groups.forEach(function (g) {
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+        ctx.fillStyle = colorByDir && !g.other ? directoryColor(g.members[0].dir) : colors.panel;
+        ctx.fill();
+        ctx.strokeStyle = colors.ink;
+        ctx.lineWidth = 2.25 / k;
+        ctx.stroke();
+        // A second ring marks a group as a stack of files, not a single file
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.r + 3.5 / k, 0, Math.PI * 2);
+        ctx.lineWidth = 1 / k;
+        ctx.stroke();
+        groupLabels.push(g);
+      });
+    }
+
+    // 4. Draw nodes: paper fill (or theme-aware >= 3:1 directory fill) + ink outline; 3px ink ring when selected
     activeNodesList.forEach(function (n) {
+      if (n.frame && n.frame.agg) return;
+      if (!(n.x === n.x && n.y === n.y)) { drawStats.invalid++; return; }
       ctx.globalAlpha = 1;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
@@ -4428,37 +4649,210 @@ const RICH_CLIENT = String.raw`
       }
     });
 
-    // 4. Draw sanitized mono node labels
+    // 5. File labels by importance. Selected, hovered and searched files always get a label; the
+    //    rest are ranked by their strongest relationship and placed (right, left, below, above)
+    //    only where they hit no other label or file, up to a per-frame budget for the space on screen.
     ctx.globalAlpha = 1;
     ctx.font = (11.5 / k) + 'px ' + colors.fontMono;
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     var labelBoxes = [];
+    var labelHalfH = 7 / k, labelGap = 5 / k;
+    var candidates = [];
     activeNodesList.forEach(function (n) {
+      if (n.frame && n.frame.agg) return;
       var isPriority =
         n === hoverNode ||
         n === selectedNode ||
         (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
         (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t)) ||
         (matches && matches.indexOf(n) >= 0);
-      if (!isPriority && k < 0.45 && n.frame && n.frame.nodes.length > 6) return;
+      if (!isPriority && (n.x < viewLeft || n.x > viewRight || n.y < viewTop || n.y > viewBottom)) return;
+      candidates.push({ n: n, pr: isPriority ? 1 : 0 });
+    });
+    candidates.sort(function (a, b) {
+      return (b.pr - a.pr) || ((b.n.importance || 0) - (a.n.importance || 0)) || (a.n.i - b.n.i);
+    });
+    function boxHits(box, list) {
+      for (var bi = 0; bi < list.length; bi++) {
+        var o = list[bi];
+        if (box.left < o.right && box.right > o.left && box.top < o.bottom && box.bottom > o.top) return true;
+      }
+      return false;
+    }
+    function boxHitsDot(box, self) {
+      var fr = self.frame;
+      var others = fr ? fr.nodes : activeNodesList;
+      for (var oi = 0; oi < others.length; oi++) {
+        var o = others[oi];
+        if (o === self || !o.active) continue;
+        var nx = Math.max(box.left, Math.min(o.x, box.right));
+        var ny = Math.max(box.top, Math.min(o.y, box.bottom));
+        if ((o.x - nx) * (o.x - nx) + (o.y - ny) * (o.y - ny) < o.r * o.r) return true;
+      }
+      return false;
+    }
+    candidates.forEach(function (c) {
+      var n = c.n, fr = n.frame;
+      if (!c.pr && fr && fr._labelsUsed >= fr._labelBudget) return;
       var label = getNodeLabel(n);
       var labelW = ctx.measureText(label).width;
-      var x = n.x + n.r + 5 / k;
-      if (n.frame && x + labelW > n.frame.x + n.frame.w - 6 / k) {
-        x = Math.max(n.frame.x + 6 / k, n.x - n.r - 5 / k - labelW);
+      if (fr && labelW > fr.w - 18 / k) {
+        // A frame narrower than the name (small groups at overview zoom): shorten the name to fit
+        label = middleTruncate(label, Math.max(6, Math.floor((fr.w * k - 22) / 7.2)));
+        labelW = ctx.measureText(label).width;
       }
-      var box = { left: x - 2 / k, right: x + labelW + 2 / k, top: n.y - 7 / k, bottom: n.y + 7 / k };
-      if (!isPriority && labelBoxes.some(function (b) {
-        return box.left < b.right && box.right > b.left && box.top < b.bottom && box.bottom > b.top;
-      })) return;
-      labelBoxes.push(box);
+      var centeredX = n.x - labelW / 2;
+      if (fr) centeredX = Math.max(fr.x + 7 / k, Math.min(fr.x + fr.w - 7 / k - labelW, centeredX));
+      var spots = [
+        { x: n.x + n.r + labelGap, y: n.y },
+        { x: n.x - n.r - labelGap - labelW, y: n.y },
+        { x: centeredX, y: n.y + n.r + labelGap + labelHalfH },
+        { x: centeredX, y: n.y - n.r - labelGap - labelHalfH }
+      ];
+      var chosen = null;
+      for (var si = 0; si < spots.length && !chosen; si++) {
+        var sp = spots[si];
+        var box = { left: sp.x - 2 / k, right: sp.x + labelW + 2 / k, top: sp.y - labelHalfH, bottom: sp.y + labelHalfH };
+        if (fr && (box.left < fr.x + 4 / k || box.right > fr.x + fr.w - 4 / k || box.top < fr.y + frameHeaderH(fr, k) || box.bottom > fr.y + fr.h - 2 / k)) continue;
+        if (boxHits(box, labelBoxes) || boxHitsDot(box, n)) continue;
+        chosen = { x: sp.x, y: sp.y, box: box };
+      }
+      if (!chosen) {
+        if (!c.pr) return;
+        // Always label what the reader is pointing at or selected, kept inside its frame
+        var px0 = spots[0].x;
+        if (fr && px0 + labelW > fr.x + fr.w - 6 / k) px0 = Math.max(fr.x + 6 / k, spots[1].x);
+        chosen = { x: px0, y: n.y, box: { left: px0 - 2 / k, right: px0 + labelW + 2 / k, top: n.y - labelHalfH, bottom: n.y + labelHalfH } };
+      }
+      labelBoxes.push(chosen.box);
+      if (fr) fr._labelsUsed++;
+      drawStats.labels++;
       ctx.lineWidth = 3.5 / k;
       ctx.strokeStyle = colors.panel;
-      ctx.strokeText(label, x, n.y);
+      ctx.strokeText(label, chosen.x, chosen.y);
       ctx.fillStyle = colors.ink;
-      ctx.fillText(label, x, n.y);
+      ctx.fillText(label, chosen.x, chosen.y);
     });
+
+    // Folder group labels: name and file count under each group, at a constant size on screen
+    ctx.font = '700 ' + (11.5 / k) + 'px ' + colors.fontMono;
+    ctx.textAlign = 'center';
+    groupLabels.forEach(function (g) {
+      var countText = ' · ' + g.members.length + (g.members.length === 1 ? ' file' : ' files');
+      var text = g.label + countText;
+      var maxW = Math.max(60 / k, g.slotW - 10 / k);
+      if (ctx.measureText(text).width > maxW) text = g.shortLabel + countText;
+      if (ctx.measureText(text).width > maxW) text = g.shortLabel + ' · ' + g.members.length;
+      if (ctx.measureText(text).width > maxW) text = middleTruncate(text, Math.max(6, Math.floor((maxW * k) / 7.2)));
+      var tw = ctx.measureText(text).width;
+      var tx = Math.max(g.frame.x + 6 / k + tw / 2, Math.min(g.frame.x + g.frame.w - 6 / k - tw / 2, g.x));
+      var ty = g.y + g.r + 15 / k;
+      // Solid backing so links between groups never run through a group's name
+      ctx.fillStyle = colors.panel;
+      ctx.fillRect(tx - tw / 2 - 4 / k, ty - 8 / k, tw + 8 / k, 16 / k);
+      ctx.fillStyle = colors.ink;
+      ctx.fillText(text, tx, ty);
+    });
+    ctx.textAlign = 'start';
+
+    // 6. Frame borders, captions and explanations, drawn last so they stay readable at any zoom
+    for (var ci = 0; ci < frames.length; ci++) {
+      var cf = frames[ci];
+      var isFrameSelected = activeFrame === cf;
+      var isMarkerFrame = Boolean(markerEdge && markerEdge.frame === cf);
+      var headerH = frameHeaderH(cf, k);
+      ctx.fillStyle = colors.panel;
+      ctx.fillRect(cf.x, cf.y, cf.w, headerH);
+      ctx.strokeStyle = colors.rule;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(cf.x, cf.y + headerH);
+      ctx.lineTo(cf.x + cf.w, cf.y + headerH);
+      ctx.lineWidth = 1.5 / k;
+      ctx.stroke();
+      // A dashed border marks a frame whose relationships are all hidden by the filter bar
+      ctx.setLineDash(cf._empty ? [6 / k, 5 / k] : []);
+      ctx.lineWidth = (isFrameSelected ? 3.5 : 2) / k;
+      ctx.strokeRect(cf.x, cf.y, cf.w, cf.h);
+      ctx.setLineDash([]);
+
+      var hiddenInFrame = cf.edges.length - frameVisibleEdgeCount(cf);
+      // Caption text keeps a constant size on screen; shorter forms are used as the frame gets narrower
+      var captionPx = k >= 1 ? 13 : 11.5;
+      ctx.font = '700 ' + (captionPx / k) + 'px ' + colors.fontMono;
+      ctx.textBaseline = 'middle';
+      var parts = cf.caption.split(' · ');
+      var hiddenSuffix = hiddenInFrame > 0 ? ' · +' + hiddenInFrame + ' hidden by filters' : '';
+      var forms = [
+        cf.caption + hiddenSuffix,
+        parts.slice(0, 3).join(' · ') + hiddenSuffix,
+        parts.slice(0, 2).join(' · ') + hiddenSuffix,
+        parts.slice(0, 2).join(' · '),
+        cf.id
+      ];
+      var availW = cf.w - 16 / k;
+      var displayCaption = forms[forms.length - 1];
+      for (var fo = 0; fo < forms.length; fo++) {
+        if (ctx.measureText(forms[fo]).width <= availW) { displayCaption = forms[fo]; break; }
+      }
+      cf._caption = displayCaption;
+      cf._captionPx = captionPx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cf.x + 2 / k, cf.y + 2 / k, Math.max(0, cf.w - 4 / k), headerH - 4 / k);
+      ctx.clip();
+      // Highlight the single active finding's cut identifier chip with --f-marker background + --f-marker-ink text
+      if (isMarkerFrame && displayCaption.indexOf(cf.id) === 0) {
+        var idW = ctx.measureText(cf.id).width;
+        var chipPadX = 4 / k;
+        ctx.fillStyle = colors.marker;
+        ctx.fillRect(cf.x + 6 / k, cf.y + 4 / k, idW + chipPadX * 2, headerH - 8 / k);
+        ctx.fillStyle = colors.markerInk;
+        ctx.fillText(cf.id, cf.x + 6 / k + chipPadX, cf.y + headerH / 2);
+        ctx.fillStyle = colors.ink;
+        ctx.fillText(displayCaption.slice(cf.id.length), cf.x + 6 / k + chipPadX * 2 + idW, cf.y + headerH / 2);
+      } else {
+        ctx.fillStyle = colors.ink;
+        ctx.fillText(displayCaption, cf.x + 8 / k, cf.y + headerH / 2);
+      }
+      ctx.restore();
+
+      cf._note = '';
+      var bodyH = (cf.h - headerH) * k, bodyW = cf.w * k - 20;
+      if (cf._empty) {
+        // Never leave a blank frame: say what is hidden and how to show it
+        var hiddenText = describeHidden(cf.edges);
+        var lines = bodyH >= 60 && bodyW >= 250
+          ? ['No relationships visible', hiddenText + ' hidden by the filter bar', 'Click to show']
+          : (bodyH >= 60
+            ? [hiddenText, 'hidden by filters', 'click to show']
+            : (bodyH >= 30 ? [hiddenText + ' hidden', 'click to show'] : ['hidden · click']));
+        if (lines.some(function (line) { return line.length * 7.2 > bodyW; })) {
+          var hiddenCount = cf.edges.length;
+          lines = bodyH >= 34 ? ['+' + hiddenCount + ' hidden', 'click to show'] : ['+' + hiddenCount + ' hidden'];
+        }
+        ctx.textAlign = 'center';
+        var lineH = 16 / k;
+        var cy = cf.y + headerH + (cf.h - headerH) / 2 - ((lines.length - 1) * lineH) / 2;
+        lines.forEach(function (line, li) {
+          ctx.font = (li === 0 && lines.length > 1 ? '700 ' : '') + (11.5 / k) + 'px ' + colors.fontMono;
+          var shown = ctx.measureText(line).width > cf.w - 16 / k
+            ? middleTruncate(line, Math.max(6, Math.floor((cf.w * k - 16) / 7)))
+            : line;
+          ctx.fillStyle = li === 0 ? colors.ink : colors.ink2;
+          ctx.fillText(shown, cf.x + cf.w / 2, cy + li * lineH);
+        });
+        ctx.textAlign = 'start';
+        cf._note = lines.join(' / ');
+      } else if (cf.agg && bodyW >= 300 && bodyH >= 170) {
+        ctx.font = (11 / k) + 'px ' + colors.fontMono;
+        ctx.fillStyle = colors.ink2;
+        cf._note = 'Grouped by folder at this zoom · click a group, or zoom in, to see files';
+        ctx.fillText(cf._note, cf.x + 10 / k, cf.y + cf.h - 12 / k);
+      }
+    }
+    lastDrawStats = drawStats;
 
     if (nodes.length === 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4468,13 +4862,53 @@ const RICH_CLIENT = String.raw`
       ctx.fillText('Nothing passed the thresholds yet. Re-run with --min-shared 2 to see weaker links.', size.w / 2, size.h / 2);
       ctx.textAlign = 'start';
     }
+    lastDrawMs = performance.now() - drawStart;
   }
+
+  // Read-only description of what the Atlas canvas last drew (the canvas has no DOM to inspect).
+  // Used by the browser tests; handy in the console as document.getElementById('map').__atlasSnapshot().
+  canvas.__atlasSnapshot = function () {
+    // Draw first so the description always matches the current filters, selection and camera
+    draw();
+    var k = cam.scale;
+    function sx(x) { return (x - cam.x) * k + size.w / 2; }
+    function sy(y) { return (y - cam.y) * k + size.h / 2; }
+    var activeFrame = (selectedEdge && selectedEdge.frame) || (selectedNode && selectedNode.frame) || null;
+    return {
+      cam: { x: cam.x, y: cam.y, scale: cam.scale },
+      size: { w: size.w, h: size.h },
+      fit: { shown: fitInfo.shown, total: fitInfo.total },
+      draw: { ms: lastDrawMs, labels: lastDrawStats.labels, aggregated: lastDrawStats.aggregated, empty: lastDrawStats.empty, invalid: lastDrawStats.invalid },
+      selectedFrameId: activeFrame ? activeFrame.id : null,
+      selectedEdgeIdx: selectedEdge ? selectedEdge.idx : null,
+      frames: frames.map(function (f) {
+        var groups = f.agg ? frameGroups(f) : null;
+        return {
+          id: f.id,
+          band: f.band,
+          files: f.nodes.length,
+          edges: f.edges.length,
+          visibleEdges: frameVisibleEdgeCount(f),
+          empty: isEmptyFrame(f),
+          aggregated: Boolean(f.agg),
+          groups: groups ? groups.groups.map(function (g) { return { key: g.key, files: g.members.length, x: sx(g.x), y: sy(g.y), r: g.r * k }; }) : [],
+          groupLinks: groups ? groups.links.length : 0,
+          caption: f._caption || '',
+          captionPx: f._captionPx || 0,
+          note: f._note || '',
+          labels: f._labelsUsed || 0,
+          rect: { x: sx(f.x), y: sy(f.y), w: f.w * k, h: f.h * k },
+          nodes: f.agg ? [] : f.nodes.filter(isActive).map(function (n) { return { i: n.i, x: sx(n.x), y: sy(n.y), r: n.r * k }; })
+        };
+      })
+    };
+  };
 
   // ---- hit testing ---------------------------------------------------------
   function nodeAt(p) {
     for (var i = nodes.length - 1; i >= 0; i--) {
       var n = nodes[i];
-      if (!isActive(n)) continue;
+      if (!isActive(n) || (n.frame && n.frame.agg)) continue;
       var dx = p.x - n.x, dy = p.y - n.y, r = n.r + 3 / cam.scale;
       if (dx * dx + dy * dy <= r * r) return n;
     }
@@ -4483,7 +4917,7 @@ const RICH_CLIENT = String.raw`
   function edgeAt(p) {
     var best = null, bestD = 6 / cam.scale;
     edges.forEach(function (e) {
-      if (!isVisible(e)) return;
+      if (!isVisible(e) || (e.frame && e.frame.agg)) return;
       var ax = e.s.x, ay = e.s.y, bx = e.t.x, by = e.t.y;
       var vx = bx - ax, vy = by - ay, len2 = vx * vx + vy * vy || 1;
       var t = Math.max(0, Math.min(1, ((p.x - ax) * vx + (p.y - ay) * vy) / len2));
@@ -4538,6 +4972,7 @@ const RICH_CLIENT = String.raw`
         return;
       }
     }
+    refreshAggFlags();
     var n = nodeAt(toWorld(px, py));
     drag = { node: n, startX: px, startY: py, lastX: px, lastY: py, moved: false, stackedSingleTouch: false };
     try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
@@ -4595,6 +5030,7 @@ const RICH_CLIENT = String.raw`
             drag.node.y = wp.y;
           }
           drag.node.pinned = true;
+          layoutEpoch++;
         } else {
           cam.x -= (px - drag.lastX) / cam.scale;
           cam.y -= (py - drag.lastY) / cam.scale;
@@ -4606,9 +5042,16 @@ const RICH_CLIENT = String.raw`
       return;
     }
     var p = toWorld(px, py);
+    refreshAggFlags();
     var n = nodeAt(p);
     var e = n ? null : edgeAt(p);
-    canvas.classList.toggle('pointing', Boolean(n || e));
+    var hoverGroup = (n || e) ? null : aggGroupAt(p);
+    var hoverEmpty = null;
+    if (!n && !e && !hoverGroup) {
+      var hf = frameAt(p);
+      if (hf && isEmptyFrame(hf)) hoverEmpty = hf;
+    }
+    canvas.classList.toggle('pointing', Boolean(n || e || hoverGroup || hoverEmpty));
     var changedHover = false;
     if (n !== hoverNode) { hoverNode = n; changedHover = true; }
     if (e !== hoverEdge) { hoverEdge = e; changedHover = true; }
@@ -4616,10 +5059,19 @@ const RICH_CLIENT = String.raw`
       syncCardMarkerBadges();
       requestDraw();
     }
-    if (n || e) {
+    if (n || e || hoverGroup || hoverEmpty) {
       if (tooltipHideTimer) { clearTimeout(tooltipHideTimer); tooltipHideTimer = null; }
       tooltip.textContent = '';
-      if (n) {
+      if (hoverGroup) {
+        tooltip.appendChild(el('div', '', hoverGroup.frame.id + ' · folder group'));
+        tooltip.appendChild(el('code', '', hoverGroup.key));
+        tooltip.appendChild(el('div', '', plural(hoverGroup.members.length, 'file') + ' · ' + plural(hoverGroup.inner, 'relationship') + ' inside'));
+        tooltip.appendChild(el('div', '', 'Click to zoom in to these files'));
+      } else if (hoverEmpty) {
+        tooltip.appendChild(el('div', '', hoverEmpty.id + ' · no relationships visible'));
+        tooltip.appendChild(el('div', '', describeHidden(hoverEmpty.edges) + ' hidden by the filter bar'));
+        tooltip.appendChild(el('div', '', 'Click to show them'));
+      } else if (n) {
         if (n.frame) tooltip.appendChild(el('div', '', n.frame.id));
         tooltip.appendChild(el('code', '', n.safePath));
         tooltip.appendChild(el('div', '', 'Folder: ' + n.safeDir));
@@ -4668,14 +5120,18 @@ const RICH_CLIENT = String.raw`
     if (!drag.moved) {
       var rect = canvas.getBoundingClientRect();
       var p = toWorld(ev.clientX - rect.left, ev.clientY - rect.top);
+      refreshAggFlags();
       var n = nodeAt(p);
       if (n) selectNode(n);
       else {
         var e = edgeAt(p);
+        var g = e ? null : aggGroupAt(p);
         if (e) selectEdge(e);
+        else if (g) flyToGroup(g);
         else {
           var f = frameAt(p);
-          if (f && f.leadEdge && isVisible(f.leadEdge)) selectEdge(f.leadEdge);
+          if (f && isEmptyFrame(f)) showKindsOf(f.edges);
+          else if (f && f.leadEdge && isVisible(f.leadEdge)) selectEdge(f.leadEdge);
           else clearSelection();
         }
       }
@@ -5097,11 +5553,25 @@ const RICH_CLIENT = String.raw`
 
   function renderOverview() {
     var header = el('div');
-    header.appendChild(el('div', 'cut-section-label', 'C-01 / OVERVIEW'));
+    header.appendChild(el('div', 'cut-section-label', 'ATLAS · OVERVIEW'));
     header.appendChild(el('h2', '', 'Contact-sheet findings'));
     header.appendChild(el('p', '', 'Each numbered cut frame groups a connected component of co-changing files, ranked by priority. Line pattern encodes relationship kind and line width encodes the conservative 95% Wilson confidence lower bound from raw historical counts (which may differ from recency/origin-weighted ranking). Co-change is historical evidence to investigate, not proof of a compile-time dependency. The gold marker chip identifies at most one active finding at a time.'));
     if (m && m.settings && typeof m.settings.maxEdges === 'number' && edges.length >= m.settings.maxEdges) {
       header.appendChild(el('p', 'card-hint', 'Display limit reached: showing top ' + edges.length.toLocaleString('en-US') + ' relationships (--edges ' + m.settings.maxEdges.toLocaleString('en-US') + '). Additional qualifying relationships may be omitted from the sheet.'));
+    }
+    var emptyFrames = frames.filter(isEmptyFrame);
+    if (emptyFrames.length > 0) {
+      var hiddenEdges = [];
+      emptyFrames.forEach(function (f) { hiddenEdges = hiddenEdges.concat(f.edges); });
+      var emptyNote = el('p', 'card-hint', plural(emptyFrames.length, 'cut frame') + ' (' + emptyFrames.map(function (f) { return f.id; }).join(', ') + ') ' +
+        (emptyFrames.length === 1 ? 'has' : 'have') + ' no visible relationships: the filter bar hides ' + describeHidden(hiddenEdges) + '.');
+      emptyNote.id = 'empty-frames-note';
+      header.appendChild(emptyNote);
+      var showHiddenBtn = el('button', 'back-btn', 'Show hidden relationships');
+      showHiddenBtn.type = 'button';
+      showHiddenBtn.id = 'show-hidden-frames';
+      showHiddenBtn.addEventListener('click', function () { showKindsOf(hiddenEdges); });
+      header.appendChild(showHiddenBtn);
     }
     panel.appendChild(header);
 
@@ -5317,7 +5787,7 @@ const RICH_CLIENT = String.raw`
     backBtn.addEventListener('click', clearSelection);
     panel.appendChild(backBtn);
 
-    panel.appendChild(el('div', 'cut-section-label', 'C-02 / EVIDENCE'));
+    panel.appendChild(el('div', 'cut-section-label', 'E-01 · EVIDENCE'));
 
     var head = el('div');
     head.appendChild(el('span', 'badge family', 'Related implementation family'));
@@ -5389,7 +5859,12 @@ const RICH_CLIENT = String.raw`
       panel.appendChild(backBtn);
     }
 
-    panel.appendChild(el('div', 'cut-section-label', 'C-02 / EVIDENCE'));
+    panel.appendChild(el('div', 'cut-section-label', 'E-01 · EVIDENCE'));
+    // Say which cut frame and pair the evidence below belongs to
+    var inspectLabels = distinguishingPaths(e.s.safePath, e.t.safePath);
+    var inspectLine = el('p', 'card-hint inspecting-line', 'Inspecting ' + (e.frame ? e.frame.id + ' · ' : '') + inspectLabels[0] + ' ↔ ' + inspectLabels[1]);
+    inspectLine.id = 'inspecting-line';
+    panel.appendChild(inspectLine);
 
     var head = el('div', 'card selected');
     head.setAttribute('data-edge-idx', String(e.idx));
@@ -5529,7 +6004,10 @@ const RICH_CLIENT = String.raw`
     backBtn.addEventListener('click', clearSelection);
     panel.appendChild(backBtn);
 
-    panel.appendChild(el('div', 'cut-section-label', 'C-02 / EVIDENCE'));
+    panel.appendChild(el('div', 'cut-section-label', 'E-01 · EVIDENCE'));
+    var inspectNodeLine = el('p', 'card-hint inspecting-line', 'Inspecting ' + (n.frame ? n.frame.id + ' · ' : '') + base(n.safePath));
+    inspectNodeLine.id = 'inspecting-line';
+    panel.appendChild(inspectNodeLine);
     if (n.frame) panel.appendChild(el('span', 'cut-chip', n.frame.id));
     panel.appendChild(el('h2', '', base(n.safePath)));
     panel.appendChild(el('p', 'path', n.safePath));
