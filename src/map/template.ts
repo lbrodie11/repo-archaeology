@@ -3303,6 +3303,9 @@ canvas.pointing { cursor: pointer; }
 .f12-plate-node:focus { outline: none; }
 .f12-plate-node:focus-visible .f12-plate-node-dot { stroke: #ffd60a; stroke-width: 3.5; }
 .f12-plate-edge-hit { cursor: pointer; }
+.f12-plate-zoom-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); padding: 4px 10px; background: #09192c; color: #fffef9; border: 1px solid #7eb3e0; font: 600 11.5px/1.3 var(--f-font-mono); pointer-events: none; opacity: 0; transition: opacity 160ms ease-out; white-space: nowrap; }
+.f12-plate-zoom-hint.is-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .f12-plate-zoom-hint { transition: none; } }
 .f12-plate-wire, .f12-plate-halo, .f12-plate-node, .f12-plate-node-label { transition: opacity 140ms ease-out; }
 .f12-plate-svg.has-hot .f12-plate-wire:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-halo:not(.is-hot) { opacity: 0.14; }
 .f12-plate-svg.has-hot .f12-plate-node:not(.is-hot), .f12-plate-svg.has-hot .f12-plate-node-label:not(.is-hot) { opacity: 0.4; }
@@ -6600,7 +6603,33 @@ const RICH_CLIENT = String.raw`
     svgEl.addEventListener('pointercancel', finishPlateDrag);
     svgEl.addEventListener('lostpointercapture', finishPlateDrag);
 
+    // A plain wheel scrolls the page (the plate sits in a long page and must not hijack scrolling);
+    // Ctrl/Cmd + wheel, which is also what trackpad pinch sends, zooms around the pointer.
+    var zoomHintTimer = null;
+    function showZoomHint() {
+      var wrap = svgEl.parentNode;
+      if (!wrap) return;
+      var hint = wrap.querySelector('.f12-plate-zoom-hint');
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.className = 'f12-plate-zoom-hint';
+        hint.setAttribute('aria-hidden', 'true');
+        var mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+        hint.textContent = (mac ? '\u2318' : 'Ctrl') + ' + scroll to zoom the plate';
+        wrap.appendChild(hint);
+      }
+      hint.classList.add('is-visible');
+      if (zoomHintTimer !== null) clearTimeout(zoomHintTimer);
+      zoomHintTimer = setTimeout(function () {
+        zoomHintTimer = null;
+        hint.classList.remove('is-visible');
+      }, 1400);
+    }
     svgEl.addEventListener('wheel', function (ev) {
+      if (!ev.ctrlKey && !ev.metaKey) {
+        showZoomHint();
+        return;
+      }
       ev.preventDefault();
       var rect = svgEl.getBoundingClientRect();
       var curVb = plate._viewBox;
@@ -6720,7 +6749,10 @@ const RICH_CLIENT = String.raw`
       var empKicker = el('div', 'f12-kicker-row');
       empKicker.appendChild(el('span', 'f12-kicker-chip marker-active', 'C-01 / NO GHOST WIRES ABOVE THRESHOLD'));
       empPanel.appendChild(empKicker);
-      empPanel.appendChild(el('h2', 'f12-headline', emp ? emp.headline : 'No co-changing file pairs passed current thresholds'));
+      var empHeadline = el('h2', 'f12-headline', emp ? emp.headline : 'No co-changing file pairs passed current thresholds');
+      empHeadline.id = 'briefing-headline';
+      empHeadline.tabIndex = -1;
+      empPanel.appendChild(empHeadline);
       empPanel.appendChild(el('p', 'f12-lede', emp ? emp.subhead : 'Try lowering --min-shared or --min-confidence.'));
       if (emp && emp.plate && emp.plate.nodes && emp.plate.nodes.length > 0) {
         var empPlateWrap = el('div', 'f12-plate-wrap');
@@ -6861,7 +6893,11 @@ const RICH_CLIENT = String.raw`
       var filterEmptyPanel = el('article', 'f12-cut-panel');
       filterEmptyPanel.id = 'cut-c01';
       filterEmptyPanel.appendChild(el('span', 'f12-cut-label', 'C-01'));
-      filterEmptyPanel.appendChild(el('h2', 'f12-headline', 'No findings match the active relationship filters'));
+      var filterEmptyHeadline = el('h2', 'f12-headline', 'No findings match the active relationship filters');
+      // Same id and focusability as every other C-01 headline, so focus restoration has a target
+      filterEmptyHeadline.id = 'briefing-headline';
+      filterEmptyHeadline.tabIndex = -1;
+      filterEmptyPanel.appendChild(filterEmptyHeadline);
       filterEmptyPanel.appendChild(el('p', 'f12-lede', 'Enable Ghost wires, Unchecked, Indirect imports, or Import links in the filter bar above to inspect findings.'));
       briefingEl.appendChild(filterEmptyPanel);
       renderAboutAnalysisSection(briefingEl);
