@@ -43,16 +43,36 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-/** Drops `meta.head` and the per-run `meta.cache` hit/miss counters (RA-04) before equivalence checks. */
-function stripHeadMeta<T extends { meta?: { head?: unknown; cache?: unknown } }>(payload: T): T {
+/**
+ * Drops `meta.head`, `meta.config` and the per-run `meta.cache` hit/miss counters (RA-04) before equivalence checks.
+ * Like `meta.head`, `meta.config` (RA-19) records how the run was invoked: `{ source: 'ref', ref, sha }` with
+ * `--head` (config read from the head tree) and `{ source: 'working-tree' }` for a checkout. Callers assert
+ * those values with `assertConfigSource` before comparing.
+ */
+function stripHeadMeta<T extends { meta?: { head?: unknown; cache?: unknown; config?: unknown } }>(payload: T): T {
   const clone = structuredClone(payload);
   if (clone.meta && 'head' in clone.meta) {
     delete clone.meta.head;
+  }
+  if (clone.meta && 'config' in clone.meta) {
+    delete clone.meta.config;
   }
   if (clone.meta && 'cache' in clone.meta) {
     delete clone.meta.cache;
   }
   return clone;
+}
+
+/** `--head` runs read config from the head tree; checkout runs from the working tree. */
+function assertConfigSource(payload: { meta: { config?: unknown } }, headSha?: string): void {
+  if (headSha === undefined) {
+    assert.deepEqual(payload.meta.config, { source: 'working-tree' });
+    return;
+  }
+  const config = payload.meta.config as { source: string; ref: string; sha: string };
+  assert.equal(config.source, 'ref');
+  assert.equal(config.sha, headSha);
+  assert.ok(config.ref.length > 0);
 }
 
 describe('--head <ref>: analyze any commit without checking it out (RA-02)', () => {
@@ -204,6 +224,11 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
       assert.equal(coFileOut.meta.head, undefined);
       assert.equal(coExplainOut.meta.head, undefined);
       assert.equal(coBacktestOut.meta.head, undefined);
+
+      for (const out of [headScanOut, headDiffOut, headFileOut, headExplainOut, headBacktestOut]) {
+        assertConfigSource(out, featureCommitSha);
+      }
+      for (const out of [coScanOut, coDiffOut, coFileOut, coExplainOut, coBacktestOut]) assertConfigSource(out);
 
       assert.deepEqual(stripHeadMeta(headScanOut), stripHeadMeta(coScanOut));
       assert.deepEqual(stripHeadMeta(headDiffOut), stripHeadMeta(coDiffOut));
@@ -829,6 +854,8 @@ describe('--head <ref>: analyze any commit without checking it out (RA-02)', () 
 
       const wtCtx = await loadContext(symRepo.dir, { minShared: 3, minConfidence: 0.4 });
       const wtScan = scan(wtCtx, { limit: 10, kinds: [...RELATIONSHIPS] });
+      assertConfigSource(symScan, symlinkHeadSha);
+      assertConfigSource(wtScan);
       assert.deepEqual(stripHeadMeta(symScan), stripHeadMeta(wtScan), '--head scan must match working-tree scan on committed symlinks');
 
       const directTreeFiles = gitTreeFiles(symRepo.dir, symlinkHeadSha, new Set(['src/a.ts', 'src/b.ts']));
