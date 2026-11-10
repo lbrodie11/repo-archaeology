@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-10
+
 ### Added
 - **Choose which `.repo-archaeology.json` applies (RA-19):** By default the config comes from the code being analyzed, so a pull request could add its own config that ignores the file it forgot to change and hide its own omission (found in Gutter's GU-05 review). Two new global options, mutually exclusive (exit 2 when combined), let the caller decide instead:
   - `--config-from <ref>` reads the file from that commit's tree, with or without `--head`, through the same checks as `--head` (regular file, 64 KB cap, valid settings). A missing file means no config. An invalid file or a ref that is not a commit is an error (exit 2) instead of a fallback. CI and review bots should pass the base branch: `diff --base origin/main --config-from origin/main`.
