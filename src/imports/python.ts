@@ -802,20 +802,31 @@ const VALID_PART = /^[\p{L}_][\p{L}\p{N}_]*$/u;
  * contributes its `__init__.py` (Python runs them before the module), a module file
  * in the middle (`a.py` for `a.b`) is not a package, so the import fails.
  */
-function walkModule(index: PythonIndex, topBase: string, rest: string[]): { files: string[]; base: string; leaf: ModuleLookup } | undefined {
-  const files: string[] = [];
+function walkModule(index: PythonIndex, topBase: string, rest: string[]): { inits: string[]; base: string; leaf: ModuleLookup } | undefined {
+  const inits: string[] = [];
   let base = topBase;
   let lookup = lookupModule(index, base);
   for (const part of rest) {
-    if (lookup.kind === 'package') files.push(lookup.init);
+    if (lookup.kind === 'package') inits.push(lookup.init);
     else if (lookup.kind !== 'namespace') return undefined;
     base = join(base, part);
     lookup = lookupModule(index, base);
   }
   if (lookup.kind === 'missing') return undefined;
-  if (lookup.kind === 'package') files.push(lookup.init);
-  if (lookup.kind === 'module') files.push(lookup.path);
-  return { files, base, leaf: lookup };
+  return { inits, base, leaf: lookup };
+}
+
+/** The leaf file a walked module path names, if any (a namespace has none). */
+const leafFile = (leaf: ModuleLookup): string | undefined => (leaf.kind === 'package' ? leaf.init : leaf.kind === 'module' ? leaf.path : undefined);
+
+/**
+ * An initializer of a package that contains the importing file already ran before that
+ * file did, whatever it imports: it is not a dependency the import statement adds.
+ */
+function containsImporter(init: string, from: string): boolean {
+  const pkg = dirOf(init);
+  const fromDir = dirOf(from);
+  return pkg !== '' && (fromDir === pkg || fromDir.startsWith(`${pkg}/`));
 }
 
 function bindingsOf(index: PythonIndex, init: string): InitializerBindings {
@@ -828,13 +839,19 @@ function bindingsOf(index: PythonIndex, init: string): InitializerBindings {
 }
 
 /** Resolves a module path (top-level location + remaining parts) and the names imported from it. */
-function resolveModule(index: PythonIndex, topBase: string, rest: string[], names: string[] | undefined): SpecifierResolution {
+function resolveModule(index: PythonIndex, from: string, topBase: string, rest: string[], names: string[] | undefined): SpecifierResolution {
   const walked = walkModule(index, topBase, rest);
   if (!walked) return { kind: 'unresolved', reasonCode: 'target-missing' };
-  const paths = new Set(walked.files);
+  // Initializers on the way run before the module (`import a.b.c` runs a/ and a/b/__init__.py).
+  const paths = new Set(walked.inits.filter((init) => !containsImporter(init, from)));
+  const leaf = leafFile(walked.leaf);
+  // The leaf itself: always for `import x` and plain modules; for a package's from-import only
+  // when a name comes out of its __init__.py (an attribute, a star import or an ambiguous name).
+  let readsLeaf = names === undefined || walked.leaf.kind === 'module';
   let incompleteReason: string | undefined;
   for (const name of names ?? []) {
     if (name === '*') {
+      readsLeaf = true;
       // `from pkg import *` also imports the submodules a package lists in `__all__`.
       if (walked.leaf.kind === 'package' && bindingsOf(index, walked.leaf.init).other.has('__all__')) {
         incompleteReason ??= `from ${posix.basename(walked.base)} import *: __all__ may name submodules`;
@@ -846,6 +863,7 @@ function resolveModule(index: PythonIndex, topBase: string, rest: string[], name
     if (sub.kind === 'missing') {
       // Not a submodule: an attribute of the package (or an ImportError). A namespace has no attributes.
       if (walked.leaf.kind === 'namespace') return { kind: 'unresolved', reasonCode: 'target-missing' };
+      readsLeaf = true;
       continue;
     }
     if (walked.leaf.kind === 'package') {
@@ -855,12 +873,15 @@ function resolveModule(index: PythonIndex, topBase: string, rest: string[], name
       const attribute = bindings.dynamic || bindings.other.has(name) || (viaSubmodule !== undefined && viaSubmodule !== name);
       if (attribute) {
         incompleteReason ??= `from ${posix.basename(walked.base)} import ${name}: ${name} may be an attribute of ${walked.leaf.init} or the submodule`;
+        readsLeaf = true;
         continue;
       }
     }
-    const subWalk = walkModule(index, join(walked.base, name), []);
-    for (const file of subWalk?.files ?? []) paths.add(file);
+    const subFile = leafFile(sub);
+    if (subFile !== undefined) paths.add(subFile);
   }
+  // A package whose submodules are imported still runs its __init__.py first, unless it contains the importer.
+  if (leaf !== undefined && (readsLeaf || (walked.leaf.kind === 'package' && !containsImporter(leaf, from)))) paths.add(leaf);
   const targets: AnalysisTarget[] = [...paths].sort().map((path) => ({ path, via: 'python-module' }));
   return { kind: 'files', targets, ...(incompleteReason ? { incompleteReason } : {}) };
 }
@@ -887,7 +908,7 @@ export function resolvePythonImport(from: string, item: ExtractedSpecifier, inde
     // `from . import x` needs a package; each extra dot climbs one level, never above the root.
     if (level > packageParts.length) return { kind: 'unresolved', reasonCode: 'target-missing' };
     const all = [...packageParts.slice(0, packageParts.length - (level - 1)), ...parts];
-    return resolveModule(index, join(root, all[0]!), all.slice(1), item.names);
+    return resolveModule(index, from, join(root, all[0]!), all.slice(1), item.names);
   }
 
   const top = parts[0];
@@ -895,8 +916,8 @@ export function resolvePythonImport(from: string, item: ExtractedSpecifier, inde
   const roots = index.nameRoots.get(top) ?? [];
   const mapped = index.mappedPackages.get(top) ?? [];
   if (roots.length + mapped.length > 1) return { kind: 'unresolved', reasonCode: 'ambiguous-package' };
-  if (mapped.length === 1) return resolveModule(index, mapped[0]!, parts.slice(1), item.names);
-  if (roots.length === 1) return resolveModule(index, join(roots[0]!, top), parts.slice(1), item.names);
+  if (mapped.length === 1) return resolveModule(index, from, mapped[0]!, parts.slice(1), item.names);
+  if (roots.length === 1) return resolveModule(index, from, join(roots[0]!, top), parts.slice(1), item.names);
   // Not in any known root. A same-named package elsewhere in the repo, or a sibling of a
   // script (Python puts the script's folder on sys.path), means a layout we do not model.
   const fromDir = dirOf(from);

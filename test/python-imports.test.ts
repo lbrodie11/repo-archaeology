@@ -159,7 +159,7 @@ module = "x.*"
 });
 
 describe('Python source roots and resolution', () => {
-  it('src/ layout: imports resolve inside src and include the package initializers on the path', () => {
+  it('src/ layout: imports resolve inside src; outside importers also depend on the package initializer', () => {
     const files = {
       'src/myapp/__init__.py': '',
       'src/myapp/db.py': '',
@@ -167,7 +167,8 @@ describe('Python source roots and resolution', () => {
       'tests/test_api.py': 'from myapp import api\n',
     };
     const api = analyze(files, 'src/myapp/api.py').analysis;
-    assert.deepEqual(edgesOf(api), ['myapp.db -> src/myapp/__init__.py', 'myapp.db -> src/myapp/db.py']);
+    // api.py is inside myapp, so myapp/__init__.py already ran before it: not an edge of this import.
+    assert.deepEqual(edgesOf(api), ['myapp.db -> src/myapp/db.py']);
     // An undeclared third-party import is external and does not make the file incomplete.
     assert.equal(api.external, 1);
     assert.equal(api.incomplete, false);
@@ -257,12 +258,8 @@ describe('Python source roots and resolution', () => {
       'src/top.py': 'from . import x\n',
     };
     const { analysis } = analyze(files, 'src/pkg/sub/deep/mod.py');
-    assert.deepEqual(edgesOf(analysis), [
-      '.. -> src/pkg/__init__.py',
-      '.. -> src/pkg/sub/__init__.py',
-      '...util -> src/pkg/__init__.py',
-      '...util -> src/pkg/util.py',
-    ]);
+    // `sub_helper` is read from pkg/sub/__init__.py (an attribute); pkg/__init__.py contains the importer.
+    assert.deepEqual(edgesOf(analysis), ['.. -> src/pkg/sub/__init__.py', '...util -> src/pkg/util.py']);
     assert.deepEqual(analysis.unresolved, [{ specifier: '.....', reasonCode: 'target-missing' }]);
     assert.deepEqual(analyze(files, 'src/top.py').analysis.unresolved, [{ specifier: '.', reasonCode: 'target-missing' }]);
   });
@@ -338,9 +335,12 @@ describe('Python import semantics (RA-10 review regressions)', () => {
     assert.deepEqual(targetsOf(analyze(files, 'from_main.py').analysis), ['pkg/__init__.py', 'pkg/child.py']);
     assert.deepEqual(targetsOf(analyze(files, 'nested.py').analysis), ['pkg/__init__.py', 'pkg/sub/__init__.py', 'pkg/sub/leaf.py']);
     assert.deepEqual(targetsOf(analyze(files, 'dynamic.py').analysis), ['pkg/__init__.py', 'pkg/sub/__init__.py', 'pkg/sub/leaf.py']);
-    // A package's own modules do not get a self edge, and relative imports include the package initializer.
-    const inside = analyze({ ...files, 'pkg/other.py': 'from . import child\n' }, 'pkg/other.py').analysis;
-    assert.deepEqual(targetsOf(inside), ['pkg/__init__.py', 'pkg/child.py']);
+    // A module inside pkg: pkg/__init__.py ran before it whatever it imports, so it is not an edge,
+    // unless the import reads a name out of it.
+    const inside = analyze({ ...files, 'pkg/other.py': 'from . import child\nimport pkg.sub.leaf\n' }, 'pkg/other.py').analysis;
+    assert.deepEqual(targetsOf(inside), ['pkg/child.py', 'pkg/sub/__init__.py', 'pkg/sub/leaf.py']);
+    const attribute = analyze({ ...files, 'pkg/other.py': 'from . import VALUE\n' }, 'pkg/other.py').analysis;
+    assert.deepEqual(targetsOf(attribute), ['pkg/__init__.py']);
     const self = analyze({ ...files, 'pkg/__init__.py': 'from . import child\n' }, 'pkg/__init__.py').analysis;
     assert.deepEqual(targetsOf(self), ['pkg/child.py']);
   });
@@ -392,7 +392,7 @@ describe('Python import semantics (RA-10 review regressions)', () => {
     const main = analyze(files, 'main.py').analysis;
     assert.deepEqual(targetsOf(main), ['impl/__init__.py', 'impl/core.py']);
     assert.equal(main.incomplete, false);
-    assert.deepEqual(targetsOf(analyze(files, 'impl/core.py').analysis), ['impl/__init__.py', 'impl/helpers.py']);
+    assert.deepEqual(targetsOf(analyze(files, 'impl/core.py').analysis), ['impl/helpers.py']);
   });
 
   it('unsupported, unreadable, oversized and limit-exceeding manifests keep non-local imports unresolved, not external', () => {
@@ -499,7 +499,7 @@ describe('Python relationships', () => {
         assert.deepEqual(graph.languages, ['python']);
         assert.deepEqual(
           graph.edges.map((edge) => `${edge.from} -> ${edge.to} (${edge.specifier}, ${edge.via})`),
-          ['src/shop/cart.py -> src/shop/__init__.py (shop, python-module)', 'src/shop/cart.py -> src/shop/pricing.py (shop, python-module)'],
+          ['src/shop/cart.py -> src/shop/pricing.py (shop, python-module)'],
         );
         assert.equal(graph.meta.imports?.dynamicLoads, 1);
         assert.equal(graph.meta.imports?.external, 2);
