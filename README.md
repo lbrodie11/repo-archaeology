@@ -466,7 +466,7 @@ repo-archaeology diff --head <pr-sha> --base <base-sha> --config-from <base-sha>
 - one marker chip, on the top finding (`F-01`); the next two are primary cards and the rest compact lines;
 - **metrics**: the counts the classic output shows (commits analyzed, skipped sweeps and reverts, changed files, kinds, counterexamples...);
 - **warnings**: what to keep in mind (the historical-signal disclaimer, silence diagnostics, explain bounds);
-- **next steps**: copyable `explain` commands for the top findings (shell-quoted, wrapped with `\` continuations so they still run).
+- **next steps**: copyable `explain` commands for the first three relationships (shell-quoted, wrapped with `\` continuations so they still run), and for `explain`, the `--style classic` command that shows its patch hunks.
 
 Every number in rich output is a number from `--json` (percentages rounded the same way everywhere). `--json`, `--format markdown`, `classic` and the HTML map are byte-identical to before. `explain`'s patch hunks are not part of the rich layout; rich `explain` suggests the `--style classic` command that shows them.
 
@@ -492,7 +492,7 @@ The full gallery (`scan` and `diff` at 40, 80 and 120 columns, light and dark) i
 - **Screen readers:** `--screen-reader` (or `FRAME12_SCREEN_READER=1`) prints rich results as plain, append-only lines, one self-describing fact per line (`Finding F-01 strength: 51% (range 36-66%), co-change confidence (95% interval)`), with every receipt and full path, no glyphs, no escape sequences and no cursor movement. The progress spinner stays still.
 - **ASCII:** `--ascii` (or `FRAME12_ASCII=1`) uses the ASCII twin of every glyph (`[ok]`, `->`, `~>`, `#`); repository text keeps its own characters.
 - **Color:** `NO_COLOR` (or `--no-color`) turns color off; bold and dim remain on a terminal so the hierarchy survives, and no status depends on color alone: every status is also a word.
-- **Motion:** the only animation is the 12 fps progress spinner on stderr, which `NO_MOTION`, `REDUCED_MOTION`, `REPO_ARCHAEOLOGY_NO_MOTION`, CI, screen-reader mode and non-terminals keep still.
+- **Motion:** the only animation is the 12 fps progress spinner on stderr, which `NO_MOTION`, `REDUCED_MOTION`, `REPO_ARCHAEOLOGY_NO_MOTION`, `FRAME12_MOTION=still`, CI, screen-reader mode and non-terminals keep still.
 
 ### Dependencies
 

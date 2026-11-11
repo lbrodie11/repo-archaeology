@@ -13,6 +13,7 @@ Minor release.
   - Receipts are the commits `--json` lists in `evidence`; `--full-evidence` adds every stored supporting commit (the card lists 3 and counts the rest; screen-reader output lists all).
   - `explain`'s patch hunks are not part of the rich layout; rich `explain` suggests the `--style classic` command that shows them.
   - On a pipe or file, rich output has no escape sequences unless `FORCE_COLOR` asks (the package's linear rules).
+  - Capability precedence is the package's: a terminal's own width now wins over `COLUMNS` (pass `--columns` to override both), and `FRAME12_*` variables (`FRAME12_ASCII`, `FRAME12_LINKS`, `FRAME12_AMBIGUOUS_WIDE`, `FRAME12_SCREEN_READER`, `FRAME12_MOTION`) apply.
   - The track-record line is Repo Archaeology's shared sentence, as in classic and Markdown.
   - Diff CODEOWNERS handles are printed without `@` (the package strips the zero-width break classic uses to keep copied handles from pinging).
 - **Dependency policy:** runtime dependencies are now `commander`, `typescript` and `@frame12/terminal` (exact-pinned at 0.1.0; it brings `@frame12/tokens@0.2.0`). Its optional `ink` and `react` peers are not installed or loaded. Install size, measured by `scripts/install-size.mjs` from `npm pack` of 0.12.0 and this version: tarball +0.2 KB, installed `node_modules` +368.4 KB (+488 KB on disk, +62 files).
