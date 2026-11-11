@@ -77,7 +77,7 @@ To keep RA-10's guarantee that relationships never claim a possible import as `d
 
 Parity means identical `files`, `edges`, `unresolved`, `languages` and `meta.imports` between the two results for every PR.
 
-Per PR, the derived path re-parsed only what differs. On ng-aquila that is 3 to 44 files out of about 1,800 analyzable ones, except one PR at 196 (p95 PR: 369 ms). On hono it is 0 to 55 files out of about 380, except one PR that rewrote 125 files (283 re-parsed, 317 ms). What remains is the base side's `ls-tree`/`diff-tree`, building its resolvers, and resolving every file of the base tree.
+Per PR, the derived path re-parsed only what differs. On ng-aquila that is 3 to 44 files out of about 1,800 analyzable ones, except one PR at 196 (p95 PR: 369 ms). On hono it is 0 to 55 files out of about 380, except one PR that rewrote 125 files (283 re-parsed, 317 ms). What remains is the base side's `ls-tree`, building its resolvers, and resolving every file of the base tree.
 
 **Memory** (`node --expose-gc`, heap retained after GC):
 

@@ -250,6 +250,22 @@ describe('importGraph({ at }) (RA-20): base-tree graph from the head session', (
     }
   });
 
+  it('concurrent calls for the same `at` build its index once and agree', async () => {
+    const session = await open(repo.dir, headSha);
+    try {
+      await session.importGraph();
+      let builds = 0;
+      const ask = (files?: string[]) =>
+        session.importGraph({ ...(files ? { files } : {}), at: baseSha, onReuse: () => builds++ } as { at: string });
+      const [scoped, whole, again] = await Promise.all([ask(REMOVED), ask(), ask(REMOVED)]);
+      assert.equal(builds, 1);
+      assert.deepEqual(graphPart(scoped), graphPart(again));
+      assert.deepEqual(graphPart(whole), graphPart(await freshGraph(repo.dir, baseSha)));
+    } finally {
+      await session.close();
+    }
+  });
+
   it('rejects a bad ref and a path absent from the base tree with UsageError', async () => {
     const session = await open(repo.dir, headSha);
     try {

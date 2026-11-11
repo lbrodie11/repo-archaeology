@@ -449,14 +449,15 @@ export async function resolveAtRef(root: string, at: string): Promise<string> {
  */
 export async function importGraphAt(ctx: Context, at: string, options: ImportGraphAtOptions = {}): Promise<ImportGraphResult> {
   const sha = await resolveAtRef(ctx.root, at);
-  const cached = derivedIndexCache.get(ctx);
-  const source = cached?.sha === sha ? undefined : await prepareDerivedTree(ctx, sha);
-  const reader = source?.base ?? cached!.reader;
+  const source = derivedIndexCache.get(ctx)?.sha === sha ? undefined : await preparing(ctx, sha);
+  // A concurrent call for the same `at` may have built the index while this one waited.
+  const cached = derivedIndexCache.get(ctx)?.sha === sha ? derivedIndexCache.get(ctx) : undefined;
+  const reader = cached?.reader ?? source!.base;
   try {
     ctx.open?.();
     reader.open();
     let derived = cached;
-    if (source) {
+    if (!derived && source) {
       derived = { sha, index: source.build(options.onReuse), treeFiles: source.treeFiles, reader: source.base };
       derivedIndexCache.set(ctx, derived);
     }
@@ -466,6 +467,21 @@ export async function importGraphAt(ctx: Context, at: string, options: ImportGra
     reader.close();
     ctx.close?.();
   }
+}
+
+const inFlight = new WeakMap<Context, { sha: string; promise: ReturnType<typeof prepareDerivedTree> }>();
+
+/** One `prepareDerivedTree` per session and `at`, shared by concurrent calls. */
+function preparing(ctx: Context, sha: string): ReturnType<typeof prepareDerivedTree> {
+  const pending = inFlight.get(ctx);
+  if (pending?.sha === sha) return pending.promise;
+  const promise = prepareDerivedTree(ctx, sha);
+  inFlight.set(ctx, { sha, promise });
+  const clear = () => {
+    if (inFlight.get(ctx)?.promise === promise) inFlight.delete(ctx);
+  };
+  promise.then(clear, clear);
+  return promise;
 }
 
 /** `at`'s tree: its file list, a reader for it, and how to build its index reusing the session's extractions. */
