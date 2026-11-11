@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { openRepository, UsageError, type ImportGraphJson, type Repository } from '../src/api/index.js';
 import { DIRTY_WORKTREE_HEAD_WARNING, SHALLOW_WARNING } from '../src/context.js';
-import { AnalysisSession, analyzeFile, type AnalysisTarget } from '../src/imports/analysis.js';
+import { AnalysisSession, analyzeFile, setDefaultEdgeBudgetForTesting, type AnalysisTarget } from '../src/imports/analysis.js';
 import { RelationshipClassifier } from '../src/imports/classify.js';
 import { setHistoryLoadObserverForTesting } from '../src/model/history.js';
 import { loadSchema, sanitizeGitEnv, validateSchemaNode } from '../scripts/schema-validator.mjs';
@@ -441,6 +441,20 @@ describe('Python target roles (RA-20)', () => {
     const classifier = new RelationshipClassifier(memoryFiles(files));
     assert.equal(classifier.classify('overlay/__init__.py', 'overlay/loader.py'), 'unknown');
     assert.equal(classifier.classify('main.py', 'overlay/loader.py'), 'unknown');
+    // Nor do they count in relationship coverage (scan/diff `meta.imports`): only the certain edges do.
+    const coverage = classifier.coverage();
+    assert.equal(coverage?.heuristicEdges, 0);
+    assert.equal(coverage?.internalEdges, 2); // overlay/__init__.py -> model.py, main.py -> overlay/__init__.py
+    // They never spend the session edge budget: with room for one edge, the certain `.model` edge is kept.
+    setDefaultEdgeBudgetForTesting(1);
+    try {
+      const reader = memoryFiles(files);
+      const analysis = analyzeFile('overlay/__init__.py', reader, new AnalysisSession(reader));
+      assert.equal(analysis.incomplete, false);
+      assert.deepEqual(analysis.edges.map((e) => e.specifier), ['.', '.model']);
+    } finally {
+      setDefaultEdgeBudgetForTesting(undefined);
+    }
     // Any other dynamic namespace (star import, globals(), a second use of __getattr__) keeps it uncertain only.
     for (const other of ['from .model import *\n', 'globals()["x"] = 1\n', 'x = __getattr__\n']) {
       const targets = pythonTargets({ ...files, 'overlay/__init__.py': init + other }, 'overlay/__init__.py');

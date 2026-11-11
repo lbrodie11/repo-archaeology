@@ -1224,7 +1224,7 @@ function resolveModule(index: PythonIndex, from: string, topBase: string, rest: 
       const bindings = bindingsOf(index, walked.leaf.init);
       const viaSubmodule = bindings.submodules.get(name);
       const bound = bindings.other.has(name) || (viaSubmodule !== undefined && viaSubmodule !== name);
-      if (bindings.dynamic && !bound && bindings.lazyGetattrOnly && subFile !== undefined) {
+      if (bindings.lazyGetattrOnly && !bound && subFile !== undefined) {
         // RA-20: a PEP 562 `__getattr__` only answers names the package does not bind, so the submodule
         // on disk is the probable target; but `__getattr__` could still return something else. The
         // graph lists it as a heuristic edge; it stays uncertain, so relationships never claim it.

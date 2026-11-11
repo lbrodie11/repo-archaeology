@@ -33,8 +33,9 @@ export interface AnalysisTarget {
   /** With `role: 'name'`: the imported name (`mod` in `from pkg import mod`). */
   name?: string;
   /**
-   * A probable target the import graph lists (as `heuristic`) but relationships must not claim:
-   * the file stays `uncertain` for the importer, so pairs with it are `unknown`, never `direct`.
+   * A probable target the import graph lists (as `heuristic`) but relationships must not claim.
+   * The analyzer also lists it in `uncertain`, so pairs with it stay `unknown`, never `direct`. It
+   * does not count against the session edge budget, so it never changes what other files resolve.
    */
   graphOnly?: boolean;
 }
@@ -114,15 +115,12 @@ export interface ExtractionStore {
 }
 
 /** A plain per-session extraction store. */
-export function createExtractionStore(): ExtractionStore & { readonly size: number } {
+export function createExtractionStore(): ExtractionStore {
   const entries = new Map<string, StoredExtraction>();
   return {
     get: (analyzer, path) => entries.get(`${analyzer}\0${path}`),
     set: (analyzer, path, entry) => {
       entries.set(`${analyzer}\0${path}`, entry);
-    },
-    get size() {
-      return entries.size;
     },
   };
 }
@@ -287,15 +285,12 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     if (resolved.kind === 'files') {
       if (resolved.incompleteReason) markIncomplete(resolved.incompleteReason);
       for (const item of resolved.uncertain ?? []) if (item.path !== path && !uncertain.has(item.path)) uncertain.set(item.path, item.reason);
-      for (const target of resolved.targets) {
-        if (target.graphOnly && target.path !== path && !uncertain.has(target.path)) uncertain.set(target.path, 'a probable import the analyzer cannot confirm');
-      }
       const targets: AnalysisTarget[] = [];
       for (const target of resolved.targets) {
         if (target.path === path || !session.includes(target.path)) continue;
         const edgeKey = `${target.path}\0${item.specifier}\0${item.kind}`;
         if (seenEdges.has(edgeKey)) continue;
-        if (analyzer.budgeted) {
+        if (analyzer.budgeted && !target.graphOnly) {
           if (session.budgetedEdges >= session.edgeBudget) {
             markIncomplete('session internal-edge budget reached');
             warnings.add(`Import analysis stopped adding edges after ${session.edgeBudget} internal edges; files past the budget are reported as incomplete.`);
