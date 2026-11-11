@@ -1,8 +1,10 @@
 /**
- * Vendored FRAME/12 design tokens for Repo Archaeology's opt-in `--style rich` mode.
+ * Vendored FRAME/12 design tokens for the `--style rich` HTML map, and style-mode resolution.
  *
- * Canonical source: `@frame12/tokens` (https://github.com/lbrodie11/frame12/tree/main/packages/tokens)
- * Vendored as static constants so `@frame12/tokens` is never a runtime dependency.
+ * Canonical source: `@frame12/tokens` (https://github.com/lbrodie11/frame12/tree/main/packages/tokens).
+ * The map embeds this palette in the generated HTML. Terminal colors are not here: `--style rich`
+ * terminal output is rendered by `@frame12/terminal`, which derives them from `@frame12/tokens` at
+ * build time (RA-21).
  */
 
 import { ConfigError } from '../errors.js';
@@ -94,30 +96,6 @@ export const FRAME12 = {
     hole: '#000000',
     backdrop: 'rgba(12, 12, 12, 0.78)',
     diff: '#ffffff',
-  },
-  terminal: {
-    markerBgRgb: [255, 214, 10] as const,
-    markerFgRgb: [18, 18, 18] as const,
-    inkRgb: [241, 240, 234] as const,
-    ink2Rgb: [185, 184, 177] as const,
-    ruleRgb: [185, 184, 177] as const,
-    ghostRgb: [216, 112, 255] as const,
-    unknownRgb: [255, 200, 56] as const,
-    indirectRgb: [86, 212, 221] as const,
-    directRgb: [96, 165, 250] as const,
-    testRgb: [74, 222, 128] as const,
-    ansi256: {
-      markerBg: 220,
-      markerFg: 16,
-      ink: 255,
-      ink2: 249,
-      rule: 245,
-      ghost: 177,
-      unknown: 220,
-      indirect: 80,
-      direct: 75,
-      test: 78,
-    },
   },
   gutters: {
     pair: '12px',

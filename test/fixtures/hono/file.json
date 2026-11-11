@@ -1,0 +1,603 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "hono",
+    "head": {
+      "ref": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+      "sha": "61f7c59e50244ab4d2dd83c151928cf7ea448510"
+    },
+    "commitsRead": 2835,
+    "commitsAnalyzed": 2780,
+    "sweepsSkipped": 34,
+    "subjectSkipped": 0,
+    "revertsSkipped": 11,
+    "renamesFollowed": 286,
+    "files": 887,
+    "oldestCommit": "2021-12-14",
+    "newestCommit": "2026-11-07",
+    "origins": {
+      "human": 2764,
+      "agent": 14,
+      "bot": 2
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 15,
+      "internalEdges": 52,
+      "external": 0,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "config": {
+      "source": "none"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "path": "src/hono-base.ts",
+  "changes": 97,
+  "churnPercentile": 0.9909808342728298,
+  "medianChanges": 3,
+  "lastChanged": "2026-11-01",
+  "authors": [
+    {
+      "author": "Yusuke Wada",
+      "commits": 57,
+      "share": 0.5876288659793815
+    },
+    {
+      "author": "Taku Amano",
+      "commits": 14,
+      "share": 0.14432989690721648
+    },
+    {
+      "author": "EdamAmex",
+      "commits": 4,
+      "share": 0.041237113402061855
+    }
+  ],
+  "companions": [
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/hono.test.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 34,
+      "fromChanges": 97,
+      "toChanges": 173,
+      "confidence": 0.351,
+      "reverseConfidence": 0.197,
+      "interval": {
+        "low": 0.2629,
+        "high": 0.4496
+      },
+      "reverseInterval": {
+        "low": 0.1441,
+        "high": 0.2621
+      },
+      "score": 0.263,
+      "weighted": false,
+      "lastTogether": "2026-11-01",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "34f90432a1794b28e52802670efcd01963f716d6",
+          "date": "2026-11-01",
+          "author": "Yusuke Wada",
+          "subject": "Merge commit from fork",
+          "origin": "human"
+        },
+        {
+          "hash": "e9c01079a932ffdfa269c0011075ac43fd8a1035",
+          "date": "2026-10-17",
+          "author": "Yusuke Wada",
+          "subject": "fix(hono-base): disallow `getPath` when `strict` is `false` (#5563)",
+          "origin": "human"
+        },
+        {
+          "hash": "6f101a7779bf6e79c3af0a09cd888428bbd35ef8",
+          "date": "2026-08-03",
+          "author": "haki",
+          "subject": "feat: add first-class QUERY method support (#5070)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/types.ts",
+      "relationship": "direct",
+      "why": "hono-base.ts imports types.ts",
+      "shared": 14,
+      "fromChanges": 97,
+      "toChanges": 127,
+      "confidence": 0.144,
+      "reverseConfidence": 0.11,
+      "interval": {
+        "low": 0.0879,
+        "high": 0.2278
+      },
+      "reverseInterval": {
+        "low": 0.0668,
+        "high": 0.1766
+      },
+      "score": 0.088,
+      "weighted": false,
+      "lastTogether": "2025-12-13",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "3e12de624a123cfdf158274a1c2b7620268343ef",
+          "date": "2025-12-13",
+          "author": "kosei28",
+          "subject": "fix(types): replace schema-based path tracking with CurrentPath parameter (#4552)",
+          "origin": "human"
+        },
+        {
+          "hash": "d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6",
+          "date": "2025-06-16",
+          "author": "Taku Amano",
+          "subject": "feat: introduce Route Helper (#4204)",
+          "origin": "human"
+        },
+        {
+          "hash": "f1a7267948ccd1015bea40bf0bd0ec2660e5d5f2",
+          "date": "2024-10-11",
+          "author": "m-shaka",
+          "subject": "perf(types): replace intersection with union to get better perf (#3443)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/context.ts",
+      "relationship": "direct",
+      "why": "hono-base.ts imports context.ts",
+      "shared": 13,
+      "fromChanges": 97,
+      "toChanges": 224,
+      "confidence": 0.134,
+      "reverseConfidence": 0.058,
+      "interval": {
+        "low": 0.08,
+        "high": 0.2159
+      },
+      "reverseInterval": {
+        "low": 0.0342,
+        "high": 0.0968
+      },
+      "score": 0.08,
+      "weighted": false,
+      "lastTogether": "2024-11-02",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42",
+          "date": "2024-11-02",
+          "author": "Yusuke Wada",
+          "subject": "refactor: use `#` for private methods to reduce the minified file size (#3596)",
+          "origin": "human"
+        },
+        {
+          "hash": "28de9b32a827436fb57518bf740073418d588044",
+          "date": "2024-07-05",
+          "author": "ryu",
+          "subject": "chore: update outdated links in JSDoc (#3089)",
+          "origin": "human"
+        },
+        {
+          "hash": "ae3a67beb199a52fa1771780f450ede9b7bbef99",
+          "date": "2024-06-27",
+          "author": "Yusuke Wada",
+          "subject": "perf(context): improve initializing `Context` (#3046)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/request.ts",
+      "relationship": "indirect",
+      "why": "connected through src/context.ts: hono-base.ts imports context.ts, which imports request.ts",
+      "shared": 10,
+      "fromChanges": 97,
+      "toChanges": 89,
+      "confidence": 0.103,
+      "reverseConfidence": 0.112,
+      "interval": {
+        "low": 0.0569,
+        "high": 0.1795
+      },
+      "reverseInterval": {
+        "low": 0.0621,
+        "high": 0.1947
+      },
+      "score": 0.057,
+      "weighted": false,
+      "lastTogether": "2025-06-16",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6",
+          "date": "2025-06-16",
+          "author": "Taku Amano",
+          "subject": "feat: introduce Route Helper (#4204)",
+          "origin": "human"
+        },
+        {
+          "hash": "ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42",
+          "date": "2024-11-02",
+          "author": "Yusuke Wada",
+          "subject": "refactor: use `#` for private methods to reduce the minified file size (#3596)",
+          "origin": "human"
+        },
+        {
+          "hash": "28de9b32a827436fb57518bf740073418d588044",
+          "date": "2024-07-05",
+          "author": "ryu",
+          "subject": "chore: update outdated links in JSDoc (#3089)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/client/types.ts",
+      "relationship": "direct",
+      "why": "types.ts imports hono-base.ts",
+      "shared": 7,
+      "fromChanges": 97,
+      "toChanges": 53,
+      "confidence": 0.072,
+      "reverseConfidence": 0.132,
+      "interval": {
+        "low": 0.0353,
+        "high": 0.1416
+      },
+      "reverseInterval": {
+        "low": 0.0654,
+        "high": 0.2485
+      },
+      "score": 0.035,
+      "weighted": false,
+      "lastTogether": "2026-08-03",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "6f101a7779bf6e79c3af0a09cd888428bbd35ef8",
+          "date": "2026-08-03",
+          "author": "haki",
+          "subject": "feat: add first-class QUERY method support (#5070)",
+          "origin": "human"
+        },
+        {
+          "hash": "eb9c112614230d6e29e06e444eb26fcc7592eb7d",
+          "date": "2026-02-26",
+          "author": "YevheniiKotyrlo",
+          "subject": "fix(types): remove DOM type dependencies from ClientResponse and request method (#4768)",
+          "origin": "human"
+        },
+        {
+          "hash": "331166471c499e5a8f432fcb77936c3d4f699cfe",
+          "date": "2024-10-14",
+          "author": "m-shaka",
+          "subject": "fix(types): rm ExcludeEmptyObject to fix massively increased type instantiations (#3507)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/hono.ts",
+      "relationship": "direct",
+      "why": "hono.ts imports hono-base.ts",
+      "shared": 6,
+      "fromChanges": 97,
+      "toChanges": 150,
+      "confidence": 0.062,
+      "reverseConfidence": 0.04,
+      "interval": {
+        "low": 0.0286,
+        "high": 0.1285
+      },
+      "reverseInterval": {
+        "low": 0.0184,
+        "high": 0.0846
+      },
+      "score": 0.029,
+      "weighted": false,
+      "lastTogether": "2024-05-29",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "18324b8b6c668b602199a437456f1c22925cb803",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "docs(src/*): Add TSDoc comments to improve code documentation (#2841)",
+          "origin": "human"
+        },
+        {
+          "hash": "68808453d5a91fe32a55a8f30e42d95b6962523a",
+          "date": "2023-10-16",
+          "author": "Yusuke Wada",
+          "subject": "refactor: refactored `hono-base` (#1588)",
+          "origin": "human"
+        },
+        {
+          "hash": "8b6bd46e6699d6ad80eced222b8cd52c9a878692",
+          "date": "2023-10-16",
+          "author": "Yusuke Wada",
+          "subject": "feat(app): `basePath` option for the constructor, deprecate `app.basePath()` (#1560)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/types.test.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 5,
+      "fromChanges": 97,
+      "toChanges": 73,
+      "confidence": 0.052,
+      "reverseConfidence": 0.068,
+      "interval": {
+        "low": 0.0222,
+        "high": 0.1151
+      },
+      "reverseInterval": {
+        "low": 0.0296,
+        "high": 0.1506
+      },
+      "score": 0.022,
+      "weighted": false,
+      "lastTogether": "2025-12-13",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "3e12de624a123cfdf158274a1c2b7620268343ef",
+          "date": "2025-12-13",
+          "author": "kosei28",
+          "subject": "fix(types): replace schema-based path tracking with CurrentPath parameter (#4552)",
+          "origin": "human"
+        },
+        {
+          "hash": "a5d9ca88c025b2e604593d77abff5ece38eb55d3",
+          "date": "2024-01-18",
+          "author": "Agata Naomichi",
+          "subject": "fix(types): use middlewares with different env types (#2018)",
+          "origin": "human"
+        },
+        {
+          "hash": "d16aedfffdbee3da32e4b1a0020d152f569acb02",
+          "date": "2023-12-03",
+          "author": "Taku Amano",
+          "subject": "feat: Ensure that calls to `c.json()` have a type equivalent to `c.jsonT()` (#1728)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/compose.ts",
+      "relationship": "direct",
+      "why": "hono-base.ts imports compose.ts",
+      "shared": 5,
+      "fromChanges": 97,
+      "toChanges": 48,
+      "confidence": 0.052,
+      "reverseConfidence": 0.104,
+      "interval": {
+        "low": 0.0222,
+        "high": 0.1151
+      },
+      "reverseInterval": {
+        "low": 0.0453,
+        "high": 0.2217
+      },
+      "score": 0.022,
+      "weighted": false,
+      "lastTogether": "2025-02-18",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "c08a2a77d7c10c3bd37520b0ea844a67e11b9581",
+          "date": "2025-02-18",
+          "author": "EdamAmex",
+          "subject": "refactor(compose): remove unnecessary complexity and improve testing (#3932)",
+          "origin": "human"
+        },
+        {
+          "hash": "18324b8b6c668b602199a437456f1c22925cb803",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "docs(src/*): Add TSDoc comments to improve code documentation (#2841)",
+          "origin": "human"
+        },
+        {
+          "hash": "d86fcd41e16edfc0078b481c9d0a966eef8385a4",
+          "date": "2023-12-03",
+          "author": "Taku Amano",
+          "subject": "feat(request): Introduce `matchedRoutes` and `routePath` for `HonoRequest` (#1744)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/helper/dev/index.ts",
+      "relationship": "indirect",
+      "why": "connected through src/hono.ts: index.ts imports hono.ts, which imports hono-base.ts",
+      "shared": 5,
+      "fromChanges": 97,
+      "toChanges": 9,
+      "confidence": 0.052,
+      "reverseConfidence": 0.556,
+      "interval": {
+        "low": 0.0222,
+        "high": 0.1151
+      },
+      "reverseInterval": {
+        "low": 0.2666,
+        "high": 0.8113
+      },
+      "score": 0.022,
+      "weighted": false,
+      "lastTogether": "2024-05-30",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a85232705912ea701bf1f61e66c55f50113aa343",
+          "date": "2024-05-30",
+          "author": "Ame_x",
+          "subject": "fix: add return types of void function (#2870)",
+          "origin": "human"
+        },
+        {
+          "hash": "813484dffd2c73bc190f995f661509d8770b1b74",
+          "date": "2024-01-01",
+          "author": "Taku Amano",
+          "subject": "fix(dev): preserve original handler in [composedHandler]. (#1873)",
+          "origin": "human"
+        },
+        {
+          "hash": "5b4592190bea1d352b3e000c3bde4530229f95c8",
+          "date": "2023-12-26",
+          "author": "Yusuke Wada",
+          "subject": "feat(dev): add `getRouterName()` (#1841)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    },
+    {
+      "from": "src/hono-base.ts",
+      "to": "src/router.ts",
+      "relationship": "direct",
+      "why": "hono-base.ts imports router.ts",
+      "shared": 4,
+      "fromChanges": 97,
+      "toChanges": 10,
+      "confidence": 0.041,
+      "reverseConfidence": 0.4,
+      "interval": {
+        "low": 0.0161,
+        "high": 0.1013
+      },
+      "reverseInterval": {
+        "low": 0.1681,
+        "high": 0.6874
+      },
+      "score": 0.016,
+      "weighted": false,
+      "lastTogether": "2026-08-03",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "6f101a7779bf6e79c3af0a09cd888428bbd35ef8",
+          "date": "2026-08-03",
+          "author": "haki",
+          "subject": "feat: add first-class QUERY method support (#5070)",
+          "origin": "human"
+        },
+        {
+          "hash": "18324b8b6c668b602199a437456f1c22925cb803",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "docs(src/*): Add TSDoc comments to improve code documentation (#2841)",
+          "origin": "human"
+        },
+        {
+          "hash": "0e1755c9e41efd9a9002b3dabcdb66c5011549c5",
+          "date": "2023-06-03",
+          "author": "Yusuke Wada",
+          "subject": "feat: handle HEAD method (#1142)",
+          "origin": "human"
+        }
+      ],
+      "wouldAlert": false
+    }
+  ]
+}
