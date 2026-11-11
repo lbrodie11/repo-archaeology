@@ -114,7 +114,7 @@ Every relationship object in `diff` (`suggestions[]`, `families[].relationships[
 - **Unweighted `interval` vs. Weighted `score`:** `interval` and `reverseInterval` are **always unweighted** so they match the raw `shared`, `fromChanges`, and `toChanges` commit counts printed alongside them. When `--half-life <days>` or `--origin-weights <spec>` is set (`weighted: true`, `weighting: "recency" | "origin" | "recency+origin"`), `confidence`, `reverseConfidence`, and the ranking `score` (the Wilson lower bound) use weighted counts and may differ from `interval.low`; in Markdown, terminal, and map output, the interval is placed next to the raw commit count and labeled `(raw 95% CI …)`.
 - **Worked Example (`14` of `19` commits):** Suppose `from` changed in `fromChanges = 19` commits and `to` changed alongside it in `shared = 14` of those commits (with no `--half-life` weighting):
   - Raw directional rate: $\hat{p} = 14 / 19 \approx 0.7368$ (`confidence: 0.737`).
-  - Two-sided 95% Wilson score interval (`wilsonInterval(14, 19)` $\approx \{ \text{low}: 0.51208, \text{high}: 0.88194 \}$): outward-rounded to `interval: { "low": 0.512, "high": 0.882 }`, rendered in Markdown and terminal output as `(95% CI 51–89%)`.
+  - Two-sided 95% Wilson score interval (`wilsonInterval(14, 19)` $\approx \{ \text{low}: 0.51208, \text{high}: 0.88194 \}$): outward-rounded to `interval: { "low": 0.512, "high": 0.882 }`, rendered in Markdown and classic terminal output as `(95% CI 51–89%)`. `--style rich` (rendered by `@frame12/terminal`, RA-21) rounds both ends to the nearest percent, as its tone bar does: `(range 51–88%)` and `95% interval 51-88%`.
   - Ranking score: `score: 0.512` (the Wilson lower bound rounded to 3 decimal places).
 
 #### 5.1.2 Relationship Verdicts (`.repo-archaeology.verdicts.json`, `common.schema.json#/$defs/RelationshipVerdict`)
@@ -170,7 +170,7 @@ When `--owners` (or `.repo-archaeology.json` `"owners": { "enabled": true }`) is
   - Auditable sample summary: `{ qualifyingCommits, lookbackDays, maxCommits, fromDate, toDate, agentAssistedCommits, excludedNonHumanCommits, incompleteCoverage, codeownersSource?, codeownersFile? }`.
 - **`codeowners`: `string[]`** (optional):
   - Matching `@user` and `@org/team` handles from `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS` (read from `merge-base` when `--base` is passed, `<head>` when `--head` is passed without `--base`, and the working tree otherwise), using case-sensitive last-valid-match precedence. Email-based `CODEOWNERS` entries are skipped without exposing their email.
-  - Rendered Markdown and terminal output insert a zero-width space (`\u200B`) after `@` in handles so copying output into a pull-request comment never triggers accidental GitHub notifications.
+  - Rendered Markdown and classic terminal output insert a zero-width space (`\u200B`) after `@` in handles so copying output into a pull-request comment never triggers accidental GitHub notifications. `--style rich` prints the handles without `@` instead (`@frame12/terminal` strips zero-width characters from text). The JSON keeps the handles as written in `CODEOWNERS`.
 
 ---
 

@@ -1,0 +1,125 @@
+[2mRepo Archaeology · [22m[1mdiff[22m
+[1m                   (61f7c59~6...HEAD +[22m
+[1m                   uncommitted changes)[22m
+[2m────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                  [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m3 (1 top, 2 primary)[22m
+
+[1;48;2;255;214;10;38;2;18;18;18m F-01 [22;39;49m  [1msrc/helper/ssg/index.ts usually[22m
+[1m        changes with[22m
+[1m        src/helper/ssg/ssg.test.tsx[22m
+[1m┃[22m [1mneeds review · top finding ·[22m
+[1m┃[22m [1mpair-e9d61976[22m
+[1m┃[22m Test link: a test and the code it
+[1m┃[22m covers. 20 of 39 commits that changed
+[1m┃[22m src/helper/ssg/ssg.test.tsx also
+[1m┃[22m changed src/helper/ssg/index.ts (51%,
+[1m┃[22m 95% interval 36-66%); the other way 20
+[1m┃[22m of 27 (74%). Last together 2026-02-19.
+[1m┃[22m Before: 5 times this changed without
+[1m┃[22m index.ts; it changed within 48 h after
+[1m┃[22m 0 (not proof those were fixes).
+[1m┃[22m src/helper/ssg/ssg.test.tsx
+[1m┃[22m src/helper/ssg/index.ts
+[1m┃[22m [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m51%[22m [2m(range 36–66%)[22m
+[1m┃[22m [2mco-change confidence (95% interval)[22m
+[1m┃[22m [2mE-01[22m  00b405a  [2m2026-02-19[22m  feat(ssg):…
+[1m┃[22m [2mE-02[22m  58175a1  [2m2024-04-09[22m  fix(ssg): …
+[1m┃[22m [2mE-03[22m  8ef9b7b  [2m2024-03-07[22m  refactor(S…
+
+[1mF-02[22m  [1msrc/jsx/streaming.test.tsx usually[22m
+[1m      changes with[22m
+[1m      runtime-tests/deno-jsx/jsx.test.ts[22m
+[1m      x[22m
+  [1mneeds review · primary · pair-ee66c335[22m
+  Test link: two tests that change
+  together. 4 of 9 commits that changed
+  runtime-tests/deno-jsx/jsx.test.tsx
+  also changed
+  src/jsx/streaming.test.tsx (44%, 95%
+  interval 19-73%); the other way 4 of
+  19 (21%). Last together 2024-02-16. No
+  earlier triggers in the last 555
+  commits.
+  runtime-tests/deno-jsx/jsx.test.tsx
+  src/jsx/streaming.test.tsx
+  [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m44%[22m [2m(range 19–73%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-04[22m  473a6f0  [2m2024-02-16[22m  refactor: …
+  [2mE-05[22m  a183fe4  [2m2024-01-16[22m  chore: ena…
+  [2mE-06[22m  cd6c488  [2m2023-11-21[22m  feat(jsx):…
+
+[1mF-03[22m  [1msrc/jsx/jsx-dev-runtime.ts usually[22m
+[1m      changes with[22m
+[1m      src/jsx/jsx-runtime.ts[22m
+  [1mneeds review · primary · pair-7c78e775[22m
+  Import link: jsx-runtime.ts imports
+  jsx-dev-runtime.ts. 3 of 6 commits
+  that changed src/jsx/jsx-runtime.ts
+  also changed
+  src/jsx/jsx-dev-runtime.ts (50%, 95%
+  interval 19-81%); the other way 3 of
+  10 (30%). Last together 2023-11-08.
+  Before: 1 time this changed without
+  jsx-dev-runtime.ts; it changed within
+  48 h after 0 (small sample; not proof
+  those were fixes).
+  src/jsx/jsx-runtime.ts
+  [2m  → references it directly[22m
+  src/jsx/jsx-dev-runtime.ts
+  [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m50%[22m [2m(range 19–81%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-07[22m  652ef7c  [2m2023-11-08[22m  feat(jsx):…
+  [2mE-08[22m  c3031a4  [2m2022-11-01[22m  fix(jsx): …
+  [2mE-09[22m  5f60a18  [2m2022-07-24[22m  feat(jsx):…
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed[22m
+    [1m2774[22m
+  [2mHistory[22m
+    [1m2021-12-14 to 2026-11-04[22m
+  [2mSweeping commits skipped[22m
+    [1m34[22m
+  [2mRevert commits skipped[22m
+    [1m11[22m
+  [2mChanged files[22m
+    [1m16[22m
+  [2mNew or without usable history[22m
+    [1m2[22m
+  [2mPossibly missed[22m
+    [1m3[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Historical signal, not[22m
+  [1m  proof: check whether the change[22m
+  [1m  really needs these files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain --head \[22m
+  [1m61f7c59e50244ab4d2dd83c151928cf7ea448\[22m
+  [1m510 --base \[22m
+  [1mbcfd02bb50fb015587aac7fe1745b5b2b6136\[22m
+  [1m1ec src/helper/ssg/ssg.test.tsx \[22m
+  [1msrc/helper/ssg/index.ts[22m
+    [2mShow the shared commits behind F-01.[22m
+  [1mnpx repo-archaeology explain --head \[22m
+  [1m61f7c59e50244ab4d2dd83c151928cf7ea448\[22m
+  [1m510 --base \[22m
+  [1mbcfd02bb50fb015587aac7fe1745b5b2b6136\[22m
+  [1m1ec \[22m
+  [1mruntime-tests/deno-jsx/jsx.test.tsx \[22m
+  [1msrc/jsx/streaming.test.tsx[22m
+    [2mShow the shared commits behind F-02.[22m
+  [1mnpx repo-archaeology explain --head \[22m
+  [1m61f7c59e50244ab4d2dd83c151928cf7ea448\[22m
+  [1m510 --base \[22m
+  [1mbcfd02bb50fb015587aac7fe1745b5b2b6136\[22m
+  [1m1ec src/jsx/jsx-runtime.ts \[22m
+  [1msrc/jsx/jsx-dev-runtime.ts[22m
+    [2mShow the shared commits behind F-03.[22m
