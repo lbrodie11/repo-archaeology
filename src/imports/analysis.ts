@@ -16,11 +16,22 @@ import { extractDetailedDependencies, type ImportEdgeKind } from './typescript.j
  * `AnalysisSession` (and so its own cache scope).
  */
 
+/**
+ * What a target is to the import that reaches it (RA-20). `module`: the module the specifier
+ * names (Python's leaf module or package `__init__.py`; every file of a Go package). `init`: a
+ * Python package `__init__.py` that runs on the way to it (`a/__init__.py` for `import a.b.c`).
+ * `name`: a Python submodule taken by name (`from pkg import mod`), with the name in `name`.
+ */
+export type ImportTargetRole = 'module' | 'init' | 'name';
+
 /** One resolved file an import points at. Go package imports resolve to several. */
 export interface AnalysisTarget {
   path: string;
   via: ImportResolutionVia;
   heuristic?: boolean;
+  role?: ImportTargetRole;
+  /** With `role: 'name'`: the imported name (`mod` in `from pkg import mod`). */
+  name?: string;
 }
 
 export interface AnalysisEdge {
@@ -79,6 +90,35 @@ export interface Extraction {
   dynamicLoads: number;
   /** Set when extraction could not finish (lexer failure, size or work budget): the file is `incomplete`. */
   incompleteReason?: string;
+  /** Analyzer-private facts read from the text (Go: the package clause), for `complete`. */
+  data?: unknown;
+}
+
+/**
+ * A file's extraction, or the fact that its source could not be read. An extraction depends on
+ * the file's bytes and path only, so it may be reused for the same path with the same blob in
+ * another tree (RA-20: `importGraph({ at })`).
+ */
+export type StoredExtraction = { unavailable: true } | { unavailable?: false; extraction: Extraction };
+
+/** Where a session keeps the extractions it computed, and finds ones it may reuse. */
+export interface ExtractionStore {
+  get(analyzer: string, path: string): StoredExtraction | undefined;
+  set(analyzer: string, path: string, entry: StoredExtraction): void;
+}
+
+/** A plain per-session extraction store. */
+export function createExtractionStore(): ExtractionStore & { readonly size: number } {
+  const entries = new Map<string, StoredExtraction>();
+  return {
+    get: (analyzer, path) => entries.get(`${analyzer}\0${path}`),
+    set: (analyzer, path, entry) => {
+      entries.set(`${analyzer}\0${path}`, entry);
+    },
+    get size() {
+      return entries.size;
+    },
+  };
 }
 
 export type SpecifierResolution =
@@ -129,7 +169,14 @@ export interface LanguageAnalyzer<Index = unknown> {
   language(path: string): string;
   /** Repository-wide index (module maps, source roots, resolvers), built once per session. */
   index(files: RepoFiles): Index;
-  extract(text: string, path: string, index: Index): Extraction;
+  /**
+   * Reads a file's imports. Must depend on `text` and `path` only (never on the index or other
+   * files): sessions reuse extractions across trees for unchanged blobs. Anything that needs the
+   * index belongs in `complete`.
+   */
+  extract(text: string, path: string): Extraction;
+  /** The index-dependent rest of an extraction (Go: the enclosing module), run on every analysis. */
+  complete?(path: string, extraction: Extraction, index: Index): Extraction;
   resolve(from: string, item: ExtractedSpecifier, index: Index, session: AnalysisSession): SpecifierResolution;
   /** Diagnostics found while building the index (duplicate modules, unsupported config). */
   indexWarnings?(index: Index): readonly string[];
@@ -148,6 +195,8 @@ export class AnalysisSession {
     readonly files: RepoFiles,
     readonly policy: AnalysisPolicy = {},
     readonly analyzers: readonly LanguageAnalyzer[] = LANGUAGE_ANALYZERS,
+    /** Where extractions are kept (and, for a derived tree, reused from); none by default. */
+    readonly extractions?: ExtractionStore,
   ) {}
 
   analyzerFor(path: string): LanguageAnalyzer | undefined {
@@ -187,7 +236,14 @@ export function analysisWarnings(session: AnalysisSession, analyses: Iterable<Fi
   return [...index, ...[...fileWarnings].filter((warning) => !index.includes(warning)).sort()];
 }
 
-/** Analyzes one file: extract its imports, resolve each, and summarize the result. */
+function readAndExtract(path: string, reader: RepoFiles, analyzer: LanguageAnalyzer, store: ExtractionStore | undefined): StoredExtraction {
+  const text = reader.read(path);
+  const entry: StoredExtraction = text === undefined ? { unavailable: true } : { extraction: analyzer.extract(text, path) };
+  store?.set(analyzer.id, path, entry);
+  return entry;
+}
+
+/** Analyzes one file: extract its imports (or reuse a stored extraction), resolve each, and summarize the result. */
 export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSession): FileAnalysis {
   const result: FileAnalysis = {
     analyzable: false,
@@ -201,14 +257,14 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
   const analyzer = session.analyzerFor(path);
   if (!analyzer) return result;
   result.language = analyzer.language(path);
-  const text = reader.read(path);
-  if (text === undefined) {
+  const stored = session.extractions?.get(analyzer.id, path) ?? readAndExtract(path, reader, analyzer, session.extractions);
+  if (stored.unavailable) {
     result.sourceUnavailable = true;
     return result;
   }
   result.analyzable = true;
   const index = session.indexFor(analyzer);
-  const extraction = analyzer.extract(text, path, index);
+  const extraction = analyzer.complete ? analyzer.complete(path, stored.extraction, index) : stored.extraction;
   result.dynamicLoads = extraction.dynamicLoads;
   if (extraction.incompleteReason) result.incompleteReason = extraction.incompleteReason;
 
@@ -257,8 +313,9 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     }
   }
   if (warnings.size > 0) result.warnings = [...warnings].sort();
-  // A file that is also a certain target is not uncertain.
-  for (const edge of result.edges) for (const target of edge.targets) uncertain.delete(target.path);
+  // A file that is also a certain target is not uncertain. A heuristic target the analyzer also
+  // called uncertain (a Python submodule behind `__getattr__`) stays uncertain: graph-only.
+  for (const edge of result.edges) for (const target of edge.targets) if (!target.heuristic) uncertain.delete(target.path);
   if (uncertain.size > 0) result.uncertain = [...uncertain].sort(([a], [b]) => a.localeCompare(b)).map(([path, reason]) => ({ path, reason }));
   result.incomplete = result.unresolved.length > 0 || result.dynamicLoads > 0 || result.incompleteReason !== undefined;
   return result;
