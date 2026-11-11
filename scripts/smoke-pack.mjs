@@ -310,7 +310,8 @@ export function runSmokePack(options = {}) {
       ['explain', 'src/payments/charge.ts', 'src/payments/ledger.ts'],
     ]) {
       const res = runInstalledRaw(['--style', 'rich', ...args]);
-      if (!res.stdout.startsWith('Repo Archaeology · ')) {
+      // `·`, or its ASCII twin `-` where @frame12/terminal detects no Unicode (Windows without TERM).
+      if (!/^Repo Archaeology [·-] /.test(res.stdout)) {
         throw new Error(`repo-archaeology --style rich ${args.join(' ')} did not print the FRAME/12 masthead:\n${res.stdout}`);
       }
       if (res.stdout.includes('\u001b')) {
