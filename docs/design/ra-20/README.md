@@ -72,12 +72,12 @@ To keep RA-10's guarantee that relationships never claim a possible import as `d
 
 | Repository (pin) | PRs | Second session p50 / p95 | Derived p50 / p95 | p95 ratio | Parity |
 | --- | --- | --- | --- | --- | --- |
-| `honojs/hono` (`eb754bd`) | 20 | 545 / 1009 ms | 88 / 272 ms | 27% | 20/20 identical |
-| `allianz/ng-aquila` (`5b23a36`) | 20 | 1239 / 1669 ms | 198 / 369 ms | **22%** (target ≤ 25%) | 20/20 identical |
+| `honojs/hono` (`eb754bd`) | 20 | 459 / 673 ms | 91 / 208 ms | 31% | 20/20 identical |
+| `allianz/ng-aquila` (`5b23a36`) | 20 | 1236 / 1780 ms | 200 / 335 ms | **19%** (target ≤ 25%) | 20/20 identical |
 
-Parity means identical `files`, `edges`, `unresolved`, `languages` and `meta.imports` between the two results for every PR.
+Measured on the final code (blob-id reuse, after three review passes). An earlier run on the first draft gave hono 545/1009 vs 88/272 ms (27%) and ng-aquila 1239/1669 vs 198/369 ms (22%); the second-session baseline varies more from run to run than the derived path. Parity means identical `files`, `edges`, `unresolved`, `languages` and `meta.imports` between the two results for every PR.
 
-Per PR, the derived path re-parsed only what differs. On ng-aquila that is 3 to 44 files out of about 1,800 analyzable ones, except one PR at 196 (p95 PR: 369 ms). On hono it is 0 to 55 files out of about 380, except one PR that rewrote 125 files (283 re-parsed, 317 ms). What remains is the base side's `ls-tree`, building its resolvers, and resolving every file of the base tree.
+Per PR, the derived path re-parsed only what differs. On ng-aquila that is 3 to 44 files out of about 1,800 analyzable ones, except one PR at 196. On hono it is 0 to 55 files out of about 380, except one PR that rewrote 125 files (283 re-parsed). What remains is the base side's `ls-tree`, building its resolvers, and resolving every file of the base tree.
 
 **Memory** (`node --expose-gc`, heap retained after GC):
 
@@ -85,7 +85,7 @@ Per PR, the derived path re-parsed only what differs. On ng-aquila that is 3 to 
 | --- | --- | --- |
 | Head session's graph, before RA-20 (main) | 4.0 MB | 12.2 MB |
 | Head session's graph, with the extraction store | 4.1 MB | 13.2 MB |
-| Derived `at` index, kept while the session is open (last `at` only) | 0.3 MB | 3.9 MB |
+| Derived `at` index, kept while the session is open (last `at` only) | 0.1 MB | 4.0 MB |
 
 The second session's own graph (about as large as the head graph) and its history are gone. The derived index stays cached for repeated calls with the same `at` until the session is closed or another `at` is asked for.
 
