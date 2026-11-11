@@ -57,7 +57,8 @@ describe('RA-21 · --style rich never loads ink or react', () => {
         { cwd: repo.dir, encoding: 'utf8', env: sanitizeGitEnv(process.env, { RA_TRACE_FILE: traceFile, NO_COLOR: '1' }), timeout: 60_000 },
       );
       assert.equal(res.status, 0, res.stderr);
-      assert.match(res.stdout, /^Repo Archaeology · /);
+      // `·`, or its ASCII twin `-` where @frame12/terminal detects no Unicode (Windows without TERM).
+      assert.match(res.stdout, /^Repo Archaeology [·-] /);
       const urls = readFileSync(traceFile, 'utf8').split('\n').filter(Boolean);
       const frame12 = urls.filter((u) => u.includes('/@frame12/terminal/'));
       assert.ok(frame12.some((u) => u.endsWith('/@frame12/terminal/dist/render/index.js')), 'render entry loaded');

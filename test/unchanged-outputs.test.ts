@@ -69,6 +69,9 @@ function pathSpellings(dir: string): string[] {
 export function normalizeText(text: string, dir: string): string {
   let out = text;
   for (const p of pathSpellings(dir)) out = out.split(p).join('<repo>');
+  // The rest of a path under the fixture uses `/` on every platform (Windows prints `\`, or `\\`
+  // inside JSON strings). On POSIX this changes nothing.
+  out = out.replace(/<repo>(?:\\\\|\\)[^\s'"`)]*/g, (m) => m.replace(/\\\\|\\/g, '/'));
   return out
     .split(basename(dir))
     .join('<repo-name>')
