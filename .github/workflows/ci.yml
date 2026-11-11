@@ -7,13 +7,20 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }} / Node ${{ matrix.node }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.runner || matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.runner || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24, 26]
+        include:
+          # The job that installs Playwright's system packages stays on Ubuntu 24.04: on the
+          # ubuntu-latest Ubuntu 26.04 image, `playwright install --with-deps` failed because apt
+          # could not resolve the Ubuntu mirrors (2026-11-11). Revisit when that image is stable.
+          - os: ubuntu-latest
+            node: 22
+            runner: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
         with:

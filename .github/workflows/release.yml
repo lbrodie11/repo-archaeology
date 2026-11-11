@@ -15,7 +15,9 @@ concurrency:
 jobs:
   verify:
     name: Verify, extract changelog, and smoke-test tarball
-    runs-on: ubuntu-latest
+    # Pinned: installs Playwright's system packages, which failed on the ubuntu-latest Ubuntu 26.04
+    # image because apt could not resolve the Ubuntu mirrors (2026-11-11). Revisit when that image is stable.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
