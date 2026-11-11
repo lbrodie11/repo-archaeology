@@ -419,8 +419,12 @@ export class RelationshipClassifier {
     for (const { reasonCode } of analysis.unresolved) {
       result.unresolvedReasons[reasonCode] = (result.unresolvedReasons[reasonCode] ?? 0) + 1;
     }
+    const graphOnly = new Set((analysis.uncertain ?? []).map(({ path }) => path));
     for (const edge of analysis.edges) {
       for (const target of edge.targets) {
+        // A heuristic target the analyzer also lists as uncertain is for the import graph only (RA-20):
+        // the pair stays `unknown`, never `direct`.
+        if (target.heuristic && graphOnly.has(target.path)) continue;
         result.internalEdges++;
         if (edge.reference) {
           result.references.add(target.path);

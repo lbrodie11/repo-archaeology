@@ -270,8 +270,8 @@ describe('Python source roots and resolution', () => {
         specifier: 'myapp.plugins',
         kind: 'dynamic',
         targets: [
-          { path: 'myapp/__init__.py', via: 'python-module' },
-          { path: 'myapp/plugins.py', via: 'python-module' },
+          { path: 'myapp/__init__.py', via: 'python-module', role: 'init' },
+          { path: 'myapp/plugins.py', via: 'python-module', role: 'module' },
         ],
       },
     ]);
@@ -377,7 +377,14 @@ describe('Python import semantics (RA-10 review regressions)', () => {
     for (const [label, init, ambiguous] of cases) {
       const analysis = analyze({ ...base, 'pkg/__init__.py': init }, 'main.py').analysis;
       if (ambiguous) {
-        assert.deepEqual(targetsOf(analysis), ['pkg/__init__.py'], label);
+        // RA-20: behind a lone PEP 562 `__getattr__` the submodule is also a heuristic, graph-only edge.
+        const certain = analysis.edges.flatMap((edge) => edge.targets.filter((target) => !target.heuristic).map((target) => target.path));
+        assert.deepEqual(certain, ['pkg/__init__.py'], label);
+        assert.deepEqual(
+          analysis.edges.flatMap((edge) => edge.targets.filter((target) => target.heuristic).map((target) => target.path)),
+          label === 'module __getattr__' ? ['pkg/child.py'] : [],
+          label,
+        );
         // Only the possible submodule is uncertain; the rest of the file is still checked.
         assert.equal(analysis.incomplete, false, label);
         assert.deepEqual(analysis.uncertain, [{ path: 'pkg/child.py', reason: 'from pkg import child: child may be an attribute of pkg/__init__.py or the submodule' }], label);

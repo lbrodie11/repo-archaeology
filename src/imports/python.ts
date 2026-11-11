@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import type { AnalysisSession, AnalysisTarget, ExtractedSpecifier, Extraction, LanguageAnalyzer, SpecifierResolution } from './analysis.js';
+import type { AnalysisSession, AnalysisTarget, ExtractedSpecifier, Extraction, ImportTargetRole, LanguageAnalyzer, SpecifierResolution } from './analysis.js';
 import { PYTHON_STDLIB_MODULES } from './python-stdlib.js';
 import { isTomlTable, parseTomlSubset, TomlSubsetError, tomlGet, type TomlTable, type TomlValue } from './toml.js';
 import { repoDirname as dirOf, type RepoFiles } from './tree-files.js';
@@ -710,6 +710,12 @@ export function extractPythonImports(text: string, execDepth = 0): PythonExtract
 export interface InitializerBindings {
   /** The initializer could not be read or binds names dynamically (`__getattr__`, star imports, `globals()`, …). */
   dynamic: boolean;
+  /**
+   * The only dynamic trait is a module-level `def __getattr__` (PEP 562). It is consulted only for
+   * names the module does not bind, so a submodule on disk that no other binding names is the
+   * probable target of `from pkg import name` (a heuristic edge, RA-20).
+   */
+  lazyGetattrOnly?: boolean;
   /** `from . import a [as b]` at module level: b → a. */
   submodules: Map<string, string>;
   /** Module-level names bound any other way (assignment, def, class, other imports, …). */
@@ -735,11 +741,22 @@ export function initializerBindings(text: string | undefined): InitializerBindin
     }
   }
   // These can bind module attributes from anywhere, including function bodies that run later.
-  for (const token of parsed.tokens) if (token.type === 'name' && DYNAMIC_NAMESPACE.has(token.value)) result.dynamic = true;
-  for (let i = 0; i < parsed.tokens.length; i++) {
-    if (isName(parsed.tokens[i], 'modules') && isOp(parsed.tokens[i - 1], '.') && isName(parsed.tokens[i - 2], 'sys')) result.dynamic = true;
+  const starOrDynamicImport = result.dynamic;
+  let otherDynamic = false;
+  let getattrToken = false;
+  for (const token of parsed.tokens) {
+    if (token.type !== 'name' || !DYNAMIC_NAMESPACE.has(token.value)) continue;
+    if (token.value === '__getattr__') getattrToken = true;
+    else otherDynamic = true;
   }
+  for (let i = 0; i < parsed.tokens.length; i++) {
+    if (isName(parsed.tokens[i], 'modules') && isOp(parsed.tokens[i - 1], '.') && isName(parsed.tokens[i - 2], 'sys')) otherDynamic = true;
+  }
+  result.dynamic = starOrDynamicImport || otherDynamic || getattrToken;
   for (const name of nonImportBindings(parsed.tokens, (index) => importTokens.has(index), true)) result.other.add(name);
+  // `__getattr__` is named once by its own `def` and nowhere else (no `getattr(mod, '__getattr__')` games).
+  const getattrUses = parsed.tokens.filter((token) => token.type === 'name' && token.value === '__getattr__').length;
+  if (getattrToken && !starOrDynamicImport && !otherDynamic && getattrUses === 1 && result.other.has('__getattr__')) result.lazyGetattrOnly = true;
   return result;
 }
 
@@ -1162,8 +1179,21 @@ function bindingsOf(index: PythonIndex, init: string): InitializerBindings {
 function resolveModule(index: PythonIndex, from: string, topBase: string, rest: string[], names: string[] | undefined): SpecifierResolution {
   const walked = walkModule(index, topBase, rest);
   if (!walked) return { kind: 'unresolved', reasonCode: 'target-missing' };
+  // What each target is to the import (RA-20): set once per path, a certain target wins over a heuristic one.
+  const targets = new Map<string, AnalysisTarget>();
+  const add = (path: string, role: ImportTargetRole, extra: { name?: string; heuristic?: boolean } = {}) => {
+    const existing = targets.get(path);
+    if (existing && !(existing.heuristic && !extra.heuristic)) return;
+    targets.set(path, {
+      path,
+      via: 'python-module',
+      ...(extra.heuristic ? { heuristic: true } : {}),
+      role,
+      ...(extra.name !== undefined ? { name: extra.name } : {}),
+    });
+  };
   // Initializers on the way run before the module (`import a.b.c` runs a/ and a/b/__init__.py).
-  const paths = new Set(walked.inits.filter((init) => !containsImporter(init, from)));
+  for (const init of walked.inits) if (!containsImporter(init, from)) add(init, 'init');
   const leaf = leafFile(walked.leaf);
   // The leaf itself: always for `import x` and plain modules; for a package's from-import only
   // when a name comes out of its __init__.py (an attribute, a star import or an ambiguous name).
@@ -1188,26 +1218,34 @@ function resolveModule(index: PythonIndex, from: string, topBase: string, rest: 
       readsLeaf = true;
       continue;
     }
+    const subFile = leafFile(sub);
     if (walked.leaf.kind === 'package') {
       // `from pkg import name` takes pkg's attribute if `__init__.py` binds one; only then does it skip the submodule.
       const bindings = bindingsOf(index, walked.leaf.init);
       const viaSubmodule = bindings.submodules.get(name);
-      const attribute = bindings.dynamic || bindings.other.has(name) || (viaSubmodule !== undefined && viaSubmodule !== name);
-      if (attribute) {
-        const subFile = leafFile(sub);
+      const bound = bindings.other.has(name) || (viaSubmodule !== undefined && viaSubmodule !== name);
+      if (bindings.dynamic && !bound && bindings.lazyGetattrOnly && subFile !== undefined) {
+        // RA-20: a PEP 562 `__getattr__` only answers names the package does not bind, so the submodule
+        // on disk is the probable target; but `__getattr__` could still return something else. The
+        // graph lists it as a heuristic edge; it stays uncertain, so relationships never claim it.
+        readsLeaf = true;
+        add(subFile, 'name', { name, heuristic: true });
+        uncertain.push({ path: subFile, reason: `from ${posix.basename(walked.base)} import ${name}: ${name} may be an attribute of ${walked.leaf.init} or the submodule` });
+        continue;
+      }
+      if (bindings.dynamic || bound) {
         const reason = `from ${posix.basename(walked.base)} import ${name}: ${name} may be an attribute of ${walked.leaf.init} or the submodule`;
         if (subFile !== undefined) uncertain.push({ path: subFile, reason });
         readsLeaf = true;
         continue;
       }
     }
-    const subFile = leafFile(sub);
-    if (subFile !== undefined) paths.add(subFile);
+    if (subFile !== undefined) add(subFile, 'name', { name });
   }
   // A package whose submodules are imported still runs its __init__.py first, unless it contains the importer.
-  if (leaf !== undefined && (readsLeaf || (walked.leaf.kind === 'package' && !containsImporter(leaf, from)))) paths.add(leaf);
-  const targets: AnalysisTarget[] = [...paths].sort().map((path) => ({ path, via: 'python-module' }));
-  return { kind: 'files', targets, ...(uncertain.length > 0 ? { uncertain } : {}) };
+  if (leaf !== undefined && (readsLeaf || (walked.leaf.kind === 'package' && !containsImporter(leaf, from)))) add(leaf, 'module');
+  const sorted = [...targets.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { kind: 'files', targets: sorted, ...(uncertain.length > 0 ? { uncertain } : {}) };
 }
 
 /** The innermost source root containing `path`. */
