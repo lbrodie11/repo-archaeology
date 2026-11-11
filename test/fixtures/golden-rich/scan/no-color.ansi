@@ -125,3 +125,15 @@
 [1mWARNINGS[22m
   [1m▲ warning: Historical signal, not proof: check whether the change really needs[22m
   [1m  these files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/preset/tiny.ts src/preset/quick.ts[22m
+    [2mShow the shared commits behind F-04.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/helper/streaming/stream.ts src/helper/streaming/sse.ts[22m
+    [2mShow the shared commits behind F-05.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/adapter/deno/ssg.ts src/adapter/bun/ssg.ts[22m
+    [2mShow the shared commits behind F-06.[22m

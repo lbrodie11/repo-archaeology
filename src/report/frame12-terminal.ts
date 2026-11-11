@@ -169,8 +169,13 @@ function directionSentence(view: RelationshipView): string {
   return `${forwardSentence(view).slice(0, -1)}; the other way ${view.shared} of ${view.toChanges} (${pct(view.reverseConfidence)}).`;
 }
 
+/** Ends repository or analysis text with exactly one sentence mark. */
+function sentence(text: string): string {
+  return /[.!?]$/.test(text.trimEnd()) ? text.trimEnd() : `${text.trimEnd()}.`;
+}
+
 function relationshipSentence(relationship: Relationship, why: string): string {
-  return `${capitalize(NAMES[relationship])}: ${why}.`;
+  return sentence(`${capitalize(NAMES[relationship])}: ${why}`);
 }
 
 function capitalize(text: string): string {
@@ -180,7 +185,7 @@ function capitalize(text: string): string {
 export function verdictSentence(verdict: RelationshipVerdictView): string {
   const kind = verdict.kind === 'confirmed' ? 'confirmed' : 'expected (silenced)';
   const meta = [verdict.by ? `by ${verdict.by}` : '', verdict.until ? `until ${verdict.until}` : ''].filter(Boolean).join(', ');
-  return `Verdict: ${kind}${meta ? ` (${meta})` : ''}: ${verdict.reason}.`;
+  return sentence(`Verdict: ${kind}${meta ? ` (${meta})` : ''}: ${verdict.reason}`);
 }
 
 function findingStatus(view: { verdict?: RelationshipVerdictView }): FindingStatus {
@@ -223,6 +228,15 @@ export function ownershipSentences(s: Suggestion): string[] {
     const suffix = notes.length > 0 ? `, ${notes.join(', ')}` : '';
     if (s.owners.length === 0) {
       out.push(`People who may have context: no qualifying recent human changes in the last ${lookbackDays} days${suffix}.`);
+      return out;
+    }
+    if (qualifying <= 1) {
+      // Classic's limited-sample wording: one change says little about who knows the file.
+      const o = s.owners[0]!;
+      out.push(
+        `People who may have context (limited sample: 1 qualifying recent change in ${lookbackDays} days${suffix}): ${o.name}${o.login ? ` (${o.login})` : ''}, 1 of 1 change, last ${o.lastDate}.`,
+      );
+      out.push('Historical activity suggests familiarity, not current ownership or availability.');
       return out;
     }
     const people = s.owners
@@ -298,7 +312,10 @@ function frameLabel(index: number): string {
   return `F-${String(index + 1).padStart(2, '0')}`;
 }
 
-/** `explain` commands for the first three pair findings (`offset` = findings before them). */
+/**
+ * `explain` commands for the first three pair findings, labeled with their frames (`offset` =
+ * findings before them, such as scan's families, which can fill the top frames on their own).
+ */
 function explainSteps(
   pairs: Array<{ from: string; to: string }>,
   offset: number,
@@ -306,7 +323,7 @@ function explainSteps(
   options: AdapterOptions,
   refs: { head?: string; base?: string },
 ): NextStep[] {
-  return pairs.slice(0, Math.max(0, 3 - offset)).map((p, i) => ({
+  return pairs.slice(0, 3).map((p, i) => ({
     command: formatExplainCommand(p.from, p.to, settings, options.flagSettings, refs),
     description: `Show the shared commits behind ${frameLabel(offset + i)}.`,
   }));
@@ -421,10 +438,12 @@ export function scanToRichView(result: ScanResult, scanOptions: ScanOptions, opt
 
 // ---------------------------------------------------------------------------------------- diff
 
-function familySentence(s: Suggestion, families: DiffFamilyView[]): string {
+function familySentence(s: Suggestion, families: DiffFamilyView[], shown: ReadonlySet<string>): string {
   const fam = families.find((f) => f.suggestedMembers.includes(s.to));
   if (!fam) return '';
-  return `Part of the ${fam.label} family: changed ${fam.changedMembers.join(', ')}; check ${fam.suggestedMembers.join(', ')} (${fam.commitsTouchingTwoOrMore} supporting commits).`;
+  // As in classic, members suggested beyond --limit are named but marked.
+  const check = fam.suggestedMembers.map((p) => (shown.has(p) ? p : `${p} (beyond --limit)`)).join(', ');
+  return `Part of the ${fam.label} family: changed ${fam.changedMembers.join(', ')}; check ${check} (${plural(fam.commitsTouchingTwoOrMore, 'supporting commit')}).`;
 }
 
 export function diffToRichView(result: DiffResult, options: AdapterOptions): RichView {
@@ -474,6 +493,7 @@ export function diffToRichView(result: DiffResult, options: AdapterOptions): Ric
       metrics.push({ name: 'total-suggestions', label: 'Suggestions before --limit', value: result.totalSuggestions });
     }
     if (families.length > 0) metrics.push({ name: 'families', label: 'Finding families', value: families.length });
+    const shown = new Set(result.suggestions.map((s) => s.to));
     findings = result.suggestions.map((s, i) =>
       pairFinding(
         s,
@@ -483,7 +503,7 @@ export function diffToRichView(result: DiffResult, options: AdapterOptions): Ric
           directionSentence(s),
           `Last together ${s.lastTogether}.`,
           s.alsoLinkedFrom.length > 0 ? `Also linked to: ${s.alsoLinkedFrom.join(', ')}.` : '',
-          familySentence(s, families),
+          familySentence(s, families, shown),
           s.verdict ? verdictSentence(s.verdict) : '',
           ...ownershipSentences(s),
           trackRecordSentence(s) ?? '',
@@ -609,8 +629,19 @@ export function explainToRichView(result: ExplainResult, options: AdapterOptions
   return {
     snapshot: snapshot('explain', `explain ${result.from} and ${result.to}`, meta, [finding], metrics, warnings, options),
     // Patch hunks are not part of the snapshot contract: classic shows them.
-    nextSteps: [{ command: `${result.cliCommand} --style classic`, description: 'Show the patch hunks for these commits.' }],
+    nextSteps: [{ command: classicCommand(result.cliCommand), description: 'Show the patch hunks for these commits.' }],
   };
+}
+
+const CLI_PREFIX = 'npx repo-archaeology ';
+
+/**
+ * The same command with `--style classic` as a global option, before the subcommand: appended at
+ * the end it would follow a `--` that `explain` adds for paths starting with `-`, and be read as a
+ * file name.
+ */
+export function classicCommand(command: string): string {
+  return command.startsWith(CLI_PREFIX) ? `${CLI_PREFIX}--style classic ${command.slice(CLI_PREFIX.length)}` : command;
 }
 
 // ------------------------------------------------------------------------------ terminal glue

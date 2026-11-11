@@ -47,6 +47,6 @@ WARNINGS
 
 
 NEXT STEPS
-  npx repo-archaeology explain src/helper/ssg/ssg.test.tsx \
-  src/helper/ssg/index.ts --style classic
+  npx repo-archaeology --style classic explain src/helper/ssg/ssg.test.tsx \
+  src/helper/ssg/index.ts
     Show the patch hunks for these commits.

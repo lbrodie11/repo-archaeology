@@ -48,6 +48,6 @@
 
 
 [1mNEXT STEPS[22m
-  [1mnpx repo-archaeology explain src/helper/ssg/ssg.test.tsx \[22m
-  [1msrc/helper/ssg/index.ts --style classic[22m
+  [1mnpx repo-archaeology --style classic explain src/helper/ssg/ssg.test.tsx \[22m
+  [1msrc/helper/ssg/index.ts[22m
     [2mShow the patch hunks for these commits.[22m

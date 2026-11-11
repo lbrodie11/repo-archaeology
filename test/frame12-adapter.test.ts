@@ -7,8 +7,10 @@ import { describe, it } from 'node:test';
 import { validateSnapshot } from '@frame12/terminal';
 import type { DiffResult, Suggestion } from '../src/commands/diff.js';
 import {
+  classicCommand,
   diffToRichView,
   explainToRichView,
+  ownershipSentences,
   fileToRichView,
   pairId,
   relationOf,
@@ -242,10 +244,17 @@ describe('RA-21 · frame12-terminal adapter', () => {
       for (const k of ['ghost', 'unknown', 'indirect', 'direct', 'test'] as const) assert.equal(m[`kind-${k}`], hono.scan.counts[k]);
       assert.equal(m.families, hono.scan.families.length);
       assert.equal(m['relationships-shown'], hono.scan.relationships.length);
-      const firstRelFrame = hono.scan.families.length + 1;
+      // Hono has 3 families, which fill the top frames; the first three relationships still get
+      // explain commands, labeled with their own frames.
+      assert.equal(hono.scan.families.length, 3);
       assert.ok(nextSteps.every((s) => s.command.startsWith('npx repo-archaeology explain ')));
-      assert.equal(nextSteps.length, Math.max(0, 3 - hono.scan.families.length));
-      if (nextSteps[0]) assert.equal(nextSteps[0].description, `Show the shared commits behind F-${String(firstRelFrame).padStart(2, '0')}.`);
+      assert.equal(nextSteps.length, 3);
+      assert.deepEqual(
+        nextSteps.map((s) => s.description),
+        ['F-04', 'F-05', 'F-06'].map((f) => `Show the shared commits behind ${f}.`),
+      );
+      const [r0] = hono.scan.relationships;
+      assert.ok(nextSteps[0]!.command.endsWith(`${r0!.from} ${r0!.to}`));
     });
 
     it('the bare command adds the no-history note and the map as a next step', () => {
@@ -352,5 +361,62 @@ describe('RA-21 · frame12-terminal adapter', () => {
     const f = diffToRichView({ ...hono.diff, suggestions: [s] }, FIXED).snapshot.findings[0]!;
     assert.equal(f.status, 'info');
     assert.match(f.summary!, /Verdict: expected \(silenced\) \(by platform-team\): generated together\./);
+    // A reason that already ends a sentence is not given a second period.
+    const dotted = { ...s, verdict: { ...s.verdict, reason: 'generated together.' }, why: 'a test and the code it covers.' };
+    const g = diffToRichView({ ...hono.diff, suggestions: [dotted] }, FIXED).snapshot.findings[0]!;
+    assert.doesNotMatch(g.summary!, /\.\./);
+  });
+
+  it('names diff family members beyond --limit as classic does', () => {
+    const [s] = hono.diff.suggestions;
+    const family = {
+      ...(hono.scan.families[0]! as object),
+      label: 'serve-static.ts across src/adapter/*',
+      changedMembers: [s!.from],
+      suggestedMembers: [s!.to, 'src/not/shown.ts'],
+      commitsTouchingTwoOrMore: 7,
+    } as unknown as NonNullable<DiffResult['families']>[number];
+    const f = diffToRichView({ ...hono.diff, suggestions: [s!], families: [family] }, FIXED).snapshot.findings[0]!;
+    assert.ok(
+      f.summary!.includes(`Part of the serve-static.ts across src/adapter/* family: changed ${s!.from}; check ${s!.to}, src/not/shown.ts (beyond --limit) (7 supporting commits).`),
+      f.summary,
+    );
+  });
+
+  it('points explain at classic with --style before the subcommand, so a `--` path terminator cannot swallow it', () => {
+    assert.equal(
+      classicCommand("npx repo-archaeology explain -- '-leading-dash.ts' src/safe.ts"),
+      "npx repo-archaeology --style classic explain -- '-leading-dash.ts' src/safe.ts",
+    );
+    const { nextSteps } = explainToRichView({ ...hono.explain, cliCommand: "npx repo-archaeology explain --head v1 -- '-a.ts' b.ts" }, FIXED);
+    assert.equal(nextSteps[0]!.command, "npx repo-archaeology --style classic explain --head v1 -- '-a.ts' b.ts");
+  });
+
+  it('keeps classic owners wording, including the limited-sample case', () => {
+    const base = hono.diff.suggestions[0]!;
+    const sample = { qualifyingCommits: 1, lookbackDays: 365, maxCommits: 100, fromDate: '2025-11-11', toDate: '2026-11-11', agentAssistedCommits: 0, excludedNonHumanCommits: 0, incompleteCoverage: false };
+    const one = ownershipSentences({ ...base, owners: [{ name: 'Ada', login: 'ada', commits: 1, lastDate: '2026-10-01' }], ownersSample: sample });
+    assert.deepEqual(one, [
+      'People who may have context (limited sample: 1 qualifying recent change in 365 days): Ada (ada), 1 of 1 change, last 2026-10-01.',
+      'Historical activity suggests familiarity, not current ownership or availability.',
+    ]);
+    const many = ownershipSentences({
+      ...base,
+      owners: [
+        { name: 'Ada', commits: 3, lastDate: '2026-10-01' },
+        { name: 'Grace', commits: 2, lastDate: '2026-09-01' },
+      ],
+      ownersSample: { ...sample, qualifyingCommits: 5, agentAssistedCommits: 2 },
+      codeowners: ['@org/team', '@ada'],
+    });
+    assert.deepEqual(many, [
+      'Designated code owners (CODEOWNERS, handles without @): org/team, ada.',
+      'People who may have context (365-day window, 2 AI-assisted commits included): Ada, 3 of 5 qualifying recent changes, last 2026-10-01; Grace, 2 of 5 qualifying recent changes, last 2026-09-01.',
+      'Historical activity suggests familiarity, not current ownership or availability.',
+    ]);
+    assert.deepEqual(ownershipSentences({ ...base, owners: [], ownersSample: sample }), [
+      'People who may have context: no qualifying recent human changes in the last 365 days.',
+    ]);
+    assert.deepEqual(ownershipSentences(base), []);
   });
 });

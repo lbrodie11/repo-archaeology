@@ -47,7 +47,10 @@ function runCli(args: string[], cwd: string, extraEnv: Record<string, string | u
     TERM: 'xterm-256color',
     LANG: 'en_US.UTF-8',
   });
-  for (const k of ['FORCE_COLOR', 'FRAME12_SCREEN_READER', 'FRAME12_ASCII', 'TERM_PROGRAM', 'LC_ALL', 'LC_CTYPE']) delete env[k];
+  // The developer's own terminal settings must not leak into the expected output.
+  for (const k of Object.keys(env)) {
+    if (k.startsWith('FRAME12_') || ['FORCE_COLOR', 'NODE_DISABLE_COLORS', 'TERM_PROGRAM', 'COLORTERM', 'WT_SESSION', 'COLUMNS', 'LC_ALL', 'LC_CTYPE', 'INK_SCREEN_READER', 'FORCE_HYPERLINK'].includes(k)) delete env[k];
+  }
   for (const [k, v] of Object.entries(extraEnv)) {
     if (v === undefined) delete env[k];
     else env[k] = v;
@@ -384,7 +387,7 @@ describe('RA-13 · FRAME/12 rich terminal output', () => {
         assert.match(richExplainPlain, /sync adapter behavior 6 \(Alice\)/);
         assert.match(visible(runCli(['explain', 'src/adapter/bun/serve-static.ts', 'src/adapter/deno/serve-static.ts', '--style', 'rich', '--screen-reader'], repo.dir).stdout), /counterexample, src\/adapter\/bun\/serve-static\.ts without src\/adapter\/deno\/serve-static\.ts: fix\(bun\): bun-only tweak/);
         // Patch hunks stay in classic; rich points there
-        assert.match(richExplainPlain, /explain .* --style classic/);
+        assert.match(richExplainPlain, /npx repo-archaeology --style classic explain src\/adapter\/bun\/serve-static\.ts src\/adapter\/deno\/serve-static\.ts\n {4}Show the patch hunks for these commits\./);
 
         // Bare CLI with --style rich runs diff when dirty
         const bareRichDirty = visible(runCli(['--style', 'rich'], repo.dir).stdout);

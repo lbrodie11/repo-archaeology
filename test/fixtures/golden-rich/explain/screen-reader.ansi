@@ -28,5 +28,5 @@ Metric to-without-from "Subject 2 without subject 1": 7
 Metric shared-commits-shown "Shared commits shown": 3
 Warning: Bounds applied: showing up to 3 shared commits.
 Warning: Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files.
-Next step: npx repo-archaeology explain src/helper/ssg/ssg.test.tsx src/helper/ssg/index.ts --style classic (Show the patch hunks for these commits.)
+Next step: npx repo-archaeology --style classic explain src/helper/ssg/ssg.test.tsx src/helper/ssg/index.ts (Show the patch hunks for these commits.)
 End of results: 1 finding, 2 warnings, run completed.
