@@ -340,7 +340,7 @@ try {
 }
 ```
 
-You can also inspect internal JavaScript/TypeScript, Go and Python import edges from the CLI via `repo-archaeology imports [--files <path>...] [--json]` (validated against [`schema/import-graph.schema.json`](schema/import-graph.schema.json)). See [`docs/api.md`](docs/api.md) for the full library reference, TypeScript exports, and stability policy.
+You can also inspect internal JavaScript/TypeScript, Go and Python import edges from the CLI via `repo-archaeology imports [--files <path>...] [--at <ref>] [--json]` (validated against [`schema/import-graph.schema.json`](schema/import-graph.schema.json)); `--at <ref>` gives another commit's graph, such as the importers a PR's removed files had at its base, re-parsing only the files that differ. See [`docs/api.md`](docs/api.md) for the full library reference, TypeScript exports, and stability policy.
 
 ## Language support
 
