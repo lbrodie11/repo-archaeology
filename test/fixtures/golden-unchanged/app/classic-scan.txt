@@ -1,0 +1,60 @@
+exit: 0
+--- stdout
+Repo Archaeology · scan
+36 commits analyzed from 2024-01-01 to 2024-02-05
+! Only 36 usable commits: results will be thin until the project has more history.
+
+13 relationships above the thresholds: 2 ghost wire · 6 unchecked · 0 indirect import · 3 import link · 2 test link
+Showing ghost wire, unchecked. Change with --kinds ghost,unknown,indirect,direct,test.
+
+ 1. src/ui/panel.tsx → src/db.ts  ghost wire
+    when src/ui/panel.tsx changed, src/db.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 54% · no import link detected in the current code
+    1293d66 2024-02-01  update src/ui/panel.tsx + src/db.ts (4)
+    19af81a 2024-01-25  update src/ui/panel.tsx + src/db.ts (3)
+    4482ad8 2024-01-18  update src/ui/panel.tsx + src/db.ts (2)
+
+ 2. src/billing.ts → templates/invoice.ts  ghost wire
+    when src/billing.ts changed, templates/invoice.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · shared configuration: both reference environment variable BILLING_PLAN (used in 2 files)
+    25f5c3f 2024-01-30  update src/billing.ts + templates/invoice.ts (4)
+    6f1ed9a 2024-01-23  update src/billing.ts + templates/invoice.ts (3)
+    f53f0da 2024-01-16  update src/billing.ts + templates/invoice.ts (2)
+
+ 3. README.md → src/lib/util.ts  unchecked
+    when README.md changed, src/lib/util.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · import status unknown because one or both file types are not supported
+    8354b8c 2024-02-05  update src/ui/button.tsx + src/lib/util.ts + README.md (4)
+    e5bf7af 2024-01-29  update src/ui/button.tsx + src/lib/util.ts + README.md (3)
+    326be33 2024-01-22  update src/ui/button.tsx + src/lib/util.ts + README.md (2)
+
+ 4. README.md → src/ui/button.tsx  unchecked
+    when README.md changed, src/ui/button.tsx changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · import status unknown because one or both file types are not supported
+    8354b8c 2024-02-05  update src/ui/button.tsx + src/lib/util.ts + README.md (4)
+    e5bf7af 2024-01-29  update src/ui/button.tsx + src/lib/util.ts + README.md (3)
+    326be33 2024-01-22  update src/ui/button.tsx + src/lib/util.ts + README.md (2)
+
+ 5. src/legacy.cjs → src/missing.ts  unchecked
+    when src/legacy.cjs changed, src/missing.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · some imports or path references could not be resolved, so a dependency link cannot be ruled out
+    0ae5c8e 2024-02-04  update src/legacy.cjs + src/missing.ts (4)
+    1ecb07b 2024-01-28  update src/legacy.cjs + src/missing.ts (3)
+    5935501 2024-01-21  update src/legacy.cjs + src/missing.ts (2)
+
+ 6. src/globals.d.ts → styles/main.css  unchecked
+    when src/globals.d.ts changed, styles/main.css changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · import status unknown because one or both file types are not supported
+    4704e73 2024-02-03  update src/types.ts + src/globals.d.ts + styles/main.css (4)
+    eeed2b0 2024-01-27  update src/types.ts + src/globals.d.ts + styles/main.css (3)
+    eb0abd5 2024-01-20  update src/types.ts + src/globals.d.ts + styles/main.css (2)
+
+ 7. src/types.ts → styles/main.css  unchecked
+    when src/types.ts changed, styles/main.css changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · import status unknown because one or both file types are not supported
+    4704e73 2024-02-03  update src/types.ts + src/globals.d.ts + styles/main.css (4)
+    eeed2b0 2024-01-27  update src/types.ts + src/globals.d.ts + styles/main.css (3)
+    eb0abd5 2024-01-20  update src/types.ts + src/globals.d.ts + styles/main.css (2)
+
+Historical signal, not proof: check whether the change really needs these files.
+--- stderr

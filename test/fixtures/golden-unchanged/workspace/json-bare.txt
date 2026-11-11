@@ -1,0 +1,338 @@
+exit: 0
+--- stdout
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "mode": "scan",
+  "changedWithoutHistory": 0,
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<repo>",
+    "commitsRead": 26,
+    "commitsAnalyzed": 26,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 13,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-01-26",
+    "origins": {
+      "human": 26,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 8,
+      "internalEdges": 5,
+      "external": 1,
+      "unresolved": 2,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 2,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {
+        "unknown-package": 1,
+        "not-exported": 1
+      }
+    },
+    "config": {
+      "source": "working-tree"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 26 usable commits: results will be thin until the project has more history."
+    ],
+    "cache": {
+      "enabled": false,
+      "hits": 0,
+      "misses": 26
+    }
+  },
+  "counts": {
+    "ghost": 1,
+    "unknown": 4,
+    "indirect": 1,
+    "direct": 1,
+    "test": 0
+  },
+  "qualifying": 7,
+  "classified": 7,
+  "truncated": false,
+  "relationships": [
+    {
+      "from": "packages/web/src/listener.js",
+      "to": "packages/core/src/model.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.545,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-22",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "01e3a96c74e9f5491fafd5a5f9eb7af14cb234ed",
+          "date": "2024-01-22",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "6b7db043e2dc56a1bbfde0f0b667b1f285869c5f",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "b589b87a6ff0321083bbf6acbd8139cc3fb41342",
+          "date": "2024-01-12",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "packages/core/package.json",
+      "to": "packages/core/src/index.ts",
+      "relationship": "unknown",
+      "why": "involves project configuration, which code uses without importing",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-26",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "074708010586f30cdad705cbe0ac95ea77f199d1",
+          "date": "2024-01-26",
+          "author": "Test",
+          "subject": "update packages/core/package.json + packages/core/src/index.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "69441cc0f62141dfbb904d3b3cb037ba9fd3e673",
+          "date": "2024-01-21",
+          "author": "Test",
+          "subject": "update packages/core/package.json + packages/core/src/index.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "1ac05429ab21c7c1330b2d1c98add6359d6595af",
+          "date": "2024-01-16",
+          "author": "Test",
+          "subject": "update packages/core/package.json + packages/core/src/index.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "packages/cli/src/main.mjs",
+      "to": "packages/core/src/internal.ts",
+      "relationship": "unknown",
+      "why": "some imports or path references could not be resolved, so a dependency link cannot be ruled out",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-25",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9c45ce837baab4c05db7f17a998d527dfe08139f",
+          "date": "2024-01-25",
+          "author": "Test",
+          "subject": "update packages/cli/src/main.mjs + packages/core/src/internal.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "f0cbe74b49febaa6330145a52b7c6522416091f5",
+          "date": "2024-01-20",
+          "author": "Test",
+          "subject": "update packages/cli/src/main.mjs + packages/core/src/internal.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "99cf0563c8d6af2dc9a24e49ca1db35d0b5e471d",
+          "date": "2024-01-15",
+          "author": "Test",
+          "subject": "update packages/cli/src/main.mjs + packages/core/src/internal.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "docs/guide.md",
+      "to": "packages/core/src/model.ts",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.545,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-24",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "7688416e98a1205922b377baf61d45b31ab6fe6f",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "cebee499e98202443f072fbbb627e300f629e874",
+          "date": "2024-01-19",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "485c14338c3f18b7d6c67e88d319ffa8378d49c7",
+          "date": "2024-01-14",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "docs/guide.md",
+      "to": "packages/web/src/page.jsx",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-24",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "7688416e98a1205922b377baf61d45b31ab6fe6f",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "cebee499e98202443f072fbbb627e300f629e874",
+          "date": "2024-01-19",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "485c14338c3f18b7d6c67e88d319ffa8378d49c7",
+          "date": "2024-01-14",
+          "author": "Test",
+          "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)",
+          "origin": "human"
+        }
+      ]
+    }
+  ],
+  "families": []
+}
+--- stderr

@@ -1,0 +1,8 @@
+exit: 0
+--- stdout
+Repo Archaeology · diff (uncommitted changes)
+26 commits analyzed from 2024-01-01 to 2024-01-26
+! Only 26 usable commits: results will be thin until the project has more history.
+
+No uncommitted changes. Use --base main to check a whole branch.
+--- stderr

@@ -1,0 +1,55 @@
+exit: 0
+--- stdout
+Repo Archaeology · explain src/billing.ts ↔ templates/invoice.ts
+36 commits analyzed from 2024-01-01 to 2024-02-05
+! Only 36 usable commits: results will be thin until the project has more history.
+
+Relationship  ghost wire · last together <ago> (2024-01-30)
+Why           shared configuration: both reference environment variable BILLING_PLAN (used in 2 files)
+Direction     src/billing.ts → templates/invoice.ts: 6 of 6 commits (100%) (95% CI 60–100%)
+              templates/invoice.ts → src/billing.ts: 6 of 6 commits (100%) (95% CI 60–100%)
+
+Shared commits (3 most recent of 6 shared commits)
+
+  25f5c3f (25f5c3f7cfc5e28b9e8de3974a6b717d1367ece2) · 2024-01-30 · Test
+  update src/billing.ts + templates/invoice.ts (4)
+    src/billing.ts [M]
+      @@ -1,2 +1,2 @@
+         export const PLAN = process.env.BILLING_PLAN;
+        -// src/billing.ts revision 52
+        +// src/billing.ts revision 69
+    templates/invoice.ts [M]
+      @@ -1,2 +1,2 @@
+         export const template = process.env.BILLING_PLAN;
+        -// templates/invoice.ts revision 53
+        +// templates/invoice.ts revision 70
+
+  6f1ed9a (6f1ed9ac766198789d689fe399d9b79a6fd188e8) · 2024-01-23 · Test
+  update src/billing.ts + templates/invoice.ts (3)
+    src/billing.ts [M]
+      @@ -1,2 +1,2 @@
+         export const PLAN = process.env.BILLING_PLAN;
+        -// src/billing.ts revision 35
+        +// src/billing.ts revision 52
+    templates/invoice.ts [M]
+      @@ -1,2 +1,2 @@
+         export const template = process.env.BILLING_PLAN;
+        -// templates/invoice.ts revision 36
+        +// templates/invoice.ts revision 53
+
+  f53f0da (f53f0da18df0d7477f8d32ea97c1c1826993eacb) · 2024-01-16 · Test
+  update src/billing.ts + templates/invoice.ts (2)
+    src/billing.ts [M]
+      @@ -1,2 +1,2 @@
+         export const PLAN = process.env.BILLING_PLAN;
+        -// src/billing.ts revision 18
+        +// src/billing.ts revision 35
+    templates/invoice.ts [M]
+      @@ -1,2 +1,2 @@
+         export const template = process.env.BILLING_PLAN;
+        -// templates/invoice.ts revision 19
+        +// templates/invoice.ts revision 36
+
+Bounds applied: showing up to 3 shared commits.
+Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files.
+--- stderr

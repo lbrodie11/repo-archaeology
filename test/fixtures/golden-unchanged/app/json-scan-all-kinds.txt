@@ -1,0 +1,749 @@
+exit: 0
+--- stdout
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<repo>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 15,
+      "internalEdges": 9,
+      "external": 2,
+      "unresolved": 3,
+      "dynamicLoads": 1,
+      "unsupportedFiles": 2,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {
+        "target-missing": 2,
+        "not-exported": 1
+      }
+    },
+    "config": {
+      "source": "working-tree"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ],
+    "cache": {
+      "enabled": false,
+      "hits": 0,
+      "misses": 36
+    }
+  },
+  "counts": {
+    "ghost": 2,
+    "unknown": 6,
+    "indirect": 0,
+    "direct": 3,
+    "test": 2
+  },
+  "qualifying": 13,
+  "classified": 13,
+  "truncated": false,
+  "relationships": [
+    {
+      "from": "README.md",
+      "to": "src/lib/util.ts",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-05",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+          "date": "2024-02-05",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "e5bf7af9e4b62653f1bc82db98dde7f5951e3132",
+          "date": "2024-01-29",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "326be339769d6bb07cf2f809f4f9ec5e525a84bc",
+          "date": "2024-01-22",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "README.md",
+      "to": "src/ui/button.tsx",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-05",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+          "date": "2024-02-05",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "e5bf7af9e4b62653f1bc82db98dde7f5951e3132",
+          "date": "2024-01-29",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "326be339769d6bb07cf2f809f4f9ec5e525a84bc",
+          "date": "2024-01-22",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/lib/util.ts",
+      "to": "src/ui/button.tsx",
+      "relationship": "direct",
+      "why": "linked through an index/barrel file",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-05",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+          "date": "2024-02-05",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "e5bf7af9e4b62653f1bc82db98dde7f5951e3132",
+          "date": "2024-01-29",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "326be339769d6bb07cf2f809f4f9ec5e525a84bc",
+          "date": "2024-01-22",
+          "author": "Test",
+          "subject": "update src/ui/button.tsx + src/lib/util.ts + README.md (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/legacy.cjs",
+      "to": "src/missing.ts",
+      "relationship": "unknown",
+      "why": "some imports or path references could not be resolved, so a dependency link cannot be ruled out",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-04",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "0ae5c8e728e9ea08ea1671add7735f8ea0e386e1",
+          "date": "2024-02-04",
+          "author": "Test",
+          "subject": "update src/legacy.cjs + src/missing.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "1ecb07bf052d654f0a99091cbc8893371ca6447a",
+          "date": "2024-01-28",
+          "author": "Test",
+          "subject": "update src/legacy.cjs + src/missing.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "59355011ee73fc3f5c4f64a0ee7510e1c76bfafe",
+          "date": "2024-01-21",
+          "author": "Test",
+          "subject": "update src/legacy.cjs + src/missing.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/globals.d.ts",
+      "to": "src/types.ts",
+      "relationship": "direct",
+      "why": "types.ts references globals.d.ts via a triple-slash path in the current code",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-03",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "4704e73b5f99c57a40ccf57f455f0c1e00bcddf4",
+          "date": "2024-02-03",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "eeed2b0ca856182f69737343294258473d03d975",
+          "date": "2024-01-27",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "eb0abd596a67a1da8504637d24c69d85da41a36f",
+          "date": "2024-01-20",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/globals.d.ts",
+      "to": "styles/main.css",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-03",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "4704e73b5f99c57a40ccf57f455f0c1e00bcddf4",
+          "date": "2024-02-03",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "eeed2b0ca856182f69737343294258473d03d975",
+          "date": "2024-01-27",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "eb0abd596a67a1da8504637d24c69d85da41a36f",
+          "date": "2024-01-20",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/types.ts",
+      "to": "styles/main.css",
+      "relationship": "unknown",
+      "why": "import status unknown because one or both file types are not supported",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-03",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "4704e73b5f99c57a40ccf57f455f0c1e00bcddf4",
+          "date": "2024-02-03",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "eeed2b0ca856182f69737343294258473d03d975",
+          "date": "2024-01-27",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "eb0abd596a67a1da8504637d24c69d85da41a36f",
+          "date": "2024-01-20",
+          "author": "Test",
+          "subject": "update src/types.ts + src/globals.d.ts + styles/main.css (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/lib/config.ts",
+      "to": "src/loader.ts",
+      "relationship": "unknown",
+      "why": "some imports or path references could not be resolved, so a dependency link cannot be ruled out",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-02",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "58c3b6b3b4edf5961b9e03bff414b7a3035c890f",
+          "date": "2024-02-02",
+          "author": "Test",
+          "subject": "update src/loader.ts + src/lib/config.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "f14a8345e536f34296e82bdaeb6da3f27709d355",
+          "date": "2024-01-26",
+          "author": "Test",
+          "subject": "update src/loader.ts + src/lib/config.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "61e3547c1254cf5fae95f3e9d2461b998225bb70",
+          "date": "2024-01-19",
+          "author": "Test",
+          "subject": "update src/loader.ts + src/lib/config.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/ui/panel.tsx",
+      "to": "src/db.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.545,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-02-01",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "1293d66ce0651e72d854f1d98e15998a521776e5",
+          "date": "2024-02-01",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "19af81a4da01631b336d903ccd018dc3f57cf205",
+          "date": "2024-01-25",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "4482ad89e26c3c5c4c86c949b01161408e6b22fa",
+          "date": "2024-01-18",
+          "author": "Test",
+          "subject": "update src/ui/panel.tsx + src/db.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/api.test.ts",
+      "to": "src/db.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.545,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-31",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9dd6620ed1e55731ec29858ef2fe0dff48a2de8b",
+          "date": "2024-01-31",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "7fbfdd53ca3e328958b26a8920b3b6d234325e10",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/api.ts",
+      "to": "src/db.ts",
+      "relationship": "direct",
+      "why": "api.ts imports db.ts",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 11,
+      "confidence": 1,
+      "reverseConfidence": 0.545,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.28,
+        "high": 0.7873
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-31",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9dd6620ed1e55731ec29858ef2fe0dff48a2de8b",
+          "date": "2024-01-31",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "7fbfdd53ca3e328958b26a8920b3b6d234325e10",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/api.test.ts",
+      "to": "src/api.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-31",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "9dd6620ed1e55731ec29858ef2fe0dff48a2de8b",
+          "date": "2024-01-31",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d",
+          "date": "2024-01-24",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "7fbfdd53ca3e328958b26a8920b3b6d234325e10",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update src/api.ts + src/db.ts + src/api.test.ts (2)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/billing.ts",
+      "to": "templates/invoice.ts",
+      "relationship": "ghost",
+      "why": "shared configuration: both reference environment variable BILLING_PLAN (used in 2 files)",
+      "hiddenBridge": {
+        "signal": "shared-environment",
+        "value": "BILLING_PLAN",
+        "filesUsing": 2
+      },
+      "shared": 6,
+      "fromChanges": 6,
+      "toChanges": 6,
+      "confidence": 1,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.61,
+      "weighted": false,
+      "lastTogether": "2024-01-30",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "25f5c3f7cfc5e28b9e8de3974a6b717d1367ece2",
+          "date": "2024-01-30",
+          "author": "Test",
+          "subject": "update src/billing.ts + templates/invoice.ts (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "6f1ed9ac766198789d689fe399d9b79a6fd188e8",
+          "date": "2024-01-23",
+          "author": "Test",
+          "subject": "update src/billing.ts + templates/invoice.ts (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "f53f0da18df0d7477f8d32ea97c1c1826993eacb",
+          "date": "2024-01-16",
+          "author": "Test",
+          "subject": "update src/billing.ts + templates/invoice.ts (2)",
+          "origin": "human"
+        }
+      ]
+    }
+  ],
+  "families": []
+}
+--- stderr

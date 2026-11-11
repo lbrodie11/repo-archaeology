@@ -1,0 +1,35 @@
+exit: 0
+--- stdout
+Repo Archaeology · file packages/core/src/model.ts
+26 commits analyzed from 2024-01-01 to 2024-01-26
+! Only 26 usable commits: results will be thin until the project has more history.
+
+Changed in    11 commits (1.8× the median file), busier than 92% of files
+Last changed  <ago> (2024-01-24)
+Who knows it  Test 100%
+
+Files that move with it
+● = strong enough for `diff` to flag it (≥ 30% confidence)
+
+  ● docs/guide.md  unchecked
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    import status unknown because one or both file types are not supported
+    7688416 2024-01-24  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)
+    cebee49 2024-01-19  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)
+    485c143 2024-01-14  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)
+
+  ● packages/web/src/page.jsx  indirect import
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    connected through packages/web/src/app.tsx: page.jsx imports app.tsx, which imports model.ts
+    7688416 2024-01-24  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)
+    cebee49 2024-01-19  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)
+    485c143 2024-01-14  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)
+
+  ● packages/web/src/listener.js  ghost wire
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    no import link detected in the current code
+    01e3a96 2024-01-22  update packages/core/src/model.ts + packages/web/src/listener.js (4)
+    6b7db04 2024-01-17  update packages/core/src/model.ts + packages/web/src/listener.js (3)
+    b589b87 2024-01-12  update packages/core/src/model.ts + packages/web/src/listener.js (2)
+
+--- stderr

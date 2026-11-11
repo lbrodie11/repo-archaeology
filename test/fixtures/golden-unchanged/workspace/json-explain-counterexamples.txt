@@ -1,0 +1,385 @@
+exit: 0
+--- stdout
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<repo>",
+    "commitsRead": 26,
+    "commitsAnalyzed": 26,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 13,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-01-26",
+    "origins": {
+      "human": 26,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 2,
+      "internalEdges": 0,
+      "external": 0,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "config": {
+      "source": "working-tree"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 26 usable commits: results will be thin until the project has more history."
+    ],
+    "cache": {
+      "enabled": false,
+      "hits": 0,
+      "misses": 26
+    }
+  },
+  "from": "packages/core/src/model.ts",
+  "to": "packages/web/src/listener.js",
+  "relationship": "ghost",
+  "why": "no import link detected in the current code",
+  "meetsThresholds": true,
+  "shared": 6,
+  "fromChanges": 11,
+  "toChanges": 6,
+  "confidence": 0.545,
+  "reverseConfidence": 1,
+  "interval": {
+    "low": 0.28,
+    "high": 0.7873
+  },
+  "reverseInterval": {
+    "low": 0.6096,
+    "high": 1
+  },
+  "score": 0.28,
+  "weighted": false,
+  "lastTogether": "2024-01-22",
+  "crossesDirectories": true,
+  "originShare": {
+    "human": 1,
+    "agent": 0,
+    "bot": 0
+  },
+  "sharedCommits": [
+    {
+      "hash": "01e3a96c74e9f5491fafd5a5f9eb7af14cb234ed",
+      "date": "2024-01-22",
+      "author": "Test",
+      "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (4)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "packages/core/src/model.ts",
+        "path": "packages/core/src/model.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,3 +1,3 @@",
+            "lines": [
+              " export interface Model { id: string }",
+              " export const MODEL_EVENT = \"model:saved\";",
+              "-// packages/core/src/model.ts revision 39",
+              "+// packages/core/src/model.ts revision 45"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "packages/web/src/listener.js",
+        "path": "packages/web/src/listener.js",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const on = 'model:saved';",
+              "-// packages/web/src/listener.js revision 35",
+              "+// packages/web/src/listener.js revision 46"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "6b7db043e2dc56a1bbfde0f0b667b1f285869c5f",
+      "date": "2024-01-17",
+      "author": "Test",
+      "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (3)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "packages/core/src/model.ts",
+        "path": "packages/core/src/model.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,3 +1,3 @@",
+            "lines": [
+              " export interface Model { id: string }",
+              " export const MODEL_EVENT = \"model:saved\";",
+              "-// packages/core/src/model.ts revision 28",
+              "+// packages/core/src/model.ts revision 34"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "packages/web/src/listener.js",
+        "path": "packages/web/src/listener.js",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const on = 'model:saved';",
+              "-// packages/web/src/listener.js revision 24",
+              "+// packages/web/src/listener.js revision 35"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "b589b87a6ff0321083bbf6acbd8139cc3fb41342",
+      "date": "2024-01-12",
+      "author": "Test",
+      "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (2)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "packages/core/src/model.ts",
+        "path": "packages/core/src/model.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,3 +1,3 @@",
+            "lines": [
+              " export interface Model { id: string }",
+              " export const MODEL_EVENT = \"model:saved\";",
+              "-// packages/core/src/model.ts revision 17",
+              "+// packages/core/src/model.ts revision 23"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "packages/web/src/listener.js",
+        "path": "packages/web/src/listener.js",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,2 @@",
+            "lines": [
+              " export const on = 'model:saved';",
+              "-// packages/web/src/listener.js revision 13",
+              "+// packages/web/src/listener.js revision 24"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    }
+  ],
+  "counterexamples": {
+    "fromWithoutToTotal": 5,
+    "toWithoutFromTotal": 0,
+    "fromWithoutTo": [
+      {
+        "hash": "7688416e98a1205922b377baf61d45b31ab6fe6f",
+        "date": "2024-01-24",
+        "author": "Test",
+        "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)",
+        "origin": "human",
+        "historicalPath": "packages/core/src/model.ts",
+        "status": "M",
+        "patch": {
+          "canonicalPath": "packages/core/src/model.ts",
+          "path": "packages/core/src/model.ts",
+          "status": "M",
+          "binary": false,
+          "emptyDiff": false,
+          "unsupportedPath": false,
+          "truncated": false,
+          "timedOut": false,
+          "omittedHunks": 0,
+          "omittedLines": 0,
+          "hunks": [
+            {
+              "header": "@@ -1,3 +1,3 @@",
+              "lines": [
+                " export interface Model { id: string }",
+                " export const MODEL_EVENT = \"model:saved\";",
+                "-// packages/core/src/model.ts revision 45",
+                "+// packages/core/src/model.ts revision 50"
+              ],
+              "truncated": false,
+              "omittedLines": 0
+            }
+          ]
+        }
+      },
+      {
+        "hash": "cebee499e98202443f072fbbb627e300f629e874",
+        "date": "2024-01-19",
+        "author": "Test",
+        "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)",
+        "origin": "human",
+        "historicalPath": "packages/core/src/model.ts",
+        "status": "M",
+        "patch": {
+          "canonicalPath": "packages/core/src/model.ts",
+          "path": "packages/core/src/model.ts",
+          "status": "M",
+          "binary": false,
+          "emptyDiff": false,
+          "unsupportedPath": false,
+          "truncated": false,
+          "timedOut": false,
+          "omittedHunks": 0,
+          "omittedLines": 0,
+          "hunks": [
+            {
+              "header": "@@ -1,3 +1,3 @@",
+              "lines": [
+                " export interface Model { id: string }",
+                " export const MODEL_EVENT = \"model:saved\";",
+                "-// packages/core/src/model.ts revision 34",
+                "+// packages/core/src/model.ts revision 39"
+              ],
+              "truncated": false,
+              "omittedLines": 0
+            }
+          ]
+        }
+      },
+      {
+        "hash": "485c14338c3f18b7d6c67e88d319ffa8378d49c7",
+        "date": "2024-01-14",
+        "author": "Test",
+        "subject": "update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)",
+        "origin": "human",
+        "historicalPath": "packages/core/src/model.ts",
+        "status": "M",
+        "patch": {
+          "canonicalPath": "packages/core/src/model.ts",
+          "path": "packages/core/src/model.ts",
+          "status": "M",
+          "binary": false,
+          "emptyDiff": false,
+          "unsupportedPath": false,
+          "truncated": false,
+          "timedOut": false,
+          "omittedHunks": 0,
+          "omittedLines": 0,
+          "hunks": [
+            {
+              "header": "@@ -1,3 +1,3 @@",
+              "lines": [
+                " export interface Model { id: string }",
+                " export const MODEL_EVENT = \"model:saved\";",
+                "-// packages/core/src/model.ts revision 23",
+                "+// packages/core/src/model.ts revision 28"
+              ],
+              "truncated": false,
+              "omittedLines": 0
+            }
+          ]
+        }
+      }
+    ],
+    "toWithoutFrom": []
+  },
+  "bounds": {
+    "maxCommits": 3,
+    "contextLines": 2,
+    "maxPatchBytes": 65536,
+    "maxHunksPerFile": 4,
+    "maxLinesPerHunk": 24,
+    "maxTotalPatchLines": 200,
+    "timeoutMs": 8000,
+    "commitsTruncated": true,
+    "outputTruncated": false,
+    "timedOut": false
+  },
+  "cliCommand": "npx repo-archaeology explain packages/core/src/model.ts packages/web/src/listener.js",
+  "disclaimer": "Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files."
+}
+--- stderr

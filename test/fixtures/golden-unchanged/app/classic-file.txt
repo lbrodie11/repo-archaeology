@@ -1,0 +1,35 @@
+exit: 0
+--- stdout
+Repo Archaeology · file src/db.ts
+36 commits analyzed from 2024-01-01 to 2024-02-05
+! Only 36 usable commits: results will be thin until the project has more history.
+
+Changed in    11 commits (1.8× the median file), busier than 95% of files
+Last changed  <ago> (2024-02-01)
+Who knows it  Test 100%
+
+Files that move with it
+● = strong enough for `diff` to flag it (≥ 30% confidence)
+
+  ● src/ui/panel.tsx  ghost wire
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    no import link detected in the current code
+    1293d66 2024-02-01  update src/ui/panel.tsx + src/db.ts (4)
+    19af81a 2024-01-25  update src/ui/panel.tsx + src/db.ts (3)
+    4482ad8 2024-01-18  update src/ui/panel.tsx + src/db.ts (2)
+
+  ● src/api.test.ts  test link
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    a test and the code it covers
+    9dd6620 2024-01-31  update src/api.ts + src/db.ts + src/api.test.ts (4)
+    a3d6a0d 2024-01-24  update src/api.ts + src/db.ts + src/api.test.ts (3)
+    7fbfdd5 2024-01-17  update src/api.ts + src/db.ts + src/api.test.ts (2)
+
+  ● src/api.ts  import link
+    6 of 11 commits (54%) (95% CI 28–79%) · last together <ago> · reverse 100%
+    api.ts imports db.ts
+    9dd6620 2024-01-31  update src/api.ts + src/db.ts + src/api.test.ts (4)
+    a3d6a0d 2024-01-24  update src/api.ts + src/db.ts + src/api.test.ts (3)
+    7fbfdd5 2024-01-17  update src/api.ts + src/db.ts + src/api.test.ts (2)
+
+--- stderr

@@ -1,0 +1,65 @@
+exit: 0
+--- stdout
+Repo Archaeology · explain packages/core/src/model.ts ↔ packages/web/src/listener.js
+26 commits analyzed from 2024-01-01 to 2024-01-26
+! Only 26 usable commits: results will be thin until the project has more history.
+
+Relationship  ghost wire · last together <ago> (2024-01-22)
+Why           no import link detected in the current code
+Direction     packages/core/src/model.ts → packages/web/src/listener.js: 6 of 11 commits (54%) (95% CI 28–79%)
+              packages/web/src/listener.js → packages/core/src/model.ts: 6 of 6 commits (100%) (95% CI 60–100%)
+
+Shared commits (3 most recent of 6 shared commits)
+
+  01e3a96 (01e3a96c74e9f5491fafd5a5f9eb7af14cb234ed) · 2024-01-22 · Test
+  update packages/core/src/model.ts + packages/web/src/listener.js (4)
+    packages/core/src/model.ts [M]
+      @@ -1,3 +1,3 @@
+         export interface Model { id: string }
+         export const MODEL_EVENT = "model:saved";
+        -// packages/core/src/model.ts revision 39
+        +// packages/core/src/model.ts revision 45
+    packages/web/src/listener.js [M]
+      @@ -1,2 +1,2 @@
+         export const on = 'model:saved';
+        -// packages/web/src/listener.js revision 35
+        +// packages/web/src/listener.js revision 46
+
+  6b7db04 (6b7db043e2dc56a1bbfde0f0b667b1f285869c5f) · 2024-01-17 · Test
+  update packages/core/src/model.ts + packages/web/src/listener.js (3)
+    packages/core/src/model.ts [M]
+      @@ -1,3 +1,3 @@
+         export interface Model { id: string }
+         export const MODEL_EVENT = "model:saved";
+        -// packages/core/src/model.ts revision 28
+        +// packages/core/src/model.ts revision 34
+    packages/web/src/listener.js [M]
+      @@ -1,2 +1,2 @@
+         export const on = 'model:saved';
+        -// packages/web/src/listener.js revision 24
+        +// packages/web/src/listener.js revision 35
+
+  b589b87 (b589b87a6ff0321083bbf6acbd8139cc3fb41342) · 2024-01-12 · Test
+  update packages/core/src/model.ts + packages/web/src/listener.js (2)
+    packages/core/src/model.ts [M]
+      @@ -1,3 +1,3 @@
+         export interface Model { id: string }
+         export const MODEL_EVENT = "model:saved";
+        -// packages/core/src/model.ts revision 17
+        +// packages/core/src/model.ts revision 23
+    packages/web/src/listener.js [M]
+      @@ -1,2 +1,2 @@
+         export const on = 'model:saved';
+        -// packages/web/src/listener.js revision 13
+        +// packages/web/src/listener.js revision 24
+
+When one file changed without the other
+  packages/core/src/model.ts without packages/web/src/listener.js (showing 3 most recent of 5)
+    7688416 2024-01-24  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)
+    cebee49 2024-01-19  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)
+    485c143 2024-01-14  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)
+  packages/web/src/listener.js without packages/core/src/model.ts: 0 commits
+
+Bounds applied: showing up to 3 shared commits.
+Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files.
+--- stderr
