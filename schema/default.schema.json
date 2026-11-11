@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.11.0/schema/default.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.12.0/schema/default.schema.json",
   "title": "Repo Archaeology Default Command Result (v1)",
   "description": "JSON output contract for bare `repo-archaeology --json` (discriminated by `mode`: `'diff'` or `'scan'`).",
   "oneOf": [
