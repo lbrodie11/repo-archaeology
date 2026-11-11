@@ -12,6 +12,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 import { buildAppFixture } from './fixtures/import-fixtures.js';
@@ -20,7 +21,8 @@ import type { FixtureRepo } from './helpers.js';
 const ROOT = join(import.meta.dirname, '..');
 const CLI = join(ROOT, 'src', 'cli.ts');
 const TSX = import.meta.resolve('tsx');
-const TRACE = join(import.meta.dirname, 'fixtures', 'trace-modules.mjs');
+// `--import` takes a URL: a bare absolute path is not one on Windows (`D:\...`).
+const TRACE = pathToFileURL(join(import.meta.dirname, 'fixtures', 'trace-modules.mjs')).href;
 
 describe('RA-21 · --style rich never loads ink or react', () => {
   let repo: FixtureRepo;

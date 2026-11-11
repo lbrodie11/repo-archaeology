@@ -12,8 +12,8 @@
  *   UPDATE_GOLDEN=1 node --import tsx --test test/unchanged-outputs.test.ts
  */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -37,11 +37,12 @@ interface Run {
 }
 
 function runCli(args: string[], cwd: string, env: Record<string, string> = {}): Promise<Run> {
+  const childEnv: NodeJS.ProcessEnv = sanitizeGitEnv(process.env, { NO_COLOR: '1', TERM: 'xterm-256color', ...env });
+  // GitHub Actions sets GITHUB_SERVER_URL/GITHUB_REPOSITORY, which make Markdown link commits:
+  // the goldens describe output outside Actions.
+  for (const k of Object.keys(childEnv)) if (k.startsWith('GITHUB_')) delete childEnv[k];
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--import', TSX, CLI, ...args], {
-      cwd,
-      env: sanitizeGitEnv(process.env, { NO_COLOR: '1', TERM: 'xterm-256color', ...env }),
-    });
+    const child = spawn(process.execPath, ['--import', TSX, CLI, ...args], { cwd, env: childEnv });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
@@ -53,12 +54,22 @@ function runCli(args: string[], cwd: string, env: Record<string, string> = {}): 
 
 const RELATIVE_TIME = /\b(?:today|yesterday|\d+ days ago|\d+ months? ago|[\d.]+ years ago)\b/g;
 
+/** Every spelling of a directory the CLI may print: real path, forward slashes (Windows), JSON-escaped. */
+function pathSpellings(dir: string): string[] {
+  const forms = new Set<string>();
+  for (const p of [dir, realpathSync(dir), realpathSync.native(dir)]) {
+    for (const q of [p, p.replace(/\\/g, '/')]) {
+      forms.add(q);
+      forms.add(JSON.stringify(q).slice(1, -1));
+    }
+  }
+  return [...forms].sort((a, b) => b.length - a.length);
+}
+
 export function normalizeText(text: string, dir: string): string {
-  return text
-    .split(realpathSync(dir))
-    .join('<repo>')
-    .split(dir)
-    .join('<repo>')
+  let out = text;
+  for (const p of pathSpellings(dir)) out = out.split(p).join('<repo>');
+  return out
     .split(basename(dir))
     .join('<repo-name>')
     .split(VERSION)
@@ -154,7 +165,8 @@ async function checkGroup(group: string, dir: string, diffBase: string, file: st
 
 describe('RA-21 · classic, JSON, Markdown, the map and exit codes are byte-identical to main', { concurrency: true }, () => {
   // The classic map seeds its layout from the repository directory name, so each fixture is
-  // copied into a directory with a fixed name (the temporary parent is normalized away).
+  // cloned into a directory with a fixed name (the temporary parent is normalized away). A local
+  // clone keeps every commit and SHA; `fs.cpSync` of a `.git` directory fails on macOS runners.
   let parent: string;
   let app: string;
   let mono: string;
@@ -162,7 +174,10 @@ describe('RA-21 · classic, JSON, Markdown, the map and exit codes are byte-iden
     parent = mkdtempSync(join(tmpdir(), 'ra21-unchanged-'));
     const copy = (repo: FixtureRepo, name: string): string => {
       const target = join(parent, name);
-      cpSync(repo.dir, target, { recursive: true });
+      const git = (args: string[], cwd?: string) =>
+        execFileSync('git', args, { cwd, stdio: 'ignore', env: sanitizeGitEnv(process.env) });
+      git(['clone', '--quiet', '--no-local', repo.dir, target]);
+      git(['remote', 'remove', 'origin'], target);
       repo.cleanup();
       return target;
     };
