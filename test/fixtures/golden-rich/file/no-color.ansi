@@ -1,0 +1,103 @@
+[2mRepo Archaeology · [22m[1mfile src/hono-base.ts[22m
+[2m────────────────────────────────────────────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                         [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m10 (1 top, 2 primary, 7 secondary)[22m
+
+[1;7m F-01 [22;27m  [1msrc/hono.test.ts usually changes with src/hono-base.ts[22m
+[1m┃[22m info · top finding · pair-55f5201b
+[1m┃[22m Test link: a test and the code it covers. 34 of 97 commits that changed
+[1m┃[22m src/hono-base.ts also changed src/hono.test.ts (35%, 95% interval 26-45%); the
+[1m┃[22m other way 34 of 173 (20%). Last together 2026-11-01. Below diff's alert
+[1m┃[22m threshold (40% confidence).
+[1m┃[22m src/hono-base.ts
+[1m┃[22m src/hono.test.ts
+[1m┃[22m [1m▰▰▰[22m[2m▱▱▱▱▱[22m [1m35%[22m [2m(range 26–45%)[22m
+[1m┃[22m [2mco-change confidence (95% interval)[22m
+[1m┃[22m [2mE-01[22m  34f9043  [2m2026-11-01[22m  Merge commit from fork
+[1m┃[22m [2mE-02[22m  e9c0107  [2m2026-10-17[22m  fix(hono-base): disallow `getPath` when `strict` i…
+[1m┃[22m [2mE-03[22m  6f101a7  [2m2026-08-03[22m  feat: add first-class QUERY method support (#5070)
+
+[1mF-02[22m  [1msrc/types.ts usually changes with src/hono-base.ts[22m
+  info · primary · pair-630d5390
+  Import link: hono-base.ts imports types.ts. 14 of 97 commits that changed
+  src/hono-base.ts also changed src/types.ts (14%, 95% interval 9-23%); the
+  other way 14 of 127 (11%). Last together 2025-12-13. Below diff's alert
+  threshold (40% confidence).
+  src/hono-base.ts
+  [2m  → references it directly[22m
+  src/types.ts
+  [1m▰[22m[2m▱▱▱▱▱▱▱[22m [1m14%[22m [2m(range 9–23%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-04[22m  3e12de6  [2m2025-12-13[22m  fix(types): replace schema-based path tracking wit…
+  [2mE-05[22m  d2737ab  [2m2025-06-16[22m  feat: introduce Route Helper (#4204)
+  [2mE-06[22m  f1a7267  [2m2024-10-11[22m  perf(types): replace intersection with union to ge…
+
+[1mF-03[22m  [1msrc/context.ts usually changes with src/hono-base.ts[22m
+  info · primary · pair-5747ffd6
+  Import link: hono-base.ts imports context.ts. 13 of 97 commits that changed
+  src/hono-base.ts also changed src/context.ts (13%, 95% interval 8-22%); the
+  other way 13 of 224 (6%). Last together 2024-11-02. Below diff's alert
+  threshold (40% confidence).
+  src/hono-base.ts
+  [2m  → references it directly[22m
+  src/context.ts
+  [1m▰[22m[2m▱▱▱▱▱▱▱[22m [1m13%[22m [2m(range 8–22%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-07[22m  ae6165b  [2m2024-11-02[22m  refactor: use `#` for private methods to reduce th…
+  [2mE-08[22m  28de9b3  [2m2024-07-05[22m  chore: update outdated links in JSDoc (#3089)
+  [2mE-09[22m  ae3a67b  [2m2024-06-27[22m  perf(context): improve initializing `Context` (#30…
+
+[1mF-04[22m  src/request.ts usually changes with src/hono-base.ts
+  [2m10% (6–18%) · 3 receipts · info · pair-a39d7400[22m
+  [2msrc/hono-base.ts ⇢ src/request.ts[22m
+[1mF-05[22m  src/client/types.ts usually changes with src/hono-base.ts
+  [2m7% (4–14%) · 3 receipts · info · pair-8a1ed860[22m
+  [2msrc/hono-base.ts → src/client/types.ts[22m
+[1mF-06[22m  src/hono.ts usually changes with src/hono-base.ts
+  [2m6% (3–13%) · 3 receipts · info · pair-04421a69[22m
+  [2msrc/hono-base.ts → src/hono.ts[22m
+[1mF-07[22m  src/types.test.ts usually changes with src/hono-base.ts
+  [2m5% (2–12%) · 3 receipts · info · pair-6fa93604[22m
+  [2msrc/hono-base.ts · src/types.test.ts[22m
+[1mF-08[22m  src/compose.ts usually changes with src/hono-base.ts
+  [2m5% (2–12%) · 3 receipts · info · pair-764b6787[22m
+  [2msrc/hono-base.ts → src/compose.ts[22m
+[1mF-09[22m  src/helper/dev/index.ts usually changes with src/hono-base.ts
+  [2m5% (2–12%) · 3 receipts · info · pair-61b57ba2[22m
+  [2msrc/hono-base.ts ⇢ src/helper/dev/index.ts[22m
+[1mF-10[22m  src/router.ts usually changes with src/hono-base.ts
+  [2m4% (2–10%) · 3 receipts · info · pair-ded6a524[22m
+  [2msrc/hono-base.ts → src/router.ts[22m
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed        [22m  [1m2780[22m
+  [2mHistory                 [22m  [1m2021-12-14 to 2026-11-07[22m
+  [2mSweeping commits skipped[22m  [1m34[22m
+  [2mRevert commits skipped  [22m  [1m11[22m
+  [2mChanged in              [22m  [1m97 commits[22m
+  [2mBusier than             [22m  [1m99% of files[22m
+  [2mMedian file             [22m  [1m3 commits[22m
+  [2mLast changed            [22m  [1m2026-11-01[22m
+  [2mWho knows it            [22m  [1mYusuke Wada 59%, Taku Amano 14%, EdamAmex 4%[22m
+  [2mFiles that move with it [22m  [1m10[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Historical signal, not proof: check whether the change really needs[22m
+  [1m  these files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/hono-base.ts src/hono.test.ts[22m
+    [2mShow the shared commits behind F-01.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/hono-base.ts src/types.ts[22m
+    [2mShow the shared commits behind F-02.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1msrc/hono-base.ts src/context.ts[22m
+    [2mShow the shared commits behind F-03.[22m

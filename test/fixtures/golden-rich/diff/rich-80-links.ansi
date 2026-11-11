@@ -1,0 +1,87 @@
+[2mRepo Archaeology · [22m[1mdiff (61f7c59~6...HEAD + uncommitted changes)[22m
+[2m────────────────────────────────────────────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                         [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m3 (1 top, 2 primary)[22m
+
+[1;48;2;255;214;10;38;2;18;18;18m F-01 [22;39;49m  [1msrc/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx[22m
+[1m┃[22m [1mneeds review · top finding · pair-e9d61976[22m
+[1m┃[22m Test link: a test and the code it covers. 20 of 39 commits that changed
+[1m┃[22m src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (51%, 95%
+[1m┃[22m interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19.
+[1m┃[22m Track record: 5 changes to src/helper/ssg/ssg.test.tsx between 2025-07-29 and
+[1m┃[22m 2026-11-04 left src/helper/ssg/index.ts out; it changed within 48 h after 0 of
+[1m┃[22m them (historical activity, not correctness).
+[1m┃[22m src/helper/ssg/ssg.test.tsx
+[1m┃[22m src/helper/ssg/index.ts
+[1m┃[22m [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m51%[22m [2m(range 36–66%)[22m
+[1m┃[22m [2mco-change confidence (95% interval)[22m
+[1m┃[22m [2mE-01[22m  ]8;;https://github.com/honojs/hono/commit/00b405a8f840f0f2ce4145e0fe5558cf2beeee78\00b405a]8;;\  [2m2026-02-19[22m  feat(ssg): add redirect plugin (#4599)
+[1m┃[22m [2mE-02[22m  ]8;;https://github.com/honojs/hono/commit/58175a1b18e82219a9456709993656eb1cc9eeeb\58175a1]8;;\  [2m2024-04-09[22m  fix(ssg): use response header to mark as disabled …
+[1m┃[22m [2mE-03[22m  ]8;;https://github.com/honojs/hono/commit/8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3\8ef9b7b]8;;\  [2m2024-03-07[22m  refactor(SSG): separate middleware logic (#2315)
+
+[1mF-02[22m  [1msrc/jsx/streaming.test.tsx usually changes with[22m
+[1m      runtime-tests/deno-jsx/jsx.test.tsx[22m
+  [1mneeds review · primary · pair-ee66c335[22m
+  Test link: two tests that change together. 4 of 9 commits that changed
+  runtime-tests/deno-jsx/jsx.test.tsx also changed src/jsx/streaming.test.tsx
+  (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together
+  2024-02-16. Track record: no change to runtime-tests/deno-jsx/jsx.test.tsx
+  between 2025-07-29 and 2026-11-04 left src/jsx/streaming.test.tsx out, so
+  there is nothing to replay (historical activity, not correctness).
+  runtime-tests/deno-jsx/jsx.test.tsx
+  src/jsx/streaming.test.tsx
+  [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m44%[22m [2m(range 19–73%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-04[22m  ]8;;https://github.com/honojs/hono/commit/473a6f09991c4b400f05c66bfd953f577c2fda58\473a6f0]8;;\  [2m2024-02-16[22m  refactor: jsx streaming (#2216)
+  [2mE-05[22m  ]8;;https://github.com/honojs/hono/commit/a183fe403ed12ba37f9f76320700571487e12074\a183fe4]8;;\  [2m2024-01-16[22m  chore: enables lint and format for `.tsx` (#1994)
+  [2mE-06[22m  ]8;;https://github.com/honojs/hono/commit/cd6c488b76a543583f0244ca43b1422e98236f3c\cd6c488]8;;\  [2m2023-11-21[22m  feat(jsx): Introduce `ErrorBoundary` component (#1…
+
+[1mF-03[22m  [1msrc/jsx/jsx-dev-runtime.ts usually changes with src/jsx/jsx-runtime.ts[22m
+  [1mneeds review · primary · pair-7c78e775[22m
+  Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that
+  changed src/jsx/jsx-runtime.ts also changed src/jsx/jsx-dev-runtime.ts (50%,
+  95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08.
+  Track record: 1 change to src/jsx/jsx-runtime.ts between 2025-07-29 and
+  2026-11-04 left src/jsx/jsx-dev-runtime.ts out; it changed within 48 h after 0
+  of them (historical activity, not correctness).
+  src/jsx/jsx-runtime.ts
+  [2m  → references it directly[22m
+  src/jsx/jsx-dev-runtime.ts
+  [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m50%[22m [2m(range 19–81%)[22m
+  [2mco-change confidence (95% interval)[22m
+  [2mE-07[22m  ]8;;https://github.com/honojs/hono/commit/652ef7c86703cddbe572749d971ebe3880f89cf1\652ef7c]8;;\  [2m2023-11-08[22m  feat(jsx): Define jsxTemplate/jsxAttr/jsxEscape fo…
+  [2mE-08[22m  ]8;;https://github.com/honojs/hono/commit/c3031a418c2b9c56094a5095dbc5d34e7c8ad090\c3031a4]8;;\  [2m2022-11-01[22m  fix(jsx): export fragment (#642)
+  [2mE-09[22m  ]8;;https://github.com/honojs/hono/commit/5f60a1822741f2e49fd8599c78c10a9f7b0f76f3\5f60a18]8;;\  [2m2022-07-24[22m  feat(jsx): support `jsxImportSource` (#420)
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed             [22m  [1m2774[22m
+  [2mHistory                      [22m  [1m2021-12-14 to 2026-11-04[22m
+  [2mSweeping commits skipped     [22m  [1m34[22m
+  [2mRevert commits skipped       [22m  [1m11[22m
+  [2mChanged files                [22m  [1m16[22m
+  [2mNew or without usable history[22m  [1m2[22m
+  [2mPossibly missed              [22m  [1m3[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Historical signal, not proof: check whether the change really needs[22m
+  [1m  these files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1m--base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/helper/ssg/ssg.test.tsx \[22m
+  [1msrc/helper/ssg/index.ts[22m
+    [2mShow the shared commits behind F-01.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1m--base bcfd02bb50fb015587aac7fe1745b5b2b61361ec \[22m
+  [1mruntime-tests/deno-jsx/jsx.test.tsx src/jsx/streaming.test.tsx[22m
+    [2mShow the shared commits behind F-02.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \[22m
+  [1m--base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/jsx/jsx-runtime.ts \[22m
+  [1msrc/jsx/jsx-dev-runtime.ts[22m
+    [2mShow the shared commits behind F-03.[22m

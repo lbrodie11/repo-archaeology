@@ -1,0 +1,127 @@
+[2mRepo Archaeology · [22m[1mscan[22m
+[2m────────────────────────────────────────────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                         [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m18 (1 top, 2 primary, 15 secondary)[22m
+
+[1;7m F-01 [22;27m  [1mserve-static.ts across src/adapter/*: 3 related implementations[22m
+[1m┃[22m [1mneeds review · top finding · family-3b6fa7b6[22m
+[1m┃[22m 3 related implementations (bun, cloudflare-workers, deno): 3 parallel
+[1m┃[22m implementations of serve-static.ts in sibling folders (bun,
+[1m┃[22m cloudflare-workers, deno); all 3 pairwise links meet thresholds (16 supporting
+[1m┃[22m commits (2+ members via a qualifying pair), 9 touched all 3). Relationships:
+[1m┃[22m ghost wire. 16 supporting commits touched two or more members via a qualifying
+[1m┃[22m pair; 9 commits touched all 3; all 3 pairwise links met thresholds; last
+[1m┃[22m together 2026-05-16.
+[1m┃[22m src/adapter/bun/serve-static.ts
+[1m┃[22m src/adapter/cloudflare-workers/serve-static.ts
+[1m┃[22m src/adapter/deno/serve-static.ts
+[1m┃[22m [2mE-01[22m  26f8c33  [2m2026-05-16[22m  fix(serveStatic): make options parameter optional …
+[1m┃[22m [2mE-02[22m  1196f14  [2m2025-08-07[22m  feat(serve-static): use `join` to correct path res…
+[1m┃[22m [2mE-03[22m  246a06a  [2m2024-09-24[22m  feat(serve-static): support absolute root (#3420) …
+
+[1mF-02[22m  [1mrouter.ts across src/router/*: 5 related implementations[22m
+  [1mneeds review · primary · family-8e9f6663[22m
+  5 related implementations (linear-router, pattern-router, reg-exp-router,
+  smart-router, trie-router): 5 parallel implementations of router.ts in sibling
+  folders (linear-router, pattern-router, reg-exp-router, smart-router,
+  trie-router); 4 of 10 pairwise links meet thresholds (8 supporting commits (2+
+  members via a qualifying pair), 1 touched all 5). Relationships: ghost wire. 8
+  supporting commits touched two or more members via a qualifying pair; 1 commit
+  touched all 5; 4 of 10 pairwise links met thresholds; last together
+  2026-08-17.
+  src/router/linear-router/router.ts
+  src/router/pattern-router/router.ts
+  src/router/reg-exp-router/router.ts
+  src/router/smart-router/router.ts
+  src/router/trie-router/router.ts
+  [2mE-04[22m  a194628  [2m2026-08-17[22m  fix(pattern-router/linear-router): prevent prefix …
+  [2mE-05[22m  7b30835  [2m2024-11-12[22m  refactor(router): use `#` for private props to red…
+  [2mE-06[22m  10a5e65  [2m2024-10-26[22m  perf(router):  improve performance of router (#352…
+
+[1mF-03[22m  [1mwebsocket.ts across src/adapter/*: 3 related implementations[22m
+  [1mneeds review · primary · family-0c422a05[22m
+  3 related implementations (bun, cloudflare-workers, deno): 3 parallel
+  implementations of websocket.ts in sibling folders (bun, cloudflare-workers,
+  deno); 2 of 3 pairwise links meet thresholds (4 supporting commits (2+ members
+  via a qualifying pair), 3 touched all 3). Relationships: ghost wire. 4
+  supporting commits touched two or more members via a qualifying pair; 3
+  commits touched all 3; 2 of 3 pairwise links met thresholds; last together
+  2024-10-25.
+  src/adapter/bun/websocket.ts
+  src/adapter/cloudflare-workers/websocket.ts
+  src/adapter/deno/websocket.ts
+  [2mE-07[22m  234b083  [2m2024-10-25[22m  feat(ws): Make WebSocket adapter more changeable (…
+  [2mE-08[22m  6f69bf0  [2m2024-09-08[22m  feat(websocket): Add generics type to `WSContext` …
+  [2mE-09[22m  a3d9cc7  [2m2024-05-28[22m  refactor(websocket): remove unused condition (#283…
+
+[1mF-04[22m  src/preset/quick.ts usually changes with src/preset/tiny.ts
+  [2m100% (68–100%) · 3 receipts · needs review · pair-ee9740dc[22m
+  [2msrc/preset/tiny.ts ⇢ src/preset/quick.ts[22m
+[1mF-05[22m  src/helper/streaming/sse.ts usually changes with src/helper/streaming/str…
+  [2m88% (53–98%) · 3 receipts · needs review · pair-98ccd910[22m
+  [2msrc/helper/streaming/stream.ts ⇢ src/helper/streaming/sse.ts[22m
+[1mF-06[22m  src/adapter/bun/ssg.ts usually changes with src/adapter/deno/ssg.ts
+  [2m100% (44–100%) · 3 receipts · needs review · pair-ae289a3c[22m
+  [2msrc/adapter/deno/ssg.ts ⇢ src/adapter/bun/ssg.ts[22m
+[1mF-07[22m  src/hono.ts usually changes with src/preset/tiny.ts
+  [2m75% (41–93%) · 3 receipts · needs review · pair-123d953b[22m
+  [2msrc/preset/tiny.ts ⇢ src/hono.ts[22m
+[1mF-08[22m  src/adapter/deno/serve-static.ts usually changes with src/adapter/bun/ser…
+  [2m60% (39–78%) · 3 receipts · needs review · pair-e83846e2[22m
+  [2msrc/adapter/bun/serve-static.ts ⇢ src/adapter/deno/serve-static.ts[22m
+[1mF-09[22m  src/router/reg-exp-router/router.ts usually changes with src/router/smart…
+  [2m80% (38–96%) · 3 receipts · needs review · pair-4de77254[22m
+  [2msrc/router/smart-router/router.ts ⇢ src/router/reg-exp-router/router.ts[22m
+[1mF-10[22m  src/hono.ts usually changes with src/preset/quick.ts
+  [2m67% (35–88%) · 3 receipts · needs review · pair-5a9cf1cc[22m
+  [2msrc/preset/quick.ts ⇢ src/hono.ts[22m
+[1mF-11[22m  src/adapter/cloudflare-workers/serve-static.ts usually changes with src/a…
+  [2m55% (34–74%) · 3 receipts · needs review · pair-1fa3fc0b[22m
+  [2msrc/adapter/bun/serve-static.ts[22m
+  [2m⇢ src/adapter/cloudflare-workers/serve-static.ts[22m
+[1mF-12[22m  src/adapter/deno/websocket.ts usually changes with src/adapter/deno/deno.…
+  [2m75% (30–95%) · 3 receipts · needs review · pair-426f9e36[22m
+  [2msrc/adapter/deno/deno.d.ts ⇢ src/adapter/deno/websocket.ts[22m
+[1mF-13[22m  src/adapter/bun/index.ts usually changes with src/adapter/deno/index.ts
+  [2m75% (30–95%) · 3 receipts · needs review · pair-6acd65ba[22m
+  [2msrc/adapter/deno/index.ts ⇢ src/adapter/bun/index.ts[22m
+[1mF-14[22m  src/adapter/cloudflare-workers/serve-static.ts usually changes with src/a…
+  [2m46% (28–65%) · 3 receipts · needs review · pair-32064fa8[22m
+  [2msrc/adapter/deno/serve-static.ts[22m
+  [2m⇢ src/adapter/cloudflare-workers/serve-static.ts[22m
+[1mF-15[22m  src/middleware/jwt/jwt.ts usually changes with src/middleware/jwk/jwk.ts
+  [2m56% (27–81%) · 3 receipts · needs review · pair-ff01b773[22m
+  [2msrc/middleware/jwk/jwk.ts ⇢ src/middleware/jwt/jwt.ts[22m
+[1mF-16[22m  src/adapter/deno/websocket.ts usually changes with src/adapter/cloudflare…
+  [2m57% (25–84%) · 3 receipts · needs review · pair-e9a0663c[22m
+  [2msrc/adapter/cloudflare-workers/websocket.ts ⇢ src/adapter/deno/websocket.ts[22m
+[1mF-17[22m  src/hono.ts usually changes with src/middleware/powered-by/index.ts
+  [2m57% (25–84%) · 3 receipts · needs review · pair-afed86d5[22m
+  [2msrc/middleware/powered-by/index.ts ⇢ src/hono.ts[22m
+[1mF-18[22m  src/router/linear-router/router.ts usually changes with src/router/smart-…
+  [2m60% (23–88%) · 3 receipts · needs review · pair-3d125061[22m
+  [2msrc/router/smart-router/router.ts ⇢ src/router/linear-router/router.ts[22m
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed        [22m  [1m2780[22m
+  [2mHistory                 [22m  [1m2021-12-14 to 2026-11-07[22m
+  [2mSweeping commits skipped[22m  [1m34[22m
+  [2mRevert commits skipped  [22m  [1m11[22m
+  [2mAbove the thresholds    [22m  [1m344[22m
+  [2mGhost wire              [22m  [1m21[22m
+  [2mUnchecked               [22m  [1m56[22m
+  [2mIndirect import         [22m  [1m9[22m
+  [2mImport link             [22m  [1m54[22m
+  [2mTest link               [22m  [1m204[22m
+  [2mShowing                 [22m  [1mghost wire, unchecked[22m
+  [2mFinding families        [22m  [1m3[22m
+  [2mRelationships shown     [22m  [1m15[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Historical signal, not proof: check whether the change really needs[22m
+  [1m  these files.[22m

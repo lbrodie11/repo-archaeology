@@ -3,3 +3,5 @@ test/fixtures/golden/** text eol=lf
 # RA-18: the report test regenerates the results section and results.json byte-for-byte; keep LF on every platform.
 docs/research/** text eol=lf
 test/fixtures/golden-unchanged/** text eol=lf
+test/fixtures/golden-rich/** text eol=lf
+test/fixtures/hono/** text eol=lf

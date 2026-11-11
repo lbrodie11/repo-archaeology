@@ -1,0 +1,127 @@
+Repo Archaeology · scan
+────────────────────────────────────────────────────────────────────────────────
+
+RUN · 1 CUT                         ✓ completed
+
+
+FINDINGS  18 (1 top, 2 primary, 15 secondary)
+
+F-01  serve-static.ts across src/adapter/*: 3 related implementations
+┃ needs review · top finding · family-3b6fa7b6
+┃ 3 related implementations (bun, cloudflare-workers, deno): 3 parallel
+┃ implementations of serve-static.ts in sibling folders (bun,
+┃ cloudflare-workers, deno); all 3 pairwise links meet thresholds (16 supporting
+┃ commits (2+ members via a qualifying pair), 9 touched all 3). Relationships:
+┃ ghost wire. 16 supporting commits touched two or more members via a qualifying
+┃ pair; 9 commits touched all 3; all 3 pairwise links met thresholds; last
+┃ together 2026-05-16.
+┃ src/adapter/bun/serve-static.ts
+┃ src/adapter/cloudflare-workers/serve-static.ts
+┃ src/adapter/deno/serve-static.ts
+┃ E-01  26f8c33  2026-05-16  fix(serveStatic): make options parameter optional …
+┃ E-02  1196f14  2025-08-07  feat(serve-static): use `join` to correct path res…
+┃ E-03  246a06a  2024-09-24  feat(serve-static): support absolute root (#3420) …
+
+F-02  router.ts across src/router/*: 5 related implementations
+  needs review · primary · family-8e9f6663
+  5 related implementations (linear-router, pattern-router, reg-exp-router,
+  smart-router, trie-router): 5 parallel implementations of router.ts in sibling
+  folders (linear-router, pattern-router, reg-exp-router, smart-router,
+  trie-router); 4 of 10 pairwise links meet thresholds (8 supporting commits (2+
+  members via a qualifying pair), 1 touched all 5). Relationships: ghost wire. 8
+  supporting commits touched two or more members via a qualifying pair; 1 commit
+  touched all 5; 4 of 10 pairwise links met thresholds; last together
+  2026-08-17.
+  src/router/linear-router/router.ts
+  src/router/pattern-router/router.ts
+  src/router/reg-exp-router/router.ts
+  src/router/smart-router/router.ts
+  src/router/trie-router/router.ts
+  E-04  a194628  2026-08-17  fix(pattern-router/linear-router): prevent prefix …
+  E-05  7b30835  2024-11-12  refactor(router): use `#` for private props to red…
+  E-06  10a5e65  2024-10-26  perf(router):  improve performance of router (#352…
+
+F-03  websocket.ts across src/adapter/*: 3 related implementations
+  needs review · primary · family-0c422a05
+  3 related implementations (bun, cloudflare-workers, deno): 3 parallel
+  implementations of websocket.ts in sibling folders (bun, cloudflare-workers,
+  deno); 2 of 3 pairwise links meet thresholds (4 supporting commits (2+ members
+  via a qualifying pair), 3 touched all 3). Relationships: ghost wire. 4
+  supporting commits touched two or more members via a qualifying pair; 3
+  commits touched all 3; 2 of 3 pairwise links met thresholds; last together
+  2024-10-25.
+  src/adapter/bun/websocket.ts
+  src/adapter/cloudflare-workers/websocket.ts
+  src/adapter/deno/websocket.ts
+  E-07  234b083  2024-10-25  feat(ws): Make WebSocket adapter more changeable (…
+  E-08  6f69bf0  2024-09-08  feat(websocket): Add generics type to `WSContext` …
+  E-09  a3d9cc7  2024-05-28  refactor(websocket): remove unused condition (#283…
+
+F-04  src/preset/quick.ts usually changes with src/preset/tiny.ts
+  100% (68–100%) · 3 receipts · needs review · pair-ee9740dc
+  src/preset/tiny.ts ⇢ src/preset/quick.ts
+F-05  src/helper/streaming/sse.ts usually changes with src/helper/streaming/str…
+  88% (53–98%) · 3 receipts · needs review · pair-98ccd910
+  src/helper/streaming/stream.ts ⇢ src/helper/streaming/sse.ts
+F-06  src/adapter/bun/ssg.ts usually changes with src/adapter/deno/ssg.ts
+  100% (44–100%) · 3 receipts · needs review · pair-ae289a3c
+  src/adapter/deno/ssg.ts ⇢ src/adapter/bun/ssg.ts
+F-07  src/hono.ts usually changes with src/preset/tiny.ts
+  75% (41–93%) · 3 receipts · needs review · pair-123d953b
+  src/preset/tiny.ts ⇢ src/hono.ts
+F-08  src/adapter/deno/serve-static.ts usually changes with src/adapter/bun/ser…
+  60% (39–78%) · 3 receipts · needs review · pair-e83846e2
+  src/adapter/bun/serve-static.ts ⇢ src/adapter/deno/serve-static.ts
+F-09  src/router/reg-exp-router/router.ts usually changes with src/router/smart…
+  80% (38–96%) · 3 receipts · needs review · pair-4de77254
+  src/router/smart-router/router.ts ⇢ src/router/reg-exp-router/router.ts
+F-10  src/hono.ts usually changes with src/preset/quick.ts
+  67% (35–88%) · 3 receipts · needs review · pair-5a9cf1cc
+  src/preset/quick.ts ⇢ src/hono.ts
+F-11  src/adapter/cloudflare-workers/serve-static.ts usually changes with src/a…
+  55% (34–74%) · 3 receipts · needs review · pair-1fa3fc0b
+  src/adapter/bun/serve-static.ts
+  ⇢ src/adapter/cloudflare-workers/serve-static.ts
+F-12  src/adapter/deno/websocket.ts usually changes with src/adapter/deno/deno.…
+  75% (30–95%) · 3 receipts · needs review · pair-426f9e36
+  src/adapter/deno/deno.d.ts ⇢ src/adapter/deno/websocket.ts
+F-13  src/adapter/bun/index.ts usually changes with src/adapter/deno/index.ts
+  75% (30–95%) · 3 receipts · needs review · pair-6acd65ba
+  src/adapter/deno/index.ts ⇢ src/adapter/bun/index.ts
+F-14  src/adapter/cloudflare-workers/serve-static.ts usually changes with src/a…
+  46% (28–65%) · 3 receipts · needs review · pair-32064fa8
+  src/adapter/deno/serve-static.ts
+  ⇢ src/adapter/cloudflare-workers/serve-static.ts
+F-15  src/middleware/jwt/jwt.ts usually changes with src/middleware/jwk/jwk.ts
+  56% (27–81%) · 3 receipts · needs review · pair-ff01b773
+  src/middleware/jwk/jwk.ts ⇢ src/middleware/jwt/jwt.ts
+F-16  src/adapter/deno/websocket.ts usually changes with src/adapter/cloudflare…
+  57% (25–84%) · 3 receipts · needs review · pair-e9a0663c
+  src/adapter/cloudflare-workers/websocket.ts ⇢ src/adapter/deno/websocket.ts
+F-17  src/hono.ts usually changes with src/middleware/powered-by/index.ts
+  57% (25–84%) · 3 receipts · needs review · pair-afed86d5
+  src/middleware/powered-by/index.ts ⇢ src/hono.ts
+F-18  src/router/linear-router/router.ts usually changes with src/router/smart-…
+  60% (23–88%) · 3 receipts · needs review · pair-3d125061
+  src/router/smart-router/router.ts ⇢ src/router/linear-router/router.ts
+
+
+METRICS
+  Commits analyzed          2780
+  History                   2021-12-14 to 2026-11-07
+  Sweeping commits skipped  34
+  Revert commits skipped    11
+  Above the thresholds      344
+  Ghost wire                21
+  Unchecked                 56
+  Indirect import           9
+  Import link               54
+  Test link                 204
+  Showing                   ghost wire, unchecked
+  Finding families          3
+  Relationships shown       15
+
+
+WARNINGS
+  ▲ warning: Historical signal, not proof: check whether the change really needs
+    these files.

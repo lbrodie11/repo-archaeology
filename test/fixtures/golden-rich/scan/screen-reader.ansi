@@ -1,0 +1,180 @@
+Repo Archaeology run "scan" (repo-archaeology-scan): completed
+Run started 2026-11-11T09:00:00.000Z, finished 2026-11-11T09:00:02.000Z.
+Cut C-01 read-history "Read git history": done
+Findings: 18 (1 top, 2 primary, 15 secondary)
+Finding F-01 family-3b6fa7b6 (top finding, needs review): serve-static.ts across src/adapter/*: 3 related implementations
+Finding F-01 summary: 3 related implementations (bun, cloudflare-workers, deno): 3 parallel implementations of serve-static.ts in sibling folders (bun, cloudflare-workers, deno); all 3 pairwise links meet thresholds (16 supporting commits (2+ members via a qualifying pair), 9 touched all 3). Relationships: ghost wire. 16 supporting commits touched two or more members via a qualifying pair; 9 commits touched all 3; all 3 pairwise links met thresholds; last together 2026-05-16.
+Finding F-01 subject 1 (file): src/adapter/bun/serve-static.ts
+Finding F-01 subject 2 (file): src/adapter/cloudflare-workers/serve-static.ts
+Finding F-01 subject 3 (file): src/adapter/deno/serve-static.ts
+Receipt E-01 for F-01 (commit): 26f8c33f23e6151873d165107f2dbcadf1204d15 2026-05-16: fix(serveStatic): make options parameter optional in all adapters (#4934) [all 3 members] <https://github.com/honojs/hono/commit/26f8c33f23e6151873d165107f2dbcadf1204d15>
+Receipt E-02 for F-01 (commit): 1196f14b94e589e2ac44fa7f1c8785d70c1cf83e 2025-08-07: feat(serve-static): use `join` to correct path resolution (#4291) [2 of 3 members] <https://github.com/honojs/hono/commit/1196f14b94e589e2ac44fa7f1c8785d70c1cf83e>
+Receipt E-03 for F-01 (commit): 246a06aa1d35aa206dcf11186b3aa90badb2de72 2024-09-24: feat(serve-static): support absolute root (#3420) [2 of 3 members] <https://github.com/honojs/hono/commit/246a06aa1d35aa206dcf11186b3aa90badb2de72>
+Finding F-02 family-8e9f6663 (primary, needs review): router.ts across src/router/*: 5 related implementations
+Finding F-02 summary: 5 related implementations (linear-router, pattern-router, reg-exp-router, smart-router, trie-router): 5 parallel implementations of router.ts in sibling folders (linear-router, pattern-router, reg-exp-router, smart-router, trie-router); 4 of 10 pairwise links meet thresholds (8 supporting commits (2+ members via a qualifying pair), 1 touched all 5). Relationships: ghost wire. 8 supporting commits touched two or more members via a qualifying pair; 1 commit touched all 5; 4 of 10 pairwise links met thresholds; last together 2026-08-17.
+Finding F-02 subject 1 (file): src/router/linear-router/router.ts
+Finding F-02 subject 2 (file): src/router/pattern-router/router.ts
+Finding F-02 subject 3 (file): src/router/reg-exp-router/router.ts
+Finding F-02 subject 4 (file): src/router/smart-router/router.ts
+Finding F-02 subject 5 (file): src/router/trie-router/router.ts
+Receipt E-04 for F-02 (commit): a19462879716e7b600daed8eb3a1b2af4bd68feb 2026-08-17: fix(pattern-router/linear-router): prevent prefix overmatch on wildcard routes (#5252) [2 of 5 members] <https://github.com/honojs/hono/commit/a19462879716e7b600daed8eb3a1b2af4bd68feb>
+Receipt E-05 for F-02 (commit): 7b308358f4024283bc95265a60ac518db8870106 2024-11-12: refactor(router): use `#` for private props to reduce the minified file size (#3660) [4 of 5 members] <https://github.com/honojs/hono/commit/7b308358f4024283bc95265a60ac518db8870106>
+Receipt E-06 for F-02 (commit): 10a5e65e85ebfffecff8648e2f1eaae00abe748d 2024-10-26: perf(router):  improve performance of router (#3526) [4 of 5 members] <https://github.com/honojs/hono/commit/10a5e65e85ebfffecff8648e2f1eaae00abe748d>
+Finding F-03 family-0c422a05 (primary, needs review): websocket.ts across src/adapter/*: 3 related implementations
+Finding F-03 summary: 3 related implementations (bun, cloudflare-workers, deno): 3 parallel implementations of websocket.ts in sibling folders (bun, cloudflare-workers, deno); 2 of 3 pairwise links meet thresholds (4 supporting commits (2+ members via a qualifying pair), 3 touched all 3). Relationships: ghost wire. 4 supporting commits touched two or more members via a qualifying pair; 3 commits touched all 3; 2 of 3 pairwise links met thresholds; last together 2024-10-25.
+Finding F-03 subject 1 (file): src/adapter/bun/websocket.ts
+Finding F-03 subject 2 (file): src/adapter/cloudflare-workers/websocket.ts
+Finding F-03 subject 3 (file): src/adapter/deno/websocket.ts
+Receipt E-07 for F-03 (commit): 234b083777d34fb1efadbe8f504148e2e533428f 2024-10-25: feat(ws): Make WebSocket adapter more changeable (#3531) [all 3 members] <https://github.com/honojs/hono/commit/234b083777d34fb1efadbe8f504148e2e533428f>
+Receipt E-08 for F-03 (commit): 6f69bf04b744d88efa608dd4458dd650ad57cdf0 2024-09-08: feat(websocket): Add generics type to `WSContext` (#3337) [all 3 members] <https://github.com/honojs/hono/commit/6f69bf04b744d88efa608dd4458dd650ad57cdf0>
+Receipt E-09 for F-03 (commit): a3d9cc7d9593b717986f81014892303d0f5b8846 2024-05-28: refactor(websocket): remove unused condition (#2839) [2 of 3 members] <https://github.com/honojs/hono/commit/a3d9cc7d9593b717986f81014892303d0f5b8846>
+Finding F-04 pair-ee9740dc (secondary, needs review): src/preset/quick.ts usually changes with src/preset/tiny.ts
+Finding F-04 summary: Ghost wire: no import link detected in the current code. 8 of 8 commits that changed src/preset/tiny.ts also changed src/preset/quick.ts (100%, 95% interval 68-100%); the other way 8 of 9 (89%). Last together 2024-05-29.
+Finding F-04 subject 1 (file): src/preset/tiny.ts
+Finding F-04 subject 2 (file): src/preset/quick.ts
+Finding F-04 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-04 strength: 100% (range 68-100%), co-change confidence (95% interval)
+Receipt E-10 for F-04 (commit): 16f73935ef902ba7927f698d9ce731d4cd9a143b 2024-05-29: fix(types): allow blank env (#2834) <https://github.com/honojs/hono/commit/16f73935ef902ba7927f698d9ce731d4cd9a143b>
+Receipt E-11 for F-04 (commit): 37df3dd7d396f116c201bc486ac8edc4acf0b36b 2024-01-19: refactor(types): name them `BlankSchema` or `BlankInput` (#2040) <https://github.com/honojs/hono/commit/37df3dd7d396f116c201bc486ac8edc4acf0b36b>
+Receipt E-12 for F-04 (commit): 68808453d5a91fe32a55a8f30e42d95b6962523a 2023-10-16: refactor: refactored `hono-base` (#1588) <https://github.com/honojs/hono/commit/68808453d5a91fe32a55a8f30e42d95b6962523a>
+Finding F-05 pair-98ccd910 (secondary, needs review): src/helper/streaming/sse.ts usually changes with src/helper/streaming/stream.ts
+Finding F-05 summary: Ghost wire: no import link detected in the current code. 7 of 8 commits that changed src/helper/streaming/stream.ts also changed src/helper/streaming/sse.ts (88%, 95% interval 53-98%); the other way 7 of 18 (39%). Last together 2025-01-27.
+Finding F-05 subject 1 (file): src/helper/streaming/stream.ts
+Finding F-05 subject 2 (file): src/helper/streaming/sse.ts
+Finding F-05 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-05 strength: 88% (range 53-98%), co-change confidence (95% interval)
+Receipt E-13 for F-05 (commit): d72aa4b6d77c7b3150bf2b7bae001e6635fe98ae 2025-01-27: refactor(helper/streaming): Avoid attaching AbortSignal on newer versions of Bun (#3859) <https://github.com/honojs/hono/commit/d72aa4b6d77c7b3150bf2b7bae001e6635fe98ae>
+Receipt E-14 for F-05 (commit): e513fe7c461a6d1c9d24ee9a66b7432aed58da82 2024-07-06: fix(helper/streaming): remove slow types (#3100) <https://github.com/honojs/hono/commit/e513fe7c461a6d1c9d24ee9a66b7432aed58da82>
+Receipt E-15 for F-05 (commit): ada10e5bf097b921f0b8ea533bb28e726ffff2dc 2024-07-03: fix(stream): Fixed a problem that onAbort() is called even if request is normally closed in deno (#3079) <https://github.com/honojs/hono/commit/ada10e5bf097b921f0b8ea533bb28e726ffff2dc>
+Finding F-06 pair-ae289a3c (secondary, needs review): src/adapter/bun/ssg.ts usually changes with src/adapter/deno/ssg.ts
+Finding F-06 summary: Ghost wire: possible parallel implementations: ssg.ts appears in sibling folders. 3 of 3 commits that changed src/adapter/deno/ssg.ts also changed src/adapter/bun/ssg.ts (100%, 95% interval 44-100%); the other way 3 of 4 (75%). Last together 2024-01-19.
+Finding F-06 subject 1 (file): src/adapter/deno/ssg.ts
+Finding F-06 subject 2 (file): src/adapter/bun/ssg.ts
+Finding F-06 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-06 strength: 100% (range 44-100%), co-change confidence (95% interval)
+Receipt E-16 for F-06 (commit): 23d96a9b0817b44a62c68ab8928dc4ae956b75d9 2024-01-19: refactor(ssg): Removal of Libraries Dependent on Node.js (#2012) <https://github.com/honojs/hono/commit/23d96a9b0817b44a62c68ab8928dc4ae956b75d9>
+Receipt E-17 for F-06 (commit): 54ef22adffe4970f89b0ef30061c761332e6d3f7 2024-01-13: chore(helper): Add experimental flag the SSG features (#1967) <https://github.com/honojs/hono/commit/54ef22adffe4970f89b0ef30061c761332e6d3f7>
+Receipt E-18 for F-06 (commit): 04b686ca39421d28d3aa3f8491c13e1f7d1c8de1 2024-01-11: feat: Introducing a New SSG Adaptor/Helper  (#1904) <https://github.com/honojs/hono/commit/04b686ca39421d28d3aa3f8491c13e1f7d1c8de1>
+Finding F-07 pair-123d953b (secondary, needs review): src/hono.ts usually changes with src/preset/tiny.ts
+Finding F-07 summary: Ghost wire: no import link detected in the current code. 6 of 8 commits that changed src/preset/tiny.ts also changed src/hono.ts (75%, 95% interval 41-93%); the other way 6 of 150 (4%). Last together 2024-05-29.
+Finding F-07 subject 1 (file): src/preset/tiny.ts
+Finding F-07 subject 2 (file): src/hono.ts
+Finding F-07 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-07 strength: 75% (range 41-93%), co-change confidence (95% interval)
+Receipt E-19 for F-07 (commit): 16f73935ef902ba7927f698d9ce731d4cd9a143b 2024-05-29: fix(types): allow blank env (#2834) <https://github.com/honojs/hono/commit/16f73935ef902ba7927f698d9ce731d4cd9a143b>
+Receipt E-20 for F-07 (commit): 37df3dd7d396f116c201bc486ac8edc4acf0b36b 2024-01-19: refactor(types): name them `BlankSchema` or `BlankInput` (#2040) <https://github.com/honojs/hono/commit/37df3dd7d396f116c201bc486ac8edc4acf0b36b>
+Receipt E-21 for F-07 (commit): 68808453d5a91fe32a55a8f30e42d95b6962523a 2023-10-16: refactor: refactored `hono-base` (#1588) <https://github.com/honojs/hono/commit/68808453d5a91fe32a55a8f30e42d95b6962523a>
+Finding F-08 pair-e83846e2 (secondary, needs review): src/adapter/deno/serve-static.ts usually changes with src/adapter/bun/serve-static.ts
+Finding F-08 summary: Ghost wire: possible parallel implementations: serve-static.ts appears in sibling folders. 12 of 20 commits that changed src/adapter/bun/serve-static.ts also changed src/adapter/deno/serve-static.ts (60%, 95% interval 39-78%); the other way 12 of 24 (50%). Last together 2026-05-16.
+Finding F-08 subject 1 (file): src/adapter/bun/serve-static.ts
+Finding F-08 subject 2 (file): src/adapter/deno/serve-static.ts
+Finding F-08 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-08 strength: 60% (range 39-78%), co-change confidence (95% interval)
+Receipt E-22 for F-08 (commit): 26f8c33f23e6151873d165107f2dbcadf1204d15 2026-05-16: fix(serveStatic): make options parameter optional in all adapters (#4934) <https://github.com/honojs/hono/commit/26f8c33f23e6151873d165107f2dbcadf1204d15>
+Receipt E-23 for F-08 (commit): 1196f14b94e589e2ac44fa7f1c8785d70c1cf83e 2025-08-07: feat(serve-static): use `join` to correct path resolution (#4291) <https://github.com/honojs/hono/commit/1196f14b94e589e2ac44fa7f1c8785d70c1cf83e>
+Receipt E-24 for F-08 (commit): 246a06aa1d35aa206dcf11186b3aa90badb2de72 2024-09-24: feat(serve-static): support absolute root (#3420) <https://github.com/honojs/hono/commit/246a06aa1d35aa206dcf11186b3aa90badb2de72>
+Finding F-09 pair-4de77254 (secondary, needs review): src/router/reg-exp-router/router.ts usually changes with src/router/smart-router/router.ts
+Finding F-09 summary: Ghost wire: possible parallel implementations: router.ts appears in sibling folders. 4 of 5 commits that changed src/router/smart-router/router.ts also changed src/router/reg-exp-router/router.ts (80%, 95% interval 38-96%); the other way 4 of 40 (10%). Last together 2024-11-12.
+Finding F-09 subject 1 (file): src/router/smart-router/router.ts
+Finding F-09 subject 2 (file): src/router/reg-exp-router/router.ts
+Finding F-09 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-09 strength: 80% (range 38-96%), co-change confidence (95% interval)
+Receipt E-25 for F-09 (commit): 7b308358f4024283bc95265a60ac518db8870106 2024-11-12: refactor(router): use `#` for private props to reduce the minified file size (#3660) <https://github.com/honojs/hono/commit/7b308358f4024283bc95265a60ac518db8870106>
+Receipt E-26 for F-09 (commit): b6133c41306f955bf1b3bcadbd3302a0c065c36a 2023-12-01: refactor(router): remove duplication `MESSAGE_MATCHER_IS_ALREADY_BUILT` (#1763) <https://github.com/honojs/hono/commit/b6133c41306f955bf1b3bcadbd3302a0c065c36a>
+Receipt E-27 for F-09 (commit): 390d05b00674567e2d02bac3bdc433292565c9a3 2023-05-17: feat(app): `app.routerName()` (#1105) <https://github.com/honojs/hono/commit/390d05b00674567e2d02bac3bdc433292565c9a3>
+Finding F-10 pair-5a9cf1cc (secondary, needs review): src/hono.ts usually changes with src/preset/quick.ts
+Finding F-10 summary: Ghost wire: no import link detected in the current code. 6 of 9 commits that changed src/preset/quick.ts also changed src/hono.ts (67%, 95% interval 35-88%); the other way 6 of 150 (4%). Last together 2024-05-29.
+Finding F-10 subject 1 (file): src/preset/quick.ts
+Finding F-10 subject 2 (file): src/hono.ts
+Finding F-10 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-10 strength: 67% (range 35-88%), co-change confidence (95% interval)
+Receipt E-28 for F-10 (commit): 16f73935ef902ba7927f698d9ce731d4cd9a143b 2024-05-29: fix(types): allow blank env (#2834) <https://github.com/honojs/hono/commit/16f73935ef902ba7927f698d9ce731d4cd9a143b>
+Receipt E-29 for F-10 (commit): 37df3dd7d396f116c201bc486ac8edc4acf0b36b 2024-01-19: refactor(types): name them `BlankSchema` or `BlankInput` (#2040) <https://github.com/honojs/hono/commit/37df3dd7d396f116c201bc486ac8edc4acf0b36b>
+Receipt E-30 for F-10 (commit): 68808453d5a91fe32a55a8f30e42d95b6962523a 2023-10-16: refactor: refactored `hono-base` (#1588) <https://github.com/honojs/hono/commit/68808453d5a91fe32a55a8f30e42d95b6962523a>
+Finding F-11 pair-1fa3fc0b (secondary, needs review): src/adapter/cloudflare-workers/serve-static.ts usually changes with src/adapter/bun/serve-static.ts
+Finding F-11 summary: Ghost wire: possible parallel implementations: serve-static.ts appears in sibling folders. 11 of 20 commits that changed src/adapter/bun/serve-static.ts also changed src/adapter/cloudflare-workers/serve-static.ts (55%, 95% interval 34-74%); the other way 11 of 27 (41%). Last together 2026-05-16.
+Finding F-11 subject 1 (file): src/adapter/bun/serve-static.ts
+Finding F-11 subject 2 (file): src/adapter/cloudflare-workers/serve-static.ts
+Finding F-11 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-11 strength: 55% (range 34-74%), co-change confidence (95% interval)
+Receipt E-31 for F-11 (commit): 26f8c33f23e6151873d165107f2dbcadf1204d15 2026-05-16: fix(serveStatic): make options parameter optional in all adapters (#4934) <https://github.com/honojs/hono/commit/26f8c33f23e6151873d165107f2dbcadf1204d15>
+Receipt E-32 for F-11 (commit): f8371ab356f79fcf762c66aa372448a8018bcfc7 2024-02-24: fix(serve-static): support extensionless files and refactor (#2260) <https://github.com/honojs/hono/commit/f8371ab356f79fcf762c66aa372448a8018bcfc7>
+Receipt E-33 for F-11 (commit): d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e 2024-01-29: feat(serve-static): `mimes` option for serve-static (#2094) <https://github.com/honojs/hono/commit/d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e>
+Finding F-12 pair-426f9e36 (secondary, needs review): src/adapter/deno/websocket.ts usually changes with src/adapter/deno/deno.d.ts
+Finding F-12 summary: Ghost wire: no import link detected in the current code. 3 of 4 commits that changed src/adapter/deno/deno.d.ts also changed src/adapter/deno/websocket.ts (75%, 95% interval 30-95%); the other way 3 of 8 (38%). Last together 2024-10-30.
+Finding F-12 subject 1 (file): src/adapter/deno/deno.d.ts
+Finding F-12 subject 2 (file): src/adapter/deno/websocket.ts
+Finding F-12 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-12 strength: 75% (range 30-95%), co-change confidence (95% interval)
+Receipt E-34 for F-12 (commit): caeecf99a871d00b21cd4d5708ef277f3df709e0 2024-10-30: fix(types): remove `any` and fix types of adapter/deno (#3291) <https://github.com/honojs/hono/commit/caeecf99a871d00b21cd4d5708ef277f3df709e0>
+Receipt E-35 for F-12 (commit): d383e49ed8f96a06e655036dac0821fb382a4931 2024-06-21: fix(websocket): change to allow use of websocket options (#2999) <https://github.com/honojs/hono/commit/d383e49ed8f96a06e655036dac0821fb382a4931>
+Receipt E-36 for F-12 (commit): 47f5c545f2c143a596501abf2b5670cf2d4a6356 2024-03-05: feat: Introduce WebSocket Helper / Adapter (#2265) <https://github.com/honojs/hono/commit/47f5c545f2c143a596501abf2b5670cf2d4a6356>
+Finding F-13 pair-6acd65ba (secondary, needs review): src/adapter/bun/index.ts usually changes with src/adapter/deno/index.ts
+Finding F-13 summary: Ghost wire: no import link detected in the current code. 3 of 4 commits that changed src/adapter/deno/index.ts also changed src/adapter/bun/index.ts (75%, 95% interval 30-95%); the other way 3 of 15 (20%). Last together 2024-05-22.
+Finding F-13 subject 1 (file): src/adapter/deno/index.ts
+Finding F-13 subject 2 (file): src/adapter/bun/index.ts
+Finding F-13 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-13 strength: 75% (range 30-95%), co-change confidence (95% interval)
+Receipt E-37 for F-13 (commit): a8a5fb97caeb820b069dabb32327e859357d79a8 2024-05-22: feat: Introduce ConnInfo helper/adapter (#2595) <https://github.com/honojs/hono/commit/a8a5fb97caeb820b069dabb32327e859357d79a8>
+Receipt E-38 for F-13 (commit): 47f5c545f2c143a596501abf2b5670cf2d4a6356 2024-03-05: feat: Introduce WebSocket Helper / Adapter (#2265) <https://github.com/honojs/hono/commit/47f5c545f2c143a596501abf2b5670cf2d4a6356>
+Receipt E-39 for F-13 (commit): 04b686ca39421d28d3aa3f8491c13e1f7d1c8de1 2024-01-11: feat: Introducing a New SSG Adaptor/Helper  (#1904) <https://github.com/honojs/hono/commit/04b686ca39421d28d3aa3f8491c13e1f7d1c8de1>
+Finding F-14 pair-32064fa8 (secondary, needs review): src/adapter/cloudflare-workers/serve-static.ts usually changes with src/adapter/deno/serve-static.ts
+Finding F-14 summary: Ghost wire: possible parallel implementations: serve-static.ts appears in sibling folders. 11 of 24 commits that changed src/adapter/deno/serve-static.ts also changed src/adapter/cloudflare-workers/serve-static.ts (46%, 95% interval 28-65%); the other way 11 of 27 (41%). Last together 2026-05-16.
+Finding F-14 subject 1 (file): src/adapter/deno/serve-static.ts
+Finding F-14 subject 2 (file): src/adapter/cloudflare-workers/serve-static.ts
+Finding F-14 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-14 strength: 46% (range 28-65%), co-change confidence (95% interval)
+Receipt E-40 for F-14 (commit): 26f8c33f23e6151873d165107f2dbcadf1204d15 2026-05-16: fix(serveStatic): make options parameter optional in all adapters (#4934) <https://github.com/honojs/hono/commit/26f8c33f23e6151873d165107f2dbcadf1204d15>
+Receipt E-41 for F-14 (commit): f8371ab356f79fcf762c66aa372448a8018bcfc7 2024-02-24: fix(serve-static): support extensionless files and refactor (#2260) <https://github.com/honojs/hono/commit/f8371ab356f79fcf762c66aa372448a8018bcfc7>
+Receipt E-42 for F-14 (commit): d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e 2024-01-29: feat(serve-static): `mimes` option for serve-static (#2094) <https://github.com/honojs/hono/commit/d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e>
+Finding F-15 pair-ff01b773 (secondary, needs review): src/middleware/jwt/jwt.ts usually changes with src/middleware/jwk/jwk.ts
+Finding F-15 summary: Ghost wire: no import link detected in the current code. 5 of 9 commits that changed src/middleware/jwk/jwk.ts also changed src/middleware/jwt/jwt.ts (56%, 95% interval 27-81%); the other way 5 of 30 (17%). Last together 2026-10-28.
+Finding F-15 subject 1 (file): src/middleware/jwk/jwk.ts
+Finding F-15 subject 2 (file): src/middleware/jwt/jwt.ts
+Finding F-15 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-15 strength: 56% (range 27-81%), co-change confidence (95% interval)
+Receipt E-43 for F-15 (commit): ed1d5f72135ccf7e09c17d64dc4af7588dd3e491 2026-10-28: fix(auth): escape backslashes in the WWW-Authenticate realm (#5590) <https://github.com/honojs/hono/commit/ed1d5f72135ccf7e09c17d64dc4af7588dd3e491>
+Receipt E-44 for F-15 (commit): 30277aee0ddd96b643a4958d6102abe6e54d9a29 2026-08-03: feat(jwt,jwk): add a configurable WWW-Authenticate realm (#5141) <https://github.com/honojs/hono/commit/30277aee0ddd96b643a4958d6102abe6e54d9a29>
+Receipt E-45 for F-15 (commit): 5463db2735476959b8af67756f4e513f4fe19115 2026-05-19: Merge commit from fork <https://github.com/honojs/hono/commit/5463db2735476959b8af67756f4e513f4fe19115>
+Finding F-16 pair-e9a0663c (secondary, needs review): src/adapter/deno/websocket.ts usually changes with src/adapter/cloudflare-workers/websocket.ts
+Finding F-16 summary: Ghost wire: possible parallel implementations: websocket.ts appears in sibling folders. 4 of 7 commits that changed src/adapter/cloudflare-workers/websocket.ts also changed src/adapter/deno/websocket.ts (57%, 95% interval 25-84%); the other way 4 of 8 (50%). Last together 2024-10-25.
+Finding F-16 subject 1 (file): src/adapter/cloudflare-workers/websocket.ts
+Finding F-16 subject 2 (file): src/adapter/deno/websocket.ts
+Finding F-16 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-16 strength: 57% (range 25-84%), co-change confidence (95% interval)
+Receipt E-46 for F-16 (commit): 234b083777d34fb1efadbe8f504148e2e533428f 2024-10-25: feat(ws): Make WebSocket adapter more changeable (#3531) <https://github.com/honojs/hono/commit/234b083777d34fb1efadbe8f504148e2e533428f>
+Receipt E-47 for F-16 (commit): 6f69bf04b744d88efa608dd4458dd650ad57cdf0 2024-09-08: feat(websocket): Add generics type to `WSContext` (#3337) <https://github.com/honojs/hono/commit/6f69bf04b744d88efa608dd4458dd650ad57cdf0>
+Receipt E-48 for F-16 (commit): a3d9cc7d9593b717986f81014892303d0f5b8846 2024-05-28: refactor(websocket): remove unused condition (#2839) <https://github.com/honojs/hono/commit/a3d9cc7d9593b717986f81014892303d0f5b8846>
+Finding F-17 pair-afed86d5 (secondary, needs review): src/hono.ts usually changes with src/middleware/powered-by/index.ts
+Finding F-17 summary: Ghost wire: no import link detected in the current code. 4 of 7 commits that changed src/middleware/powered-by/index.ts also changed src/hono.ts (57%, 95% interval 25-84%); the other way 4 of 150 (3%). Last together 2022-04-20.
+Finding F-17 subject 1 (file): src/middleware/powered-by/index.ts
+Finding F-17 subject 2 (file): src/hono.ts
+Finding F-17 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-17 strength: 57% (range 25-84%), co-change confidence (95% interval)
+Receipt E-49 for F-17 (commit): 798425a17d5e06b6b7c0b0082c7ee3b5a4137271 2022-04-20: refactor: define `Next` type (#160) <https://github.com/honojs/hono/commit/798425a17d5e06b6b7c0b0082c7ee3b5a4137271>
+Receipt E-50 for F-17 (commit): f9fa20062b6d00724674b53bcaf1526014f1ce34 2022-01-09: Refactor (#35) <https://github.com/honojs/hono/commit/f9fa20062b6d00724674b53bcaf1526014f1ce34>
+Receipt E-51 for F-17 (commit): 7c87ac68cd7dc39963c25cac80843811de732615 2022-01-06: Setup lint to enable code styles check (#27) <https://github.com/honojs/hono/commit/7c87ac68cd7dc39963c25cac80843811de732615>
+Finding F-18 pair-3d125061 (secondary, needs review): src/router/linear-router/router.ts usually changes with src/router/smart-router/router.ts
+Finding F-18 summary: Ghost wire: possible parallel implementations: router.ts appears in sibling folders. 3 of 5 commits that changed src/router/smart-router/router.ts also changed src/router/linear-router/router.ts (60%, 95% interval 23-88%); the other way 3 of 12 (25%). Last together 2024-11-12.
+Finding F-18 subject 1 (file): src/router/smart-router/router.ts
+Finding F-18 subject 2 (file): src/router/linear-router/router.ts
+Finding F-18 relation (history-only): subject 1 changes together with subject 2, with no code link between them
+Finding F-18 strength: 60% (range 23-88%), co-change confidence (95% interval)
+Receipt E-52 for F-18 (commit): 7b308358f4024283bc95265a60ac518db8870106 2024-11-12: refactor(router): use `#` for private props to reduce the minified file size (#3660) <https://github.com/honojs/hono/commit/7b308358f4024283bc95265a60ac518db8870106>
+Receipt E-53 for F-18 (commit): 10a5e65e85ebfffecff8648e2f1eaae00abe748d 2024-10-26: perf(router):  improve performance of router (#3526) <https://github.com/honojs/hono/commit/10a5e65e85ebfffecff8648e2f1eaae00abe748d>
+Receipt E-54 for F-18 (commit): 390d05b00674567e2d02bac3bdc433292565c9a3 2023-05-17: feat(app): `app.routerName()` (#1105) <https://github.com/honojs/hono/commit/390d05b00674567e2d02bac3bdc433292565c9a3>
+Metric commits-analyzed "Commits analyzed": 2780
+Metric history "History": 2021-12-14 to 2026-11-07
+Metric sweeps-skipped "Sweeping commits skipped": 34
+Metric reverts-skipped "Revert commits skipped": 11
+Metric relationships "Above the thresholds": 344
+Metric kind-ghost "Ghost wire": 21
+Metric kind-unknown "Unchecked": 56
+Metric kind-indirect "Indirect import": 9
+Metric kind-direct "Import link": 54
+Metric kind-test "Test link": 204
+Metric kinds-shown "Showing": ghost wire, unchecked
+Metric families "Finding families": 3
+Metric relationships-shown "Relationships shown": 15
+Warning: Historical signal, not proof: check whether the change really needs these files.
+End of results: 18 findings, 1 warning, run completed.

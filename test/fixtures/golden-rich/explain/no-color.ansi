@@ -1,0 +1,52 @@
+[2mRepo Archaeology · [22m[1mexplain src/helper/ssg/ssg.test.tsx and[22m
+[1m                   src/helper/ssg/index.ts[22m
+[2m────────────────────────────────────────────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                         [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m1 (1 top)[22m
+
+[1;7m F-01 [22;27m  [1msrc/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx[22m
+[1m┃[22m [1mneeds review · top finding · pair-e9d61976[22m
+[1m┃[22m Test link: a test and the code it covers. 20 of 40 commits that changed
+[1m┃[22m src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (50%, 95%
+[1m┃[22m interval 35-65%). The other way, 20 of 27 commits that changed
+[1m┃[22m src/helper/ssg/index.ts also changed src/helper/ssg/ssg.test.tsx (74%, 95%
+[1m┃[22m interval 55-87%). Last together 2026-02-19. Counterexamples:
+[1m┃[22m src/helper/ssg/ssg.test.tsx changed without src/helper/ssg/index.ts in 20
+[1m┃[22m commits, and src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx in 7
+[1m┃[22m commits.
+[1m┃[22m src/helper/ssg/ssg.test.tsx
+[1m┃[22m src/helper/ssg/index.ts
+[1m┃[22m [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m50%[22m [2m(range 35–65%)[22m
+[1m┃[22m [2mco-change confidence (95% interval)[22m
+[1m┃[22m [2mE-01[22m  00b405a  [2m2026-02-19[22m  feat(ssg): add redirect plugin (#4599) (3w36zj6)
+[1m┃[22m [2mE-02[22m  58175a1  [2m2024-04-09[22m  fix(ssg): use response header to mark as disabled …
+[1m┃[22m [2mE-03[22m  8ef9b7b  [2m2024-03-07[22m  refactor(SSG): separate middleware logic (#2315) (…
+[1m┃[22m [2m+6 more receipts[22m
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed           [22m  [1m2780[22m
+  [2mHistory                    [22m  [1m2021-12-14 to 2026-11-07[22m
+  [2mSweeping commits skipped   [22m  [1m34[22m
+  [2mRevert commits skipped     [22m  [1m11[22m
+  [2mShared commits             [22m  [1m20[22m
+  [2mCommits changing subject 1 [22m  [1m40[22m
+  [2mCommits changing subject 2 [22m  [1m27[22m
+  [2mSubject 1 without subject 2[22m  [1m20[22m
+  [2mSubject 2 without subject 1[22m  [1m7[22m
+  [2mShared commits shown       [22m  [1m3[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Bounds applied: showing up to 3 shared commits.[22m
+  [1m▲ warning: Historical patches show what changed in the same commit, not proof[22m
+  [1m  of why the files changed together or that future changes require both files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain src/helper/ssg/ssg.test.tsx \[22m
+  [1msrc/helper/ssg/index.ts --style classic[22m
+    [2mShow the patch hunks for these commits.[22m
