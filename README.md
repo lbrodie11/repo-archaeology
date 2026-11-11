@@ -496,7 +496,7 @@ The full gallery (`scan` and `diff` at 40, 80 and 120 columns, light and dark) i
 
 ### Dependencies
 
-Runtime dependencies: `commander`, `typescript` (import parsing) and `@frame12/terminal` (`--style rich` rendering; exact-pinned, it brings `@frame12/tokens`). `@frame12/terminal`'s optional `ink` and `react` peers are for its live view, which Repo Archaeology does not use, so they are not installed and never loaded. Measured with `scripts/install-size.mjs` from `npm pack` of 0.11.0 and this version: the packed tarball is 1.9 KB smaller (the previous renderer was removed), and an installed `node_modules` grows by 362.7 KB (+484 KB on disk, +62 files, two packages: `@frame12/terminal@0.1.0`, `@frame12/tokens@0.2.0`).
+Runtime dependencies: `commander`, `typescript` (import parsing) and `@frame12/terminal` (`--style rich` rendering; exact-pinned, it brings `@frame12/tokens`). `@frame12/terminal`'s optional `ink` and `react` peers are for its live view, which Repo Archaeology does not use, so they are not installed and never loaded. Measured with `scripts/install-size.mjs` from `npm pack` of 0.12.0 and this version: the packed tarball grows by 0.2 KB (the removed renderer roughly offsets these docs), and an installed `node_modules` grows by 368.4 KB (+488 KB on disk, +62 files, two packages: `@frame12/terminal@0.1.0`, `@frame12/tokens@0.2.0`).
 
 ## History cache
 

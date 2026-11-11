@@ -15,7 +15,7 @@ Minor release.
   - On a pipe or file, rich output has no escape sequences unless `FORCE_COLOR` asks (the package's linear rules).
   - The track-record line is Repo Archaeology's shared sentence, as in classic and Markdown.
   - Diff CODEOWNERS handles are printed without `@` (the package strips the zero-width break classic uses to keep copied handles from pinging).
-- **Dependency policy:** runtime dependencies are now `commander`, `typescript` and `@frame12/terminal` (exact-pinned at 0.1.0; it brings `@frame12/tokens@0.2.0`). Its optional `ink` and `react` peers are not installed or loaded. Install size, measured by `scripts/install-size.mjs` from `npm pack` of 0.11.0 and this version: tarball 1.9 KB smaller, installed `node_modules` +362.7 KB (+484 KB on disk, +62 files).
+- **Dependency policy:** runtime dependencies are now `commander`, `typescript` and `@frame12/terminal` (exact-pinned at 0.1.0; it brings `@frame12/tokens@0.2.0`). Its optional `ink` and `react` peers are not installed or loaded. Install size, measured by `scripts/install-size.mjs` from `npm pack` of 0.12.0 and this version: tarball +0.2 KB, installed `node_modules` +368.4 KB (+488 KB on disk, +62 files).
 
 ### Added
 - `--screen-reader` (or `FRAME12_SCREEN_READER=1`): `--style rich` as plain, append-only lines, one fact per line, every receipt and full path.
