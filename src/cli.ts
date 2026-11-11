@@ -5,7 +5,7 @@ import { backtest, printBacktest } from './commands/backtest.js';
 import { diff, printDiff, validateTrackWindow } from './commands/diff.js';
 import { explain, printExplain } from './commands/explain.js';
 import { fileReport, printFile } from './commands/file.js';
-import { importGraph, printImports } from './commands/imports.js';
+import { importGraph, importGraphAt, printImports } from './commands/imports.js';
 import { openInBrowser, printMap, writeMap } from './commands/map.js';
 import { printScan, scan } from './commands/scan.js';
 import {
@@ -521,13 +521,14 @@ program
   .command('imports')
   .description('inspect internal module imports and reverse importers across the repository')
   .option('-f, --files <path...>', 'restrict from to these files plus every file that imports them')
-  .action(async (opts: { files?: string[] }, cmd: Command) => {
+  .option('--at <ref>', "graph of another commit's tree, reusing this tree's parses for unchanged files")
+  .action(async (opts: { files?: string[]; at?: string }, cmd: Command) => {
     const global = cmd.optsWithGlobals<GlobalOptions>();
     const ctx = await loadContext(global.cwd, settingsFrom(global), { head: global.head, ...configOptionsFrom(global) });
     if (global.json) {
-      printVersionedJson(await createRepository(ctx).importGraph({ files: opts.files }));
+      printVersionedJson(await createRepository(ctx).importGraph({ files: opts.files, ...(opts.at !== undefined ? { at: opts.at } : {}) }));
     } else {
-      const result = importGraph(ctx, { files: opts.files });
+      const result = opts.at !== undefined ? await importGraphAt(ctx, opts.at, { files: opts.files }) : importGraph(ctx, { files: opts.files });
       printImports(result);
     }
   });

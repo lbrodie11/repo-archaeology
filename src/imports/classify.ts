@@ -421,6 +421,8 @@ export class RelationshipClassifier {
     }
     for (const edge of analysis.edges) {
       for (const target of edge.targets) {
+        // Graph-only targets (RA-20) stay uncertain: the pair is `unknown`, never `direct`.
+        if (target.graphOnly) continue;
         result.internalEdges++;
         if (edge.reference) {
           result.references.add(target.path);

@@ -48,6 +48,24 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "at": {
+      "description": "Present when the graph is of another commit's tree than the session's (`importGraph({ at })`, `imports --at <ref>`; RA-20): the ref as given and its commit SHA. `files`, `edges` and `unresolved` describe that tree.",
+      "type": "object",
+      "required": [
+        "ref",
+        "sha"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        }
+      }
     }
   },
   "$defs": {
@@ -89,6 +107,14 @@
         },
         "heuristic": {
           "type": "boolean"
+        },
+        "role": {
+          "$ref": "common.schema.json#/$defs/ImportTargetRole"
+        },
+        "name": {
+          "description": "With `role: \"name\"`: the imported name (`mod` in `from pkg import mod`).",
+          "type": "string",
+          "minLength": 1
         }
       }
     },

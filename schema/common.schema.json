@@ -415,6 +415,15 @@
         }
       }
     },
+    "ImportTargetRole": {
+      "description": "What an import edge's `to` is to the import (RA-20; Python and Go edges). `module`: the module the specifier names (Python: `a/b/c.py` for `import a.b.c`, `a/b/__init__.py` for `import a.b` and for `from a.b import x`; Go: every file of the imported package). `init`: a Python package `__init__.py` that runs on the way (`a/__init__.py` for `import a.b.c`). `name`: a Python submodule taken by `from pkg import mod`, with the name in the edge's `name`. Absent on TS/JS edges (their `to` is always the module the specifier names) and in output before 0.12.0. The set may grow (see docs/api.md §1).",
+      "type": "string",
+      "enum": [
+        "module",
+        "init",
+        "name"
+      ]
+    },
     "ImportResolutionVia": {
       "type": "string",
       "enum": [

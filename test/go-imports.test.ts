@@ -151,10 +151,10 @@ describe('Go import resolution', () => {
         targets: [
           // Build-tagged and _os-suffixed files are included (a conservative union);
           // _test.go and a different package clause (the ignore-tagged generator) are not.
-          { path: 'db/conn.go', via: 'go-package' },
-          { path: 'db/db.go', via: 'go-package' },
-          { path: 'db/db_windows.go', via: 'go-package' },
-          { path: 'db/linux.go', via: 'go-package' },
+          { path: 'db/conn.go', via: 'go-package', role: 'module' },
+          { path: 'db/db.go', via: 'go-package', role: 'module' },
+          { path: 'db/db_windows.go', via: 'go-package', role: 'module' },
+          { path: 'db/linux.go', via: 'go-package', role: 'module' },
         ],
       },
     ]);
@@ -421,7 +421,7 @@ describe('Go relationships', () => {
       try {
         const graph = importGraph(ctx);
         assert.deepEqual(graph.languages, ['go']);
-        assert.deepEqual(graph.edges, [{ from: 'store/store.go', to: 'model/model.go', specifier: 'example.com/app/model', kind: 'static', via: 'go-package' }]);
+        assert.deepEqual(graph.edges, [{ from: 'store/store.go', to: 'model/model.go', specifier: 'example.com/app/model', kind: 'static', via: 'go-package', role: 'module' }]);
         assert.equal(graph.meta.imports?.filesScanned, 6);
         assert.equal(graph.meta.imports?.external, 3);
         assert.equal(graph.meta.imports?.internalEdges, 1);

@@ -713,7 +713,7 @@ function resolveGoImport(from: string, importPath: string, index: GoIndex): Spec
       const reason = `Go directory ${dir || '.'} holds files of several packages (${pkg.names.join(', ')})`;
       return { kind: 'files', targets: [], uncertain: pkg.members.map((path) => ({ path, reason })) };
     }
-    const targets: AnalysisTarget[] = pkg.members.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package' }));
+    const targets: AnalysisTarget[] = pkg.members.slice(0, MAX_GO_PACKAGE_FAN_OUT).map((path) => ({ path, via: 'go-package', role: 'module' }));
     if (pkg.members.length > MAX_GO_PACKAGE_FAN_OUT) {
       const reason = `Go package ${importPath} has more than ${MAX_GO_PACKAGE_FAN_OUT} files; edges list the first ${MAX_GO_PACKAGE_FAN_OUT}`;
       return {
@@ -752,20 +752,28 @@ export const goAnalyzer: LanguageAnalyzer<GoIndex> = {
   budgeted: true,
   index: buildGoIndex,
   indexWarnings: (index) => index.warnings,
-  extract(text, path, index): Extraction {
+  extract(text): Extraction {
     const parsed = extractGoImports(text);
-    index.headers.set(path, { name: parsed.packageName ?? null, ignored: goBuildIgnored(text) });
+    const header: GoFileHeader = { name: parsed.packageName ?? null, ignored: goBuildIgnored(text) };
     const imports: ExtractedSpecifier[] = parsed.imports.map(({ path: specifier }) => ({ specifier, kind: 'static' }));
+    return {
+      imports,
+      dynamicLoads: 0,
+      ...(parsed.error !== undefined ? { incompleteReason: `Go import declarations could not be parsed: ${parsed.error}` } : {}),
+      data: header,
+    };
+  },
+  complete(path, extraction, index): Extraction {
+    // The package clause is text-only; the enclosing module comes from this tree's go.mod files.
+    index.headers.set(path, extraction.data as GoFileHeader);
+    if (extraction.incompleteReason !== undefined) return extraction;
     const module = nearestGoModule(index, dirOf(path));
-    const incompleteReason =
-      parsed.error !== undefined
-        ? `Go import declarations could not be parsed: ${parsed.error}`
-        : !module
-          ? 'Go file outside any go.mod module'
-          : module.broken
-            ? `Go module manifest unusable: ${module.broken}`
-            : undefined;
-    return { imports, dynamicLoads: 0, ...(incompleteReason ? { incompleteReason } : {}) };
+    const incompleteReason = !module
+      ? 'Go file outside any go.mod module'
+      : module.broken
+        ? `Go module manifest unusable: ${module.broken}`
+        : undefined;
+    return incompleteReason ? { ...extraction, incompleteReason } : extraction;
   },
   resolve(from, item, index, _session: AnalysisSession) {
     return resolveGoImport(from, item.specifier, index);

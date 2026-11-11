@@ -416,7 +416,15 @@ export function processCommits(raw: Iterable<RawCommit>, options: BuilderOptions
   return builder.finish();
 }
 
+let historyLoadObserver: ((root: string, rev: string | undefined) => void) | undefined;
+
+/** Test hook: called at the start of every `loadHistory` (`undefined` removes it). */
+export function setHistoryLoadObserverForTesting(observer: ((root: string, rev: string | undefined) => void) | undefined): void {
+  historyLoadObserver = observer;
+}
+
 export async function loadHistory(root: string, options: HistoryOptions): Promise<History> {
+  historyLoadObserver?.(root, options.rev);
   const resolvedOptions: HistoryOptions =
     options.mailmap !== undefined
       ? options
