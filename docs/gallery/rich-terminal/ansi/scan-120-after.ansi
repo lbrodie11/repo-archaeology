@@ -1,0 +1,87 @@
+[2mRepo Archaeology · [22m[1mscan[22m
+[2m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[22m
+
+[2mRUN · [22m[1m1 CUT[22m                         [1m✓ completed[22m
+
+
+[1mFINDINGS[22m  [2m7 (1 top, 2 primary, 4 secondary)[22m
+
+[1;48;2;255;214;10;38;2;18;18;18m F-01 [22;39;49m  [1mserve-static.ts across src/adapter/*: 3 related implementations[22m
+[1m┃[22m [1mneeds review · top finding · family-3b6fa7b6[22m
+[1m┃[22m 3 related implementations (bun, cloudflare-workers, deno): 3 parallel implementations of serve-static.ts in sibling
+[1m┃[22m folders (bun, cloudflare-workers, deno); all 3 pairwise links meet thresholds (16 supporting commits (2+ members via a
+[1m┃[22m qualifying pair), 9 touched all 3). Relationships: ghost wire. 16 supporting commits touched two or more members via a
+[1m┃[22m qualifying pair; 9 commits touched all 3; all 3 pairwise links met thresholds; last together 2026-05-16.
+[1m┃[22m src/adapter/bun/serve-static.ts
+[1m┃[22m src/adapter/cloudflare-workers/serve-static.ts
+[1m┃[22m src/adapter/deno/serve-static.ts
+[1m┃[22m [2mE-01[22m  26f8c33  [2m2026-05-16[22m  fix(serveStatic): make options parameter optional in all adapters (#4934) [all 3 members]
+[1m┃[22m [2mE-02[22m  1196f14  [2m2025-08-07[22m  feat(serve-static): use `join` to correct path resolution (#4291) [2 of 3 members]
+[1m┃[22m [2mE-03[22m  246a06a  [2m2024-09-24[22m  feat(serve-static): support absolute root (#3420) [2 of 3 members]
+
+[1mF-02[22m  [1mrouter.ts across src/router/*: 5 related implementations[22m
+  [1mneeds review · primary · family-8e9f6663[22m
+  5 related implementations (linear-router, pattern-router, reg-exp-router, smart-router, trie-router): 5 parallel
+  implementations of router.ts in sibling folders (linear-router, pattern-router, reg-exp-router, smart-router,
+  trie-router); 4 of 10 pairwise links meet thresholds (8 supporting commits (2+ members via a qualifying pair), 1
+  touched all 5). Relationships: ghost wire. 8 supporting commits touched two or more members via a qualifying pair; 1
+  commit touched all 5; 4 of 10 pairwise links met thresholds; last together 2026-08-17.
+  src/router/linear-router/router.ts
+  src/router/pattern-router/router.ts
+  src/router/reg-exp-router/router.ts
+  src/router/smart-router/router.ts
+  src/router/trie-router/router.ts
+  [2mE-04[22m  a194628  [2m2026-08-17[22m  fix(pattern-router/linear-router): prevent prefix overmatch on wildcard routes (#5252) [2 …
+  [2mE-05[22m  7b30835  [2m2024-11-12[22m  refactor(router): use `#` for private props to reduce the minified file size (#3660) [4 of…
+  [2mE-06[22m  10a5e65  [2m2024-10-26[22m  perf(router):  improve performance of router (#3526) [4 of 5 members]
+
+[1mF-03[22m  [1mwebsocket.ts across src/adapter/*: 3 related implementations[22m
+  [1mneeds review · primary · family-0c422a05[22m
+  3 related implementations (bun, cloudflare-workers, deno): 3 parallel implementations of websocket.ts in sibling
+  folders (bun, cloudflare-workers, deno); 2 of 3 pairwise links meet thresholds (4 supporting commits (2+ members via a
+  qualifying pair), 3 touched all 3). Relationships: ghost wire. 4 supporting commits touched two or more members via a
+  qualifying pair; 3 commits touched all 3; 2 of 3 pairwise links met thresholds; last together 2024-10-25.
+  src/adapter/bun/websocket.ts
+  src/adapter/cloudflare-workers/websocket.ts
+  src/adapter/deno/websocket.ts
+  [2mE-07[22m  234b083  [2m2024-10-25[22m  feat(ws): Make WebSocket adapter more changeable (#3531) [all 3 members]
+  [2mE-08[22m  6f69bf0  [2m2024-09-08[22m  feat(websocket): Add generics type to `WSContext` (#3337) [all 3 members]
+  [2mE-09[22m  a3d9cc7  [2m2024-05-28[22m  refactor(websocket): remove unused condition (#2839) [2 of 3 members]
+
+[1mF-04[22m  src/preset/quick.ts usually changes with src/preset/tiny.ts
+  [2m100% (68–100%) · 3 receipts · needs review · pair-ee9740dc[22m
+  [2msrc/preset/tiny.ts ⇢ src/preset/quick.ts[22m
+[1mF-05[22m  src/helper/streaming/sse.ts usually changes with src/helper/streaming/stream.ts
+  [2m88% (53–98%) · 3 receipts · needs review · pair-98ccd910[22m
+  [2msrc/helper/streaming/stream.ts ⇢ src/helper/streaming/sse.ts[22m
+[1mF-06[22m  src/adapter/bun/ssg.ts usually changes with src/adapter/deno/ssg.ts
+  [2m100% (44–100%) · 3 receipts · needs review · pair-ae289a3c[22m
+  [2msrc/adapter/deno/ssg.ts ⇢ src/adapter/bun/ssg.ts[22m
+[1mF-07[22m  src/hono.ts usually changes with src/preset/tiny.ts
+  [2m75% (41–93%) · 3 receipts · needs review · pair-123d953b[22m
+  [2msrc/preset/tiny.ts ⇢ src/hono.ts[22m
+
+
+[1mMETRICS[22m
+  [2mCommits analyzed        [22m  [1m2780                    [22m    [2mHistory                 [22m  [1m2021-12-14 to 2026-11-07[22m
+  [2mSweeping commits skipped[22m  [1m34                      [22m    [2mRevert commits skipped  [22m  [1m11[22m
+  [2mAbove the thresholds    [22m  [1m344                     [22m    [2mGhost wire              [22m  [1m21[22m
+  [2mUnchecked               [22m  [1m56                      [22m    [2mIndirect import         [22m  [1m9[22m
+  [2mImport link             [22m  [1m54                      [22m    [2mTest link               [22m  [1m204[22m
+  [2mShowing                 [22m  [1mghost wire, unchecked   [22m    [2mFinding families        [22m  [1m3[22m
+  [2mRelationships shown     [22m  [1m4[22m
+
+
+[1mWARNINGS[22m
+  [1m▲ warning: Historical signal, not proof: check whether the change really needs these files.[22m
+
+
+[1mNEXT STEPS[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/preset/tiny.ts src/preset/quick.ts[22m
+    [2mShow the shared commits behind F-04.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/helper/streaming/stream.ts \[22m
+  [1msrc/helper/streaming/sse.ts[22m
+    [2mShow the shared commits behind F-05.[22m
+  [1mnpx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/adapter/deno/ssg.ts \[22m
+  [1msrc/adapter/bun/ssg.ts[22m
+    [2mShow the shared commits behind F-06.[22m

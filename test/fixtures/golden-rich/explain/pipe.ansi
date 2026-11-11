@@ -1,0 +1,52 @@
+Repo Archaeology · explain src/helper/ssg/ssg.test.tsx and
+                   src/helper/ssg/index.ts
+────────────────────────────────────────────────────────────────────────────────
+
+RUN · 1 CUT                         ✓ completed
+
+
+FINDINGS  1 (1 top)
+
+F-01  src/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx
+┃ needs review · top finding · pair-e9d61976
+┃ Test link: a test and the code it covers. 20 of 40 commits that changed
+┃ src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (50%, 95%
+┃ interval 35-65%). The other way, 20 of 27 commits that changed
+┃ src/helper/ssg/index.ts also changed src/helper/ssg/ssg.test.tsx (74%, 95%
+┃ interval 55-87%). Last together 2026-02-19. Counterexamples:
+┃ src/helper/ssg/ssg.test.tsx changed without src/helper/ssg/index.ts in 20
+┃ commits, and src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx in 7
+┃ commits.
+┃ src/helper/ssg/ssg.test.tsx
+┃ src/helper/ssg/index.ts
+┃ ▰▰▰▰▱▱▱▱ 50% (range 35–65%)
+┃ co-change confidence (95% interval)
+┃ E-01  00b405a  2026-02-19  feat(ssg): add redirect plugin (#4599) (3w36zj6)
+┃ E-02  58175a1  2024-04-09  fix(ssg): use response header to mark as disabled …
+┃ E-03  8ef9b7b  2024-03-07  refactor(SSG): separate middleware logic (#2315) (…
+┃ +6 more receipts
+
+
+METRICS
+  Commits analyzed             2780
+  History                      2021-12-14 to 2026-11-07
+  Sweeping commits skipped     34
+  Revert commits skipped       11
+  Shared commits               20
+  Commits changing subject 1   40
+  Commits changing subject 2   27
+  Subject 1 without subject 2  20
+  Subject 2 without subject 1  7
+  Shared commits shown         3
+
+
+WARNINGS
+  ▲ warning: Bounds applied: showing up to 3 shared commits.
+  ▲ warning: Historical patches show what changed in the same commit, not proof
+    of why the files changed together or that future changes require both files.
+
+
+NEXT STEPS
+  npx repo-archaeology --style classic explain src/helper/ssg/ssg.test.tsx \
+  src/helper/ssg/index.ts
+    Show the patch hunks for these commits.

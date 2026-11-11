@@ -1,0 +1,94 @@
+exit: 0
+--- stdout
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<repo>",
+    "commitsRead": 36,
+    "commitsAnalyzed": 36,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 20,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-02-05",
+    "origins": {
+      "human": 36,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "config": {
+      "source": "working-tree"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 36 usable commits: results will be thin until the project has more history."
+    ],
+    "cache": {
+      "enabled": false,
+      "hits": 0,
+      "misses": 36
+    }
+  },
+  "evaluation": {
+    "headSha": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+    "baselineSha": "8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e",
+    "commitsAnalyzed": 36,
+    "effectiveOptions": {
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25
+    }
+  },
+  "changed": [],
+  "totalSuggestions": 0,
+  "suggestions": [],
+  "families": [],
+  "silence": {
+    "primaryReason": "no_changed_files",
+    "reasons": [
+      "no_changed_files",
+      "limited_repo_history"
+    ],
+    "changedFiles": 0,
+    "changedWithHistory": 0,
+    "changedInsufficientHistory": 0,
+    "rawCompanions": 0,
+    "qualifyingCompanions": 0,
+    "touchedCompanions": 0,
+    "filteredByThreshold": 0,
+    "filteredByKind": 0,
+    "deletedCompanions": 0,
+    "shallowHistory": false,
+    "limitedHistory": true,
+    "commitsAnalyzed": 36,
+    "verdicts": {
+      "silenced": 0
+    },
+    "details": [
+      "No uncommitted changes in the working tree. Use --base <ref> to compare a branch.",
+      "Analysis is based on a thin baseline history (36 usable baseline commits, fewer than 50)."
+    ]
+  }
+}
+--- stderr

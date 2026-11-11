@@ -1,0 +1,210 @@
+exit: 0
+--- stdout
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "<repo>",
+    "commitsRead": 23,
+    "commitsAnalyzed": 23,
+    "sweepsSkipped": 0,
+    "subjectSkipped": 0,
+    "revertsSkipped": 0,
+    "renamesFollowed": 0,
+    "files": 13,
+    "oldestCommit": "2024-01-01",
+    "newestCommit": "2024-01-23",
+    "origins": {
+      "human": 23,
+      "agent": 0,
+      "bot": 0
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 2,
+      "internalEdges": 0,
+      "external": 0,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "config": {
+      "source": "working-tree"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": [
+      "Only 23 usable commits: results will be thin until the project has more history."
+    ],
+    "cache": {
+      "enabled": false,
+      "hits": 0,
+      "misses": 23
+    }
+  },
+  "base": "HEAD~3",
+  "evaluation": {
+    "targetBranchRef": "HEAD~3",
+    "headSha": "074708010586f30cdad705cbe0ac95ea77f199d1",
+    "mergeBaseSha": "0d723a1d6bc701d1c0e8adfbf340bd98de1061c0",
+    "baselineSha": "0d723a1d6bc701d1c0e8adfbf340bd98de1061c0",
+    "commitsAnalyzed": 23,
+    "effectiveOptions": {
+      "minShared": 2,
+      "minConfidence": 0.3,
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25
+    }
+  },
+  "changed": [
+    {
+      "path": "docs/guide.md",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "docs/guide.md",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/cli/src/main.mjs",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/cli/src/main.mjs",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/core/package.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/core/package.json",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/core/src/index.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/core/src/internal.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/core/src/internal.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/core/src/model.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/core/src/model.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "packages/web/src/page.jsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "packages/web/src/page.jsx",
+      "hasHistory": true
+    }
+  ],
+  "totalSuggestions": 1,
+  "suggestions": [
+    {
+      "from": "packages/core/src/model.ts",
+      "to": "packages/web/src/listener.js",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 10,
+      "toChanges": 6,
+      "confidence": 0.6,
+      "reverseConfidence": 1,
+      "interval": {
+        "low": 0.3126,
+        "high": 0.8319
+      },
+      "reverseInterval": {
+        "low": 0.6096,
+        "high": 1
+      },
+      "score": 0.313,
+      "weighted": false,
+      "lastTogether": "2024-01-22",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "01e3a96c74e9f5491fafd5a5f9eb7af14cb234ed",
+          "date": "2024-01-22",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (4)",
+          "origin": "human"
+        },
+        {
+          "hash": "6b7db043e2dc56a1bbfde0f0b667b1f285869c5f",
+          "date": "2024-01-17",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (3)",
+          "origin": "human"
+        },
+        {
+          "hash": "b589b87a6ff0321083bbf6acbd8139cc3fb41342",
+          "date": "2024-01-12",
+          "author": "Test",
+          "subject": "update packages/core/src/model.ts + packages/web/src/listener.js (2)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "reason": "limited_history"
+      }
+    }
+  ],
+  "families": []
+}
+--- stderr

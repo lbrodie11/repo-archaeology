@@ -1,0 +1,14 @@
+exit: 0
+--- stdout
+Repo Archaeology · diff (HEAD~4...HEAD + uncommitted changes)
+32 commits analyzed from 2024-01-01 to 2024-02-01
+! Only 32 usable commits: results will be thin until the project has more history.
+
+You changed 10 files.
+
+No suggestions after evaluating 10 files:
+  • 10 untouched co-change partners (src/db.ts, src/ui/panel.tsx, src/api.test.ts, +7 more) fell below thresholds (requires ≥2 shared and ≥30% confidence; strongest was 1 shared at 20% confidence).
+  • 10 qualifying historical companions (src/lib/util.ts, src/ui/button.tsx, src/types.ts, +7 more) are already included in this changeset.
+  • Analysis is based on a thin baseline history (32 usable baseline commits, fewer than 50).
+Silence means no untouched file met the active historical criteria; it does not guarantee the change is complete.
+--- stderr

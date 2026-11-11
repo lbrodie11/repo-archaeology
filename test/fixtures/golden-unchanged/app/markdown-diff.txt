@@ -1,0 +1,20 @@
+exit: 0
+--- stdout
+## Repo Archaeology
+
+_Historical co-change clues from Git history. Suggestions highlight untouched files that repeatedly changed alongside your modified files in past commits—they are prompts for review, not proof of a bug._
+
+Evaluated **10 changed files** against base `HEAD~4` (merge-base `1293d66` → `8354b8c`) · **32 commits analyzed** (2024-01-01 to 2024-02-01) (thresholds: ≥2 shared, ≥30% confidence).
+
+> **Warning:** Only 32 usable commits: results will be thin until the project has more history.
+
+### No companion suggestions
+
+No suggestions after evaluating 10 files:
+
+- 10 untouched co-change partners \(src/db.ts, src/ui/panel.tsx, src/api.test.ts, +7 more\) fell below thresholds \(requires ≥2 shared and ≥30% confidence; strongest was 1 shared at 20% confidence\).
+- 10 qualifying historical companions \(src/lib/util.ts, src/ui/button.tsx, src/types.ts, +7 more\) are already included in this changeset.
+- Analysis is based on a thin baseline history \(32 usable baseline commits, fewer than 50\).
+
+_Zero suggestions means no untouched file met the configured historical co-change thresholds—not that this change is guaranteed free of omissions._
+--- stderr

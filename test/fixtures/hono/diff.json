@@ -1,0 +1,457 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "hono",
+    "head": {
+      "ref": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+      "sha": "61f7c59e50244ab4d2dd83c151928cf7ea448510"
+    },
+    "commitsRead": 2829,
+    "commitsAnalyzed": 2774,
+    "sweepsSkipped": 34,
+    "subjectSkipped": 0,
+    "revertsSkipped": 11,
+    "renamesFollowed": 286,
+    "files": 885,
+    "oldestCommit": "2021-12-14",
+    "newestCommit": "2026-11-04",
+    "origins": {
+      "human": 2759,
+      "agent": 13,
+      "bot": 2
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 3,
+      "internalEdges": 10,
+      "external": 0,
+      "unresolved": 0,
+      "dynamicLoads": 0,
+      "unsupportedFiles": 0,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "config": {
+      "source": "none"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "base": "61f7c59~6",
+  "evaluation": {
+    "targetBranchRef": "61f7c59~6",
+    "headSha": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+    "mergeBaseSha": "bcfd02bb50fb015587aac7fe1745b5b2b61361ec",
+    "baselineSha": "bcfd02bb50fb015587aac7fe1745b5b2b61361ec",
+    "commitsAnalyzed": 2774,
+    "effectiveOptions": {
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25
+    }
+  },
+  "changed": [
+    {
+      "path": "adapters/aws-lambda/src/handler.test.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "hasHistory": false
+    },
+    {
+      "path": "adapters/aws-lambda/src/handler.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "hasHistory": false
+    },
+    {
+      "path": "package.json",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "package.json",
+      "hasHistory": true
+    },
+    {
+      "path": "runtime-tests/deno-jsx/jsx.test.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "runtime-tests/deno-jsx/jsx.test.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "src/adapter/aws-lambda/handler.test.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/adapter/aws-lambda/handler.test.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/adapter/aws-lambda/handler.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/adapter/aws-lambda/handler.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/helper/factory/index.test.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/helper/factory/index.test.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/helper/factory/index.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/helper/factory/index.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/helper/ssg/ssg.test.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/helper/ssg/ssg.test.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "src/helper/ssg/ssg.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/helper/ssg/ssg.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/base.test.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/base.test.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/base.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/base.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/constants.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/constants.ts",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/index.test.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/index.test.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/jsx-runtime.test.tsx",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/jsx-runtime.test.tsx",
+      "hasHistory": true
+    },
+    {
+      "path": "src/jsx/jsx-runtime.ts",
+      "deleted": false,
+      "added": false,
+      "sources": [
+        "branch"
+      ],
+      "historyPath": "src/jsx/jsx-runtime.ts",
+      "hasHistory": true
+    }
+  ],
+  "totalSuggestions": 3,
+  "suggestions": [
+    {
+      "from": "src/helper/ssg/ssg.test.tsx",
+      "to": "src/helper/ssg/index.ts",
+      "relationship": "test",
+      "why": "a test and the code it covers",
+      "shared": 20,
+      "fromChanges": 39,
+      "toChanges": 27,
+      "confidence": 0.513,
+      "reverseConfidence": 0.741,
+      "interval": {
+        "low": 0.3619,
+        "high": 0.6614
+      },
+      "reverseInterval": {
+        "low": 0.5532,
+        "high": 0.8683
+      },
+      "score": 0.362,
+      "weighted": false,
+      "lastTogether": "2026-02-19",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "00b405a8f840f0f2ce4145e0fe5558cf2beeee78",
+          "date": "2026-02-19",
+          "author": "3w36zj6",
+          "subject": "feat(ssg): add redirect plugin (#4599)",
+          "origin": "human"
+        },
+        {
+          "hash": "58175a1b18e82219a9456709993656eb1cc9eeeb",
+          "date": "2024-04-09",
+          "author": "Taku Amano",
+          "subject": "fix(ssg): use response header to mark as disabled routes for SSG (#2477)",
+          "origin": "human"
+        },
+        {
+          "hash": "8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3",
+          "date": "2024-03-07",
+          "author": "watany",
+          "subject": "refactor(SSG): separate middleware logic (#2315)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 5,
+        "confirmed": 0,
+        "triggers": 6,
+        "coChanged": 1,
+        "precision": 0,
+        "interval": {
+          "low": 0,
+          "high": 0.4345
+        },
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2025-07-29",
+          "to": "2026-11-04",
+          "commits": 555,
+          "trainingCommits": 2219
+        },
+        "excluded": {
+          "censored": 1,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
+    },
+    {
+      "from": "runtime-tests/deno-jsx/jsx.test.tsx",
+      "to": "src/jsx/streaming.test.tsx",
+      "relationship": "test",
+      "why": "two tests that change together",
+      "shared": 4,
+      "fromChanges": 9,
+      "toChanges": 19,
+      "confidence": 0.444,
+      "reverseConfidence": 0.211,
+      "interval": {
+        "low": 0.1887,
+        "high": 0.7334
+      },
+      "reverseInterval": {
+        "low": 0.085,
+        "high": 0.4334
+      },
+      "score": 0.189,
+      "weighted": false,
+      "lastTogether": "2024-02-16",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "473a6f09991c4b400f05c66bfd953f577c2fda58",
+          "date": "2024-02-16",
+          "author": "Taku Amano",
+          "subject": "refactor: jsx streaming (#2216)",
+          "origin": "human"
+        },
+        {
+          "hash": "a183fe403ed12ba37f9f76320700571487e12074",
+          "date": "2024-01-16",
+          "author": "Yusuke Wada",
+          "subject": "chore: enables lint and format for `.tsx` (#1994)",
+          "origin": "human"
+        },
+        {
+          "hash": "cd6c488b76a543583f0244ca43b1422e98236f3c",
+          "date": "2023-11-21",
+          "author": "Taku Amano",
+          "subject": "feat(jsx): Introduce `ErrorBoundary` component (#1714)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 0,
+        "reason": "never_fired",
+        "triggers": 0,
+        "coChanged": 0,
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2025-07-29",
+          "to": "2026-11-04",
+          "commits": 555,
+          "trainingCommits": 2219
+        },
+        "excluded": {
+          "censored": 0,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
+    },
+    {
+      "from": "src/jsx/jsx-runtime.ts",
+      "to": "src/jsx/jsx-dev-runtime.ts",
+      "relationship": "direct",
+      "why": "jsx-runtime.ts imports jsx-dev-runtime.ts",
+      "shared": 3,
+      "fromChanges": 6,
+      "toChanges": 10,
+      "confidence": 0.5,
+      "reverseConfidence": 0.3,
+      "interval": {
+        "low": 0.1876,
+        "high": 0.8124
+      },
+      "reverseInterval": {
+        "low": 0.1077,
+        "high": 0.6033
+      },
+      "score": 0.188,
+      "weighted": false,
+      "lastTogether": "2023-11-08",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "652ef7c86703cddbe572749d971ebe3880f89cf1",
+          "date": "2023-11-08",
+          "author": "Taku Amano",
+          "subject": "feat(jsx): Define jsxTemplate/jsxAttr/jsxEscape for \"@jsx precompile\" of Deno 1.38 (#1651)",
+          "origin": "human"
+        },
+        {
+          "hash": "c3031a418c2b9c56094a5095dbc5d34e7c8ad090",
+          "date": "2022-11-01",
+          "author": "Yusuke Wada",
+          "subject": "fix(jsx): export fragment (#642)",
+          "origin": "human"
+        },
+        {
+          "hash": "5f60a1822741f2e49fd8599c78c10a9f7b0f76f3",
+          "date": "2022-07-24",
+          "author": "Yusuke Wada",
+          "subject": "feat(jsx): support `jsxImportSource` (#420)",
+          "origin": "human"
+        }
+      ],
+      "alsoLinkedFrom": [],
+      "trackRecord": {
+        "fired": 1,
+        "confirmed": 0,
+        "triggers": 1,
+        "coChanged": 0,
+        "precision": 0,
+        "interval": {
+          "low": 0,
+          "high": 0.7935
+        },
+        "windowHours": 48,
+        "evaluated": {
+          "from": "2025-07-29",
+          "to": "2026-11-04",
+          "commits": 555,
+          "trainingCommits": 2219
+        },
+        "excluded": {
+          "censored": 0,
+          "targetDeleted": 0,
+          "clockSkew": 0
+        }
+      }
+    }
+  ],
+  "families": []
+}

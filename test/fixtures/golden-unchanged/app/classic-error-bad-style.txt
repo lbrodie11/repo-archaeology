@@ -1,0 +1,4 @@
+exit: 2
+--- stdout
+--- stderr
+error: Invalid style mode from --style: "neon". Expected one of: classic, rich.

@@ -1,0 +1,3 @@
+exit: 2
+--- stderr
+error: Nothing to show for no/such/file.ts: no such file in the history or the working tree.

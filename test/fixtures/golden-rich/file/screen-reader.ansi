@@ -1,0 +1,107 @@
+Repo Archaeology run "file src/hono-base.ts" (repo-archaeology-file): completed
+Run started 2026-11-11T09:00:00.000Z, finished 2026-11-11T09:00:02.000Z.
+Cut C-01 read-history "Read git history": done
+Findings: 10 (1 top, 2 primary, 7 secondary)
+Finding F-01 pair-55f5201b (top finding, info): src/hono.test.ts usually changes with src/hono-base.ts
+Finding F-01 summary: Test link: a test and the code it covers. 34 of 97 commits that changed src/hono-base.ts also changed src/hono.test.ts (35%, 95% interval 26-45%); the other way 34 of 173 (20%). Last together 2026-11-01. Below diff's alert threshold (40% confidence).
+Finding F-01 subject 1 (file): src/hono-base.ts
+Finding F-01 subject 2 (file): src/hono.test.ts
+Finding F-01 strength: 35% (range 26-45%), co-change confidence (95% interval)
+Receipt E-01 for F-01 (commit): 34f90432a1794b28e52802670efcd01963f716d6 2026-11-01: Merge commit from fork <https://github.com/honojs/hono/commit/34f90432a1794b28e52802670efcd01963f716d6>
+Receipt E-02 for F-01 (commit): e9c01079a932ffdfa269c0011075ac43fd8a1035 2026-10-17: fix(hono-base): disallow `getPath` when `strict` is `false` (#5563) <https://github.com/honojs/hono/commit/e9c01079a932ffdfa269c0011075ac43fd8a1035>
+Receipt E-03 for F-01 (commit): 6f101a7779bf6e79c3af0a09cd888428bbd35ef8 2026-08-03: feat: add first-class QUERY method support (#5070) <https://github.com/honojs/hono/commit/6f101a7779bf6e79c3af0a09cd888428bbd35ef8>
+Finding F-02 pair-630d5390 (primary, info): src/types.ts usually changes with src/hono-base.ts
+Finding F-02 summary: Import link: hono-base.ts imports types.ts. 14 of 97 commits that changed src/hono-base.ts also changed src/types.ts (14%, 95% interval 9-23%); the other way 14 of 127 (11%). Last together 2025-12-13. Below diff's alert threshold (40% confidence).
+Finding F-02 subject 1 (file): src/hono-base.ts
+Finding F-02 subject 2 (file): src/types.ts
+Finding F-02 relation (direct): subject 1 references subject 2 directly
+Finding F-02 strength: 14% (range 9-23%), co-change confidence (95% interval)
+Receipt E-04 for F-02 (commit): 3e12de624a123cfdf158274a1c2b7620268343ef 2025-12-13: fix(types): replace schema-based path tracking with CurrentPath parameter (#4552) <https://github.com/honojs/hono/commit/3e12de624a123cfdf158274a1c2b7620268343ef>
+Receipt E-05 for F-02 (commit): d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6 2025-06-16: feat: introduce Route Helper (#4204) <https://github.com/honojs/hono/commit/d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6>
+Receipt E-06 for F-02 (commit): f1a7267948ccd1015bea40bf0bd0ec2660e5d5f2 2024-10-11: perf(types): replace intersection with union to get better perf (#3443) <https://github.com/honojs/hono/commit/f1a7267948ccd1015bea40bf0bd0ec2660e5d5f2>
+Finding F-03 pair-5747ffd6 (primary, info): src/context.ts usually changes with src/hono-base.ts
+Finding F-03 summary: Import link: hono-base.ts imports context.ts. 13 of 97 commits that changed src/hono-base.ts also changed src/context.ts (13%, 95% interval 8-22%); the other way 13 of 224 (6%). Last together 2024-11-02. Below diff's alert threshold (40% confidence).
+Finding F-03 subject 1 (file): src/hono-base.ts
+Finding F-03 subject 2 (file): src/context.ts
+Finding F-03 relation (direct): subject 1 references subject 2 directly
+Finding F-03 strength: 13% (range 8-22%), co-change confidence (95% interval)
+Receipt E-07 for F-03 (commit): ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42 2024-11-02: refactor: use `#` for private methods to reduce the minified file size (#3596) <https://github.com/honojs/hono/commit/ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42>
+Receipt E-08 for F-03 (commit): 28de9b32a827436fb57518bf740073418d588044 2024-07-05: chore: update outdated links in JSDoc (#3089) <https://github.com/honojs/hono/commit/28de9b32a827436fb57518bf740073418d588044>
+Receipt E-09 for F-03 (commit): ae3a67beb199a52fa1771780f450ede9b7bbef99 2024-06-27: perf(context): improve initializing `Context` (#3046) <https://github.com/honojs/hono/commit/ae3a67beb199a52fa1771780f450ede9b7bbef99>
+Finding F-04 pair-a39d7400 (secondary, info): src/request.ts usually changes with src/hono-base.ts
+Finding F-04 summary: Indirect import: connected through src/context.ts: hono-base.ts imports context.ts, which imports request.ts. 10 of 97 commits that changed src/hono-base.ts also changed src/request.ts (10%, 95% interval 6-18%); the other way 10 of 89 (11%). Last together 2025-06-16. Below diff's alert threshold (40% confidence).
+Finding F-04 subject 1 (file): src/hono-base.ts
+Finding F-04 subject 2 (file): src/request.ts
+Finding F-04 relation (indirect): subject 1 is connected to subject 2 through other modules
+Finding F-04 strength: 10% (range 6-18%), co-change confidence (95% interval)
+Receipt E-10 for F-04 (commit): d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6 2025-06-16: feat: introduce Route Helper (#4204) <https://github.com/honojs/hono/commit/d2737abfb4a4e2b23f4a4ecf05f23bc38fd2daa6>
+Receipt E-11 for F-04 (commit): ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42 2024-11-02: refactor: use `#` for private methods to reduce the minified file size (#3596) <https://github.com/honojs/hono/commit/ae6165b99440dce8f8839b6e85e9d4c3ed7b2c42>
+Receipt E-12 for F-04 (commit): 28de9b32a827436fb57518bf740073418d588044 2024-07-05: chore: update outdated links in JSDoc (#3089) <https://github.com/honojs/hono/commit/28de9b32a827436fb57518bf740073418d588044>
+Finding F-05 pair-8a1ed860 (secondary, info): src/client/types.ts usually changes with src/hono-base.ts
+Finding F-05 summary: Import link: types.ts imports hono-base.ts. 7 of 97 commits that changed src/hono-base.ts also changed src/client/types.ts (7%, 95% interval 4-14%); the other way 7 of 53 (13%). Last together 2026-08-03. Below diff's alert threshold (40% confidence).
+Finding F-05 subject 1 (file): src/hono-base.ts
+Finding F-05 subject 2 (file): src/client/types.ts
+Finding F-05 relation (direct): subject 1 references subject 2 directly
+Finding F-05 strength: 7% (range 4-14%), co-change confidence (95% interval)
+Receipt E-13 for F-05 (commit): 6f101a7779bf6e79c3af0a09cd888428bbd35ef8 2026-08-03: feat: add first-class QUERY method support (#5070) <https://github.com/honojs/hono/commit/6f101a7779bf6e79c3af0a09cd888428bbd35ef8>
+Receipt E-14 for F-05 (commit): eb9c112614230d6e29e06e444eb26fcc7592eb7d 2026-02-26: fix(types): remove DOM type dependencies from ClientResponse and request method (#4768) <https://github.com/honojs/hono/commit/eb9c112614230d6e29e06e444eb26fcc7592eb7d>
+Receipt E-15 for F-05 (commit): 331166471c499e5a8f432fcb77936c3d4f699cfe 2024-10-14: fix(types): rm ExcludeEmptyObject to fix massively increased type instantiations (#3507) <https://github.com/honojs/hono/commit/331166471c499e5a8f432fcb77936c3d4f699cfe>
+Finding F-06 pair-04421a69 (secondary, info): src/hono.ts usually changes with src/hono-base.ts
+Finding F-06 summary: Import link: hono.ts imports hono-base.ts. 6 of 97 commits that changed src/hono-base.ts also changed src/hono.ts (6%, 95% interval 3-13%); the other way 6 of 150 (4%). Last together 2024-05-29. Below diff's alert threshold (40% confidence).
+Finding F-06 subject 1 (file): src/hono-base.ts
+Finding F-06 subject 2 (file): src/hono.ts
+Finding F-06 relation (direct): subject 1 references subject 2 directly
+Finding F-06 strength: 6% (range 3-13%), co-change confidence (95% interval)
+Receipt E-16 for F-06 (commit): 18324b8b6c668b602199a437456f1c22925cb803 2024-05-29: docs(src/*): Add TSDoc comments to improve code documentation (#2841) <https://github.com/honojs/hono/commit/18324b8b6c668b602199a437456f1c22925cb803>
+Receipt E-17 for F-06 (commit): 68808453d5a91fe32a55a8f30e42d95b6962523a 2023-10-16: refactor: refactored `hono-base` (#1588) <https://github.com/honojs/hono/commit/68808453d5a91fe32a55a8f30e42d95b6962523a>
+Receipt E-18 for F-06 (commit): 8b6bd46e6699d6ad80eced222b8cd52c9a878692 2023-10-16: feat(app): `basePath` option for the constructor, deprecate `app.basePath()` (#1560) <https://github.com/honojs/hono/commit/8b6bd46e6699d6ad80eced222b8cd52c9a878692>
+Finding F-07 pair-6fa93604 (secondary, info): src/types.test.ts usually changes with src/hono-base.ts
+Finding F-07 summary: Test link: a test and the code it covers. 5 of 97 commits that changed src/hono-base.ts also changed src/types.test.ts (5%, 95% interval 2-12%); the other way 5 of 73 (7%). Last together 2025-12-13. Below diff's alert threshold (40% confidence).
+Finding F-07 subject 1 (file): src/hono-base.ts
+Finding F-07 subject 2 (file): src/types.test.ts
+Finding F-07 strength: 5% (range 2-12%), co-change confidence (95% interval)
+Receipt E-19 for F-07 (commit): 3e12de624a123cfdf158274a1c2b7620268343ef 2025-12-13: fix(types): replace schema-based path tracking with CurrentPath parameter (#4552) <https://github.com/honojs/hono/commit/3e12de624a123cfdf158274a1c2b7620268343ef>
+Receipt E-20 for F-07 (commit): a5d9ca88c025b2e604593d77abff5ece38eb55d3 2024-01-18: fix(types): use middlewares with different env types (#2018) <https://github.com/honojs/hono/commit/a5d9ca88c025b2e604593d77abff5ece38eb55d3>
+Receipt E-21 for F-07 (commit): d16aedfffdbee3da32e4b1a0020d152f569acb02 2023-12-03: feat: Ensure that calls to `c.json()` have a type equivalent to `c.jsonT()` (#1728) <https://github.com/honojs/hono/commit/d16aedfffdbee3da32e4b1a0020d152f569acb02>
+Finding F-08 pair-764b6787 (secondary, info): src/compose.ts usually changes with src/hono-base.ts
+Finding F-08 summary: Import link: hono-base.ts imports compose.ts. 5 of 97 commits that changed src/hono-base.ts also changed src/compose.ts (5%, 95% interval 2-12%); the other way 5 of 48 (10%). Last together 2025-02-18. Below diff's alert threshold (40% confidence).
+Finding F-08 subject 1 (file): src/hono-base.ts
+Finding F-08 subject 2 (file): src/compose.ts
+Finding F-08 relation (direct): subject 1 references subject 2 directly
+Finding F-08 strength: 5% (range 2-12%), co-change confidence (95% interval)
+Receipt E-22 for F-08 (commit): c08a2a77d7c10c3bd37520b0ea844a67e11b9581 2025-02-18: refactor(compose): remove unnecessary complexity and improve testing (#3932) <https://github.com/honojs/hono/commit/c08a2a77d7c10c3bd37520b0ea844a67e11b9581>
+Receipt E-23 for F-08 (commit): 18324b8b6c668b602199a437456f1c22925cb803 2024-05-29: docs(src/*): Add TSDoc comments to improve code documentation (#2841) <https://github.com/honojs/hono/commit/18324b8b6c668b602199a437456f1c22925cb803>
+Receipt E-24 for F-08 (commit): d86fcd41e16edfc0078b481c9d0a966eef8385a4 2023-12-03: feat(request): Introduce `matchedRoutes` and `routePath` for `HonoRequest` (#1744) <https://github.com/honojs/hono/commit/d86fcd41e16edfc0078b481c9d0a966eef8385a4>
+Finding F-09 pair-61b57ba2 (secondary, info): src/helper/dev/index.ts usually changes with src/hono-base.ts
+Finding F-09 summary: Indirect import: connected through src/hono.ts: index.ts imports hono.ts, which imports hono-base.ts. 5 of 97 commits that changed src/hono-base.ts also changed src/helper/dev/index.ts (5%, 95% interval 2-12%); the other way 5 of 9 (56%). Last together 2024-05-30. Below diff's alert threshold (40% confidence).
+Finding F-09 subject 1 (file): src/hono-base.ts
+Finding F-09 subject 2 (file): src/helper/dev/index.ts
+Finding F-09 relation (indirect): subject 1 is connected to subject 2 through other modules
+Finding F-09 strength: 5% (range 2-12%), co-change confidence (95% interval)
+Receipt E-25 for F-09 (commit): a85232705912ea701bf1f61e66c55f50113aa343 2024-05-30: fix: add return types of void function (#2870) <https://github.com/honojs/hono/commit/a85232705912ea701bf1f61e66c55f50113aa343>
+Receipt E-26 for F-09 (commit): 813484dffd2c73bc190f995f661509d8770b1b74 2024-01-01: fix(dev): preserve original handler in [composedHandler]. (#1873) <https://github.com/honojs/hono/commit/813484dffd2c73bc190f995f661509d8770b1b74>
+Receipt E-27 for F-09 (commit): 5b4592190bea1d352b3e000c3bde4530229f95c8 2023-12-26: feat(dev): add `getRouterName()` (#1841) <https://github.com/honojs/hono/commit/5b4592190bea1d352b3e000c3bde4530229f95c8>
+Finding F-10 pair-ded6a524 (secondary, info): src/router.ts usually changes with src/hono-base.ts
+Finding F-10 summary: Import link: hono-base.ts imports router.ts. 4 of 97 commits that changed src/hono-base.ts also changed src/router.ts (4%, 95% interval 2-10%); the other way 4 of 10 (40%). Last together 2026-08-03. Below diff's alert threshold (40% confidence).
+Finding F-10 subject 1 (file): src/hono-base.ts
+Finding F-10 subject 2 (file): src/router.ts
+Finding F-10 relation (direct): subject 1 references subject 2 directly
+Finding F-10 strength: 4% (range 2-10%), co-change confidence (95% interval)
+Receipt E-28 for F-10 (commit): 6f101a7779bf6e79c3af0a09cd888428bbd35ef8 2026-08-03: feat: add first-class QUERY method support (#5070) <https://github.com/honojs/hono/commit/6f101a7779bf6e79c3af0a09cd888428bbd35ef8>
+Receipt E-29 for F-10 (commit): 18324b8b6c668b602199a437456f1c22925cb803 2024-05-29: docs(src/*): Add TSDoc comments to improve code documentation (#2841) <https://github.com/honojs/hono/commit/18324b8b6c668b602199a437456f1c22925cb803>
+Receipt E-30 for F-10 (commit): 0e1755c9e41efd9a9002b3dabcdb66c5011549c5 2023-06-03: feat: handle HEAD method (#1142) <https://github.com/honojs/hono/commit/0e1755c9e41efd9a9002b3dabcdb66c5011549c5>
+Metric commits-analyzed "Commits analyzed": 2780
+Metric history "History": 2021-12-14 to 2026-11-07
+Metric sweeps-skipped "Sweeping commits skipped": 34
+Metric reverts-skipped "Revert commits skipped": 11
+Metric changes "Changed in": 97 commits
+Metric churn-percentile "Busier than": 99% of files
+Metric median-changes "Median file": 3 commits
+Metric last-changed "Last changed": 2026-11-01
+Metric authors "Who knows it": Yusuke Wada 59%, Taku Amano 14%, EdamAmex 4%
+Metric companions "Files that move with it": 10
+Warning: Historical signal, not proof: check whether the change really needs these files.
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/hono-base.ts src/hono.test.ts (Show the shared commits behind F-01.)
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/hono-base.ts src/types.ts (Show the shared commits behind F-02.)
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/hono-base.ts src/context.ts (Show the shared commits behind F-03.)
+End of results: 10 findings, 1 warning, run completed.

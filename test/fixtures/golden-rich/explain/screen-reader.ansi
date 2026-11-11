@@ -1,0 +1,32 @@
+Repo Archaeology run "explain src/helper/ssg/ssg.test.tsx and src/helper/ssg/index.ts" (repo-archaeology-explain): completed
+Run started 2026-11-11T09:00:00.000Z, finished 2026-11-11T09:00:02.000Z.
+Cut C-01 read-history "Read git history": done
+Findings: 1 (1 top)
+Finding F-01 pair-e9d61976 (top finding, needs review): src/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx
+Finding F-01 summary: Test link: a test and the code it covers. 20 of 40 commits that changed src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (50%, 95% interval 35-65%). The other way, 20 of 27 commits that changed src/helper/ssg/index.ts also changed src/helper/ssg/ssg.test.tsx (74%, 95% interval 55-87%). Last together 2026-02-19. Counterexamples: src/helper/ssg/ssg.test.tsx changed without src/helper/ssg/index.ts in 20 commits, and src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx in 7 commits.
+Finding F-01 subject 1 (file): src/helper/ssg/ssg.test.tsx
+Finding F-01 subject 2 (file): src/helper/ssg/index.ts
+Finding F-01 strength: 50% (range 35-65%), co-change confidence (95% interval)
+Receipt E-01 for F-01 (commit): 00b405a8f840f0f2ce4145e0fe5558cf2beeee78 2026-02-19: feat(ssg): add redirect plugin (#4599) (3w36zj6) <https://github.com/honojs/hono/commit/00b405a8f840f0f2ce4145e0fe5558cf2beeee78>
+Receipt E-02 for F-01 (commit): 58175a1b18e82219a9456709993656eb1cc9eeeb 2024-04-09: fix(ssg): use response header to mark as disabled routes for SSG (#2477) (Taku Amano) <https://github.com/honojs/hono/commit/58175a1b18e82219a9456709993656eb1cc9eeeb>
+Receipt E-03 for F-01 (commit): 8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3 2024-03-07: refactor(SSG): separate middleware logic (#2315) (watany) <https://github.com/honojs/hono/commit/8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3>
+Receipt E-04 for F-01 (commit): 7852e0a1e07f1d686f78f91589c7f9b573ca8bae 2026-11-04: counterexample, src/helper/ssg/ssg.test.tsx without src/helper/ssg/index.ts: fix(ssg): do not reuse created directories across toSSG runs (#5381) <https://github.com/honojs/hono/commit/7852e0a1e07f1d686f78f91589c7f9b573ca8bae>
+Receipt E-05 for F-01 (commit): e44d0a5329b0c2c7b540020abe86e3a8e8666f37 2026-11-04: counterexample, src/helper/ssg/ssg.test.tsx without src/helper/ssg/index.ts: fix(utils/mime,ssg): match media types case-insensitively (#5449) <https://github.com/honojs/hono/commit/e44d0a5329b0c2c7b540020abe86e3a8e8666f37>
+Receipt E-06 for F-01 (commit): 3a67f7f3997e1437d108f7bcba2dbcee2df69221 2026-08-26: counterexample, src/helper/ssg/ssg.test.tsx without src/helper/ssg/index.ts: Merge commit from fork <https://github.com/honojs/hono/commit/3a67f7f3997e1437d108f7bcba2dbcee2df69221>
+Receipt E-07 for F-01 (commit): a32482ddb0d8c9b75310c28750389a1819be6618 2024-02-25: counterexample, src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx: fix(ssg): allow `app: Hono<any, any, any>` for `toSSG` (#2272) <https://github.com/honojs/hono/commit/a32482ddb0d8c9b75310c28750389a1819be6618>
+Receipt E-08 for F-01 (commit): 5809f753dc3d9a1fa85735573ec869beb9b37400 2024-01-24: counterexample, src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx: fix: await generate hook (#2074) <https://github.com/honojs/hono/commit/5809f753dc3d9a1fa85735573ec869beb9b37400>
+Receipt E-09 for F-01 (commit): 1f46aa1561e032b99f0d013b404230aaaefa1ae4 2024-01-19: counterexample, src/helper/ssg/index.ts without src/helper/ssg/ssg.test.tsx: fix(ssg): Remove ArrayBuffer from FileSystemModule's writeFile (#2032) <https://github.com/honojs/hono/commit/1f46aa1561e032b99f0d013b404230aaaefa1ae4>
+Metric commits-analyzed "Commits analyzed": 2780
+Metric history "History": 2021-12-14 to 2026-11-07
+Metric sweeps-skipped "Sweeping commits skipped": 34
+Metric reverts-skipped "Revert commits skipped": 11
+Metric shared "Shared commits": 20
+Metric from-changes "Commits changing subject 1": 40
+Metric to-changes "Commits changing subject 2": 27
+Metric from-without-to "Subject 1 without subject 2": 20
+Metric to-without-from "Subject 2 without subject 1": 7
+Metric shared-commits-shown "Shared commits shown": 3
+Warning: Bounds applied: showing up to 3 shared commits.
+Warning: Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files.
+Next step: npx repo-archaeology --style classic explain src/helper/ssg/ssg.test.tsx src/helper/ssg/index.ts (Show the patch hunks for these commits.)
+End of results: 1 finding, 2 warnings, run completed.

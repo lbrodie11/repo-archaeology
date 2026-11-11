@@ -1,0 +1,23 @@
+exit: 0
+--- stdout
+## Repo Archaeology
+
+_Historical co-change clues from Git history. Suggestions highlight untouched files that repeatedly changed alongside your modified files in past commits—they are prompts for review, not proof of a bug._
+
+Evaluated **7 changed files** against base `HEAD~3` (merge-base `0d723a1` → `0747080`) · **23 commits analyzed** (2024-01-01 to 2024-01-23) (thresholds: ≥2 shared, ≥30% confidence).
+
+> **Warning:** Only 23 usable commits: results will be thin until the project has more history.
+
+### Possibly missed (1)
+
+1. **`packages/web/src/listener.js`** — `ghost wire`
+   - Changed with `packages/core/src/model.ts` in **6 of 10 commits (60%)** (95% CI 31–84%) · reverse **100%** (6/6) · last together 2024-01-22
+   - no import link detected in the current code
+   - `01e3a96` (2024-01-22) — update packages/core/src/model.ts + packages/web/src/listener.js \(4\)
+   - `6b7db04` (2024-01-17) — update packages/core/src/model.ts + packages/web/src/listener.js \(3\)
+   - `b589b87` (2024-01-12) — update packages/core/src/model.ts + packages/web/src/listener.js \(2\)
+   - Verify: `npx repo-archaeology explain --base 0d723a1d6bc701d1c0e8adfbf340bd98de1061c0 packages/core/src/model.ts packages/web/src/listener.js`
+
+---
+Was a suggestion useful or noisy? [Share feedback](https://github.com/lbrodie11/repo-archaeology/issues/new?template=suggestion-feedback.yml) _(please avoid posting private paths or source code)_.
+--- stderr

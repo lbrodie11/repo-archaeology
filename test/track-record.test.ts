@@ -963,7 +963,13 @@ describe('RA-06 track record: end-to-end contract', () => {
       const expectedLine =
         'Before: 4 times this changed without permissions.ts; it changed within 48 h after 3 (small sample; not proof those were fixes).';
       assert.ok(classic.stdout.includes(expectedLine), `classic output lacks the track-record line:\n${classic.stdout}`);
-      assert.ok(rich.stdout.includes(expectedLine), `rich output lacks the track-record line:\n${rich.stdout}`);
+      // Rich (@frame12/terminal, RA-21) wraps prose to the terminal width inside the finding's card:
+      // join the wrapped lines (dropping the card gutter) before looking for the same sentence.
+      const richProse = rich.stdout
+        .split('\n')
+        .map((line) => line.replace(/^[┃|]? +/, '').trim())
+        .join(' ');
+      assert.ok(richProse.includes(expectedLine), `rich output lacks the track-record line:\n${rich.stdout}`);
       assert.ok(
         markdown.stdout.includes(
           'Before: 4 times this changed without `permissions.ts`; it changed within 48 h after 3 (small sample; not proof those were fixes).',

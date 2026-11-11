@@ -1,0 +1,1775 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "hono",
+    "head": {
+      "ref": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+      "sha": "61f7c59e50244ab4d2dd83c151928cf7ea448510"
+    },
+    "commitsRead": 2835,
+    "commitsAnalyzed": 2780,
+    "sweepsSkipped": 34,
+    "subjectSkipped": 0,
+    "revertsSkipped": 11,
+    "renamesFollowed": 286,
+    "files": 887,
+    "oldestCommit": "2021-12-14",
+    "newestCommit": "2026-11-07",
+    "origins": {
+      "human": 2764,
+      "agent": 14,
+      "bot": 2
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "imports": {
+      "scope": "analyzed-files",
+      "filesScanned": 158,
+      "internalEdges": 445,
+      "external": 31,
+      "unresolved": 0,
+      "dynamicLoads": 1,
+      "unsupportedFiles": 21,
+      "sourceUnavailable": 0,
+      "heuristicEdges": 0,
+      "unresolvedByReason": {}
+    },
+    "config": {
+      "source": "none"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "counts": {
+    "ghost": 21,
+    "unknown": 56,
+    "indirect": 9,
+    "direct": 54,
+    "test": 204
+  },
+  "qualifying": 344,
+  "classified": 344,
+  "truncated": false,
+  "relationships": [
+    {
+      "from": "src/preset/tiny.ts",
+      "to": "src/preset/quick.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 8,
+      "fromChanges": 8,
+      "toChanges": 9,
+      "confidence": 1,
+      "reverseConfidence": 0.889,
+      "interval": {
+        "low": 0.6755,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.565,
+        "high": 0.9802
+      },
+      "score": 0.676,
+      "weighted": false,
+      "lastTogether": "2024-05-29",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "16f73935ef902ba7927f698d9ce731d4cd9a143b",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "fix(types): allow blank env (#2834)",
+          "origin": "human"
+        },
+        {
+          "hash": "37df3dd7d396f116c201bc486ac8edc4acf0b36b",
+          "date": "2024-01-19",
+          "author": "Yusuke Wada",
+          "subject": "refactor(types): name them `BlankSchema` or `BlankInput` (#2040)",
+          "origin": "human"
+        },
+        {
+          "hash": "68808453d5a91fe32a55a8f30e42d95b6962523a",
+          "date": "2023-10-16",
+          "author": "Yusuke Wada",
+          "subject": "refactor: refactored `hono-base` (#1588)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/helper/streaming/stream.ts",
+      "to": "src/helper/streaming/sse.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 7,
+      "fromChanges": 8,
+      "toChanges": 18,
+      "confidence": 0.875,
+      "reverseConfidence": 0.389,
+      "interval": {
+        "low": 0.5291,
+        "high": 0.9776
+      },
+      "reverseInterval": {
+        "low": 0.203,
+        "high": 0.6139
+      },
+      "score": 0.529,
+      "weighted": false,
+      "lastTogether": "2025-01-27",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "d72aa4b6d77c7b3150bf2b7bae001e6635fe98ae",
+          "date": "2025-01-27",
+          "author": "Jarred Sumner",
+          "subject": "refactor(helper/streaming): Avoid attaching AbortSignal on newer versions of Bun (#3859)",
+          "origin": "human"
+        },
+        {
+          "hash": "e513fe7c461a6d1c9d24ee9a66b7432aed58da82",
+          "date": "2024-07-06",
+          "author": "Yusuke Wada",
+          "subject": "fix(helper/streaming): remove slow types (#3100)",
+          "origin": "human"
+        },
+        {
+          "hash": "ada10e5bf097b921f0b8ea533bb28e726ffff2dc",
+          "date": "2024-07-03",
+          "author": "Taku Amano",
+          "subject": "fix(stream): Fixed a problem that onAbort() is called even if request is normally closed in deno (#3079)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/deno/ssg.ts",
+      "to": "src/adapter/bun/ssg.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: ssg.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "ssg.ts",
+        "filesUsing": 2
+      },
+      "shared": 3,
+      "fromChanges": 3,
+      "toChanges": 4,
+      "confidence": 1,
+      "reverseConfidence": 0.75,
+      "interval": {
+        "low": 0.4385,
+        "high": 1
+      },
+      "reverseInterval": {
+        "low": 0.3006,
+        "high": 0.9545
+      },
+      "score": 0.439,
+      "weighted": false,
+      "lastTogether": "2024-01-19",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "23d96a9b0817b44a62c68ab8928dc4ae956b75d9",
+          "date": "2024-01-19",
+          "author": "watany",
+          "subject": "refactor(ssg): Removal of Libraries Dependent on Node.js (#2012)",
+          "origin": "human"
+        },
+        {
+          "hash": "54ef22adffe4970f89b0ef30061c761332e6d3f7",
+          "date": "2024-01-13",
+          "author": "watany",
+          "subject": "chore(helper): Add experimental flag the SSG features (#1967)",
+          "origin": "human"
+        },
+        {
+          "hash": "04b686ca39421d28d3aa3f8491c13e1f7d1c8de1",
+          "date": "2024-01-11",
+          "author": "watany",
+          "subject": "feat: Introducing a New SSG Adaptor/Helper  (#1904)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/preset/tiny.ts",
+      "to": "src/hono.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 8,
+      "toChanges": 150,
+      "confidence": 0.75,
+      "reverseConfidence": 0.04,
+      "interval": {
+        "low": 0.4092,
+        "high": 0.9286
+      },
+      "reverseInterval": {
+        "low": 0.0184,
+        "high": 0.0846
+      },
+      "score": 0.409,
+      "weighted": false,
+      "lastTogether": "2024-05-29",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "16f73935ef902ba7927f698d9ce731d4cd9a143b",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "fix(types): allow blank env (#2834)",
+          "origin": "human"
+        },
+        {
+          "hash": "37df3dd7d396f116c201bc486ac8edc4acf0b36b",
+          "date": "2024-01-19",
+          "author": "Yusuke Wada",
+          "subject": "refactor(types): name them `BlankSchema` or `BlankInput` (#2040)",
+          "origin": "human"
+        },
+        {
+          "hash": "68808453d5a91fe32a55a8f30e42d95b6962523a",
+          "date": "2023-10-16",
+          "author": "Yusuke Wada",
+          "subject": "refactor: refactored `hono-base` (#1588)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/bun/serve-static.ts",
+      "to": "src/adapter/deno/serve-static.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "serve-static.ts",
+        "filesUsing": 2
+      },
+      "shared": 12,
+      "fromChanges": 20,
+      "toChanges": 24,
+      "confidence": 0.6,
+      "reverseConfidence": 0.5,
+      "interval": {
+        "low": 0.3865,
+        "high": 0.7812
+      },
+      "reverseInterval": {
+        "low": 0.3142,
+        "high": 0.6858
+      },
+      "score": 0.387,
+      "weighted": false,
+      "lastTogether": "2026-05-16",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+          "date": "2026-05-16",
+          "author": "mixelburg",
+          "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+          "origin": "human"
+        },
+        {
+          "hash": "1196f14b94e589e2ac44fa7f1c8785d70c1cf83e",
+          "date": "2025-08-07",
+          "author": "Yusuke Wada",
+          "subject": "feat(serve-static): use `join` to correct path resolution (#4291)",
+          "origin": "human"
+        },
+        {
+          "hash": "246a06aa1d35aa206dcf11186b3aa90badb2de72",
+          "date": "2024-09-24",
+          "author": "Yusuke Wada",
+          "subject": "feat(serve-static): support absolute root (#3420)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/router/smart-router/router.ts",
+      "to": "src/router/reg-exp-router/router.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: router.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "router.ts",
+        "filesUsing": 2
+      },
+      "shared": 4,
+      "fromChanges": 5,
+      "toChanges": 40,
+      "confidence": 0.8,
+      "reverseConfidence": 0.1,
+      "interval": {
+        "low": 0.3755,
+        "high": 0.9638
+      },
+      "reverseInterval": {
+        "low": 0.0395,
+        "high": 0.2306
+      },
+      "score": 0.376,
+      "weighted": false,
+      "lastTogether": "2024-11-12",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "7b308358f4024283bc95265a60ac518db8870106",
+          "date": "2024-11-12",
+          "author": "EdamAmex",
+          "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+          "origin": "human"
+        },
+        {
+          "hash": "b6133c41306f955bf1b3bcadbd3302a0c065c36a",
+          "date": "2023-12-01",
+          "author": "Yusuke Wada",
+          "subject": "refactor(router): remove duplication `MESSAGE_MATCHER_IS_ALREADY_BUILT` (#1763)",
+          "origin": "human"
+        },
+        {
+          "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+          "date": "2023-05-17",
+          "author": "Yusuke Wada",
+          "subject": "feat(app): `app.routerName()` (#1105)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/preset/quick.ts",
+      "to": "src/hono.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 6,
+      "fromChanges": 9,
+      "toChanges": 150,
+      "confidence": 0.667,
+      "reverseConfidence": 0.04,
+      "interval": {
+        "low": 0.3542,
+        "high": 0.8795
+      },
+      "reverseInterval": {
+        "low": 0.0184,
+        "high": 0.0846
+      },
+      "score": 0.354,
+      "weighted": false,
+      "lastTogether": "2024-05-29",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "16f73935ef902ba7927f698d9ce731d4cd9a143b",
+          "date": "2024-05-29",
+          "author": "fzn0x",
+          "subject": "fix(types): allow blank env (#2834)",
+          "origin": "human"
+        },
+        {
+          "hash": "37df3dd7d396f116c201bc486ac8edc4acf0b36b",
+          "date": "2024-01-19",
+          "author": "Yusuke Wada",
+          "subject": "refactor(types): name them `BlankSchema` or `BlankInput` (#2040)",
+          "origin": "human"
+        },
+        {
+          "hash": "68808453d5a91fe32a55a8f30e42d95b6962523a",
+          "date": "2023-10-16",
+          "author": "Yusuke Wada",
+          "subject": "refactor: refactored `hono-base` (#1588)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/bun/serve-static.ts",
+      "to": "src/adapter/cloudflare-workers/serve-static.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "serve-static.ts",
+        "filesUsing": 2
+      },
+      "shared": 11,
+      "fromChanges": 20,
+      "toChanges": 27,
+      "confidence": 0.55,
+      "reverseConfidence": 0.407,
+      "interval": {
+        "low": 0.342,
+        "high": 0.7419
+      },
+      "reverseInterval": {
+        "low": 0.2451,
+        "high": 0.5928
+      },
+      "score": 0.342,
+      "weighted": false,
+      "lastTogether": "2026-05-16",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+          "date": "2026-05-16",
+          "author": "mixelburg",
+          "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+          "origin": "human"
+        },
+        {
+          "hash": "f8371ab356f79fcf762c66aa372448a8018bcfc7",
+          "date": "2024-02-24",
+          "author": "Yusuke Wada",
+          "subject": "fix(serve-static): support extensionless files and refactor (#2260)",
+          "origin": "human"
+        },
+        {
+          "hash": "d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e",
+          "date": "2024-01-29",
+          "author": "ryu",
+          "subject": "feat(serve-static): `mimes` option for serve-static (#2094)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/deno/deno.d.ts",
+      "to": "src/adapter/deno/websocket.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 4,
+      "toChanges": 8,
+      "confidence": 0.75,
+      "reverseConfidence": 0.375,
+      "interval": {
+        "low": 0.3006,
+        "high": 0.9545
+      },
+      "reverseInterval": {
+        "low": 0.1368,
+        "high": 0.6943
+      },
+      "score": 0.301,
+      "weighted": false,
+      "lastTogether": "2024-10-30",
+      "crossesDirectories": false,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "caeecf99a871d00b21cd4d5708ef277f3df709e0",
+          "date": "2024-10-30",
+          "author": "EdamAmex",
+          "subject": "fix(types): remove `any` and fix types of adapter/deno (#3291)",
+          "origin": "human"
+        },
+        {
+          "hash": "d383e49ed8f96a06e655036dac0821fb382a4931",
+          "date": "2024-06-21",
+          "author": "Ame_x",
+          "subject": "fix(websocket): change to allow use of websocket options (#2999)",
+          "origin": "human"
+        },
+        {
+          "hash": "47f5c545f2c143a596501abf2b5670cf2d4a6356",
+          "date": "2024-03-05",
+          "author": "Shotaro Nakamura",
+          "subject": "feat: Introduce WebSocket Helper / Adapter (#2265)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/deno/index.ts",
+      "to": "src/adapter/bun/index.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 3,
+      "fromChanges": 4,
+      "toChanges": 15,
+      "confidence": 0.75,
+      "reverseConfidence": 0.2,
+      "interval": {
+        "low": 0.3006,
+        "high": 0.9545
+      },
+      "reverseInterval": {
+        "low": 0.0704,
+        "high": 0.4519
+      },
+      "score": 0.301,
+      "weighted": false,
+      "lastTogether": "2024-05-22",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "a8a5fb97caeb820b069dabb32327e859357d79a8",
+          "date": "2024-05-22",
+          "author": "Shotaro Nakamura",
+          "subject": "feat: Introduce ConnInfo helper/adapter (#2595)",
+          "origin": "human"
+        },
+        {
+          "hash": "47f5c545f2c143a596501abf2b5670cf2d4a6356",
+          "date": "2024-03-05",
+          "author": "Shotaro Nakamura",
+          "subject": "feat: Introduce WebSocket Helper / Adapter (#2265)",
+          "origin": "human"
+        },
+        {
+          "hash": "04b686ca39421d28d3aa3f8491c13e1f7d1c8de1",
+          "date": "2024-01-11",
+          "author": "watany",
+          "subject": "feat: Introducing a New SSG Adaptor/Helper  (#1904)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/deno/serve-static.ts",
+      "to": "src/adapter/cloudflare-workers/serve-static.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "serve-static.ts",
+        "filesUsing": 2
+      },
+      "shared": 11,
+      "fromChanges": 24,
+      "toChanges": 27,
+      "confidence": 0.458,
+      "reverseConfidence": 0.407,
+      "interval": {
+        "low": 0.2789,
+        "high": 0.6493
+      },
+      "reverseInterval": {
+        "low": 0.2451,
+        "high": 0.5928
+      },
+      "score": 0.279,
+      "weighted": false,
+      "lastTogether": "2026-05-16",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+          "date": "2026-05-16",
+          "author": "mixelburg",
+          "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+          "origin": "human"
+        },
+        {
+          "hash": "f8371ab356f79fcf762c66aa372448a8018bcfc7",
+          "date": "2024-02-24",
+          "author": "Yusuke Wada",
+          "subject": "fix(serve-static): support extensionless files and refactor (#2260)",
+          "origin": "human"
+        },
+        {
+          "hash": "d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e",
+          "date": "2024-01-29",
+          "author": "ryu",
+          "subject": "feat(serve-static): `mimes` option for serve-static (#2094)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/middleware/jwk/jwk.ts",
+      "to": "src/middleware/jwt/jwt.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 5,
+      "fromChanges": 9,
+      "toChanges": 30,
+      "confidence": 0.556,
+      "reverseConfidence": 0.167,
+      "interval": {
+        "low": 0.2666,
+        "high": 0.8113
+      },
+      "reverseInterval": {
+        "low": 0.0733,
+        "high": 0.3357
+      },
+      "score": 0.267,
+      "weighted": false,
+      "lastTogether": "2026-10-28",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "ed1d5f72135ccf7e09c17d64dc4af7588dd3e491",
+          "date": "2026-10-28",
+          "author": "Yusuke Wada",
+          "subject": "fix(auth): escape backslashes in the WWW-Authenticate realm (#5590)",
+          "origin": "human"
+        },
+        {
+          "hash": "30277aee0ddd96b643a4958d6102abe6e54d9a29",
+          "date": "2026-08-03",
+          "author": "Arham Amin",
+          "subject": "feat(jwt,jwk): add a configurable WWW-Authenticate realm (#5141)",
+          "origin": "human"
+        },
+        {
+          "hash": "5463db2735476959b8af67756f4e513f4fe19115",
+          "date": "2026-05-19",
+          "author": "Taku Amano",
+          "subject": "Merge commit from fork",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/adapter/cloudflare-workers/websocket.ts",
+      "to": "src/adapter/deno/websocket.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: websocket.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "websocket.ts",
+        "filesUsing": 2
+      },
+      "shared": 4,
+      "fromChanges": 7,
+      "toChanges": 8,
+      "confidence": 0.571,
+      "reverseConfidence": 0.5,
+      "interval": {
+        "low": 0.2504,
+        "high": 0.8418
+      },
+      "reverseInterval": {
+        "low": 0.2152,
+        "high": 0.7848
+      },
+      "score": 0.25,
+      "weighted": false,
+      "lastTogether": "2024-10-25",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "234b083777d34fb1efadbe8f504148e2e533428f",
+          "date": "2024-10-25",
+          "author": "Shotaro Nakamura",
+          "subject": "feat(ws): Make WebSocket adapter more changeable (#3531)",
+          "origin": "human"
+        },
+        {
+          "hash": "6f69bf04b744d88efa608dd4458dd650ad57cdf0",
+          "date": "2024-09-08",
+          "author": "hayatosc",
+          "subject": "feat(websocket): Add generics type to `WSContext` (#3337)",
+          "origin": "human"
+        },
+        {
+          "hash": "a3d9cc7d9593b717986f81014892303d0f5b8846",
+          "date": "2024-05-28",
+          "author": "fzn0x",
+          "subject": "refactor(websocket): remove unused condition (#2839)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/middleware/powered-by/index.ts",
+      "to": "src/hono.ts",
+      "relationship": "ghost",
+      "why": "no import link detected in the current code",
+      "shared": 4,
+      "fromChanges": 7,
+      "toChanges": 150,
+      "confidence": 0.571,
+      "reverseConfidence": 0.027,
+      "interval": {
+        "low": 0.2504,
+        "high": 0.8418
+      },
+      "reverseInterval": {
+        "low": 0.0104,
+        "high": 0.0666
+      },
+      "score": 0.25,
+      "weighted": false,
+      "lastTogether": "2022-04-20",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "798425a17d5e06b6b7c0b0082c7ee3b5a4137271",
+          "date": "2022-04-20",
+          "author": "Yusuke Wada",
+          "subject": "refactor: define `Next` type (#160)",
+          "origin": "human"
+        },
+        {
+          "hash": "f9fa20062b6d00724674b53bcaf1526014f1ce34",
+          "date": "2022-01-09",
+          "author": "Yusuke Wada",
+          "subject": "Refactor (#35)",
+          "origin": "human"
+        },
+        {
+          "hash": "7c87ac68cd7dc39963c25cac80843811de732615",
+          "date": "2022-01-06",
+          "author": "Minghe",
+          "subject": "Setup lint to enable code styles check (#27)",
+          "origin": "human"
+        }
+      ]
+    },
+    {
+      "from": "src/router/smart-router/router.ts",
+      "to": "src/router/linear-router/router.ts",
+      "relationship": "ghost",
+      "why": "possible parallel implementations: router.ts appears in sibling folders",
+      "hiddenBridge": {
+        "signal": "parallel-implementation",
+        "value": "router.ts",
+        "filesUsing": 2
+      },
+      "shared": 3,
+      "fromChanges": 5,
+      "toChanges": 12,
+      "confidence": 0.6,
+      "reverseConfidence": 0.25,
+      "interval": {
+        "low": 0.2307,
+        "high": 0.8824
+      },
+      "reverseInterval": {
+        "low": 0.0889,
+        "high": 0.5324
+      },
+      "score": 0.231,
+      "weighted": false,
+      "lastTogether": "2024-11-12",
+      "crossesDirectories": true,
+      "originShare": {
+        "human": 1,
+        "agent": 0,
+        "bot": 0
+      },
+      "evidence": [
+        {
+          "hash": "7b308358f4024283bc95265a60ac518db8870106",
+          "date": "2024-11-12",
+          "author": "EdamAmex",
+          "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+          "origin": "human"
+        },
+        {
+          "hash": "10a5e65e85ebfffecff8648e2f1eaae00abe748d",
+          "date": "2024-10-26",
+          "author": "EdamAmex",
+          "subject": "perf(router):  improve performance of router (#3526)",
+          "origin": "human"
+        },
+        {
+          "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+          "date": "2023-05-17",
+          "author": "Yusuke Wada",
+          "subject": "feat(app): `app.routerName()` (#1105)",
+          "origin": "human"
+        }
+      ]
+    }
+  ],
+  "families": [
+    {
+      "id": "src/adapter/*/serve-static",
+      "label": "serve-static.ts across src/adapter/*",
+      "stem": "serve-static",
+      "fileName": "serve-static.ts",
+      "parentDir": "src/adapter",
+      "why": "3 parallel implementations of serve-static.ts in sibling folders (bun, cloudflare-workers, deno); all 3 pairwise links meet thresholds (16 supporting commits (2+ members via a qualifying pair), 9 touched all 3)",
+      "members": [
+        {
+          "path": "src/adapter/bun/serve-static.ts",
+          "dir": "src/adapter/bun",
+          "variant": "bun",
+          "changes": 20,
+          "connections": 2
+        },
+        {
+          "path": "src/adapter/cloudflare-workers/serve-static.ts",
+          "dir": "src/adapter/cloudflare-workers",
+          "variant": "cloudflare-workers",
+          "changes": 27,
+          "connections": 2
+        },
+        {
+          "path": "src/adapter/deno/serve-static.ts",
+          "dir": "src/adapter/deno",
+          "variant": "deno",
+          "changes": 24,
+          "connections": 2
+        }
+      ],
+      "commitsTouchingTwoOrMore": 16,
+      "commitsTouchingAll": 9,
+      "lastTogether": "2026-05-16",
+      "qualifyingPairs": 3,
+      "possiblePairs": 3,
+      "complete": true,
+      "relationshipKinds": [
+        "ghost"
+      ],
+      "peakScore": 0.387,
+      "maxPairShared": 12,
+      "evidence": [
+        {
+          "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+          "date": "2026-05-16",
+          "author": "mixelburg",
+          "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/cloudflare-workers/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        },
+        {
+          "hash": "1196f14b94e589e2ac44fa7f1c8785d70c1cf83e",
+          "date": "2025-08-07",
+          "author": "Yusuke Wada",
+          "subject": "feat(serve-static): use `join` to correct path resolution (#4291)",
+          "origin": "human",
+          "membersTouched": 2,
+          "totalMembers": 3,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        },
+        {
+          "hash": "246a06aa1d35aa206dcf11186b3aa90badb2de72",
+          "date": "2024-09-24",
+          "author": "Yusuke Wada",
+          "subject": "feat(serve-static): support absolute root (#3420)",
+          "origin": "human",
+          "membersTouched": 2,
+          "totalMembers": 3,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        }
+      ],
+      "allMemberEvidence": [
+        {
+          "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+          "date": "2026-05-16",
+          "author": "mixelburg",
+          "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/cloudflare-workers/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        },
+        {
+          "hash": "f8371ab356f79fcf762c66aa372448a8018bcfc7",
+          "date": "2024-02-24",
+          "author": "Yusuke Wada",
+          "subject": "fix(serve-static): support extensionless files and refactor (#2260)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/cloudflare-workers/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        },
+        {
+          "hash": "d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e",
+          "date": "2024-01-29",
+          "author": "ryu",
+          "subject": "feat(serve-static): `mimes` option for serve-static (#2094)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/serve-static.ts",
+            "src/adapter/cloudflare-workers/serve-static.ts",
+            "src/adapter/deno/serve-static.ts"
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "src/adapter/bun/serve-static.ts",
+          "to": "src/adapter/deno/serve-static.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "serve-static.ts",
+            "filesUsing": 2
+          },
+          "shared": 12,
+          "fromChanges": 20,
+          "toChanges": 24,
+          "confidence": 0.6,
+          "reverseConfidence": 0.5,
+          "interval": {
+            "low": 0.3865,
+            "high": 0.7812
+          },
+          "reverseInterval": {
+            "low": 0.3142,
+            "high": 0.6858
+          },
+          "score": 0.387,
+          "weighted": false,
+          "lastTogether": "2026-05-16",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+              "date": "2026-05-16",
+              "author": "mixelburg",
+              "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+              "origin": "human"
+            },
+            {
+              "hash": "1196f14b94e589e2ac44fa7f1c8785d70c1cf83e",
+              "date": "2025-08-07",
+              "author": "Yusuke Wada",
+              "subject": "feat(serve-static): use `join` to correct path resolution (#4291)",
+              "origin": "human"
+            },
+            {
+              "hash": "246a06aa1d35aa206dcf11186b3aa90badb2de72",
+              "date": "2024-09-24",
+              "author": "Yusuke Wada",
+              "subject": "feat(serve-static): support absolute root (#3420)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/adapter/bun/serve-static.ts",
+          "to": "src/adapter/cloudflare-workers/serve-static.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "serve-static.ts",
+            "filesUsing": 2
+          },
+          "shared": 11,
+          "fromChanges": 20,
+          "toChanges": 27,
+          "confidence": 0.55,
+          "reverseConfidence": 0.407,
+          "interval": {
+            "low": 0.342,
+            "high": 0.7419
+          },
+          "reverseInterval": {
+            "low": 0.2451,
+            "high": 0.5928
+          },
+          "score": 0.342,
+          "weighted": false,
+          "lastTogether": "2026-05-16",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+              "date": "2026-05-16",
+              "author": "mixelburg",
+              "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+              "origin": "human"
+            },
+            {
+              "hash": "f8371ab356f79fcf762c66aa372448a8018bcfc7",
+              "date": "2024-02-24",
+              "author": "Yusuke Wada",
+              "subject": "fix(serve-static): support extensionless files and refactor (#2260)",
+              "origin": "human"
+            },
+            {
+              "hash": "d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e",
+              "date": "2024-01-29",
+              "author": "ryu",
+              "subject": "feat(serve-static): `mimes` option for serve-static (#2094)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/adapter/deno/serve-static.ts",
+          "to": "src/adapter/cloudflare-workers/serve-static.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: serve-static.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "serve-static.ts",
+            "filesUsing": 2
+          },
+          "shared": 11,
+          "fromChanges": 24,
+          "toChanges": 27,
+          "confidence": 0.458,
+          "reverseConfidence": 0.407,
+          "interval": {
+            "low": 0.2789,
+            "high": 0.6493
+          },
+          "reverseInterval": {
+            "low": 0.2451,
+            "high": 0.5928
+          },
+          "score": 0.279,
+          "weighted": false,
+          "lastTogether": "2026-05-16",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "26f8c33f23e6151873d165107f2dbcadf1204d15",
+              "date": "2026-05-16",
+              "author": "mixelburg",
+              "subject": "fix(serveStatic): make options parameter optional in all adapters (#4934)",
+              "origin": "human"
+            },
+            {
+              "hash": "f8371ab356f79fcf762c66aa372448a8018bcfc7",
+              "date": "2024-02-24",
+              "author": "Yusuke Wada",
+              "subject": "fix(serve-static): support extensionless files and refactor (#2260)",
+              "origin": "human"
+            },
+            {
+              "hash": "d74d95d11c8d06ff7588a3a2e899e3843c4a7d1e",
+              "date": "2024-01-29",
+              "author": "ryu",
+              "subject": "feat(serve-static): `mimes` option for serve-static (#2094)",
+              "origin": "human"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "src/router/*/router",
+      "label": "router.ts across src/router/*",
+      "stem": "router",
+      "fileName": "router.ts",
+      "parentDir": "src/router",
+      "why": "5 parallel implementations of router.ts in sibling folders (linear-router, pattern-router, reg-exp-router, smart-router, trie-router); 4 of 10 pairwise links meet thresholds (8 supporting commits (2+ members via a qualifying pair), 1 touched all 5)",
+      "members": [
+        {
+          "path": "src/router/linear-router/router.ts",
+          "dir": "src/router/linear-router",
+          "variant": "linear-router",
+          "changes": 12,
+          "connections": 2
+        },
+        {
+          "path": "src/router/pattern-router/router.ts",
+          "dir": "src/router/pattern-router",
+          "variant": "pattern-router",
+          "changes": 15,
+          "connections": 1
+        },
+        {
+          "path": "src/router/reg-exp-router/router.ts",
+          "dir": "src/router/reg-exp-router",
+          "variant": "reg-exp-router",
+          "changes": 40,
+          "connections": 1
+        },
+        {
+          "path": "src/router/smart-router/router.ts",
+          "dir": "src/router/smart-router",
+          "variant": "smart-router",
+          "changes": 5,
+          "connections": 3
+        },
+        {
+          "path": "src/router/trie-router/router.ts",
+          "dir": "src/router/trie-router",
+          "variant": "trie-router",
+          "changes": 8,
+          "connections": 1
+        }
+      ],
+      "commitsTouchingTwoOrMore": 8,
+      "commitsTouchingAll": 1,
+      "lastTogether": "2026-08-17",
+      "qualifyingPairs": 4,
+      "possiblePairs": 10,
+      "complete": false,
+      "relationshipKinds": [
+        "ghost"
+      ],
+      "peakScore": 0.376,
+      "maxPairShared": 5,
+      "evidence": [
+        {
+          "hash": "a19462879716e7b600daed8eb3a1b2af4bd68feb",
+          "date": "2026-08-17",
+          "author": "Yusuke Wada",
+          "subject": "fix(pattern-router/linear-router): prevent prefix overmatch on wildcard routes (#5252)",
+          "origin": "human",
+          "membersTouched": 2,
+          "totalMembers": 5,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/router/linear-router/router.ts",
+            "src/router/pattern-router/router.ts"
+          ]
+        },
+        {
+          "hash": "7b308358f4024283bc95265a60ac518db8870106",
+          "date": "2024-11-12",
+          "author": "EdamAmex",
+          "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+          "origin": "human",
+          "membersTouched": 4,
+          "totalMembers": 5,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/router/linear-router/router.ts",
+            "src/router/reg-exp-router/router.ts",
+            "src/router/smart-router/router.ts",
+            "src/router/trie-router/router.ts"
+          ]
+        },
+        {
+          "hash": "10a5e65e85ebfffecff8648e2f1eaae00abe748d",
+          "date": "2024-10-26",
+          "author": "EdamAmex",
+          "subject": "perf(router):  improve performance of router (#3526)",
+          "origin": "human",
+          "membersTouched": 4,
+          "totalMembers": 5,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/router/linear-router/router.ts",
+            "src/router/pattern-router/router.ts",
+            "src/router/smart-router/router.ts",
+            "src/router/trie-router/router.ts"
+          ]
+        }
+      ],
+      "allMemberEvidence": [
+        {
+          "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+          "date": "2023-05-17",
+          "author": "Yusuke Wada",
+          "subject": "feat(app): `app.routerName()` (#1105)",
+          "origin": "human",
+          "membersTouched": 5,
+          "totalMembers": 5,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/router/linear-router/router.ts",
+            "src/router/pattern-router/router.ts",
+            "src/router/reg-exp-router/router.ts",
+            "src/router/smart-router/router.ts",
+            "src/router/trie-router/router.ts"
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "src/router/smart-router/router.ts",
+          "to": "src/router/reg-exp-router/router.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: router.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "router.ts",
+            "filesUsing": 2
+          },
+          "shared": 4,
+          "fromChanges": 5,
+          "toChanges": 40,
+          "confidence": 0.8,
+          "reverseConfidence": 0.1,
+          "interval": {
+            "low": 0.3755,
+            "high": 0.9638
+          },
+          "reverseInterval": {
+            "low": 0.0395,
+            "high": 0.2306
+          },
+          "score": 0.376,
+          "weighted": false,
+          "lastTogether": "2024-11-12",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "7b308358f4024283bc95265a60ac518db8870106",
+              "date": "2024-11-12",
+              "author": "EdamAmex",
+              "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+              "origin": "human"
+            },
+            {
+              "hash": "b6133c41306f955bf1b3bcadbd3302a0c065c36a",
+              "date": "2023-12-01",
+              "author": "Yusuke Wada",
+              "subject": "refactor(router): remove duplication `MESSAGE_MATCHER_IS_ALREADY_BUILT` (#1763)",
+              "origin": "human"
+            },
+            {
+              "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+              "date": "2023-05-17",
+              "author": "Yusuke Wada",
+              "subject": "feat(app): `app.routerName()` (#1105)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/router/smart-router/router.ts",
+          "to": "src/router/linear-router/router.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: router.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "router.ts",
+            "filesUsing": 2
+          },
+          "shared": 3,
+          "fromChanges": 5,
+          "toChanges": 12,
+          "confidence": 0.6,
+          "reverseConfidence": 0.25,
+          "interval": {
+            "low": 0.2307,
+            "high": 0.8824
+          },
+          "reverseInterval": {
+            "low": 0.0889,
+            "high": 0.5324
+          },
+          "score": 0.231,
+          "weighted": false,
+          "lastTogether": "2024-11-12",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "7b308358f4024283bc95265a60ac518db8870106",
+              "date": "2024-11-12",
+              "author": "EdamAmex",
+              "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+              "origin": "human"
+            },
+            {
+              "hash": "10a5e65e85ebfffecff8648e2f1eaae00abe748d",
+              "date": "2024-10-26",
+              "author": "EdamAmex",
+              "subject": "perf(router):  improve performance of router (#3526)",
+              "origin": "human"
+            },
+            {
+              "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+              "date": "2023-05-17",
+              "author": "Yusuke Wada",
+              "subject": "feat(app): `app.routerName()` (#1105)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/router/smart-router/router.ts",
+          "to": "src/router/trie-router/router.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: router.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "router.ts",
+            "filesUsing": 2
+          },
+          "shared": 3,
+          "fromChanges": 5,
+          "toChanges": 8,
+          "confidence": 0.6,
+          "reverseConfidence": 0.375,
+          "interval": {
+            "low": 0.2307,
+            "high": 0.8824
+          },
+          "reverseInterval": {
+            "low": 0.1368,
+            "high": 0.6943
+          },
+          "score": 0.231,
+          "weighted": false,
+          "lastTogether": "2024-11-12",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "7b308358f4024283bc95265a60ac518db8870106",
+              "date": "2024-11-12",
+              "author": "EdamAmex",
+              "subject": "refactor(router): use `#` for private props to reduce the minified file size (#3660)",
+              "origin": "human"
+            },
+            {
+              "hash": "10a5e65e85ebfffecff8648e2f1eaae00abe748d",
+              "date": "2024-10-26",
+              "author": "EdamAmex",
+              "subject": "perf(router):  improve performance of router (#3526)",
+              "origin": "human"
+            },
+            {
+              "hash": "390d05b00674567e2d02bac3bdc433292565c9a3",
+              "date": "2023-05-17",
+              "author": "Yusuke Wada",
+              "subject": "feat(app): `app.routerName()` (#1105)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/router/linear-router/router.ts",
+          "to": "src/router/pattern-router/router.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: router.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "router.ts",
+            "filesUsing": 2
+          },
+          "shared": 5,
+          "fromChanges": 12,
+          "toChanges": 15,
+          "confidence": 0.417,
+          "reverseConfidence": 0.333,
+          "interval": {
+            "low": 0.1932,
+            "high": 0.6805
+          },
+          "reverseInterval": {
+            "low": 0.1517,
+            "high": 0.5829
+          },
+          "score": 0.193,
+          "weighted": false,
+          "lastTogether": "2026-08-17",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "a19462879716e7b600daed8eb3a1b2af4bd68feb",
+              "date": "2026-08-17",
+              "author": "Yusuke Wada",
+              "subject": "fix(pattern-router/linear-router): prevent prefix overmatch on wildcard routes (#5252)",
+              "origin": "human"
+            },
+            {
+              "hash": "10a5e65e85ebfffecff8648e2f1eaae00abe748d",
+              "date": "2024-10-26",
+              "author": "EdamAmex",
+              "subject": "perf(router):  improve performance of router (#3526)",
+              "origin": "human"
+            },
+            {
+              "hash": "f60ab8b93e7fcecbfd754394ad9f61407a4b5ac4",
+              "date": "2024-03-18",
+              "author": "Leonardo Carreiro",
+              "subject": "fix(router): wildcard paths when using js reserved words (like constructor and __proto__) (#2357)",
+              "origin": "human"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "src/adapter/*/websocket",
+      "label": "websocket.ts across src/adapter/*",
+      "stem": "websocket",
+      "fileName": "websocket.ts",
+      "parentDir": "src/adapter",
+      "why": "3 parallel implementations of websocket.ts in sibling folders (bun, cloudflare-workers, deno); 2 of 3 pairwise links meet thresholds (4 supporting commits (2+ members via a qualifying pair), 3 touched all 3)",
+      "members": [
+        {
+          "path": "src/adapter/bun/websocket.ts",
+          "dir": "src/adapter/bun",
+          "variant": "bun",
+          "changes": 14,
+          "connections": 1
+        },
+        {
+          "path": "src/adapter/cloudflare-workers/websocket.ts",
+          "dir": "src/adapter/cloudflare-workers",
+          "variant": "cloudflare-workers",
+          "changes": 7,
+          "connections": 2
+        },
+        {
+          "path": "src/adapter/deno/websocket.ts",
+          "dir": "src/adapter/deno",
+          "variant": "deno",
+          "changes": 8,
+          "connections": 1
+        }
+      ],
+      "commitsTouchingTwoOrMore": 4,
+      "commitsTouchingAll": 3,
+      "lastTogether": "2024-10-25",
+      "qualifyingPairs": 2,
+      "possiblePairs": 3,
+      "complete": false,
+      "relationshipKinds": [
+        "ghost"
+      ],
+      "peakScore": 0.25,
+      "maxPairShared": 4,
+      "evidence": [
+        {
+          "hash": "234b083777d34fb1efadbe8f504148e2e533428f",
+          "date": "2024-10-25",
+          "author": "Shotaro Nakamura",
+          "subject": "feat(ws): Make WebSocket adapter more changeable (#3531)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/websocket.ts",
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        },
+        {
+          "hash": "6f69bf04b744d88efa608dd4458dd650ad57cdf0",
+          "date": "2024-09-08",
+          "author": "hayatosc",
+          "subject": "feat(websocket): Add generics type to `WSContext` (#3337)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/websocket.ts",
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        },
+        {
+          "hash": "a3d9cc7d9593b717986f81014892303d0f5b8846",
+          "date": "2024-05-28",
+          "author": "fzn0x",
+          "subject": "refactor(websocket): remove unused condition (#2839)",
+          "origin": "human",
+          "membersTouched": 2,
+          "totalMembers": 3,
+          "touchesAllMembers": false,
+          "memberPaths": [
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        }
+      ],
+      "allMemberEvidence": [
+        {
+          "hash": "234b083777d34fb1efadbe8f504148e2e533428f",
+          "date": "2024-10-25",
+          "author": "Shotaro Nakamura",
+          "subject": "feat(ws): Make WebSocket adapter more changeable (#3531)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/websocket.ts",
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        },
+        {
+          "hash": "6f69bf04b744d88efa608dd4458dd650ad57cdf0",
+          "date": "2024-09-08",
+          "author": "hayatosc",
+          "subject": "feat(websocket): Add generics type to `WSContext` (#3337)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/websocket.ts",
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        },
+        {
+          "hash": "47f5c545f2c143a596501abf2b5670cf2d4a6356",
+          "date": "2024-03-05",
+          "author": "Shotaro Nakamura",
+          "subject": "feat: Introduce WebSocket Helper / Adapter (#2265)",
+          "origin": "human",
+          "membersTouched": 3,
+          "totalMembers": 3,
+          "touchesAllMembers": true,
+          "memberPaths": [
+            "src/adapter/bun/websocket.ts",
+            "src/adapter/cloudflare-workers/websocket.ts",
+            "src/adapter/deno/websocket.ts"
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "from": "src/adapter/cloudflare-workers/websocket.ts",
+          "to": "src/adapter/deno/websocket.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: websocket.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "websocket.ts",
+            "filesUsing": 2
+          },
+          "shared": 4,
+          "fromChanges": 7,
+          "toChanges": 8,
+          "confidence": 0.571,
+          "reverseConfidence": 0.5,
+          "interval": {
+            "low": 0.2504,
+            "high": 0.8418
+          },
+          "reverseInterval": {
+            "low": 0.2152,
+            "high": 0.7848
+          },
+          "score": 0.25,
+          "weighted": false,
+          "lastTogether": "2024-10-25",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "234b083777d34fb1efadbe8f504148e2e533428f",
+              "date": "2024-10-25",
+              "author": "Shotaro Nakamura",
+              "subject": "feat(ws): Make WebSocket adapter more changeable (#3531)",
+              "origin": "human"
+            },
+            {
+              "hash": "6f69bf04b744d88efa608dd4458dd650ad57cdf0",
+              "date": "2024-09-08",
+              "author": "hayatosc",
+              "subject": "feat(websocket): Add generics type to `WSContext` (#3337)",
+              "origin": "human"
+            },
+            {
+              "hash": "a3d9cc7d9593b717986f81014892303d0f5b8846",
+              "date": "2024-05-28",
+              "author": "fzn0x",
+              "subject": "refactor(websocket): remove unused condition (#2839)",
+              "origin": "human"
+            }
+          ]
+        },
+        {
+          "from": "src/adapter/cloudflare-workers/websocket.ts",
+          "to": "src/adapter/bun/websocket.ts",
+          "relationship": "ghost",
+          "why": "possible parallel implementations: websocket.ts appears in sibling folders",
+          "hiddenBridge": {
+            "signal": "parallel-implementation",
+            "value": "websocket.ts",
+            "filesUsing": 2
+          },
+          "shared": 3,
+          "fromChanges": 7,
+          "toChanges": 14,
+          "confidence": 0.429,
+          "reverseConfidence": 0.214,
+          "interval": {
+            "low": 0.1582,
+            "high": 0.7496
+          },
+          "reverseInterval": {
+            "low": 0.0757,
+            "high": 0.4759
+          },
+          "score": 0.158,
+          "weighted": false,
+          "lastTogether": "2024-10-25",
+          "crossesDirectories": true,
+          "originShare": {
+            "human": 1,
+            "agent": 0,
+            "bot": 0
+          },
+          "evidence": [
+            {
+              "hash": "234b083777d34fb1efadbe8f504148e2e533428f",
+              "date": "2024-10-25",
+              "author": "Shotaro Nakamura",
+              "subject": "feat(ws): Make WebSocket adapter more changeable (#3531)",
+              "origin": "human"
+            },
+            {
+              "hash": "6f69bf04b744d88efa608dd4458dd650ad57cdf0",
+              "date": "2024-09-08",
+              "author": "hayatosc",
+              "subject": "feat(websocket): Add generics type to `WSContext` (#3337)",
+              "origin": "human"
+            },
+            {
+              "hash": "47f5c545f2c143a596501abf2b5670cf2d4a6356",
+              "date": "2024-03-05",
+              "author": "Shotaro Nakamura",
+              "subject": "feat: Introduce WebSocket Helper / Adapter (#2265)",
+              "origin": "human"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

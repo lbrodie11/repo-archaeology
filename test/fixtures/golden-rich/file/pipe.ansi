@@ -1,0 +1,103 @@
+Repo Archaeology · file src/hono-base.ts
+────────────────────────────────────────────────────────────────────────────────
+
+RUN · 1 CUT                         ✓ completed
+
+
+FINDINGS  10 (1 top, 2 primary, 7 secondary)
+
+F-01  src/hono.test.ts usually changes with src/hono-base.ts
+┃ info · top finding · pair-55f5201b
+┃ Test link: a test and the code it covers. 34 of 97 commits that changed
+┃ src/hono-base.ts also changed src/hono.test.ts (35%, 95% interval 26-45%); the
+┃ other way 34 of 173 (20%). Last together 2026-11-01. Below diff's alert
+┃ threshold (40% confidence).
+┃ src/hono-base.ts
+┃ src/hono.test.ts
+┃ ▰▰▰▱▱▱▱▱ 35% (range 26–45%)
+┃ co-change confidence (95% interval)
+┃ E-01  34f9043  2026-11-01  Merge commit from fork
+┃ E-02  e9c0107  2026-10-17  fix(hono-base): disallow `getPath` when `strict` i…
+┃ E-03  6f101a7  2026-08-03  feat: add first-class QUERY method support (#5070)
+
+F-02  src/types.ts usually changes with src/hono-base.ts
+  info · primary · pair-630d5390
+  Import link: hono-base.ts imports types.ts. 14 of 97 commits that changed
+  src/hono-base.ts also changed src/types.ts (14%, 95% interval 9-23%); the
+  other way 14 of 127 (11%). Last together 2025-12-13. Below diff's alert
+  threshold (40% confidence).
+  src/hono-base.ts
+    → references it directly
+  src/types.ts
+  ▰▱▱▱▱▱▱▱ 14% (range 9–23%)
+  co-change confidence (95% interval)
+  E-04  3e12de6  2025-12-13  fix(types): replace schema-based path tracking wit…
+  E-05  d2737ab  2025-06-16  feat: introduce Route Helper (#4204)
+  E-06  f1a7267  2024-10-11  perf(types): replace intersection with union to ge…
+
+F-03  src/context.ts usually changes with src/hono-base.ts
+  info · primary · pair-5747ffd6
+  Import link: hono-base.ts imports context.ts. 13 of 97 commits that changed
+  src/hono-base.ts also changed src/context.ts (13%, 95% interval 8-22%); the
+  other way 13 of 224 (6%). Last together 2024-11-02. Below diff's alert
+  threshold (40% confidence).
+  src/hono-base.ts
+    → references it directly
+  src/context.ts
+  ▰▱▱▱▱▱▱▱ 13% (range 8–22%)
+  co-change confidence (95% interval)
+  E-07  ae6165b  2024-11-02  refactor: use `#` for private methods to reduce th…
+  E-08  28de9b3  2024-07-05  chore: update outdated links in JSDoc (#3089)
+  E-09  ae3a67b  2024-06-27  perf(context): improve initializing `Context` (#30…
+
+F-04  src/request.ts usually changes with src/hono-base.ts
+  10% (6–18%) · 3 receipts · info · pair-a39d7400
+  src/hono-base.ts ⇢ src/request.ts
+F-05  src/client/types.ts usually changes with src/hono-base.ts
+  7% (4–14%) · 3 receipts · info · pair-8a1ed860
+  src/hono-base.ts → src/client/types.ts
+F-06  src/hono.ts usually changes with src/hono-base.ts
+  6% (3–13%) · 3 receipts · info · pair-04421a69
+  src/hono-base.ts → src/hono.ts
+F-07  src/types.test.ts usually changes with src/hono-base.ts
+  5% (2–12%) · 3 receipts · info · pair-6fa93604
+  src/hono-base.ts · src/types.test.ts
+F-08  src/compose.ts usually changes with src/hono-base.ts
+  5% (2–12%) · 3 receipts · info · pair-764b6787
+  src/hono-base.ts → src/compose.ts
+F-09  src/helper/dev/index.ts usually changes with src/hono-base.ts
+  5% (2–12%) · 3 receipts · info · pair-61b57ba2
+  src/hono-base.ts ⇢ src/helper/dev/index.ts
+F-10  src/router.ts usually changes with src/hono-base.ts
+  4% (2–10%) · 3 receipts · info · pair-ded6a524
+  src/hono-base.ts → src/router.ts
+
+
+METRICS
+  Commits analyzed          2780
+  History                   2021-12-14 to 2026-11-07
+  Sweeping commits skipped  34
+  Revert commits skipped    11
+  Changed in                97 commits
+  Busier than               99% of files
+  Median file               3 commits
+  Last changed              2026-11-01
+  Who knows it              Yusuke Wada 59%, Taku Amano 14%, EdamAmex 4%
+  Files that move with it   10
+
+
+WARNINGS
+  ▲ warning: Historical signal, not proof: check whether the change really needs
+    these files.
+
+
+NEXT STEPS
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  src/hono-base.ts src/hono.test.ts
+    Show the shared commits behind F-01.
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  src/hono-base.ts src/types.ts
+    Show the shared commits behind F-02.
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  src/hono-base.ts src/context.ts
+    Show the shared commits behind F-03.

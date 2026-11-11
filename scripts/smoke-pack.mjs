@@ -12,7 +12,9 @@
  *    for `diff --base <first-branch-point> --json` and `backtest --json`.
  * 5. Validates both outputs against `schema/diff.schema.json` and `schema/backtest.schema.json`
  *    using the shared recursive JSON Schema validator (`scripts/schema-validator.mjs`).
- * 6. Exits non-zero on any failure.
+ * 6. Runs `--style rich` for `scan`, `diff`, `file` and `explain` from the installed tarball, which
+ *    has `@frame12/terminal` but neither of its optional peers (`ink`, `react`) (RA-21).
+ * 7. Exits non-zero on any failure.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -216,7 +218,7 @@ export function runSmokePack(options = {}) {
       throw new Error(`Installed schema directory missing diff.schema.json at ${installedSchemaDir}`);
     }
 
-    const runInstalledCli = (args) => {
+    const runInstalledRaw = (args) => {
       const cliEnv = sanitizeGitEnv(process.env, { NO_COLOR: '1' });
       const npmCliJs = resolveNpmCliJs(cliEnv);
       // On POSIX, execute `node_modules/.bin/repo-archaeology` directly to verify both the bin symlink
@@ -263,6 +265,11 @@ export function runSmokePack(options = {}) {
           `repo-archaeology ${args.join(' ')} exited with status ${res.status}:\n${res.stderr || res.stdout}`,
         );
       }
+      return res;
+    };
+
+    const runInstalledCli = (args) => {
+      const res = runInstalledRaw(args);
       try {
         return JSON.parse(res.stdout);
       } catch (err) {
@@ -285,6 +292,32 @@ export function runSmokePack(options = {}) {
     validateAgainstSchema(SCHEMA_DIR, backtestJson, 'backtest.schema.json');
     validateAgainstSchema(installedSchemaDir, diffJson, 'diff.schema.json');
     validateAgainstSchema(installedSchemaDir, backtestJson, 'backtest.schema.json');
+
+    // 5b. `--style rich` from the tarball install, without ink or react (RA-21).
+    console.log('5b. Running installed `--style rich` for scan, diff, file and explain (no ink, no react)...');
+    for (const peer of ['ink', 'react']) {
+      if (existsSync(join(installDir, 'node_modules', peer))) {
+        throw new Error(`Expected the install to have no '${peer}' (an optional peer of @frame12/terminal), but it is present.`);
+      }
+    }
+    if (!existsSync(join(installDir, 'node_modules', '@frame12', 'terminal', 'package.json'))) {
+      throw new Error('Expected @frame12/terminal to be installed as a dependency of repo-archaeology.');
+    }
+    for (const args of [
+      ['scan'],
+      ['diff', '--base', firstBranchPoint],
+      ['file', 'src/payments/charge.ts'],
+      ['explain', 'src/payments/charge.ts', 'src/payments/ledger.ts'],
+    ]) {
+      const res = runInstalledRaw(['--style', 'rich', ...args]);
+      // `·`, or its ASCII twin `-` where @frame12/terminal detects no Unicode (Windows without TERM).
+      if (!/^Repo Archaeology [·-] /.test(res.stdout)) {
+        throw new Error(`repo-archaeology --style rich ${args.join(' ')} did not print the FRAME/12 masthead:\n${res.stdout}`);
+      }
+      if (res.stdout.includes('\u001b')) {
+        throw new Error(`repo-archaeology --style rich ${args.join(' ')} wrote escape sequences to a pipe.`);
+      }
+    }
 
     if (diffJson.tool?.version !== pkg.version) {
       throw new Error(`Expected diff --json tool.version '${pkg.version}', got '${diffJson.tool?.version}'`);

@@ -1,0 +1,48 @@
+exit: 0
+--- stdout
+Repo Archaeology · scan
+26 commits analyzed from 2024-01-01 to 2024-01-26
+! Only 26 usable commits: results will be thin until the project has more history.
+
+7 relationships above the thresholds: 1 ghost wire · 4 unchecked · 1 indirect import · 1 import link · 0 test link
+Showing ghost wire, unchecked. Change with --kinds ghost,unknown,indirect,direct,test.
+
+ 1. packages/web/src/listener.js → packages/core/src/model.ts  ghost wire
+    when packages/web/src/listener.js changed, packages/core/src/model.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 54% · no import link detected in the current code
+    01e3a96 2024-01-22  update packages/core/src/model.ts + packages/web/src/listener.js (4)
+    6b7db04 2024-01-17  update packages/core/src/model.ts + packages/web/src/listener.js (3)
+    b589b87 2024-01-12  update packages/core/src/model.ts + packages/web/src/listener.js (2)
+
+ 2. packages/core/package.json → packages/core/src/index.ts  unchecked
+    when packages/core/package.json changed, packages/core/src/index.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · involves project configuration, which code uses without importing
+    0747080 2024-01-26  update packages/core/package.json + packages/core/src/index.ts (4)
+    69441cc 2024-01-21  update packages/core/package.json + packages/core/src/index.ts (3)
+    1ac0542 2024-01-16  update packages/core/package.json + packages/core/src/index.ts (2)
+
+ 3. packages/cli/src/main.mjs → packages/core/src/internal.ts  unchecked
+    when packages/cli/src/main.mjs changed, packages/core/src/internal.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · some imports or path references could not be resolved, so a dependency link cannot be ruled out
+    9c45ce8 2024-01-25  update packages/cli/src/main.mjs + packages/core/src/internal.ts (4)
+    f0cbe74 2024-01-20  update packages/cli/src/main.mjs + packages/core/src/internal.ts (3)
+    99cf056 2024-01-15  update packages/cli/src/main.mjs + packages/core/src/internal.ts (2)
+
+ 4. docs/guide.md → packages/core/src/model.ts  unchecked
+    when docs/guide.md changed, packages/core/src/model.ts changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 54% · import status unknown because one or both file types are not supported
+    7688416 2024-01-24  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)
+    cebee49 2024-01-19  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)
+    485c143 2024-01-14  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)
+
+ 5. docs/guide.md → packages/web/src/page.jsx  unchecked
+    when docs/guide.md changed, packages/web/src/page.jsx changed too in 6 of 6 commits (100%) (95% CI 60–100%) · last together <ago>
+    reverse: 100% · import status unknown because one or both file types are not supported
+    7688416 2024-01-24  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (4)
+    cebee49 2024-01-19  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (3)
+    485c143 2024-01-14  update packages/web/src/page.jsx + packages/core/src/model.ts + docs/guide.md (2)
+
+Historical signal, not proof: check whether the change really needs these files.
+
+Explore the interactive view with `repo-archaeology map`.
+--- stderr

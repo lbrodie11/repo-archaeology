@@ -25,21 +25,26 @@ import { RELATIONSHIPS, type Relationship } from './imports/classify.js';
 import { parseOriginWeightsSpec, type OriginWeights } from './model/origin.js';
 import { formatJsonContract, getToolVersion, validateJsonOutPath, writeJsonContractFile } from './report/contract.js';
 import { renderDiffMarkdown } from './report/markdown.js';
+import type { Env } from '@frame12/terminal';
 import {
-  detectTerminalCapabilities,
-  printRichDiff,
-  printRichDimLine,
-  printRichExplain,
-  printRichFile,
-  printRichScan,
-  startRichProgressSpinner,
-  type RichRenderOptions,
-  type RichSpinnerController,
-} from './report/terminal-rich.js';
+  capabilityArgv,
+  diffToRichView,
+  explainToRichView,
+  fileToRichView,
+  renderRichView,
+  scanToRichView,
+  terminalCapabilities,
+  type AdapterOptions,
+  type RichView,
+  type TerminalFlags,
+} from './report/frame12-terminal.js';
+import { startRichProgressSpinner, type RichSpinnerController } from './report/terminal-safety.js';
 import { resolveStyleMode, type StyleMode } from './style/frame12.js';
 import { c, terminalText } from './util/term.js';
 
 const version = getToolVersion();
+/** When this run started (the rich snapshot's `startedAt`). */
+const RUN_STARTED_AT = new Date().toISOString();
 
 function positiveInt(value: string): number {
   const n = Number(value);
@@ -137,6 +142,8 @@ interface GlobalOptions {
   ascii?: boolean;
   links?: boolean;
   color?: boolean;
+  screenReader?: boolean;
+  columns?: number;
   fullEvidence?: boolean;
   cache: boolean;
   json?: boolean;
@@ -182,26 +189,35 @@ function configOptionsFrom(opts: GlobalOptions): Pick<ContextOptions, 'useConfig
   return {};
 }
 
-function richRenderOptionsFrom(
-  global: GlobalOptions,
-  remoteUrl?: string,
-  flagSettings?: Partial<Settings>,
-): RichRenderOptions {
+function terminalFlags(global: GlobalOptions): TerminalFlags {
   return {
-    remoteUrl,
-    ascii: global.ascii === true,
-    noColor: global.color === false,
-    noLinks: global.links === false,
-    fullEvidence: global.fullEvidence === true,
-    flagSettings,
+    color: global.color,
+    ascii: global.ascii,
+    links: global.links,
+    screenReader: global.screenReader,
+    columns: global.columns,
   };
 }
 
-async function resolveRichRenderOptions(global: GlobalOptions, ctx: Context): Promise<RichRenderOptions> {
-  const baseOpts = richRenderOptionsFrom(global, undefined, ctx.flagSettings);
-  const caps = detectTerminalCapabilities(baseOpts);
+/**
+ * `--style rich`: render a result through `@frame12/terminal` with its own capability detection
+ * (Repo Archaeology's flags mapped onto it). The remote is read only when links are enabled.
+ */
+async function writeRich(global: GlobalOptions, ctx: Context, build: (options: AdapterOptions) => RichView): Promise<void> {
+  const caps = terminalCapabilities(terminalFlags(global), process.env as Env, {
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr,
+  });
   const remoteUrl = caps.links ? await remoteOriginUrl(ctx.root) : undefined;
-  return { ...baseOpts, remoteUrl };
+  const view = build({
+    startedAt: RUN_STARTED_AT,
+    finishedAt: new Date().toISOString(),
+    flagSettings: ctx.flagSettings,
+    fullEvidence: global.fullEvidence === true,
+    ...(remoteUrl ? { remoteUrl } : {}),
+  });
+  process.stdout.write(renderRichView(view, caps));
 }
 
 async function loadTerminalContext(
@@ -237,7 +253,7 @@ async function loadTerminalContext(
           onWarning: (msg) => console.error(c.yellow(`! ${terminalText(msg)}`)),
         });
         if (resolvedStyle === 'rich') {
-          spinner = startRichProgressSpinner(richRenderOptionsFrom(global));
+          spinner = startRichProgressSpinner({ argv: capabilityArgv(terminalFlags(global)) });
         }
       },
     });
@@ -281,7 +297,9 @@ program
   .option('--style <mode>', 'visual style mode: classic or rich', (value) => resolveStyleMode({ flag: value }))
   .option('--ascii', 'use ASCII-only characters in rich terminal output')
   .addOption(new Option('--no-links', 'disable OSC 8 hyperlinks in rich terminal output'))
-  .option('--full-evidence', 'show all supporting commit receipts inline in rich terminal output')
+  .option('--screen-reader', 'rich terminal output as plain, append-only lines, one fact per line')
+  .option('--columns <n>', 'lay out rich terminal output for this many columns (20-400)', positiveInt)
+  .option('--full-evidence', 'include every stored supporting commit as a receipt in rich terminal output')
   .option('--no-cache', 'do not read or write the persistent history cache (.git/repo-archaeology/cache/)')
   .option('--json', 'print machine-readable JSON')
   .addOption(new Option('--no-color', 'disable colors'))
@@ -309,7 +327,7 @@ program
         const result = scan(ctx, options);
         spinner?.stop();
         if (style === 'rich') {
-          printRichScan(result, options, await resolveRichRenderOptions(global, ctx));
+          await writeRich(global, ctx, (o) => scanToRichView(result, options, o));
         } else {
           printScan(result, options);
         }
@@ -399,7 +417,7 @@ program
             writeJsonContractFile(opts.jsonOut, result);
           }
           if (style === 'rich') {
-            printRichDiff(result, await resolveRichRenderOptions(global, ctx));
+            await writeRich(global, ctx, (o) => diffToRichView(result, o));
           } else {
             printDiff(result);
           }
@@ -430,7 +448,7 @@ program
         const result = fileReport(ctx, path, opts);
         spinner?.stop();
         if (style === 'rich') {
-          printRichFile(result, await resolveRichRenderOptions(global, ctx));
+          await writeRich(global, ctx, (o) => fileToRichView(result, o));
         } else {
           printFile(result);
         }
@@ -473,7 +491,7 @@ program
         });
         spinner?.stop();
         if (style === 'rich') {
-          printRichExplain(result, await resolveRichRenderOptions(global, ctx));
+          await writeRich(global, ctx, (o) => explainToRichView(result, o));
         } else {
           printExplain(result);
         }
@@ -652,7 +670,7 @@ program.action(async () => {
         if (result.changed.some((file) => file.hasHistory)) {
           spinner?.stop();
           if (global.json) printJson({ mode: 'diff', ...result });
-          else if (style === 'rich') printRichDiff(result, await resolveRichRenderOptions(global, ctx));
+          else if (style === 'rich') await writeRich(global, ctx, (o) => diffToRichView(result, o));
           else printDiff(result);
           return;
         }
@@ -665,17 +683,7 @@ program.action(async () => {
     spinner?.stop();
     if (global.json) printJson({ mode: 'scan', changedWithoutHistory, ...result });
     else if (style === 'rich') {
-      const richOpts = await resolveRichRenderOptions(global, ctx);
-      if (changedWithoutHistory > 0) {
-        printRichDimLine(
-          `${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.`,
-          richOpts,
-        );
-        process.stdout.write('\n');
-      }
-      printRichScan(result, options, richOpts);
-      process.stdout.write('\n');
-      printRichDimLine('Explore the interactive view with `repo-archaeology map`.', richOpts);
+      await writeRich(global, ctx, (o) => scanToRichView(result, options, o, { changedWithoutHistory, bare: true }));
     } else {
       if (changedWithoutHistory > 0) console.log(c.dim(`${changedWithoutHistory} changed file${changedWithoutHistory === 1 ? '' : 's'} had no usable history; showing repository-wide relationships instead.\n`));
       printScan(result, options);

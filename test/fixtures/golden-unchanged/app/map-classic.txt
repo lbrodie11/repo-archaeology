@@ -1,0 +1,2448 @@
+exit: 0
+--- stdout
+Repo Archaeology · map
+! Only 36 usable commits: results will be thin until the project has more history.
+Drew 11 relationships between 15 files (2 ghost wires).
+Wrote <repo>/.git/map-classic.html
+--- stderr
+--- html
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ra-style" content="classic">
+<title>Ghost wires in <repo-name></title>
+<style>
+:root {
+  --ground: #13304f;
+  --ground-deep: #0e2540;
+  --ground-surface: #173b61;
+  --ground-card: rgba(14, 37, 64, 0.75);
+  --ground-card-hover: rgba(23, 59, 97, 0.9);
+  --chalk: #e8eef5;
+  --chalk-faded: #9fb4cc;
+  --chalk-dim: #7189a5;
+  --grid: rgba(159, 180, 204, 0.08);
+  --tape: #ff4f9a;
+  --tape-glow: rgba(255, 79, 154, 0.35);
+  --ochre: #e3b65b;
+  --lichen: #7fd1b0;
+  --import: rgba(232, 238, 245, 0.55);
+  --border-subtle: rgba(159, 180, 204, 0.18);
+  --border-active: rgba(159, 180, 204, 0.35);
+  --condensed: "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --text: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --code: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--ground); color: var(--chalk); font: 15px/1.55 var(--text); }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--tape); outline-offset: 2px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
+.bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between; padding: 18px 24px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--ground); }
+h1 { margin: 0; font: 600 30px/1.1 var(--condensed); letter-spacing: 0.01em; font-stretch: condensed; }
+.summary { margin: 4px 0 0; color: var(--chalk-faded); font-size: 14px; max-width: 75ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.search input { width: 240px; padding: 7px 11px; border: 1px solid var(--border-active); border-radius: 6px; background: var(--ground-deep); font-size: 13.5px; }
+.search input::placeholder { color: var(--chalk-faded); }
+.banner-warning { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 12px; background: rgba(227, 182, 91, 0.12); border: 1px solid rgba(227, 182, 91, 0.35); border-radius: 6px; font-size: 13px; color: var(--ochre); }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; min-width: 24px; padding: 5px 11px; border: 1px solid rgba(159, 180, 204, 0.3); border-radius: 999px; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--chalk); transition: all 0.15s ease; }
+.toggle:hover { border-color: var(--chalk); }
+.toggle[aria-pressed="false"] { border-style: dashed; border-color: rgba(159, 180, 204, 0.25); background: rgba(14, 37, 64, 0.4); color: var(--chalk-faded); }
+.toggle[aria-pressed="false"] .count { color: var(--chalk-dim); }
+.toggle[aria-pressed="true"] { background: rgba(23, 59, 97, 0.5); border-color: var(--border-active); color: var(--chalk); }
+.toggle .count { color: var(--chalk-faded); font-variant-numeric: tabular-nums; }
+.swatch { width: 22px; height: 0; border-top: 2px solid; }
+.swatch.ghost { border-top: 2px dashed var(--tape); filter: drop-shadow(0 0 3px var(--tape)); }
+.swatch.unknown { border-top: 2px dotted var(--ochre); }
+.swatch.indirect { border-top: 2px dashed var(--import); opacity: 0.8; }
+.swatch.direct { border-top-color: var(--import); }
+.swatch.test { border-top-color: var(--lichen); }
+
+.stage { position: relative; min-height: 0; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+canvas.dragging { cursor: grabbing; }
+canvas.pointing { cursor: pointer; }
+.stage-overlay { position: absolute; top: 14px; left: 14px; display: flex; gap: 8px; z-index: 10; }
+.map-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; min-width: 24px; padding: 6px 12px; background: rgba(14, 37, 64, 0.88); backdrop-filter: blur(6px); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+.map-btn:hover { background: rgba(19, 48, 79, 0.98); border-color: var(--chalk); transform: translateY(-1px); }
+.hint { position: absolute; left: 16px; bottom: 12px; margin: 0; font-size: 12.5px; color: var(--chalk-faded); pointer-events: none; }
+.tooltip { position: absolute; pointer-events: none; max-width: 440px; padding: 7px 11px; border-radius: 6px; background: var(--ground-deep); border: 1px solid var(--border-active); font-size: 13.5px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); z-index: 20; }
+.tooltip code { font-family: var(--code); font-size: 13px; word-break: break-all; }
+
+.panel { overflow-y: auto; padding: 22px 24px 36px; background: var(--ground-deep); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { margin: 0 0 6px; font: 600 22px/1.25 var(--condensed); font-stretch: condensed; }
+.panel h3 { margin: 18px 0 8px; font: 600 13px/1.2 var(--text); text-transform: uppercase; letter-spacing: 0.05em; color: var(--chalk-faded); }
+.panel p { margin: 0 0 10px; color: var(--chalk-faded); font-size: 14.5px; line-height: 1.55; }
+.panel .path { font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; color: var(--chalk); }
+.panel ol, .panel ul { list-style: none; margin: 0; padding: 0; }
+
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.badge.ghost { background: rgba(255, 79, 154, 0.15); color: var(--tape); border: 1px solid rgba(255, 79, 154, 0.35); }
+.badge.parallel { background: rgba(160, 200, 240, 0.12); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
+.badge.family { background: rgba(127, 209, 176, 0.16); color: var(--lichen); border: 1px solid rgba(127, 209, 176, 0.4); }
+.badge.unknown { background: rgba(227, 182, 91, 0.15); color: var(--ochre); border: 1px solid rgba(227, 182, 91, 0.35); }
+.badge.indirect { background: rgba(160, 200, 240, 0.15); color: #a0c8f0; border: 1px solid rgba(160, 200, 240, 0.3); }
+.badge.direct { background: rgba(232, 238, 245, 0.1); color: var(--chalk); border: 1px solid rgba(232, 238, 245, 0.25); }
+.badge.test { background: rgba(127, 209, 176, 0.15); color: var(--lichen); border: 1px solid rgba(127, 209, 176, 0.35); }
+
+.tab-group { display: flex; gap: 4px; margin-bottom: 8px; background: rgba(14, 37, 64, 0.7); padding: 3px; border-radius: 8px; border: 1px solid var(--border-subtle); }
+.tab-btn { flex: 1; padding: 6px 8px; background: transparent; border: 0; border-radius: 6px; color: var(--chalk-faded); font-size: 12.5px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s ease; }
+.tab-btn:hover { color: var(--chalk); }
+.tab-btn.active { background: var(--ground-surface); color: var(--chalk); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+
+.card-hint { font-size: 12px; color: var(--chalk-dim); margin: -4px 0 8px; }
+.card { background: var(--ground-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease; display: block; width: 100%; text-align: left; }
+.card.interactive { cursor: pointer; font: inherit; }
+.card.interactive:hover { border-color: rgba(255, 79, 154, 0.5); background: var(--ground-card-hover); transform: translateY(-1px); }
+.card.selected { border-color: var(--tape); box-shadow: 0 0 14px var(--tape-glow); }
+.card.family-card { border-left: 3px solid var(--lichen); }
+.card.family-card.interactive:hover { border-color: rgba(127, 209, 176, 0.65); }
+
+.card-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.card-title { font-family: var(--code); font-size: 13.5px; font-weight: 600; color: var(--chalk); overflow-wrap: anywhere; }
+.card-sub { font-size: 12.5px; color: var(--chalk-faded); margin-top: 4px; }
+.family-variants { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
+.family-variant-pill { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(23, 59, 97, 0.7); border: 1px solid var(--border-subtle); font: 11.5px/1.4 var(--code); color: var(--chalk); }
+
+.file-link { display: inline-flex; align-items: center; min-height: 24px; min-width: 24px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--code); font-size: 13.5px; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: rgba(159, 180, 204, 0.4); text-underline-offset: 3px; color: var(--chalk); }
+.file-link:hover { text-decoration-color: var(--tape); color: #fff; }
+
+.nav-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.back-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; margin-bottom: 8px; background: rgba(14, 37, 64, 0.6); border: 1px solid var(--border-active); border-radius: 6px; color: var(--chalk); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; width: fit-content; }
+.nav-row .back-btn { margin-bottom: 0; }
+.back-btn:hover { background: var(--ground-surface); border-color: var(--chalk); }
+.back-to-family-btn { border-color: rgba(127, 209, 176, 0.45); color: var(--lichen); }
+.back-to-family-btn:hover { border-color: var(--lichen); color: #fff; }
+
+.pair-container { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.pair-box { background: rgba(14, 37, 64, 0.85); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px; }
+.pair-box-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pair-dir { font-size: 12px; color: var(--chalk-dim); }
+.pair-wire { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--chalk-faded); padding: 2px 0; }
+
+.family-pair-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.family-pair-details { background: rgba(14, 37, 64, 0.78); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; }
+.family-pair-details[open] { border-color: var(--border-active); background: rgba(14, 37, 64, 0.92); }
+.family-pair-summary { cursor: pointer; font: 600 13px/1.4 var(--code); color: var(--chalk); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; }
+.family-pair-meta { font: 500 12px/1.3 var(--text); color: var(--chalk-faded); display: inline-flex; align-items: center; gap: 6px; }
+.family-pair-body { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(159, 180, 204, 0.14); font-size: 12.5px; color: var(--chalk-faded); }
+.family-pair-stat { margin: 3px 0; }
+.btn-inspect-pair { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 10px; background: rgba(23, 59, 97, 0.75); border: 1px solid var(--border-active); border-radius: 5px; color: var(--chalk); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-inspect-pair:hover { border-color: var(--tape); color: #fff; background: var(--ground-surface); }
+.evidence-scope-tag { display: inline-block; padding: 1px 6px; margin-right: 6px; border-radius: 4px; background: rgba(127, 209, 176, 0.14); border: 1px solid rgba(127, 209, 176, 0.32); font: 600 11px/1.3 var(--text); color: var(--lichen); }
+
+.cochange-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.cochange-card { background: rgba(14, 37, 64, 0.65); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 8px; text-align: center; }
+.cochange-pct { font-size: 21px; font-weight: 700; color: var(--chalk); font-variant-numeric: tabular-nums; }
+.cochange-label { font-size: 12px; color: var(--chalk-faded); margin-top: 4px; line-height: 1.3; }
+
+.callout { background: rgba(19, 48, 79, 0.6); border-left: 3px solid var(--tape); border-radius: 0 6px 6px 0; padding: 12px 14px; margin: 12px 0; font-size: 14px; line-height: 1.55; color: var(--chalk); }
+.callout.unknown { border-left-color: var(--ochre); }
+.callout.indirect { border-left-color: #a0c8f0; }
+.callout.direct { border-left-color: var(--chalk-faded); }
+.callout.test { border-left-color: var(--lichen); }
+.callout-title { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.evidence-wrap { margin: 12px 0 0; color: var(--chalk-faded); font-size: 13px; }
+.evidence-wrap summary { width: fit-content; cursor: pointer; color: var(--chalk); font-weight: 500; padding: 4px 0; }
+.evidence { margin: 8px 0 0; font-size: 13px; color: var(--chalk-faded); }
+.evidence li { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; padding: 6px 0; border-top: 1px solid rgba(159, 180, 204, 0.1); }
+.evidence .hash { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; min-width: 24px; padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(14, 37, 64, 0.6); cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--chalk); height: fit-content; }
+.evidence .hash:hover { border-color: var(--tape); color: var(--tape); }
+.evidence-item-body { min-width: 0; }
+.evidence-rename { font-family: var(--code); font-size: 11.5px; color: var(--chalk-dim); margin-top: 2px; overflow-wrap: anywhere; }
+
+.patch-details { grid-column: 1 / -1; margin-top: 4px; background: rgba(10, 26, 46, 0.75); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 6px 10px; }
+.patch-details summary { font-size: 12px; color: #a0c8f0; cursor: pointer; font-weight: 500; padding: 2px 0; }
+.patch-file { margin-top: 8px; border-top: 1px solid rgba(159, 180, 204, 0.12); padding-top: 6px; }
+.patch-file-title { font-family: var(--code); font-size: 12px; font-weight: 600; color: var(--chalk); overflow-wrap: anywhere; }
+.patch-note { font-size: 12px; color: var(--chalk-dim); margin-top: 3px; }
+.patch-hunk { margin: 6px 0 0; padding: 6px 8px; background: rgba(7, 19, 34, 0.85); border-radius: 4px; overflow-x: auto; font: 11.5px/1.45 var(--code); }
+.patch-hunk-hdr { color: #a0c8f0; margin-bottom: 2px; white-space: pre; }
+.patch-line { white-space: pre; color: var(--chalk-faded); }
+.patch-line.add { color: var(--lichen); background: rgba(127, 209, 176, 0.08); }
+.patch-line.del { color: #ff8da1; background: rgba(255, 79, 154, 0.08); }
+
+.counterexample-group { margin-top: 8px; }
+.counterexample-title { font-size: 12px; font-weight: 600; color: var(--chalk); margin: 6px 0 4px; }
+
+.cli-box { margin-top: 12px; padding: 10px 12px; background: rgba(14, 37, 64, 0.85); border: 1px solid var(--border-subtle); border-radius: 6px; }
+.cli-box-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cli-box-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--chalk-faded); }
+.btn-cli-copy { padding: 3px 9px; border: 1px solid var(--border-active); border-radius: 4px; background: rgba(23, 59, 97, 0.65); color: var(--chalk); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-cli-copy:hover { border-color: var(--tape); color: #fff; }
+.btn-cli-copy.copied { background: rgba(127, 209, 176, 0.22); border-color: var(--lichen); color: var(--lichen); }
+.cli-code { display: block; font: 12px/1.45 var(--code); color: var(--chalk); overflow-wrap: anywhere; user-select: all; }
+.privacy-note { margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--chalk-dim); }
+
+.btn-export { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 9px 16px; margin-top: 14px; background: rgba(255, 79, 154, 0.14); border: 1px solid rgba(255, 79, 154, 0.4); border-radius: 6px; color: var(--chalk); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; }
+.btn-export:hover { background: rgba(255, 79, 154, 0.25); border-color: var(--tape); }
+.btn-export.copied { background: rgba(127, 209, 176, 0.22); border-color: var(--lichen); color: var(--lichen); }
+
+.view-all-btn { display: block; width: 100%; padding: 8px 12px; margin-top: 10px; background: transparent; border: 1px dashed var(--border-active); border-radius: 6px; color: var(--chalk-faded); font-size: 13px; font-weight: 500; cursor: pointer; text-align: center; }
+.view-all-btn:hover { color: var(--chalk); border-color: var(--chalk); border-style: solid; }
+
+.folder-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--chalk-faded); }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh auto; height: auto; }
+  canvas { touch-action: pan-y; }
+  .panel { border-left: 0; border-top: 1px solid var(--border-subtle); }
+  .search input { width: 100%; }
+  .controls, .search { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="heading">
+      <h1>Ghost wires in <repo-name></h1>
+      <p id="summary" class="summary"></p>
+      <div class="banner-warning">! Only 36 usable commits: results will be thin until the project has more history.</div>
+    </div>
+    <div class="controls">
+      <label class="search"><span class="visually-hidden">Find a file</span>
+        <input id="search" type="search" placeholder="Find a file  ( / )" autocomplete="off" spellcheck="false">
+      </label>
+      <div id="toggles" class="toggles" role="group" aria-label="Relationship types"></div>
+    </div>
+  </header>
+  <main class="stage">
+    <canvas id="map" role="img" aria-label="Map of files that change together. The panel lists the same relationships as text."></canvas>
+    <div id="tooltip" class="tooltip" hidden></div>
+    <div class="stage-overlay">
+      <button id="reset-view" class="map-btn" type="button" title="Fit all files in view">Reset view</button>
+      <button id="toggle-anim" class="map-btn" type="button" title="Pause or resume line animation">Pause animation</button>
+    </div>
+    <p class="hint">Drag to pan, scroll to zoom, drag a file to pin it.</p>
+  </main>
+  <aside id="panel" class="panel" aria-live="polite"></aside>
+</div>
+<script type="application/json" id="ra-data">{"meta":{"tool":"repo-archaeology","root":"<repo-name>","commitsRead":36,"commitsAnalyzed":36,"sweepsSkipped":0,"subjectSkipped":0,"revertsSkipped":0,"renamesFollowed":0,"files":20,"oldestCommit":"2024-01-01","newestCommit":"2024-02-05","origins":{"human":36,"agent":0,"bot":0},"verdicts":{"loaded":0,"active":0,"expired":0,"file":".repo-archaeology.verdicts.json"},"imports":{"scope":"analyzed-files","filesScanned":15,"internalEdges":9,"external":2,"unresolved":3,"dynamicLoads":1,"unsupportedFiles":2,"sourceUnavailable":0,"heuristicEdges":0,"unresolvedByReason":{"target-missing":2,"not-exported":1}},"config":{"source":"working-tree"},"settings":{"maxCommits":5000,"maxFilesPerCommit":25,"minShared":2,"minConfidence":0.3,"ignore":[],"useDefaultIgnores":true},"warnings":["Only 36 usable commits: results will be thin until the project has more history."],"cache":{"enabled":false,"hits":0,"misses":36}},"repoName":"<repo-name>","generatedAt":"<generatedAt>","counts":{"ghost":2,"unknown":6,"indirect":0,"direct":3,"test":2},"classificationTruncated":false,"patchesIncluded":false,"nodes":[{"path":"README.md","dir":"(root)","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/lib/util.ts","dir":"src/lib","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/ui/button.tsx","dir":"src/ui","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/legacy.cjs","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/missing.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/globals.d.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/types.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"styles/main.css","dir":"styles","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/lib/config.ts","dir":"src/lib","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/loader.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/ui/panel.tsx","dir":"src/ui","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/db.ts","dir":"src","changes":11,"topAuthor":"Test","topAuthorShare":1},{"path":"src/api.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"src/billing.ts","dir":"src","changes":6,"topAuthor":"Test","topAuthorShare":1},{"path":"templates/invoice.ts","dir":"templates","changes":6,"topAuthor":"Test","topAuthorShare":1}],"edges":[{"source":0,"target":1,"relationship":"unknown","why":"import status unknown because one or both file types are not supported","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-05","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e","date":"2024-02-05","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (4)","origin":"human"},{"hash":"e5bf7af9e4b62653f1bc82db98dde7f5951e3132","date":"2024-01-29","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (3)","origin":"human"},{"hash":"326be339769d6bb07cf2f809f4f9ec5e525a84bc","date":"2024-01-22","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain README.md src/lib/util.ts"},{"source":0,"target":2,"relationship":"unknown","why":"import status unknown because one or both file types are not supported","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-05","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e","date":"2024-02-05","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (4)","origin":"human"},{"hash":"e5bf7af9e4b62653f1bc82db98dde7f5951e3132","date":"2024-01-29","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (3)","origin":"human"},{"hash":"326be339769d6bb07cf2f809f4f9ec5e525a84bc","date":"2024-01-22","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain README.md src/ui/button.tsx"},{"source":1,"target":2,"relationship":"direct","why":"linked through an index/barrel file","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":2,"weighted":false,"lastTogether":"2024-02-05","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"8354b8c3b31925de17bda7ea8aa5b3d0883c2a6e","date":"2024-02-05","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (4)","origin":"human"},{"hash":"e5bf7af9e4b62653f1bc82db98dde7f5951e3132","date":"2024-01-29","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (3)","origin":"human"},{"hash":"326be339769d6bb07cf2f809f4f9ec5e525a84bc","date":"2024-01-22","subject":"update src/ui/button.tsx + src/lib/util.ts + README.md (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/lib/util.ts src/ui/button.tsx"},{"source":3,"target":4,"relationship":"unknown","why":"some imports or path references could not be resolved, so a dependency link cannot be ruled out","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-04","crossesDirectories":false,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"0ae5c8e728e9ea08ea1671add7735f8ea0e386e1","date":"2024-02-04","subject":"update src/legacy.cjs + src/missing.ts (4)","origin":"human"},{"hash":"1ecb07bf052d654f0a99091cbc8893371ca6447a","date":"2024-01-28","subject":"update src/legacy.cjs + src/missing.ts (3)","origin":"human"},{"hash":"59355011ee73fc3f5c4f64a0ee7510e1c76bfafe","date":"2024-01-21","subject":"update src/legacy.cjs + src/missing.ts (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/legacy.cjs src/missing.ts"},{"source":5,"target":6,"relationship":"direct","why":"types.ts references globals.d.ts via a triple-slash path in the current code","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-03","crossesDirectories":false,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"4704e73b5f99c57a40ccf57f455f0c1e00bcddf4","date":"2024-02-03","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (4)","origin":"human"},{"hash":"eeed2b0ca856182f69737343294258473d03d975","date":"2024-01-27","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (3)","origin":"human"},{"hash":"eb0abd596a67a1da8504637d24c69d85da41a36f","date":"2024-01-20","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/globals.d.ts src/types.ts"},{"source":5,"target":7,"relationship":"unknown","why":"import status unknown because one or both file types are not supported","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":2,"weighted":false,"lastTogether":"2024-02-03","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"4704e73b5f99c57a40ccf57f455f0c1e00bcddf4","date":"2024-02-03","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (4)","origin":"human"},{"hash":"eeed2b0ca856182f69737343294258473d03d975","date":"2024-01-27","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (3)","origin":"human"},{"hash":"eb0abd596a67a1da8504637d24c69d85da41a36f","date":"2024-01-20","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/globals.d.ts styles/main.css"},{"source":6,"target":7,"relationship":"unknown","why":"import status unknown because one or both file types are not supported","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":2,"weighted":false,"lastTogether":"2024-02-03","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"4704e73b5f99c57a40ccf57f455f0c1e00bcddf4","date":"2024-02-03","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (4)","origin":"human"},{"hash":"eeed2b0ca856182f69737343294258473d03d975","date":"2024-01-27","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (3)","origin":"human"},{"hash":"eb0abd596a67a1da8504637d24c69d85da41a36f","date":"2024-01-20","subject":"update src/types.ts + src/globals.d.ts + styles/main.css (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/types.ts styles/main.css"},{"source":8,"target":9,"relationship":"unknown","why":"some imports or path references could not be resolved, so a dependency link cannot be ruled out","shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-02","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"58c3b6b3b4edf5961b9e03bff414b7a3035c890f","date":"2024-02-02","subject":"update src/loader.ts + src/lib/config.ts (4)","origin":"human"},{"hash":"f14a8345e536f34296e82bdaeb6da3f27709d355","date":"2024-01-26","subject":"update src/loader.ts + src/lib/config.ts (3)","origin":"human"},{"hash":"61e3547c1254cf5fae95f3e9d2461b998225bb70","date":"2024-01-19","subject":"update src/loader.ts + src/lib/config.ts (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/lib/config.ts src/loader.ts"},{"source":10,"target":11,"relationship":"ghost","why":"no import link detected in the current code","shared":6,"fromChanges":6,"toChanges":11,"confidence":1,"reverseConfidence":0.545,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.28,"high":0.7873},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-02-01","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"1293d66ce0651e72d854f1d98e15998a521776e5","date":"2024-02-01","subject":"update src/ui/panel.tsx + src/db.ts (4)","origin":"human"},{"hash":"19af81a4da01631b336d903ccd018dc3f57cf205","date":"2024-01-25","subject":"update src/ui/panel.tsx + src/db.ts (3)","origin":"human"},{"hash":"4482ad89e26c3c5c4c86c949b01161408e6b22fa","date":"2024-01-18","subject":"update src/ui/panel.tsx + src/db.ts (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":5,"fromOnly":[],"toOnly":[{"hash":"9dd6620ed1e55731ec29858ef2fe0dff48a2de8b","date":"2024-01-31","subject":"update src/api.ts + src/db.ts + src/api.test.ts (4)","origin":"human"},{"hash":"a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d","date":"2024-01-24","subject":"update src/api.ts + src/db.ts + src/api.test.ts (3)","origin":"human"},{"hash":"7fbfdd53ca3e328958b26a8920b3b6d234325e10","date":"2024-01-17","subject":"update src/api.ts + src/db.ts + src/api.test.ts (2)","origin":"human"}]},"explainCommand":"npx repo-archaeology explain src/ui/panel.tsx src/db.ts"},{"source":12,"target":11,"relationship":"direct","why":"api.ts imports db.ts","shared":6,"fromChanges":6,"toChanges":11,"confidence":1,"reverseConfidence":0.545,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.28,"high":0.7873},"score":0.6096657120978346,"overviewPriority":1,"weighted":false,"lastTogether":"2024-01-31","crossesDirectories":false,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"9dd6620ed1e55731ec29858ef2fe0dff48a2de8b","date":"2024-01-31","subject":"update src/api.ts + src/db.ts + src/api.test.ts (4)","origin":"human"},{"hash":"a3d6a0da34f2679e5d4571c6dcc4210df28b1c9d","date":"2024-01-24","subject":"update src/api.ts + src/db.ts + src/api.test.ts (3)","origin":"human"},{"hash":"7fbfdd53ca3e328958b26a8920b3b6d234325e10","date":"2024-01-17","subject":"update src/api.ts + src/db.ts + src/api.test.ts (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":5,"fromOnly":[],"toOnly":[{"hash":"1293d66ce0651e72d854f1d98e15998a521776e5","date":"2024-02-01","subject":"update src/ui/panel.tsx + src/db.ts (4)","origin":"human"},{"hash":"19af81a4da01631b336d903ccd018dc3f57cf205","date":"2024-01-25","subject":"update src/ui/panel.tsx + src/db.ts (3)","origin":"human"},{"hash":"4482ad89e26c3c5c4c86c949b01161408e6b22fa","date":"2024-01-18","subject":"update src/ui/panel.tsx + src/db.ts (2)","origin":"human"}]},"explainCommand":"npx repo-archaeology explain src/api.ts src/db.ts"},{"source":13,"target":14,"relationship":"ghost","why":"shared configuration: both reference environment variable BILLING_PLAN (used in 2 files)","hiddenBridge":{"signal":"shared-environment","value":"BILLING_PLAN","filesUsing":2},"shared":6,"fromChanges":6,"toChanges":6,"confidence":1,"reverseConfidence":1,"interval":{"low":0.6096,"high":1},"reverseInterval":{"low":0.6096,"high":1},"score":0.6096657120978346,"overviewPriority":2,"weighted":false,"lastTogether":"2024-01-30","crossesDirectories":true,"originShare":{"human":1,"agent":0,"bot":0},"evidence":[{"hash":"25f5c3f7cfc5e28b9e8de3974a6b717d1367ece2","date":"2024-01-30","subject":"update src/billing.ts + templates/invoice.ts (4)","origin":"human"},{"hash":"6f1ed9ac766198789d689fe399d9b79a6fd188e8","date":"2024-01-23","subject":"update src/billing.ts + templates/invoice.ts (3)","origin":"human"},{"hash":"f53f0da18df0d7477f8d32ea97c1c1826993eacb","date":"2024-01-16","subject":"update src/billing.ts + templates/invoice.ts (2)","origin":"human"}],"counterexamples":{"fromOnlyTotal":0,"toOnlyTotal":0,"fromOnly":[],"toOnly":[]},"explainCommand":"npx repo-archaeology explain src/billing.ts templates/invoice.ts"}],"families":[]}</script>
+<script type="application/json" id="ra-layout">{"x":[208.2,168.6,-55.6,-180.9,-194.2,-319.7,-340.8,-139.9,114.6,-179.4,8.8,-52.3,-110.4,152.4,268.6],"y":[14.7,198.8,285.8,-13.9,-7.7,63.3,-97.2,-221.9,226.5,-2.7,114.7,-14.7,-160.5,-193.9,-90]}</script>
+<script>
+(function () {
+  'use strict';
+  var data = JSON.parse(document.getElementById('ra-data').textContent);
+  var KINDS = {
+    ghost: { label: 'Ghost wires', color: '#ff4f9a' },
+    unknown: { label: 'Unchecked', color: '#e3b65b' },
+    indirect: { label: 'Indirect imports', color: 'rgba(160, 200, 240, 0.6)' },
+    direct: { label: 'Import links', color: 'rgba(232, 238, 245, 0.55)' },
+    test: { label: 'Test links', color: '#7fd1b0' }
+  };
+  var ORDER = ['ghost', 'unknown', 'indirect', 'direct', 'test'];
+  function hasKindInData(kind) {
+    if (data.edges.some(function (e) { return e.relationship === kind; })) return true;
+    return (data.families || []).some(function (f) {
+      return (f.undrawnPairs || []).some(function (up) { return up.relationship === kind; });
+    });
+  }
+  var hasPrimary = data.edges.some(function (e) { return e.relationship !== 'unknown'; });
+  var visible = {
+    ghost: hasKindInData('ghost'),
+    unknown: !hasPrimary && hasKindInData('unknown'),
+    indirect: hasKindInData('indirect'),
+    direct: hasKindInData('direct'),
+    test: hasKindInData('test')
+  };
+  var motionMedia = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var reduceMotion = Boolean(motionMedia && motionMedia.matches);
+
+  var canvas = document.getElementById('map');
+  var ctx = canvas.getContext('2d');
+  var tooltip = document.getElementById('tooltip');
+  var panel = document.getElementById('panel');
+  var search = document.getElementById('search');
+  var resetBtn = document.getElementById('reset-view');
+  var hintEl = typeof document.querySelector === 'function' ? document.querySelector('.hint') : null;
+  function updateTouchHint() {
+    if (hintEl) hintEl.textContent = 'Two fingers to pan and zoom';
+  }
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+    updateTouchHint();
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function pct(x) { return Math.floor(x * 100 + 1e-9) + '%'; }
+  // Contributor concentration without naming the person: map reports are meant to be shared
+  function contributorShareNote(author, share) {
+    return author && typeof share === 'number' && share >= 0.4 ? ' · One contributor: ' + pct(share) + ' of commits' : '';
+  }
+  function formatCi(iv, raw) {
+    return '(' + (raw ? 'raw ' : '') + '95% CI ' + Math.floor(iv.low * 100 + 1e-9) + '\u2013' + Math.ceil(iv.high * 100 - 1e-9) + '%)';
+  }
+  function base(p) { var i = p.lastIndexOf('/'); return i < 0 ? p : p.slice(i + 1); }
+  function distinguishingPaths(a, b) {
+    var aParts = a.split('/'), bParts = b.split('/');
+    for (var depth = 1; depth <= Math.max(aParts.length, bParts.length); depth++) {
+      var aLabel = aParts.slice(-depth).join('/');
+      var bLabel = bParts.slice(-depth).join('/');
+      if (aLabel !== bLabel) return [aLabel, bLabel];
+    }
+    return [a, b];
+  }
+  function plural(n, w) { return n.toLocaleString('en-US') + ' ' + w + (n === 1 ? '' : 's'); }
+  function relativeDate(date) {
+    var days = Math.max(0, Math.floor((Date.parse(data.generatedAt) - Date.parse(date)) / 86400000));
+    if (days < 1) return '<ago>';
+    if (days === 1) return '<ago>';
+    if (days < 45) return days + ' days ago';
+    var months = Math.round(days / 30.44);
+    if (months < 18) return months + ' ' + (months === 1 ? 'month' : 'months') + ' ago';
+    var years = (days / 365.25).toFixed(1).replace(/\.0$/, '');
+    return years + ' years ago';
+  }
+  function capitalize(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
+
+  // Deterministic layout: the same repo produces the same picture every time.
+  var seed = 7;
+  for (var s = 0; s < data.repoName.length; s++) seed = (seed * 31 + data.repoName.charCodeAt(s)) | 0;
+  function random() {
+    seed = (seed + 0x6d2b79f5) | 0;
+    var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function pairJitter(i, j) {
+    var lo = i < j ? i : j;
+    var hi = i < j ? j : i;
+    var h1 = (Math.imul(lo + 1, 0x9e3779b1) ^ Math.imul(hi + 1, 0x85ebca6b)) | 0;
+    h1 = Math.imul(h1 ^ (h1 >>> 15), 1 | h1);
+    h1 = (h1 + Math.imul(h1 ^ (h1 >>> 7), 61 | h1)) ^ h1;
+    var jx = ((h1 ^ (h1 >>> 14)) >>> 0) / 4294967296 - 0.5;
+    var h2 = (h1 + 0x6d2b79f5) | 0;
+    h2 = Math.imul(h2 ^ (h2 >>> 15), 1 | h2);
+    h2 = (h2 + Math.imul(h2 ^ (h2 >>> 7), 61 | h2)) ^ h2;
+    var jy = ((h2 ^ (h2 >>> 14)) >>> 0) / 4294967296 - 0.5;
+    return i < j ? { dx: jx, dy: jy } : { dx: -jx, dy: -jy };
+  }
+  function hashHue(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return Math.round((h * 137.508) % 360);
+  }
+
+  // ---- data ----------------------------------------------------------------
+  // Null-prototype object: folders named "constructor" or "__proto__" must not hit Object.prototype.
+  var dirs = Object.create(null);
+  var dirList = [];
+  var nodes = data.nodes.map(function (n, i) {
+    if (!dirs[n.dir]) { dirs[n.dir] = { name: n.dir, x: 0, y: 0, count: 0 }; dirList.push(dirs[n.dir]); }
+    return {
+      i: i, path: n.path, dir: n.dir, changes: n.changes, author: n.topAuthor, share: n.topAuthorShare,
+      r: 4 + Math.min(14, Math.sqrt(n.changes) * 1.25),
+      color: 'hsl(' + hashHue(n.dir) + ', 58%, 72%)',
+      x: 0, y: 0, vx: 0, vy: 0, pinned: false, edges: []
+    };
+  });
+  var edges = data.edges.map(function (e) {
+    var edge = { s: nodes[e.source], t: nodes[e.target], d: e };
+    edge.s.edges.push(edge);
+    edge.t.edges.push(edge);
+    return edge;
+  });
+
+  function edgeKey(a, b) {
+    return a < b ? a + '\0' + b : b + '\0' + a;
+  }
+  var nodeByPath = Object.create(null);
+  nodes.forEach(function (n) { nodeByPath[n.path] = n; });
+  var edgeByPairKey = Object.create(null);
+  edges.forEach(function (e) { edgeByPairKey[edgeKey(e.s.path, e.t.path)] = e; });
+  var families = (data.families || []).map(function (f) {
+    var famEdges = [];
+    (f.edgeIndices || []).forEach(function (idx) {
+      if (edges[idx]) famEdges.push(edges[idx]);
+    });
+    var relList = f.relationships || f.pairs;
+    if (famEdges.length === 0 && relList) {
+      relList.forEach(function (p) {
+        var found = edgeByPairKey[edgeKey(p.from, p.to)];
+        if (found) famEdges.push(found);
+      });
+    }
+    var famNodes = [];
+    (f.members || []).forEach(function (m) {
+      var n = typeof m.nodeIndex === 'number' && nodes[m.nodeIndex] ? nodes[m.nodeIndex] : nodeByPath[m.path];
+      if (n) famNodes.push(n);
+    });
+    return { d: f, members: f.members || [], edges: famEdges, undrawnPairs: f.undrawnPairs || [], nodes: famNodes };
+  });
+
+  // Disambiguate duplicate basenames (e.g. multiple page.tsx or route.ts)
+  var baseCounts = Object.create(null);
+  nodes.forEach(function (n) {
+    var b = base(n.path);
+    baseCounts[b] = (baseCounts[b] || 0) + 1;
+  });
+  function getNodeLabel(n) {
+    var b = base(n.path);
+    if (baseCounts[b] <= 1) return b;
+    var parts = n.path.split('/');
+    if (parts.length >= 2) return parts.slice(-2).join('/');
+    return n.path;
+  }
+
+  var overviewGhosts = edges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
+    return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
+  });
+  var overviewLabelNodes = {};
+  overviewGhosts.slice(0, 3).forEach(function (e) {
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    overviewLabelNodes[e.s.i] = labels[0];
+    overviewLabelNodes[e.t.i] = labels[1];
+  });
+  dirList.forEach(function (d, i) {
+    var angle = (i / Math.max(1, dirList.length)) * Math.PI * 2;
+    var radius = 120 + 40 * Math.sqrt(dirList.length);
+    d.x = Math.cos(angle) * radius;
+    d.y = Math.sin(angle) * radius;
+  });
+  nodes.forEach(function (n) {
+    var d = dirs[n.dir];
+    n.x = d.x + (random() - 0.5) * 80;
+    n.y = d.y + (random() - 0.5) * 80;
+  });
+  var layoutEl = document.getElementById('ra-layout');
+  var precomputed = null;
+  if (layoutEl && layoutEl.textContent) {
+    try { precomputed = JSON.parse(layoutEl.textContent); } catch (_) { precomputed = null; }
+  }
+  var hasPrecomputed = Boolean(
+    precomputed &&
+    Array.isArray(precomputed.x) &&
+    Array.isArray(precomputed.y) &&
+    precomputed.x.length === nodes.length &&
+    precomputed.y.length === nodes.length &&
+    precomputed.x.every(function (v) { return typeof v === 'number' && Number.isFinite(v); }) &&
+    precomputed.y.every(function (v) { return typeof v === 'number' && Number.isFinite(v); })
+  );
+  if (hasPrecomputed) {
+    for (var li = 0; li < nodes.length; li++) {
+      nodes[li].x = precomputed.x[li];
+      nodes[li].y = precomputed.y[li];
+    }
+  }
+
+  // ---- header --------------------------------------------------------------
+  var m = data.meta;
+  var span = m.oldestCommit && m.newestCommit ? ' between ' + m.oldestCommit + ' and ' + m.newestCommit : '';
+  function updateSummary() {
+    var shown = edges.filter(function (e) { return visible[e.d.relationship]; }).length;
+    document.getElementById('summary').textContent =
+      'Analyzed ' + plural(m.commitsAnalyzed, 'commit') + span + '. Loaded ' + plural(edges.length, 'relationship') +
+      ' and showing ' + shown.toLocaleString('en-US') + ' (each at least ' + m.settings.minShared +
+      ' shared commits and ' + pct(m.settings.minConfidence) + ' confidence).';
+  }
+  updateSummary();
+
+  var alpha = hasPrecomputed ? 0 : 1;
+  var tickCount = 0;
+  var fitPendingAfterSettle = !hasPrecomputed;
+  var deferSimOneFrame = false;
+  var activeNodesList = [];
+  var visibleEdgesList = [];
+  var edgesByKind = { test: [], direct: [], indirect: [], unknown: [], ghost: [] };
+  edges.forEach(function (e) {
+    if (edgesByKind[e.d.relationship]) edgesByKind[e.d.relationship].push(e);
+  });
+  var xOrder = new Int32Array(nodes.length);
+  var cellX = new Int32Array(nodes.length);
+  var cellY = new Int32Array(nodes.length);
+  var nodeCell = new Int32Array(nodes.length);
+  var sortedNode = new Int32Array(nodes.length);
+  var gridCounts = new Int32Array(1024);
+  var gridStarts = new Int32Array(1024);
+  var gridWrite = new Int32Array(1024);
+  var nonEmptyCells = new Int32Array(1024);
+  var xOrderNeedsInit = true;
+  function syncActiveNodes() {
+    activeNodesList = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var act = false;
+      for (var k = 0; k < n.edges.length; k++) {
+        if (visible[n.edges[k].d.relationship]) { act = true; break; }
+      }
+      n.active = act;
+      if (act) activeNodesList.push(n);
+      else { n.vx = 0; n.vy = 0; }
+    }
+    visibleEdgesList = [];
+    for (var ei = 0; ei < edges.length; ei++) {
+      if (visible[edges[ei].d.relationship]) visibleEdgesList.push(edges[ei]);
+    }
+    xOrderNeedsInit = true;
+  }
+  syncActiveNodes();
+
+  var toggles = document.getElementById('toggles');
+  ORDER.forEach(function (kind) {
+    var shown = edges.filter(function (e) { return e.d.relationship === kind; }).length;
+    if (shown === 0 && !hasKindInData(kind)) return;
+    var b = el('button', 'toggle');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(visible[kind]));
+    if (kind === 'unknown') b.title = 'Hidden by default when other links exist: import status could not be verified';
+    b.appendChild(el('span', 'swatch ' + kind));
+    b.appendChild(el('span', '', KINDS[kind].label));
+    b.appendChild(el('span', 'count', String(shown)));
+    b.addEventListener('click', function () {
+      visible[kind] = !visible[kind];
+      b.setAttribute('aria-pressed', String(visible[kind]));
+      syncActiveNodes();
+      if (selectedEdge && !visible[selectedEdge.d.relationship]) selectedEdge = null;
+      if (selectedFamily && !resolveActiveFamilyView(selectedFamily)) selectedFamily = null;
+      if (returnToFamily && !resolveActiveFamilyView(returnToFamily)) returnToFamily = null;
+      alpha = Math.max(alpha, 0.6);
+      tickCount = 0;
+      deferSimOneFrame = true;
+      fitPendingAfterSettle = !selectedNode && !selectedEdge && !selectedFamily && !userMoved;
+      if (fitPendingAfterSettle) {
+        flight = null;
+        if (!reduceMotion) fit();
+      }
+      updateSummary();
+      renderPanel();
+      requestDraw();
+    });
+    toggles.appendChild(b);
+  });
+
+  // ---- layout simulation ---------------------------------------------------
+  function tick() {
+    var i, j, a, b, dx, dy, d2, f;
+    var activeNodes = activeNodesList;
+    var mLen = activeNodes.length;
+    if (mLen > 1) {
+      if (xOrderNeedsInit) {
+        for (i = 0; i < mLen; i++) xOrder[i] = i;
+        xOrder.subarray(0, mLen).sort(function (ia, ib) { return activeNodes[ia].x - activeNodes[ib].x; });
+        xOrderNeedsInit = false;
+      } else {
+        for (i = 1; i < mLen; i++) {
+          var idx = xOrder[i];
+          var xVal = activeNodes[idx].x;
+          j = i - 1;
+          while (j >= 0 && activeNodes[xOrder[j]].x > xVal) {
+            xOrder[j + 1] = xOrder[j];
+            j--;
+          }
+          xOrder[j + 1] = idx;
+        }
+      }
+      var minCellX = 2147483647, maxCellX = -2147483648;
+      var minCellY = 2147483647, maxCellY = -2147483648;
+      for (i = 0; i < mLen; i++) {
+        a = activeNodes[i];
+        var cx0 = Math.floor(a.x / 300) | 0;
+        var cy0 = Math.floor(a.y / 300) | 0;
+        cellX[i] = cx0;
+        cellY[i] = cy0;
+        if (cx0 < minCellX) minCellX = cx0;
+        if (cx0 > maxCellX) maxCellX = cx0;
+        if (cy0 < minCellY) minCellY = cy0;
+        if (cy0 > maxCellY) maxCellY = cy0;
+      }
+      var cols = maxCellX - minCellX + 3;
+      var rows = maxCellY - minCellY + 3;
+      var totalCells = cols * rows;
+      var repAlpha = 1400 * alpha;
+      if (totalCells <= 65536) {
+        if (gridCounts.length < totalCells + 1) {
+          gridCounts = new Int32Array(totalCells + 1);
+          gridStarts = new Int32Array(totalCells + 1);
+          gridWrite = new Int32Array(totalCells + 1);
+          nonEmptyCells = new Int32Array(totalCells + 1);
+        } else {
+          gridCounts.fill(0, 0, totalCells + 1);
+        }
+        for (i = 0; i < mLen; i++) {
+          var cIdx = (cellY[i] - minCellY + 1) * cols + (cellX[i] - minCellX + 1);
+          nodeCell[i] = cIdx;
+          gridCounts[cIdx]++;
+        }
+        var sum = 0, nonEmptyCount = 0;
+        for (var c = 0; c < totalCells; c++) {
+          gridStarts[c] = sum;
+          gridWrite[c] = sum;
+          var cnt = gridCounts[c];
+          if (cnt > 0) nonEmptyCells[nonEmptyCount++] = c;
+          sum += cnt;
+        }
+        gridStarts[totalCells] = sum;
+        for (var k = 0; k < mLen; k++) {
+          var nIdx = xOrder[k];
+          var cell = nodeCell[nIdx];
+          sortedNode[gridWrite[cell]++] = nIdx;
+        }
+        for (var nc = 0; nc < nonEmptyCount; nc++) {
+          var cCell = nonEmptyCells[nc];
+          var startA = gridStarts[cCell];
+          var endA = gridStarts[cCell + 1];
+          var endARight = gridStarts[cCell + 2];
+          var startBottom = gridStarts[cCell + cols - 1];
+          var endBottom = gridStarts[cCell + cols + 2];
+          var jStartBottom = startBottom;
+          for (i = startA; i < endA; i++) {
+            a = activeNodes[sortedNode[i]];
+            var maxX = a.x + 300;
+            for (j = i + 1; j < endARight; j++) {
+              b = activeNodes[sortedNode[j]];
+              if (b.x > maxX) break;
+              dx = b.x - a.x; dy = b.y - a.y;
+              d2 = dx * dx + dy * dy;
+              if (d2 > 90000) continue;
+              if (d2 < 1) { var jit = pairJitter(a.i, b.i); dx = jit.dx; dy = jit.dy; d2 = 1; }
+              f = repAlpha / d2;
+              a.vx -= dx * f; a.vy -= dy * f;
+              b.vx += dx * f; b.vy += dy * f;
+            }
+            if (jStartBottom < endBottom) {
+              var minX = a.x - 300;
+              while (jStartBottom < endBottom && activeNodes[sortedNode[jStartBottom]].x < minX) jStartBottom++;
+              for (j = jStartBottom; j < endBottom; j++) {
+                b = activeNodes[sortedNode[j]];
+                if (b.x > maxX) break;
+                dx = b.x - a.x; dy = b.y - a.y;
+                d2 = dx * dx + dy * dy;
+                if (d2 > 90000) continue;
+                if (d2 < 1) { var jit2 = pairJitter(a.i, b.i); dx = jit2.dx; dy = jit2.dy; d2 = 1; }
+                f = repAlpha / d2;
+                a.vx -= dx * f; a.vy -= dy * f;
+                b.vx += dx * f; b.vy += dy * f;
+              }
+            }
+          }
+        }
+      } else {
+        for (i = 0; i < mLen; i++) {
+          a = activeNodes[xOrder[i]];
+          var maxSweepX = a.x + 300;
+          for (j = i + 1; j < mLen; j++) {
+            b = activeNodes[xOrder[j]];
+            if (b.x > maxSweepX) break;
+            dx = b.x - a.x; dy = b.y - a.y;
+            d2 = dx * dx + dy * dy;
+            if (d2 > 90000) continue;
+            if (d2 < 1) { var jit3 = pairJitter(a.i, b.i); dx = jit3.dx; dy = jit3.dy; d2 = 1; }
+            f = repAlpha / d2;
+            a.vx -= dx * f; a.vy -= dy * f;
+            b.vx += dx * f; b.vy += dy * f;
+          }
+        }
+      }
+    }
+    for (i = 0; i < visibleEdgesList.length; i++) {
+      var e = visibleEdgesList[i];
+      dx = e.t.x - e.s.x; dy = e.t.y - e.s.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var strength = Math.max(e.d.confidence, e.d.reverseConfidence);
+      var rest = 50 + (1 - strength) * 90 + e.s.r + e.t.r;
+      f = ((d - rest) / d) * 0.05 * alpha * (0.4 + strength);
+      e.s.vx += dx * f; e.s.vy += dy * f;
+      e.t.vx -= dx * f; e.t.vy -= dy * f;
+    }
+    dirList.forEach(function (d) { d.cx = 0; d.cy = 0; d.count = 0; });
+    activeNodes.forEach(function (n) { var d = dirs[n.dir]; d.cx += n.x; d.cy += n.y; d.count++; });
+    activeNodes.forEach(function (n) {
+      var d = dirs[n.dir];
+      n.vx += (d.cx / d.count - n.x) * 0.012 * alpha - n.x * 0.012 * alpha;
+      n.vy += (d.cy / d.count - n.y) * 0.012 * alpha - n.y * 0.012 * alpha;
+      if (n.pinned) { n.vx = 0; n.vy = 0; return; }
+      n.vx *= 0.62; n.vy *= 0.62;
+      n.x += n.vx; n.y += n.vy;
+    });
+    alpha *= 0.985;
+    tickCount++;
+    if (tickCount >= 400) alpha = 0;
+  }
+
+  // ---- camera --------------------------------------------------------------
+  var cam = { x: 0, y: 0, scale: 1 };
+  var size = { w: 0, h: 0, dpr: 1 };
+  function resizeNow() {
+    var rect = canvas.getBoundingClientRect();
+    var rw = rect.width > 0 ? rect.width : (canvas.clientWidth || 800);
+    var rh = rect.height > 0 ? rect.height : (canvas.clientHeight || 600);
+    var maxScale = Math.sqrt(16000000 / Math.max(1, rw * rh));
+    var dpr = Math.min(window.devicePixelRatio || 1, 2, maxScale);
+    size.dpr = dpr;
+    size.w = rw; size.h = rh;
+    canvas.width = Math.round(rw * dpr);
+    canvas.height = Math.round(rh * dpr);
+    requestDraw();
+  }
+  function bounds(list) {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    list.forEach(function (n) {
+      minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
+      minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
+    });
+    var w = Math.max(1, size.w);
+    var h = Math.max(1, size.h);
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, scale: Math.max(0.2, Math.min(2.2, Math.min(w / Math.max(1, maxX - minX + 160), h / Math.max(1, maxY - minY + 160)))) };
+  }
+  function fit() {
+    var list = activeNodesList;
+    if (list.length === 0) return;
+    var b = bounds(list);
+    cam.x = b.x; cam.y = b.y; cam.scale = b.scale;
+  }
+  var flight = null;
+  function flyTo(list) {
+    if (list.length === 0) return;
+    var b = bounds(list);
+    b.scale = Math.min(b.scale, 2);
+    if (reduceMotion) { cam.x = b.x; cam.y = b.y; cam.scale = b.scale; requestDraw(); return; }
+    flight = { from: { x: cam.x, y: cam.y, scale: cam.scale }, to: b, start: performance.now() };
+    requestDraw();
+  }
+  function stepFlight(now) {
+    if (!flight) return false;
+    var t = Math.min(1, (now - flight.start) / 450);
+    var e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    cam.x = flight.from.x + (flight.to.x - flight.from.x) * e;
+    cam.y = flight.from.y + (flight.to.y - flight.from.y) * e;
+    cam.scale = flight.from.scale + (flight.to.scale - flight.from.scale) * e;
+    if (t >= 1) flight = null;
+    return true;
+  }
+  var userMoved = false;
+  function toWorld(px, py) {
+    return { x: (px - size.w / 2) / cam.scale + cam.x, y: (py - size.h / 2) / cam.scale + cam.y };
+  }
+
+  // ---- selection -----------------------------------------------------------
+  var selectedNode = null, selectedEdge = null, selectedFamily = null, hoverNode = null, hoverEdge = null, hoverFamily = null, matches = null;
+  var returnToFamily = null, expandedFamilyPairKey = null;
+  var overviewTab = 'ghost';
+  var overviewExpanded = false;
+  var animPaused = false;
+
+  function isVisible(e) { return visible[e.d.relationship]; }
+  function isActive(n) { return Boolean(n.active); }
+
+  function getActiveFamilyViews(fam) {
+    if (!fam) return [];
+    var activeEdges = fam.edges.filter(isVisible);
+    var activeUndrawn = (fam.undrawnPairs || []).filter(function (up) {
+      return Boolean(visible[up.relationship]);
+    });
+    if (activeEdges.length + activeUndrawn.length < 2) return [];
+    var adj = Object.create(null);
+    fam.members.forEach(function (m) { adj[m.path] = []; });
+    activeEdges.forEach(function (e) {
+      if (adj[e.s.path] && adj[e.t.path]) {
+        adj[e.s.path].push(e.t.path);
+        adj[e.t.path].push(e.s.path);
+      }
+    });
+    activeUndrawn.forEach(function (up) {
+      if (adj[up.from] && adj[up.to]) {
+        adj[up.from].push(up.to);
+        adj[up.to].push(up.from);
+      }
+    });
+    var memberIdxByPath = Object.create(null);
+    fam.members.forEach(function (m, idx) { memberIdxByPath[m.path] = idx; });
+
+    var visited = Object.create(null);
+    var views = [];
+    fam.members.forEach(function (m) {
+      if (visited[m.path] || !adj[m.path] || adj[m.path].length === 0) return;
+      var compPaths = Object.create(null);
+      var queue = [m.path];
+      visited[m.path] = true;
+      compPaths[m.path] = true;
+      for (var q = 0; q < queue.length; q++) {
+        var cur = queue[q];
+        var nbrs = adj[cur] || [];
+        for (var k = 0; k < nbrs.length; k++) {
+          var nxt = nbrs[k];
+          if (!visited[nxt]) {
+            visited[nxt] = true;
+            compPaths[nxt] = true;
+            queue.push(nxt);
+          }
+        }
+      }
+      var compMembers = fam.members.filter(function (mem) { return Boolean(compPaths[mem.path]); });
+      if (compMembers.length < 3) return;
+      var compEdges = activeEdges.filter(function (e) { return Boolean(compPaths[e.s.path] && compPaths[e.t.path]); });
+      var compUndrawn = activeUndrawn.filter(function (up) { return Boolean(compPaths[up.from] && compPaths[up.to]); });
+      var qualifyingPairs = compEdges.length + compUndrawn.length;
+      if (qualifyingPairs < 2) return;
+      var possiblePairs = (compMembers.length * (compMembers.length - 1)) / 2;
+      var isSubset = compMembers.length < fam.members.length || qualifyingPairs < fam.d.qualifyingPairs;
+
+      var compNodes = [];
+      compMembers.forEach(function (mem) {
+        var n = typeof mem.nodeIndex === 'number' && nodes[mem.nodeIndex] ? nodes[mem.nodeIndex] : nodeByPath[mem.path];
+        if (n) compNodes.push(n);
+      });
+
+      var commitsTouchingTwoOrMore = fam.d.commitsTouchingTwoOrMore;
+      var commitsTouchingAll = fam.d.commitsTouchingAll;
+      var lastTogether = fam.d.lastTogether;
+      var activeEvidence = fam.d.evidence || [];
+
+      if (isSubset) {
+        var compIdxSet = Object.create(null);
+        compMembers.forEach(function (mem) {
+          var mi = memberIdxByPath[mem.path];
+          if (typeof mi === 'number') compIdxSet[mi] = true;
+        });
+        var activePairIdxSet = Object.create(null);
+        var activePairPathSet = Object.create(null);
+        function addActivePair(pA, pB) {
+          activePairPathSet[edgeKey(pA, pB)] = true;
+          var ia = memberIdxByPath[pA];
+          var ib = memberIdxByPath[pB];
+          if (typeof ia === 'number' && typeof ib === 'number') {
+            var lo = ia < ib ? ia : ib;
+            var hi = ia < ib ? ib : ia;
+            activePairIdxSet[lo + ':' + hi] = true;
+          }
+        }
+        compEdges.forEach(function (e) { addActivePair(e.s.path, e.t.path); });
+        compUndrawn.forEach(function (up) { addActivePair(up.from, up.to); });
+
+        var evByHash = Object.create(null);
+        var evOrder = [];
+        function collectEv(ev, extraPaths) {
+          if (!ev || !ev.hash) return;
+          var rec = evByHash[ev.hash];
+          if (!rec) {
+            rec = { hash: ev.hash, date: ev.date || '', author: ev.author || '', subject: ev.subject || '', pathMap: Object.create(null) };
+            evByHash[ev.hash] = rec;
+            evOrder.push(rec);
+          }
+          (ev.memberPaths || []).forEach(function (p) {
+            if (compPaths[p]) rec.pathMap[p] = true;
+          });
+          (extraPaths || []).forEach(function (p) {
+            if (compPaths[p]) rec.pathMap[p] = true;
+          });
+        }
+        (fam.d.evidence || []).forEach(function (ev) { collectEv(ev); });
+        (fam.d.allMemberEvidence || []).forEach(function (ev) { collectEv(ev); });
+        compEdges.forEach(function (e) {
+          (e.d.evidence || []).forEach(function (ev) { collectEv(ev, [e.s.path, e.t.path]); });
+        });
+        compUndrawn.forEach(function (up) {
+          (up.evidence || []).forEach(function (ev) { collectEv(ev, [up.from, up.to]); });
+        });
+
+        var filteredEv = [];
+        evOrder.forEach(function (rec) {
+          var paths = compMembers.map(function (mem) { return mem.path; }).filter(function (p) { return Boolean(rec.pathMap[p]); });
+          if (paths.length < 2) return;
+          var hasActivePair = false;
+          for (var a = 0; a < paths.length && !hasActivePair; a++) {
+            for (var b = a + 1; b < paths.length; b++) {
+              if (activePairPathSet[edgeKey(paths[a], paths[b])]) {
+                hasActivePair = true;
+                break;
+              }
+            }
+          }
+          if (!hasActivePair) return;
+          filteredEv.push({
+            hash: rec.hash,
+            date: rec.date,
+            author: rec.author,
+            subject: rec.subject,
+            membersTouched: paths.length,
+            totalMembers: compMembers.length,
+            touchesAllMembers: paths.length === compMembers.length,
+            memberPaths: paths
+          });
+        });
+        filteredEv.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+        activeEvidence = filteredEv.slice(0, 5);
+
+        if (fam.d.commitMemberIndices && fam.d.commitMemberIndices.length > 0) {
+          commitsTouchingTwoOrMore = 0;
+          commitsTouchingAll = 0;
+          fam.d.commitMemberIndices.forEach(function (mIndices) {
+            var activeIdxs = (mIndices || []).filter(function (idx) { return Boolean(compIdxSet[idx]); });
+            if (activeIdxs.length < 2) return;
+            var hasPair = false;
+            for (var i = 0; i < activeIdxs.length && !hasPair; i++) {
+              for (var j = i + 1; j < activeIdxs.length; j++) {
+                var lo = activeIdxs[i] < activeIdxs[j] ? activeIdxs[i] : activeIdxs[j];
+                var hi = activeIdxs[i] < activeIdxs[j] ? activeIdxs[j] : activeIdxs[i];
+                if (activePairIdxSet[lo + ':' + hi]) {
+                  hasPair = true;
+                  break;
+                }
+              }
+            }
+            if (!hasPair) return;
+            commitsTouchingTwoOrMore++;
+            if (activeIdxs.length === compMembers.length) commitsTouchingAll++;
+          });
+        } else {
+          commitsTouchingTwoOrMore = filteredEv.length;
+          commitsTouchingAll = filteredEv.filter(function (ev) { return ev.touchesAllMembers; }).length;
+        }
+        if (activeEvidence.length > 0 && activeEvidence[0].date) {
+          lastTogether = activeEvidence[0].date;
+        }
+      }
+
+      views.push({
+        id: fam.d.id + ':' + compMembers.map(function (mem) { return mem.path; }).join(','),
+        d: fam.d,
+        family: fam,
+        members: compMembers,
+        nodes: compNodes,
+        nodeSet: new Set(compNodes),
+        edges: compEdges,
+        edgeSet: new Set(compEdges),
+        undrawnPairs: compUndrawn,
+        qualifyingPairs: qualifyingPairs,
+        possiblePairs: possiblePairs,
+        commitsTouchingTwoOrMore: commitsTouchingTwoOrMore,
+        commitsTouchingAll: commitsTouchingAll,
+        lastTogether: lastTogether,
+        evidence: activeEvidence,
+        isSubset: isSubset
+      });
+    });
+    return views;
+  }
+
+  function resolveActiveFamilyView(sel) {
+    if (!sel) return null;
+    if (sel._isFallbackView) return sel;
+    var baseFam = sel.family || sel;
+    var views = getActiveFamilyViews(baseFam);
+    if (views.length === 0) return null;
+    if (sel.id) {
+      for (var i = 0; i < views.length; i++) {
+        if (views[i].id === sel.id) return views[i];
+      }
+      if (sel.members && sel.members.length > 0) {
+        var targetPath = sel.members[0].path;
+        for (var j = 0; j < views.length; j++) {
+          if (views[j].members.some(function (m) { return m.path === targetPath; })) return views[j];
+        }
+      }
+    }
+    return views[0];
+  }
+
+  function focusEdge(e, activeFam) {
+    if (selectedEdge) return e === selectedEdge;
+    if (hoverEdge) return e === hoverEdge;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
+    if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
+    return true;
+  }
+  function focusNode(n, activeFam) {
+    if (selectedEdge) return n === selectedEdge.s || n === selectedEdge.t;
+    if (hoverEdge) return n === hoverEdge.s || n === hoverEdge.t;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.nodeSet ? fam.nodeSet.has(n) : fam.nodes.indexOf(n) >= 0;
+    if (selectedNode) return n === selectedNode || n.edges.some(function (e) { return isVisible(e) && (e.s === selectedNode || e.t === selectedNode); });
+    if (matches) return matches.indexOf(n) >= 0;
+    return true;
+  }
+  function isGhostFocused(e, activeFam) {
+    if (e.d.relationship !== 'ghost' || !visible.ghost) return false;
+    if (selectedEdge) return e === selectedEdge;
+    if (hoverEdge) return e === hoverEdge;
+    var fam = activeFam !== undefined ? activeFam : resolveActiveFamilyView(hoverFamily || selectedFamily);
+    if (fam) return fam.edgeSet ? fam.edgeSet.has(e) : fam.edges.indexOf(e) >= 0;
+    if (selectedNode) return e.s === selectedNode || e.t === selectedNode;
+    if (hoverNode) return e.s === hoverNode || e.t === hoverNode;
+    return false;
+  }
+  function hasFocusedGhostWire() {
+    if (!visible.ghost) return false;
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    var ghostEdges = edgesByKind.ghost || [];
+    for (var i = 0; i < ghostEdges.length; i++) {
+      if (isGhostFocused(ghostEdges[i], activeFam)) return true;
+    }
+    return false;
+  }
+
+  // ---- drawing -------------------------------------------------------------
+  var dashPhase = 0, drawQueued = false, dirty = true, lastMarch = 0, marchTimer = null;
+  var labelWidthCache = new Map();
+  var lastZoomBucket = '';
+  function measureLabelWidth(label, zoomBucket) {
+    if (zoomBucket !== lastZoomBucket) {
+      labelWidthCache.clear();
+      lastZoomBucket = zoomBucket;
+    }
+    var w = labelWidthCache.get(label);
+    if (w === undefined) {
+      w = ctx.measureText(label).width;
+      labelWidthCache.set(label, w);
+    }
+    return w;
+  }
+  function cancelMarchTimer() {
+    if (marchTimer !== null) {
+      clearTimeout(marchTimer);
+      marchTimer = null;
+    }
+  }
+  function scheduleMarch(now) {
+    if (marchTimer !== null || drawQueued) return;
+    var elapsed = now - lastMarch;
+    var delay = Math.max(4, Math.ceil(83.34 - elapsed));
+    marchTimer = setTimeout(function () {
+      marchTimer = null;
+      if (drawQueued) return;
+      drawQueued = true;
+      requestAnimationFrame(frame);
+    }, delay);
+  }
+  function requestDraw() {
+    dirty = true;
+    if (drawQueued) return;
+    cancelMarchTimer();
+    drawQueued = true;
+    requestAnimationFrame(frame);
+  }
+  function frame() {
+    drawQueued = false;
+    var ts = performance.now();
+    var didSimStep = false;
+    var isDraggingNode = Boolean(drag && drag.node && drag.moved);
+    if (alpha > 0.02) {
+      if (deferSimOneFrame && !isDraggingNode) {
+        deferSimOneFrame = false;
+        requestDraw();
+        return;
+      } else {
+        deferSimOneFrame = false;
+        var sliceStart = ts;
+        var steps = 0;
+        var maxSteps = (reduceMotion && !isDraggingNode) ? 400 : 6;
+        var budgetMs = 8;
+        while (alpha > 0.02 && steps < maxSteps && (steps === 0 || performance.now() - sliceStart < budgetMs)) {
+          tick();
+          steps++;
+        }
+        didSimStep = steps > 0;
+        if (alpha <= 0.02 && fitPendingAfterSettle) {
+          fitPendingAfterSettle = false;
+          if (!userMoved && !selectedNode && !selectedEdge && !selectedFamily) fit();
+        }
+        if (reduceMotion && didSimStep && !(drag && drag.node && drag.moved)) {
+          requestDraw();
+          return;
+        }
+      }
+    }
+    var flying = stepFlight(ts);
+    var marching = !animPaused && !reduceMotion && !document.hidden && hasFocusedGhostWire();
+    if (!marching) cancelMarchTimer();
+    var marched = false;
+    if (marching && ts - lastMarch >= 83.33) {
+      dashPhase = (dashPhase + 1.75) % 1100;
+      lastMarch = ts;
+      marched = true;
+    }
+    if (dirty || didSimStep || flying || marched) {
+      dirty = false;
+      draw();
+    }
+    if (alpha > 0.02 || flying) {
+      cancelMarchTimer();
+      requestDraw();
+    } else if (marching) {
+      scheduleMarch(performance.now());
+    }
+  }
+
+  function draw() {
+    var dpr = size.dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#13304f';
+    ctx.fillRect(0, 0, size.w, size.h);
+
+    var step = 80 * cam.scale;
+    if (step > 14) {
+      var origin = { x: size.w / 2 - cam.x * cam.scale, y: size.h / 2 - cam.y * cam.scale };
+      ctx.strokeStyle = 'rgba(159, 180, 204, 0.08)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var gx = ((origin.x % step) + step) % step; gx < size.w; gx += step) { ctx.moveTo(Math.round(gx) + 0.5, 0); ctx.lineTo(Math.round(gx) + 0.5, size.h); }
+      for (var gy = ((origin.y % step) + step) % step; gy < size.h; gy += step) { ctx.moveTo(0, Math.round(gy) + 0.5); ctx.lineTo(size.w, Math.round(gy) + 0.5); }
+      ctx.stroke();
+    }
+
+    var k = cam.scale;
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (size.w / 2 - cam.x * k), dpr * (size.h / 2 - cam.y * k));
+
+    var activeFam = resolveActiveFamilyView(hoverFamily || selectedFamily);
+    ['test', 'direct', 'indirect', 'unknown', 'ghost'].forEach(function (kind) {
+      if (!visible[kind]) return;
+      var kindEdges = edgesByKind[kind] || [];
+      for (var ei = 0; ei < kindEdges.length; ei++) {
+        var e = kindEdges[ei];
+        var focused = focusEdge(e, activeFam);
+        var baseWidth = (0.8 + Math.max(e.d.confidence, e.d.reverseConfidence) * 2.2) / k;
+        ctx.beginPath();
+        ctx.moveTo(e.s.x, e.s.y);
+        ctx.lineTo(e.t.x, e.t.y);
+        if (kind === 'ghost') {
+          var ghostFocused = isGhostFocused(e, activeFam);
+          if (ghostFocused) {
+            ctx.setLineDash([]);
+            ctx.lineDashOffset = 0;
+            ctx.strokeStyle = '#ff4f9a';
+            ctx.globalAlpha = 0.25;
+            ctx.lineWidth = baseWidth + 5 / k;
+            ctx.stroke();
+          }
+          ctx.globalAlpha = focused ? 1 : 0.06;
+          ctx.strokeStyle = KINDS[kind].color;
+          ctx.lineWidth = baseWidth;
+          ctx.setLineDash([7 / k, 6 / k]);
+          ctx.lineDashOffset = ghostFocused ? -dashPhase / k : 0;
+        } else {
+          ctx.globalAlpha = focused ? 1 : 0.06;
+          ctx.strokeStyle = KINDS[kind].color;
+          ctx.lineWidth = baseWidth;
+          ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
+          if (kind === 'unknown') {
+            ctx.setLineDash([2 / k, 5 / k]);
+          } else if (kind === 'indirect') {
+            ctx.setLineDash([10 / k, 4 / k]);
+          } else if (kind === 'test') {
+            ctx.globalAlpha *= 0.7;
+          }
+        }
+        ctx.stroke();
+      }
+    });
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+
+    activeNodesList.forEach(function (n) {
+      var focused = focusNode(n, activeFam);
+      ctx.globalAlpha = focused ? 1 : 0.14;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = n.color;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1 / k, 1.2);
+      var isTargetEndpoint = (selectedEdge && (n === selectedEdge.s || n === selectedEdge.t)) ||
+                             (hoverEdge && (n === hoverEdge.s || n === hoverEdge.t)) ||
+                             (activeFam && (activeFam.nodeSet ? activeFam.nodeSet.has(n) : activeFam.nodes.indexOf(n) >= 0));
+      ctx.strokeStyle = n === selectedNode ? '#ff4f9a' : (isTargetEndpoint ? '#ff4f9a' : 'rgba(14, 37, 64, 0.9)');
+      if (n === selectedNode || isTargetEndpoint) ctx.lineWidth = 3 / Math.sqrt(k);
+      ctx.stroke();
+    });
+
+    ctx.globalAlpha = 1;
+    ctx.font = (12.5 / k) + 'px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    var zoomBucket = k.toFixed(3);
+    var labelBoxes = [];
+    nodes.forEach(function (n) {
+      var overview = !selectedNode && !selectedEdge && !selectedFamily && !hoverEdge && !hoverFamily && !matches;
+      var wanted = n === hoverNode || n === selectedNode || (matches && matches.indexOf(n) >= 0) ||
+        ((selectedNode || selectedEdge || selectedFamily || hoverEdge || hoverFamily) && focusNode(n, activeFam)) ||
+        (overview && (n.r * k > 9 || (visible.ghost && overviewLabelNodes[n.i])));
+      if (!wanted || !isActive(n)) return;
+      var label = overviewLabelNodes[n.i] || getNodeLabel(n);
+      var x = n.x + n.r + 5 / k;
+      var labelW = measureLabelWidth(label, zoomBucket);
+      var labelBox = { left: x - 2 / k, right: x + labelW + 2 / k, top: n.y - 8 / k, bottom: n.y + 8 / k };
+      if (overview && labelBoxes.some(function (box) {
+        return labelBox.left < box.right && labelBox.right > box.left && labelBox.top < box.bottom && labelBox.bottom > box.top;
+      })) return;
+      labelBoxes.push(labelBox);
+      ctx.lineWidth = 4 / k;
+      ctx.strokeStyle = 'rgba(19, 48, 79, 0.94)';
+      ctx.strokeText(label, x, n.y);
+      ctx.fillStyle = '#e8eef5';
+      ctx.fillText(label, x, n.y);
+    });
+
+    if (nodes.length === 0) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#9fb4cc';
+      ctx.font = '15px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Nothing passed the thresholds yet. Re-run with --min-shared 2 to see weaker links.', size.w / 2, size.h / 2);
+      ctx.textAlign = 'start';
+    }
+  }
+
+  // ---- hit testing ---------------------------------------------------------
+  function nodeAt(p) {
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      var n = nodes[i];
+      if (!isActive(n)) continue;
+      var dx = p.x - n.x, dy = p.y - n.y, r = n.r + 3 / cam.scale;
+      if (dx * dx + dy * dy <= r * r) return n;
+    }
+    return null;
+  }
+  function edgeAt(p) {
+    var best = null, bestD = 6 / cam.scale;
+    edges.forEach(function (e) {
+      if (!isVisible(e)) return;
+      var ax = e.s.x, ay = e.s.y, bx = e.t.x, by = e.t.y;
+      var vx = bx - ax, vy = by - ay, len2 = vx * vx + vy * vy || 1;
+      var t = Math.max(0, Math.min(1, ((p.x - ax) * vx + (p.y - ay) * vy) / len2));
+      var dx = p.x - (ax + t * vx), dy = p.y - (ay + t * vy), d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestD) { bestD = d; best = e; }
+    });
+    return best;
+  }
+
+  // ---- pointer interaction -------------------------------------------------
+  var drag = null;
+  var activeTouches = new Map();
+  var pinchState = null;
+  var pinchMoved = false;
+  function isStackedTouch(ev) {
+    return ev.pointerType === 'touch' && window.innerWidth <= 960;
+  }
+  canvas.addEventListener('pointerdown', function (ev) {
+    var rect = canvas.getBoundingClientRect();
+    var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    if (ev.pointerType === 'touch') {
+      updateTouchHint();
+      activeTouches.set(ev.pointerId, {
+        x: px, y: py, clientX: ev.clientX, clientY: ev.clientY, startX: px, startY: py
+      });
+      if (activeTouches.size === 2) {
+        drag = null;
+        pinchMoved = true;
+        canvas.classList.remove('dragging');
+        activeTouches.forEach(function (_, pid) {
+          try { canvas.setPointerCapture(pid); } catch (_) {}
+        });
+        var pts = Array.from(activeTouches.values());
+        pinchState = {
+          midX: (pts[0].x + pts[1].x) / 2,
+          midY: (pts[0].y + pts[1].y) / 2,
+          dist: Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y))
+        };
+        return;
+      }
+      if (activeTouches.size > 2) return;
+      if (isStackedTouch(ev)) {
+        var tn = nodeAt(toWorld(px, py));
+        drag = { node: tn, startX: px, startY: py, lastX: px, lastY: py, moved: false, stackedSingleTouch: true };
+        return;
+      }
+    }
+    var n = nodeAt(toWorld(px, py));
+    drag = { node: n, startX: px, startY: py, lastX: px, lastY: py, moved: false, stackedSingleTouch: false };
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
+    canvas.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove', function (ev) {
+    var rect = canvas.getBoundingClientRect();
+    var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    if (ev.pointerType === 'touch' && activeTouches.has(ev.pointerId)) {
+      var prevTouch = activeTouches.get(ev.pointerId);
+      prevTouch.x = px; prevTouch.y = py;
+      prevTouch.clientX = ev.clientX; prevTouch.clientY = ev.clientY;
+      if (activeTouches.size === 2 && pinchState) {
+        var pts = Array.from(activeTouches.values());
+        var newMidX = (pts[0].x + pts[1].x) / 2;
+        var newMidY = (pts[0].y + pts[1].y) / 2;
+        var newDist = Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+        userMoved = true; flight = null;
+        var before = toWorld(newMidX, newMidY);
+        cam.scale = Math.max(0.15, Math.min(6, cam.scale * (newDist / pinchState.dist)));
+        var after = toWorld(newMidX, newMidY);
+        cam.x += before.x - after.x - (newMidX - pinchState.midX) / cam.scale;
+        cam.y += before.y - after.y - (newMidY - pinchState.midY) / cam.scale;
+        pinchState.midX = newMidX;
+        pinchState.midY = newMidY;
+        pinchState.dist = newDist;
+        tooltip.hidden = true;
+        requestDraw();
+        return;
+      }
+      if (drag && drag.stackedSingleTouch) {
+        if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 6) {
+          drag.moved = true;
+        }
+        drag.lastX = px; drag.lastY = py;
+        return;
+      }
+    }
+    if (drag) {
+      if (Math.abs(px - drag.startX) + Math.abs(py - drag.startY) > 4) drag.moved = true;
+      if (drag.node && drag.moved) {
+        var w = toWorld(px, py);
+        drag.node.x = w.x; drag.node.y = w.y; drag.node.pinned = true;
+        alpha = Math.max(alpha, 0.25);
+        tickCount = 0;
+      } else if (drag.moved) {
+        userMoved = true; flight = null;
+        cam.x -= (px - drag.lastX) / cam.scale;
+        cam.y -= (py - drag.lastY) / cam.scale;
+      }
+      drag.lastX = px; drag.lastY = py;
+      tooltip.hidden = true;
+      requestDraw();
+      return;
+    }
+    var p = toWorld(px, py);
+    var n = nodeAt(p);
+    var e = n ? null : edgeAt(p);
+    canvas.classList.toggle('pointing', Boolean(n || e));
+    if (n !== hoverNode) { hoverNode = n; requestDraw(); }
+    if (n || e) {
+      tooltip.textContent = '';
+      if (n) {
+        tooltip.appendChild(el('code', '', n.path));
+        tooltip.appendChild(el('div', '', 'Folder: ' + n.dir));
+        tooltip.appendChild(el('div', '', 'Changed in ' + plural(n.changes, 'commit')));
+      } else {
+        var labels = distinguishingPaths(e.s.path, e.t.path);
+        tooltip.appendChild(el('div', '', KINDS[e.d.relationship].label.replace(/s$/, '') + ': ' + labels[0] + ' and ' + labels[1]));
+        tooltip.appendChild(el('div', '', directionEvidence(e, true)));
+      }
+      tooltip.hidden = false;
+      var left = Math.min(px + 14, size.w - tooltip.offsetWidth - 8);
+      tooltip.style.left = Math.max(8, left) + 'px';
+      tooltip.style.top = (py + 14) + 'px';
+    } else {
+      tooltip.hidden = true;
+    }
+  });
+  function endDrag(ev) {
+    if (ev.pointerType === 'touch') {
+      activeTouches.delete(ev.pointerId);
+      if (activeTouches.size < 2) pinchState = null;
+      if (pinchMoved) {
+        if (activeTouches.size === 0) pinchMoved = false;
+        drag = null;
+        return;
+      }
+    }
+    if (!drag) return;
+    canvas.classList.remove('dragging');
+    if (!drag.moved) {
+      var rect = canvas.getBoundingClientRect();
+      var p = toWorld(ev.clientX - rect.left, ev.clientY - rect.top);
+      var n = nodeAt(p);
+      if (n) selectNode(n);
+      else {
+        var e = edgeAt(p);
+        if (e) selectEdge(e); else clearSelection();
+      }
+    }
+    drag = null;
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', function (ev) {
+    if (ev.pointerType === 'touch') {
+      activeTouches.delete(ev.pointerId);
+      if (activeTouches.size < 2) pinchState = null;
+      if (activeTouches.size === 0) pinchMoved = false;
+    }
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
+  canvas.addEventListener('pointerleave', function () { if (!drag) { tooltip.hidden = true; if (hoverNode) { hoverNode = null; requestDraw(); } } });
+  window.addEventListener('blur', function () {
+    activeTouches.clear();
+    pinchState = null;
+    pinchMoved = false;
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
+  canvas.addEventListener('wheel', function (ev) {
+    ev.preventDefault();
+    userMoved = true; flight = null;
+    var rect = canvas.getBoundingClientRect();
+    var px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    var before = toWorld(px, py);
+    cam.scale = Math.max(0.15, Math.min(6, cam.scale * Math.exp(-ev.deltaY * 0.0015)));
+    var after = toWorld(px, py);
+    cam.x += before.x - after.x; cam.y += before.y - after.y;
+    requestDraw();
+  }, { passive: false });
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') {
+      if ((selectedEdge || selectedNode) && returnToFamily && resolveActiveFamilyView(returnToFamily)) {
+        selectFamily(returnToFamily, true);
+      } else {
+        if (search.value || matches) {
+          search.value = '';
+          matches = null;
+        }
+        clearSelection();
+        search.blur();
+      }
+    }
+    if (ev.key === '/' && document.activeElement !== search) { ev.preventDefault(); search.focus(); }
+  });
+  search.addEventListener('input', function () {
+    var q = search.value.trim().toLowerCase();
+    matches = q ? nodes.filter(function (n) { return n.path.toLowerCase().indexOf(q) >= 0; }) : null;
+    requestDraw();
+  });
+  search.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && matches && matches.length > 0) { selectNode(matches[0]); }
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      userMoved = false; flight = null;
+      clearSelection();
+      fit(); requestDraw();
+    });
+  }
+  var toggleAnimBtn = document.getElementById('toggle-anim');
+  if (toggleAnimBtn) {
+    toggleAnimBtn.addEventListener('click', function () {
+      animPaused = !animPaused;
+      toggleAnimBtn.textContent = animPaused ? 'Resume animation' : 'Pause animation';
+      requestDraw();
+    });
+  }
+
+  function selectNode(n, fromFamily) {
+    if (fromFamily !== undefined) {
+      returnToFamily = fromFamily;
+    } else if (selectedFamily) {
+      var activeView = resolveActiveFamilyView(selectedFamily);
+      returnToFamily = activeView && activeView.nodes.indexOf(n) >= 0 ? activeView : null;
+    } else if (returnToFamily) {
+      var prevView = resolveActiveFamilyView(returnToFamily);
+      returnToFamily = prevView && prevView.nodes.indexOf(n) >= 0 ? prevView : null;
+    }
+    selectedNode = n; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    var group = [n];
+    n.edges.forEach(function (e) { if (isVisible(e)) group.push(e.s === n ? e.t : e.s); });
+    flyTo(group);
+    renderPanel(); requestDraw();
+  }
+  function selectEdge(e, fromFamily) {
+    if (fromFamily !== undefined) {
+      returnToFamily = fromFamily;
+    } else if (selectedFamily) {
+      var activeView = resolveActiveFamilyView(selectedFamily);
+      returnToFamily = activeView && activeView.edges.indexOf(e) >= 0 ? activeView : null;
+    } else if (returnToFamily) {
+      var prevView = resolveActiveFamilyView(returnToFamily);
+      returnToFamily = prevView && prevView.edges.indexOf(e) >= 0 ? prevView : null;
+    }
+    selectedEdge = e; selectedNode = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    flyTo([e.s, e.t]);
+    renderPanel(); requestDraw();
+  }
+  function selectFamily(fam, keepExpandedPair) {
+    var view = resolveActiveFamilyView(fam);
+    if (!view) return;
+    selectedFamily = view; selectedNode = null; selectedEdge = null; returnToFamily = null; hoverEdge = null; hoverFamily = null; matches = null; search.value = '';
+    if (!keepExpandedPair) expandedFamilyPairKey = null;
+    flyTo(view.nodes);
+    renderPanel();
+    if (keepExpandedPair) {
+      var targetFocus = panel._expandedPairSummary || panel._familyHeading;
+      if (targetFocus && typeof targetFocus.focus === 'function') targetFocus.focus();
+    }
+    requestDraw();
+  }
+  function clearSelection() {
+    selectedNode = null; selectedEdge = null; selectedFamily = null; hoverEdge = null; hoverFamily = null; returnToFamily = null; expandedFamilyPairKey = null;
+    renderPanel(); requestDraw();
+  }
+
+  // ---- copy & clipboard helpers --------------------------------------------
+  function copyText(text, button, successMsg) {
+    var label = successMsg || 'Copied';
+    function copied() {
+      var original = button.dataset.origLabel || button.textContent;
+      button.dataset.origLabel = original;
+      if (button._copyTimer) clearTimeout(button._copyTimer);
+      button.textContent = label;
+      button.classList.add('copied');
+      button._copyTimer = setTimeout(function () {
+        button.textContent = original;
+        button.classList.remove('copied');
+        button._copyTimer = null;
+      }, 1500);
+    }
+    function fallback() {
+      var input = el('textarea');
+      input.value = text; input.style.position = 'fixed'; input.style.opacity = '0';
+      document.body.appendChild(input); input.select();
+      try { if (document.execCommand('copy')) copied(); } catch (_) {}
+      input.remove();
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(copied, fallback);
+      return;
+    }
+    fallback();
+  }
+
+  function defuseMentions(text) {
+    return String(text)
+      .replace(/@([a-zA-Z0-9_-]+)/g, '@\u200B$1')
+      .replace(/#([0-9]+)/g, '#\u200B$1');
+  }
+
+  function sanitizeMarkdown(text) {
+    return defuseMentions(text)
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/([\\<>[\]()*_~\x60])/g, '\\$1');
+  }
+
+  function shellQuoteArg(arg) {
+    var s = String(arg == null ? '' : arg);
+    if (/^[A-Za-z0-9_./-]+$/.test(s) && s.charAt(0) !== '-') return s;
+    return "'" + s.replace(/'/g, "'\\''") + "'";
+  }
+
+  function fallbackExplainCommand(a, b) {
+    return 'npx repo-archaeology explain ' + shellQuoteArg(a) + ' ' + shellQuoteArg(b);
+  }
+
+  function mdCode(text) {
+    var q = String.fromCharCode(96);
+    var s = defuseMentions(text).replace(/[\r\n]+/g, ' ');
+    var fence = q;
+    while (s.indexOf(fence) !== -1) fence += q;
+    var needsPad = s.charAt(0) === q || s.charAt(s.length - 1) === q || s.charAt(0) === ' ' || s.charAt(s.length - 1) === ' ';
+    var pad = needsPad ? ' ' : '';
+    return fence + pad + s + pad + fence;
+  }
+
+  function formatFindingMarkdown(e) {
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    var kindName = findingLabel(e);
+    var scope = e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')
+      ? ' Connects different parts of the project (' + mdCode(e.s.dir) + ' and ' + mdCode(e.t.dir) + ').'
+      : '';
+    var lines = [
+      '### 🔍 Repo Archaeology: File Relationship Finding',
+      '',
+      '**Files:** ' + mdCode(e.s.path) + ' ↔ ' + mdCode(e.t.path) + '  ',
+      '**Relationship:** ' + kindName + ' (' + plural(e.d.shared, 'shared commit') + ')  ',
+      '**Last Together:** ' + relativeDate(e.d.lastTogether) + '  ',
+      '',
+      '**Directional Co-Change:**',
+      '- ' + mdCode(labels[0]) + ' → ' + mdCode(labels[1]) + ': ' + directionEvidence(e, true),
+      '- ' + mdCode(labels[1]) + ' → ' + mdCode(labels[0]) + ': ' + directionEvidence(e, false),
+      '',
+      '**Why It Matters:**',
+      '- ' + sanitizeMarkdown(capitalize(e.d.why)) + '.' + scope,
+      (e.d.relationship === 'ghost' ? '- No direct or supported indirect import relationship found in current code.' : '')
+    ];
+    if (e.d.verdict) {
+      var vHead = e.d.verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship';
+      lines.push('- **' + vHead + ':** ' + sanitizeMarkdown(e.d.verdict.reason));
+    }
+    if (e.d.evidence && e.d.evidence.length > 0) {
+      lines.push('', '**Supporting Commits:**');
+      e.d.evidence.slice(0, 5).forEach(function (ev) {
+        lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + '): ' + sanitizeMarkdown(ev.subject));
+      });
+    }
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
+    lines.push('', '**Inspect Diff Evidence:** ' + mdCode(cliCmd));
+    return lines.filter(function (l) { return l !== undefined; }).join('\n');
+  }
+
+  function formatFamilyMarkdown(view) {
+    var lines = [
+      '### 🔍 Repo Archaeology: Related Implementation Family',
+      '',
+      '**Pattern:** ' + mdCode(view.d.label || view.d.id) + '  ',
+      '**Members (' + view.members.length + ' files):** ' + view.members.map(function (m) { return mdCode(m.path); }).join(', ') + '  ',
+      '**Pairwise Links:** ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed thresholds  ',
+      '**Family-Wide Commits:** ' + plural(view.commitsTouchingTwoOrMore, 'supporting commit') + ' (2+ members via a qualifying pair; ' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ')  ',
+      '**Last Together:** ' + relativeDate(view.lastTogether) + '  ',
+      '',
+      '**Qualifying Pairwise Relationships:**'
+    ];
+    view.edges.forEach(function (e) {
+      var labels = distinguishingPaths(e.s.path, e.t.path);
+      lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(e.d.shared, 'shared commit') + ' (' + directionEvidence(e, true) + '; reverse ' + directionEvidence(e, false) + ')');
+    });
+    (view.undrawnPairs || []).forEach(function (up) {
+      var labels = distinguishingPaths(up.from, up.to);
+      lines.push('- ' + mdCode(labels[0]) + ' ↔ ' + mdCode(labels[1]) + ': ' + plural(up.shared, 'shared commit') + ' (qualifies, not drawn)');
+    });
+    if (view.evidence && view.evidence.length > 0) {
+      lines.push('', '**Family-Wide Supporting Commits (2+ members via a qualifying pair):**');
+      view.evidence.slice(0, 5).forEach(function (ev) {
+        var scopeTag = ev.touchesAllMembers ? 'all ' + ev.totalMembers + ' members' : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
+        lines.push('- ' + mdCode(ev.hash.slice(0, 7)) + ' (' + ev.date + ', ' + scopeTag + '): ' + sanitizeMarkdown(ev.subject));
+      });
+    }
+    return lines.join('\n');
+  }
+
+  function edgeWeightingLabel(d) {
+    if (!d.weighted) return '';
+    if (d.weighting === 'origin') return 'origin-weighted';
+    if (d.weighting === 'recency+origin') return 'recency+origin-weighted';
+    return 'recency-weighted';
+  }
+  function directionEvidence(e, fromSource) {
+    var total = fromSource ? e.d.fromChanges : e.d.toChanges;
+    var confidence = fromSource ? e.d.confidence : e.d.reverseConfidence;
+    var iv = fromSource ? e.d.interval : e.d.reverseInterval;
+    if (e.d.weighted) return e.d.shared + ' of ' + total + ' commits ' + formatCi(iv, true) + ' (' + pct(confidence) + ' ' + edgeWeightingLabel(e.d) + ')';
+    return e.d.shared + ' of ' + total + ' commits (' + pct(confidence) + ') ' + formatCi(iv, false);
+  }
+  function findingLabel(e) {
+    if (e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation') return 'Related implementations';
+    return KINDS[e.d.relationship].label.replace(/s$/, '');
+  }
+
+  // ---- panel rendering -----------------------------------------------------
+  function buildOverviewItems(listData) {
+    var edgeToFamilyView = new Map();
+    var allActiveViews = [];
+    families.forEach(function (fam) {
+      var views = getActiveFamilyViews(fam);
+      views.forEach(function (view) {
+        allActiveViews.push(view);
+        view.edges.forEach(function (e) {
+          edgeToFamilyView.set(e, view);
+        });
+      });
+    });
+    var items = [];
+    var emittedViews = new Set();
+    for (var i = 0; i < listData.length; i++) {
+      var e = listData[i];
+      var famView = edgeToFamilyView.get(e);
+      if (famView) {
+        if (!emittedViews.has(famView.id)) {
+          emittedViews.add(famView.id);
+          items.push({ kind: 'family', view: famView });
+        }
+      } else {
+        items.push({ kind: 'edge', edge: e });
+      }
+    }
+    if (overviewTab !== 'surprising') {
+      allActiveViews.forEach(function (view) {
+        if (emittedViews.has(view.id)) return;
+        var matchesTab = overviewTab === 'all'
+          || view.edges.length === 0
+          || view.edges.some(function (e) { return e.d.relationship === 'ghost'; })
+          || (view.undrawnPairs || []).some(function (up) { return up.relationship === 'ghost'; });
+        if (!matchesTab) return;
+        emittedViews.add(view.id);
+        items.push({ kind: 'family', view: view });
+      });
+    }
+    return items;
+  }
+
+  function getTopFindings(items, maxCount) {
+    var top = items.slice(0, maxCount);
+    for (var i = maxCount; i < items.length; i++) {
+      if (items[i].kind === 'family') top.push(items[i]);
+    }
+    return top;
+  }
+
+  function renderOverview() {
+    var header = el('div');
+    header.appendChild(el('h2', '', 'Explore file relationships'));
+    header.appendChild(el('p', '', 'Each dot represents a file sized by commit frequency and colored by directory. Lines connect files that change together. Pink dashed lines are ghost wires: files with no direct or supported indirect import relationship in current code that repeatedly move together in git history.'));
+    panel.appendChild(header);
+
+    var visibleEdges = edges.filter(isVisible);
+    var ghosts = visibleEdges.filter(function (e) { return e.d.relationship === 'ghost'; }).sort(function (a, b) {
+      return b.d.overviewPriority - a.d.overviewPriority || b.d.score - a.d.score || b.d.shared - a.d.shared;
+    });
+    var surprising = ghosts.filter(function (e) {
+      var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+      if (isParallel) return false;
+      var fromDir = e.s.dir, toDir = e.t.dir;
+      var independent = fromDir !== toDir && fromDir !== '.' && toDir !== '.'
+        && !fromDir.startsWith(toDir + '/') && !toDir.startsWith(fromDir + '/');
+      return independent || e.d.overviewPriority >= 2;
+    });
+    var strongest = visibleEdges.slice().sort(function (a, b) { return b.d.shared - a.d.shared || b.d.score - a.d.score; });
+
+    // Tabs
+    var tabGroup = el('div', 'tab-group');
+    var tabDefs = [
+      { id: 'ghost', label: 'Ghost wires (' + ghosts.length + ')' },
+      { id: 'surprising', label: 'Surprising (' + surprising.length + ')' },
+      { id: 'all', label: 'All links (' + visibleEdges.length + ')' }
+    ];
+    tabDefs.forEach(function (t) {
+      var btn = el('button', 'tab-btn' + (overviewTab === t.id ? ' active' : ''), t.label);
+      btn.type = 'button';
+      btn.addEventListener('click', function () {
+        overviewTab = t.id;
+        overviewExpanded = false;
+        renderPanel();
+      });
+      tabGroup.appendChild(btn);
+    });
+    panel.appendChild(tabGroup);
+
+    var listData = overviewTab === 'surprising' ? surprising : (overviewTab === 'all' ? strongest : ghosts);
+    var titleText = overviewTab === 'surprising' ? 'Cross-folder connections worth exploring' : (overviewTab === 'all' ? 'Strongest co-changing files' : 'Connections worth exploring');
+
+    panel.appendChild(el('h3', '', titleText));
+
+    var overviewItems = buildOverviewItems(listData);
+    if (overviewItems.length === 0) {
+      panel.appendChild(el('p', '', 'No relationships found for this filter.'));
+    } else {
+      panel.appendChild(el('p', 'card-hint', 'Select a card or line to inspect directional stats & commits'));
+      var displayItems = overviewExpanded ? overviewItems : getTopFindings(overviewItems, 3);
+      var cardsContainer = el('div');
+      for (var idx = 0; idx < displayItems.length; idx++) {
+        var item = displayItems[idx];
+        if (item.kind === 'family') {
+          cardsContainer.appendChild(familyCard(item.view));
+        } else {
+          cardsContainer.appendChild(relationshipCard(item.edge));
+        }
+      }
+      panel.appendChild(cardsContainer);
+
+      if (overviewItems.length > displayItems.length || (overviewExpanded && overviewItems.length > 3)) {
+        var viewAllBtn = el('button', 'view-all-btn', overviewExpanded ? 'Show top 3 findings' : 'View all ' + overviewItems.length + ' findings');
+        viewAllBtn.type = 'button';
+        viewAllBtn.addEventListener('click', function () {
+          overviewExpanded = !overviewExpanded;
+          renderPanel();
+        });
+        panel.appendChild(viewAllBtn);
+      }
+    }
+
+    // Folder Color Legend
+    renderFolderLegend();
+  }
+
+  function renderFolderLegend() {
+    var activeNodes = nodes.filter(isActive);
+    var dirCounts = Object.create(null);
+    activeNodes.forEach(function (n) {
+      dirCounts[n.dir] = (dirCounts[n.dir] || 0) + 1;
+    });
+    var sortedDirs = Object.keys(dirCounts)
+      .map(function (name) { return { name: name, count: dirCounts[name] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+    if (sortedDirs.length === 0) return;
+    var title = sortedDirs.length > 8
+      ? 'Directory color legend (' + sortedDirs.slice(0, 8).length + ' of ' + sortedDirs.length + ' folders)'
+      : 'Directory color legend';
+    panel.appendChild(el('h3', '', title));
+    var legend = el('div', 'folder-legend');
+    sortedDirs.slice(0, 8).forEach(function (d) {
+      var item = el('div', 'legend-item');
+      var dot = el('span', 'legend-dot');
+      dot.style.background = 'hsl(' + hashHue(d.name) + ', 58%, 72%)';
+      item.appendChild(dot);
+      item.appendChild(el('span', '', d.name + ' (' + d.count + ')'));
+      legend.appendChild(item);
+    });
+    panel.appendChild(legend);
+  }
+
+  function familyCard(view) {
+    var card = el('button', 'card interactive family-card');
+    card.type = 'button';
+    var head = el('div', 'card-header');
+    head.appendChild(el('span', 'badge family', 'Related family · ' + view.members.length + ' files'));
+    head.appendChild(el('span', 'card-sub', plural(view.commitsTouchingTwoOrMore, 'commit') + ' (2+ files) · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' pairs'));
+    card.appendChild(head);
+
+    var title = el('div', 'card-title', view.d.label || view.d.id);
+    card.appendChild(title);
+
+    var variants = el('div', 'family-variants');
+    view.members.forEach(function (m) {
+      variants.appendChild(el('span', 'family-variant-pill', m.variant));
+    });
+    card.appendChild(variants);
+
+    var note = el('div', 'card-sub');
+    var pairSummary = view.qualifyingPairs === view.possiblePairs
+      ? 'All ' + view.possiblePairs + ' pairwise links across ' + view.members.length + ' sibling directories passed thresholds.'
+      : view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairwise links passed thresholds across ' + view.members.length + ' sibling directories.';
+    note.textContent = pairSummary + ' ' + plural(view.commitsTouchingTwoOrMore, 'supporting commit') + ' (2+ members via a qualifying pair; ' + plural(view.commitsTouchingAll, 'commit') + ' touched all ' + view.members.length + ').';
+    card.appendChild(note);
+
+    card.addEventListener('pointerenter', function () {
+      hoverFamily = view;
+      requestDraw();
+    });
+    card.addEventListener('pointerleave', function () {
+      if (hoverFamily === view) {
+        hoverFamily = null;
+        requestDraw();
+      }
+    });
+    card.addEventListener('click', function () {
+      selectFamily(view);
+    });
+    return card;
+  }
+
+  function relationshipCard(e) {
+    var card = el('button', 'card interactive');
+    card.type = 'button';
+    var head = el('div', 'card-header');
+    var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+    var badgeClass = isParallel ? 'badge parallel' : 'badge ' + e.d.relationship;
+    head.appendChild(el('span', badgeClass, findingLabel(e)));
+    var peakPct = pct(Math.max(e.d.confidence, e.d.reverseConfidence));
+    head.appendChild(el('span', 'card-sub', plural(e.d.shared, 'shared commit') + ' · ' + peakPct));
+    card.appendChild(head);
+
+    var pair = el('div', 'card-title');
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+    pair.textContent = labels[0] + ' ↔ ' + labels[1];
+    card.appendChild(pair);
+
+    var note = el('div', 'card-sub');
+    if (isParallel) {
+      note.textContent = 'These files support related functionality across sibling directories and have been updated together in ' + plural(e.d.shared, 'commit') + '.';
+    } else {
+      var scope = e.d.crossesDirectories
+        ? 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + '). '
+        : '';
+      note.textContent = scope + capitalize(e.d.why) + '.';
+    }
+    card.appendChild(note);
+
+    card.addEventListener('pointerenter', function () {
+      hoverEdge = e;
+      requestDraw();
+    });
+    card.addEventListener('pointerleave', function () {
+      if (hoverEdge === e) {
+        hoverEdge = null;
+        requestDraw();
+      }
+    });
+    card.addEventListener('click', function () {
+      selectEdge(e);
+    });
+    return card;
+  }
+
+  function renderSelectedFamily(sel) {
+    var view = resolveActiveFamilyView(sel);
+    if (!view) {
+      clearSelection();
+      return;
+    }
+
+    var backBtn = el('button', 'back-btn', '← Back to overview');
+    backBtn.type = 'button';
+    backBtn.addEventListener('click', clearSelection);
+    panel.appendChild(backBtn);
+
+    var head = el('div');
+    head.appendChild(el('span', 'badge family', 'Related implementation family'));
+    var familyHeading = el('h2', '', view.d.label || view.d.id);
+    familyHeading.tabIndex = -1;
+    head.appendChild(familyHeading);
+    panel._familyHeading = familyHeading;
+    panel._expandedPairSummary = null;
+    var subsetNote = view.isSubset && view.members.length < view.d.members.length
+      ? ' (filtered from ' + view.d.members.length + ' family members)'
+      : '';
+    head.appendChild(el('p', 'card-sub', view.members.length + ' sibling files' + subsetNote + ' · ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' qualifying pairs · Last together ' + relativeDate(view.lastTogether)));
+    panel.appendChild(head);
+
+    var grid = el('div', 'cochange-grid');
+    var card1 = el('div', 'cochange-card');
+    card1.appendChild(el('div', 'cochange-pct', String(view.commitsTouchingTwoOrMore)));
+    card1.appendChild(el('div', 'cochange-label', 'Supporting commits (2+ members via a qualifying pair)'));
+    grid.appendChild(card1);
+
+    var card2 = el('div', 'cochange-card');
+    card2.appendChild(el('div', 'cochange-pct', String(view.commitsTouchingAll)));
+    card2.appendChild(el('div', 'cochange-label', 'Commits touching all ' + view.members.length + ' family members together'));
+    grid.appendChild(card2);
+    panel.appendChild(grid);
+
+    var callout = el('div', 'callout indirect');
+    callout.appendChild(el('div', 'callout-title', 'Why these files are grouped'));
+    var p1 = el('p');
+    var parentDesc = view.d.parentDir === '.' ? 'the repository root' : view.d.parentDir;
+    p1.textContent = 'These ' + view.members.length + ' files share the same stem (' + view.d.stem + ') in sibling directories under ' + parentDesc + ' and are connected by qualifying parallel-implementation relationships.';
+    callout.appendChild(p1);
+
+    var p2 = el('p');
+    if (view.qualifyingPairs < view.possiblePairs) {
+      p2.textContent = 'Incomplete relationship graph: ' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible pairs passed the current thresholds. Only qualifying pairwise links are drawn on the map and listed below; missing pairs are never fabricated.';
+    } else {
+      p2.textContent = 'Complete relationship graph: all ' + view.possiblePairs + ' possible pairs across the ' + view.members.length + ' files passed the current thresholds.';
+    }
+    callout.appendChild(p2);
+    panel.appendChild(callout);
+
+    panel.appendChild(el('h3', '', 'Member files (' + view.members.length + ')'));
+    var memberContainer = el('div', 'pair-container');
+    view.members.forEach(function (m) {
+      var mNode = typeof m.nodeIndex === 'number' && nodes[m.nodeIndex] ? nodes[m.nodeIndex] : nodeByPath[m.path];
+      var box = el('div', 'pair-box');
+      var boxHead = el('div', 'pair-box-head');
+      var link = el('button', 'file-link', m.path);
+      link.type = 'button';
+      if (mNode) {
+        link.addEventListener('click', function () { selectNode(mNode, view); });
+      }
+      boxHead.appendChild(link);
+      boxHead.appendChild(el('span', 'family-variant-pill', m.variant));
+      box.appendChild(boxHead);
+      box.appendChild(el('div', 'pair-dir', 'Folder: ' + (m.dir || m.directory || '') + ' · Changed in ' + plural(m.changes, 'commit') + contributorShareNote(m.topAuthor, m.topAuthorShare)));
+      memberContainer.appendChild(box);
+    });
+    panel.appendChild(memberContainer);
+
+    panel.appendChild(el('h3', '', 'Qualifying pairwise relationships (' + view.qualifyingPairs + ' of ' + view.possiblePairs + ' possible)'));
+    var pairList = el('div', 'family-pair-list');
+    view.edges.forEach(function (e, idx) {
+      var pKey = edgeKey(e.s.path, e.t.path);
+      var details = el('details', 'family-pair-details');
+      if (expandedFamilyPairKey ? expandedFamilyPairKey === pKey : idx === 0) {
+        details.open = true;
+      }
+      details.addEventListener('toggle', function () {
+        if (details.open) expandedFamilyPairKey = pKey;
+      });
+      details.addEventListener('pointerenter', function () {
+        hoverEdge = e;
+        requestDraw();
+      });
+      details.addEventListener('pointerleave', function () {
+        if (hoverEdge === e) {
+          hoverEdge = null;
+          requestDraw();
+        }
+      });
+
+      var summary = el('summary', 'family-pair-summary');
+      var labels = distinguishingPaths(e.s.path, e.t.path);
+      summary.appendChild(el('span', '', labels[0] + ' ↔ ' + labels[1]));
+      var meta = el('span', 'family-pair-meta');
+      meta.appendChild(el('span', 'badge ' + e.d.relationship, KINDS[e.d.relationship].label.replace(/s$/, '')));
+      var peakPct = pct(Math.max(e.d.confidence, e.d.reverseConfidence));
+      meta.appendChild(el('span', '', plural(e.d.shared, 'shared commit') + ' · ' + peakPct));
+      summary.appendChild(meta);
+      details.appendChild(summary);
+      if (details.open && !panel._expandedPairSummary) panel._expandedPairSummary = summary;
+
+      var body = el('div', 'family-pair-body');
+      body.appendChild(el('div', 'family-pair-stat', e.s.path + ' ↔ ' + e.t.path));
+      body.appendChild(el('div', 'family-pair-stat', labels[0] + ' → ' + labels[1] + ': ' + directionEvidence(e, true)));
+      body.appendChild(el('div', 'family-pair-stat', labels[1] + ' → ' + labels[0] + ': ' + directionEvidence(e, false)));
+
+      if (e.d.evidence && e.d.evidence.length > 0) {
+        var evList = el('ul', 'evidence');
+        e.d.evidence.slice(0, 3).forEach(function (ev) {
+          var li = el('li');
+          var hash = el('button', 'hash', ev.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+          evList.appendChild(li);
+        });
+        body.appendChild(evList);
+      }
+
+      var inspectBtn = el('button', 'btn-inspect-pair', 'Inspect paired diff & evidence →');
+      inspectBtn.type = 'button';
+      inspectBtn.addEventListener('click', function () {
+        expandedFamilyPairKey = pKey;
+        selectEdge(e, view);
+      });
+      body.appendChild(inspectBtn);
+      details.appendChild(body);
+      pairList.appendChild(details);
+    });
+    (view.undrawnPairs || []).forEach(function (up, uIdx) {
+      var pKey = edgeKey(up.from, up.to);
+      var details = el('details', 'family-pair-details');
+      if (expandedFamilyPairKey ? expandedFamilyPairKey === pKey : (view.edges.length === 0 && uIdx === 0)) {
+        details.open = true;
+      }
+      details.addEventListener('toggle', function () {
+        if (details.open) expandedFamilyPairKey = pKey;
+      });
+      var summary = el('summary', 'family-pair-summary');
+      var labels = distinguishingPaths(up.from, up.to);
+      summary.appendChild(el('span', '', labels[0] + ' ↔ ' + labels[1]));
+      var meta = el('span', 'family-pair-meta');
+      meta.appendChild(el('span', 'badge ' + up.relationship, KINDS[up.relationship].label.replace(/s$/, '')));
+      meta.appendChild(el('span', 'badge unknown', 'qualifies (not drawn)'));
+      var peakPct = pct(Math.max(up.confidence, up.reverseConfidence));
+      meta.appendChild(el('span', '', plural(up.shared, 'shared commit') + ' · ' + peakPct));
+      summary.appendChild(meta);
+      details.appendChild(summary);
+      if (details.open && !panel._expandedPairSummary) panel._expandedPairSummary = summary;
+
+      var body = el('div', 'family-pair-body');
+      body.appendChild(el('div', 'family-pair-stat', up.from + ' ↔ ' + up.to));
+      var pseudoEdge = { d: up };
+      body.appendChild(el('div', 'family-pair-stat', labels[0] + ' → ' + labels[1] + ': ' + directionEvidence(pseudoEdge, true)));
+      body.appendChild(el('div', 'family-pair-stat', labels[1] + ' → ' + labels[0] + ': ' + directionEvidence(pseudoEdge, false)));
+      body.appendChild(el('div', 'family-pair-stat', 'Qualifies (not drawn on canvas due to map display cap).'));
+      if (up.evidence && up.evidence.length > 0) {
+        var evList = el('ul', 'evidence');
+        up.evidence.slice(0, 3).forEach(function (ev) {
+          var li = el('li');
+          var hash = el('button', 'hash', ev.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+          evList.appendChild(li);
+        });
+        body.appendChild(evList);
+      }
+      if (up.explainCommand) {
+        var cmdBtn = el('button', 'btn-inspect-pair', 'Copy CLI command: ' + up.explainCommand);
+        cmdBtn.type = 'button';
+        cmdBtn.addEventListener('click', function () { copyText(up.explainCommand, cmdBtn, 'Copied command'); });
+        body.appendChild(cmdBtn);
+      }
+      details.appendChild(body);
+      pairList.appendChild(details);
+    });
+    panel.appendChild(pairList);
+
+    if (view.evidence && view.evidence.length > 0) {
+      var evDetails = el('details', 'evidence-wrap');
+      evDetails.open = true;
+      evDetails.appendChild(el('summary', '', 'Family-wide supporting commits (' + view.evidence.length + ' of ' + view.commitsTouchingTwoOrMore + ' touching 2+ members via a qualifying pair)'));
+      var list = el('ul', 'evidence');
+      view.evidence.forEach(function (ev) {
+        var li = el('li');
+        var hash = el('button', 'hash', ev.hash.slice(0, 7));
+        hash.type = 'button'; hash.title = 'Copy full commit hash';
+        hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+        li.appendChild(hash);
+
+        var body = el('div', 'evidence-item-body');
+        var topLine = el('div');
+        var tagText = ev.touchesAllMembers
+          ? 'All ' + ev.totalMembers + ' members'
+          : ev.membersTouched + ' of ' + ev.totalMembers + ' members';
+        topLine.appendChild(el('span', 'evidence-scope-tag', tagText));
+        topLine.appendChild(el('span', '', ev.date + '  ' + ev.subject));
+        body.appendChild(topLine);
+        if (ev.memberPaths && ev.memberPaths.length > 0 && !ev.touchesAllMembers) {
+          body.appendChild(el('div', 'evidence-rename', 'Touched: ' + ev.memberPaths.join(', ')));
+        }
+        li.appendChild(body);
+        list.appendChild(li);
+      });
+      evDetails.appendChild(list);
+      panel.appendChild(evDetails);
+    }
+
+    var exportBtn = el('button', 'btn-export', '📋 Copy finding for PR / discussion');
+    exportBtn.type = 'button';
+    exportBtn.addEventListener('click', function () {
+      var markdown = formatFamilyMarkdown(view);
+      copyText(markdown, exportBtn, '✓ Copied finding to clipboard');
+    });
+    panel.appendChild(exportBtn);
+  }
+
+  function renderSelectedEdge(e) {
+    var activeReturnFam = resolveActiveFamilyView(returnToFamily);
+    if (activeReturnFam) {
+      var navRow = el('div', 'nav-row');
+      var backFamBtn = el('button', 'back-btn back-to-family-btn', '← Back to family (' + (activeReturnFam.d.label || activeReturnFam.d.id) + ')');
+      backFamBtn.type = 'button';
+      backFamBtn.addEventListener('click', function () { selectFamily(activeReturnFam, true); });
+      navRow.appendChild(backFamBtn);
+      var backOverviewBtn = el('button', 'back-btn', 'Overview');
+      backOverviewBtn.type = 'button';
+      backOverviewBtn.addEventListener('click', clearSelection);
+      navRow.appendChild(backOverviewBtn);
+      panel.appendChild(navRow);
+    } else {
+      var backBtn = el('button', 'back-btn', '← Back to overview');
+      backBtn.type = 'button';
+      backBtn.addEventListener('click', clearSelection);
+      panel.appendChild(backBtn);
+    }
+
+    var head = el('div');
+    var isParallel = e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation';
+    var badgeClass = isParallel ? 'badge parallel' : 'badge ' + e.d.relationship;
+    head.appendChild(el('span', badgeClass, findingLabel(e)));
+    head.appendChild(el('h2', '', 'Connection worth checking'));
+    head.appendChild(el('p', 'card-sub', 'Changed together in ' + plural(e.d.shared, 'commit') + ' · Last together ' + relativeDate(e.d.lastTogether)));
+    panel.appendChild(head);
+
+    var labels = distinguishingPaths(e.s.path, e.t.path);
+
+    // Pair Boxes
+    var pairContainer = el('div', 'pair-container');
+
+    var boxA = el('div', 'pair-box');
+    var boxAHead = el('div', 'pair-box-head');
+    var linkA = el('button', 'file-link', e.s.path);
+    linkA.type = 'button';
+    linkA.addEventListener('click', function () { selectNode(e.s, activeReturnFam || undefined); });
+    boxAHead.appendChild(linkA);
+    boxA.appendChild(boxAHead);
+    var subA = el('div', 'pair-dir', 'Folder: ' + e.s.dir + ' · Changed in ' + plural(e.s.changes, 'commit') + contributorShareNote(e.s.author, e.s.share));
+    boxA.appendChild(subA);
+    pairContainer.appendChild(boxA);
+
+    var wire = el('div', 'pair-wire');
+    wire.appendChild(el('span', 'swatch ' + e.d.relationship));
+    wire.appendChild(el('span', '', plural(e.d.shared, 'shared commit')));
+    wire.appendChild(el('span', 'swatch ' + e.d.relationship));
+    pairContainer.appendChild(wire);
+
+    var boxB = el('div', 'pair-box');
+    var boxBHead = el('div', 'pair-box-head');
+    var linkB = el('button', 'file-link', e.t.path);
+    linkB.type = 'button';
+    linkB.addEventListener('click', function () { selectNode(e.t, activeReturnFam || undefined); });
+    boxBHead.appendChild(linkB);
+    boxB.appendChild(boxBHead);
+    var subB = el('div', 'pair-dir', 'Folder: ' + e.t.dir + ' · Changed in ' + plural(e.t.changes, 'commit') + contributorShareNote(e.t.author, e.t.share));
+    boxB.appendChild(subB);
+    pairContainer.appendChild(boxB);
+
+    panel.appendChild(pairContainer);
+
+    // Directional Co-Change Cards
+    var grid = el('div', 'cochange-grid');
+    var card1 = el('div', 'cochange-card');
+    card1.appendChild(el('div', 'cochange-pct', pct(e.d.confidence)));
+    var wLabel = edgeWeightingLabel(e.d);
+    var desc1 = (wLabel ? '(' + wLabel + ') ' : '') + labels[0] + ' changes also modified ' + labels[1] + ' (' + e.d.shared + ' of ' + e.d.fromChanges + ' commits) ' + formatCi(e.d.interval, e.d.weighted);
+    card1.appendChild(el('div', 'cochange-label', desc1));
+    grid.appendChild(card1);
+
+    var card2 = el('div', 'cochange-card');
+    card2.appendChild(el('div', 'cochange-pct', pct(e.d.reverseConfidence)));
+    var desc2 = (wLabel ? '(' + wLabel + ') ' : '') + labels[1] + ' changes also modified ' + labels[0] + ' (' + e.d.shared + ' of ' + e.d.toChanges + ' commits) ' + formatCi(e.d.reverseInterval, e.d.weighted);
+    card2.appendChild(el('div', 'cochange-label', desc2));
+    grid.appendChild(card2);
+    panel.appendChild(grid);
+
+    // Why it matters
+    var callout = el('div', 'callout ' + e.d.relationship);
+    callout.appendChild(el('div', 'callout-title', 'Why it matters'));
+    var p1 = el('p');
+    p1.textContent = 'These files have been updated together before. If you\'re making changes to one, consider reviewing both.';
+    callout.appendChild(p1);
+
+    var p2 = el('p');
+    if (e.d.relationship === 'ghost') {
+      p2.textContent = 'No direct or one-step-removed import relationship found in the current code. Based on ' + plural(e.d.shared, 'shared commit') + ', so this is an investigative clue rather than a confirmed compile-time dependency.';
+    } else if (e.d.relationship === 'indirect') {
+      p2.textContent = 'Connected indirectly (one step removed through an intermediate file) in the dependency tree.';
+    } else if (e.d.relationship === 'direct') {
+      p2.textContent = 'Connected by a direct import link in the current codebase.';
+    } else if (e.d.relationship === 'test') {
+      p2.textContent = String(e.d.why || '').trim().toLowerCase() === 'both are tests'
+        ? 'Both files are test files that have moved together in ' + plural(e.d.shared, 'shared commit') + '.'
+        : 'Test file that repeatedly changes alongside this code (' + plural(e.d.shared, 'shared commit') + ').';
+    } else {
+      p2.textContent = 'Import relationship status could not be fully verified from static imports.';
+    }
+    callout.appendChild(p2);
+
+    if (e.d.crossesDirectories && !(e.d.hiddenBridge && e.d.hiddenBridge.signal === 'parallel-implementation')) {
+      var p3 = el('p');
+      p3.textContent = 'Connects different parts of the project (' + e.s.dir + ' and ' + e.t.dir + ').';
+      callout.appendChild(p3);
+    }
+    if (e.d.verdict) {
+      var pv = el('p');
+      var vLabel = e.d.verdict.kind === 'confirmed' ? 'Confirmed dependency' : 'Expected relationship (silenced)';
+      if (e.d.verdict.by) vLabel += ' by ' + e.d.verdict.by;
+      if (e.d.verdict.until) vLabel += ' (until ' + e.d.verdict.until + ')';
+      pv.textContent = vLabel + ': ' + e.d.verdict.reason;
+      callout.appendChild(pv);
+    }
+    panel.appendChild(callout);
+
+    function renderFilePatchBlock(patch) {
+      var wrap = el('div', 'patch-file');
+      var titleText = patch.canonicalPath;
+      if (patch.oldPath && patch.oldPath !== patch.path) {
+        titleText += ' [' + patch.status + ': ' + patch.oldPath + ' → ' + patch.path + ']';
+      } else if (patch.path && patch.path !== patch.canonicalPath) {
+        titleText += ' [' + patch.status + ' at ' + patch.path + ']';
+      } else if (patch.status) {
+        titleText += ' [' + patch.status + ']';
+      }
+      wrap.appendChild(el('div', 'patch-file-title', titleText));
+      if (!patch.hunks || patch.hunks.length === 0) {
+        wrap.appendChild(el('div', 'patch-note', patch.statusNote || 'No textual diff hunks'));
+        return wrap;
+      }
+      var hasUnexplainedHunkTruncation = false;
+      patch.hunks.forEach(function (hunk) {
+        var box = el('div', 'patch-hunk');
+        box.appendChild(el('div', 'patch-hunk-hdr', hunk.header));
+        hunk.lines.forEach(function (line) {
+          var cls = 'patch-line';
+          if (line.charAt(0) === '+') cls += ' add';
+          else if (line.charAt(0) === '-') cls += ' del';
+          box.appendChild(el('div', cls, line));
+        });
+        if (hunk.omittedLines > 0) {
+          box.appendChild(el('div', 'patch-note', '… (' + plural(hunk.omittedLines, 'line') + ' omitted in hunk)'));
+        } else if (hunk.truncated) {
+          hasUnexplainedHunkTruncation = true;
+        }
+        wrap.appendChild(box);
+      });
+      if (patch.omittedHunks > 0) {
+        var hunkCountStr = patch.rawTruncated
+          ? patch.omittedHunks.toLocaleString('en-US') + '+ additional hunk' + (patch.omittedHunks === 1 ? '' : 's')
+          : plural(patch.omittedHunks, 'additional hunk');
+        wrap.appendChild(el('div', 'patch-note', '… (' + hunkCountStr + ' omitted)'));
+      }
+      var unexplained = patch.timedOut || patch.rawTruncated || (patch.truncated && !patch.omittedHunks && (!patch.omittedLines || hasUnexplainedHunkTruncation));
+      if (unexplained) {
+        var reason = patch.timedOut ? 'time limit' : 'byte/time limit';
+        wrap.appendChild(el('div', 'patch-note', '… (patch truncated due to ' + reason + ')'));
+      }
+      return wrap;
+    }
+
+    // Supporting Commits
+    if (e.d.evidence && e.d.evidence.length > 0) {
+      var details = el('details', 'evidence-wrap');
+      details.open = true;
+      details.appendChild(el('summary', '', 'View ' + e.d.evidence.length + ' supporting commit' + (e.d.evidence.length === 1 ? '' : 's')));
+      var list = el('ul', 'evidence');
+      e.d.evidence.forEach(function (ev) {
+        var li = el('li');
+        var hash = el('button', 'hash', ev.hash.slice(0, 7));
+        hash.type = 'button'; hash.title = 'Copy full commit hash';
+        hash.addEventListener('click', function () { copyText(ev.hash, hash, 'Copied'); });
+        li.appendChild(hash);
+
+        var body = el('div', 'evidence-item-body');
+        body.appendChild(el('div', '', ev.date + '  ' + ev.subject));
+        var renameParts = [];
+        if (ev.sourcePath && ev.sourcePath !== e.s.path) renameParts.push(labels[0] + ' was ' + ev.sourcePath);
+        if (ev.targetPath && ev.targetPath !== e.t.path) renameParts.push(labels[1] + ' was ' + ev.targetPath);
+        if (renameParts.length > 0) {
+          body.appendChild(el('div', 'evidence-rename', 'Historical path: ' + renameParts.join(' · ')));
+        }
+        li.appendChild(body);
+
+        if (ev.patches && ev.patches.source && ev.patches.target) {
+          var patchDetails = el('details', 'patch-details');
+          patchDetails.appendChild(el('summary', '', 'Inspect bounded patch hunks'));
+          patchDetails.appendChild(renderFilePatchBlock(ev.patches.source));
+          patchDetails.appendChild(renderFilePatchBlock(ev.patches.target));
+          patchDetails.appendChild(el('div', 'patch-note', 'Historical patches show what changed in the same commit, not proof of why the files changed together.'));
+          li.appendChild(patchDetails);
+        }
+        list.appendChild(li);
+      });
+      details.appendChild(list);
+      panel.appendChild(details);
+    }
+
+    // Counterexamples ("When one changed without the other")
+    var cx = e.d.counterexamples;
+    if (cx && ((cx.fromOnly && cx.fromOnly.length > 0) || (cx.toOnly && cx.toOnly.length > 0))) {
+      var cxDetails = el('details', 'evidence-wrap');
+      cxDetails.appendChild(el('summary', '', 'When one changed without the other'));
+      var appendCounterSide = function (titleText, items, total) {
+        if (!items || items.length === 0) return;
+        var countNum = typeof total === 'number' && total >= items.length ? total : items.length;
+        var suffix = countNum > items.length
+          ? ' (showing ' + items.length + ' of ' + countNum + ')'
+          : ' (' + plural(countNum, 'commit') + ')';
+        var grp = el('div', 'counterexample-group');
+        grp.appendChild(el('div', 'counterexample-title', titleText + suffix));
+        var ul = el('ul', 'evidence');
+        items.forEach(function (item) {
+          var li = el('li');
+          var hash = el('button', 'hash', item.hash.slice(0, 7));
+          hash.type = 'button'; hash.title = 'Copy full commit hash';
+          hash.addEventListener('click', function () { copyText(item.hash, hash, 'Copied'); });
+          li.appendChild(hash);
+          li.appendChild(el('span', '', item.date + '  ' + item.subject));
+          ul.appendChild(li);
+        });
+        grp.appendChild(ul);
+        cxDetails.appendChild(grp);
+      };
+      appendCounterSide(labels[0] + ' without ' + labels[1], cx.fromOnly, cx.fromOnlyTotal);
+      appendCounterSide(labels[1] + ' without ' + labels[0], cx.toOnly, cx.toOnlyTotal);
+      panel.appendChild(cxDetails);
+    }
+
+    // Copyable CLI explain command + privacy note
+    var cliCmd = e.d.explainCommand || fallbackExplainCommand(e.s.path, e.t.path);
+    var cliBox = el('div', 'cli-box');
+    var cliHead = el('div', 'cli-box-head');
+    cliHead.appendChild(el('span', 'cli-box-label', 'Inspect paired diffs locally'));
+    var copyCliBtn = el('button', 'btn-cli-copy', 'Copy CLI command');
+    copyCliBtn.type = 'button';
+    copyCliBtn.addEventListener('click', function () {
+      copyText(cliCmd, copyCliBtn, '✓ Copied');
+    });
+    cliHead.appendChild(copyCliBtn);
+    cliBox.appendChild(cliHead);
+    cliBox.appendChild(el('code', 'cli-code', cliCmd));
+    var privacyText = data.patchesIncluded
+      ? 'Historical patches show what changed in the same commit, not proof of why the files changed together.'
+      : 'Source-code patches are omitted by default. This file still contains file paths, commit subjects and author names. Run the CLI command above locally, or pass --include-patches when generating the map.';
+    cliBox.appendChild(el('div', 'privacy-note', privacyText));
+    panel.appendChild(cliBox);
+
+    // Export button
+    var exportBtn = el('button', 'btn-export', '📋 Copy finding for PR / discussion');
+    exportBtn.type = 'button';
+    exportBtn.addEventListener('click', function () {
+      var markdown = formatFindingMarkdown(e);
+      copyText(markdown, exportBtn, '✓ Copied finding to clipboard');
+    });
+    panel.appendChild(exportBtn);
+  }
+
+  function renderSelectedNode(n) {
+    var activeReturnFam = resolveActiveFamilyView(returnToFamily);
+    if (activeReturnFam) {
+      var navRow = el('div', 'nav-row');
+      var backFamBtn = el('button', 'back-btn back-to-family-btn', '← Back to family (' + (activeReturnFam.d.label || activeReturnFam.d.id) + ')');
+      backFamBtn.type = 'button';
+      backFamBtn.addEventListener('click', function () { selectFamily(activeReturnFam, true); });
+      navRow.appendChild(backFamBtn);
+      var backOverviewBtn = el('button', 'back-btn', 'Overview');
+      backOverviewBtn.type = 'button';
+      backOverviewBtn.addEventListener('click', clearSelection);
+      navRow.appendChild(backOverviewBtn);
+      panel.appendChild(navRow);
+    } else {
+      var backBtn = el('button', 'back-btn', '← Back to overview');
+      backBtn.type = 'button';
+      backBtn.addEventListener('click', clearSelection);
+      panel.appendChild(backBtn);
+    }
+
+    panel.appendChild(el('h2', '', base(n.path)));
+    panel.appendChild(el('p', 'path', n.path));
+    var who = n.author ? ' Most commits by ' + n.author + ' (' + pct(n.share || 0) + ').' : '';
+    panel.appendChild(el('p', '', 'Folder: ' + n.dir + ' · Changed in ' + plural(n.changes, 'commit') + '.' + who));
+
+    var rels = n.edges.filter(isVisible).sort(function (a, b) { return b.d.shared - a.d.shared; });
+    panel.appendChild(el('h3', '', 'Connected file relationships (' + rels.length + ')'));
+
+    if (rels.length === 0) {
+      panel.appendChild(el('p', '', 'Its relationships are hidden by the filters above.'));
+    } else {
+      var cardsContainer = el('div');
+      rels.forEach(function (e) {
+        cardsContainer.appendChild(relationshipCard(e));
+      });
+      panel.appendChild(cardsContainer);
+    }
+  }
+
+  function renderPanel() {
+    panel.textContent = '';
+    if (selectedNode) {
+      renderSelectedNode(selectedNode);
+    } else if (selectedEdge) {
+      renderSelectedEdge(selectedEdge);
+    } else if (selectedFamily) {
+      renderSelectedFamily(selectedFamily);
+    } else {
+      renderOverview();
+    }
+  }
+
+  // ---- start ---------------------------------------------------------------
+  if (motionMedia) {
+    var onMotionChange = function (ev) {
+      reduceMotion = Boolean(ev.matches);
+      if (reduceMotion) {
+        cancelMarchTimer();
+        if (flight) {
+          cam.x = flight.to.x; cam.y = flight.to.y; cam.scale = flight.to.scale;
+          flight = null;
+        }
+      }
+      requestDraw();
+    };
+    if (typeof motionMedia.addEventListener === 'function') {
+      motionMedia.addEventListener('change', onMotionChange);
+    } else if (typeof motionMedia.addListener === 'function') {
+      motionMedia.addListener(onMotionChange);
+    }
+  }
+  var resizeTimer = null;
+  function scheduleResize() {
+    if (resizeTimer !== null) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      resizeTimer = null;
+      var rect = canvas.getBoundingClientRect();
+      if (Math.round(rect.width) === Math.round(size.w) && Math.round(rect.height) === Math.round(size.h)) return;
+      resizeNow();
+    }, 50);
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    var roInitialized = false;
+    var ro = new ResizeObserver(function () {
+      if (!roInitialized) { roInitialized = true; return; }
+      scheduleResize();
+    });
+    ro.observe(canvas);
+  } else {
+    window.addEventListener('resize', scheduleResize);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) cancelMarchTimer();
+    else requestDraw();
+  });
+  resizeNow();
+  fit();
+  renderPanel();
+  requestDraw();
+})();
+</script>
+</body>
+</html>

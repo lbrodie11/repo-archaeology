@@ -1,0 +1,83 @@
+Repo Archaeology · diff (61f7c59~6...HEAD + uncommitted changes)
+────────────────────────────────────────────────────────────────────────────────
+
+RUN · 1 CUT                         ✓ completed
+
+
+FINDINGS  3 (1 top, 2 primary)
+
+F-01  src/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx
+┃ needs review · top finding · pair-e9d61976
+┃ Test link: a test and the code it covers. 20 of 39 commits that changed
+┃ src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (51%, 95%
+┃ interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19.
+┃ Before: 5 times this changed without index.ts; it changed within 48 h after 0
+┃ (not proof those were fixes).
+┃ src/helper/ssg/ssg.test.tsx
+┃ src/helper/ssg/index.ts
+┃ ▰▰▰▰▱▱▱▱ 51% (range 36–66%)
+┃ co-change confidence (95% interval)
+┃ E-01  00b405a  2026-02-19  feat(ssg): add redirect plugin (#4599)
+┃ E-02  58175a1  2024-04-09  fix(ssg): use response header to mark as disabled …
+┃ E-03  8ef9b7b  2024-03-07  refactor(SSG): separate middleware logic (#2315)
+
+F-02  src/jsx/streaming.test.tsx usually changes with
+      runtime-tests/deno-jsx/jsx.test.tsx
+  needs review · primary · pair-ee66c335
+  Test link: two tests that change together. 4 of 9 commits that changed
+  runtime-tests/deno-jsx/jsx.test.tsx also changed src/jsx/streaming.test.tsx
+  (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together
+  2024-02-16. No earlier triggers in the last 555 commits.
+  runtime-tests/deno-jsx/jsx.test.tsx
+  src/jsx/streaming.test.tsx
+  ▰▰▰▰▱▱▱▱ 44% (range 19–73%)
+  co-change confidence (95% interval)
+  E-04  473a6f0  2024-02-16  refactor: jsx streaming (#2216)
+  E-05  a183fe4  2024-01-16  chore: enables lint and format for `.tsx` (#1994)
+  E-06  cd6c488  2023-11-21  feat(jsx): Introduce `ErrorBoundary` component (#1…
+
+F-03  src/jsx/jsx-dev-runtime.ts usually changes with src/jsx/jsx-runtime.ts
+  needs review · primary · pair-7c78e775
+  Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that
+  changed src/jsx/jsx-runtime.ts also changed src/jsx/jsx-dev-runtime.ts (50%,
+  95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08.
+  Before: 1 time this changed without jsx-dev-runtime.ts; it changed within 48 h
+  after 0 (small sample; not proof those were fixes).
+  src/jsx/jsx-runtime.ts
+    → references it directly
+  src/jsx/jsx-dev-runtime.ts
+  ▰▰▰▰▱▱▱▱ 50% (range 19–81%)
+  co-change confidence (95% interval)
+  E-07  652ef7c  2023-11-08  feat(jsx): Define jsxTemplate/jsxAttr/jsxEscape fo…
+  E-08  c3031a4  2022-11-01  fix(jsx): export fragment (#642)
+  E-09  5f60a18  2022-07-24  feat(jsx): support `jsxImportSource` (#420)
+
+
+METRICS
+  Commits analyzed               2774
+  History                        2021-12-14 to 2026-11-04
+  Sweeping commits skipped       34
+  Revert commits skipped         11
+  Changed files                  16
+  New or without usable history  2
+  Possibly missed                3
+
+
+WARNINGS
+  ▲ warning: Historical signal, not proof: check whether the change really needs
+    these files.
+
+
+NEXT STEPS
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/helper/ssg/ssg.test.tsx \
+  src/helper/ssg/index.ts
+    Show the shared commits behind F-01.
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec \
+  runtime-tests/deno-jsx/jsx.test.tsx src/jsx/streaming.test.tsx
+    Show the shared commits behind F-02.
+  npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 \
+  --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/jsx/jsx-runtime.ts \
+  src/jsx/jsx-dev-runtime.ts
+    Show the shared commits behind F-03.

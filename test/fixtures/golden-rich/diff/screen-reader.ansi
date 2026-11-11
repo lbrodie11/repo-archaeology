@@ -1,0 +1,41 @@
+Repo Archaeology run "diff (61f7c59~6...HEAD + uncommitted changes)" (repo-archaeology-diff): completed
+Run started 2026-11-11T09:00:00.000Z, finished 2026-11-11T09:00:02.000Z.
+Cut C-01 read-history "Read git history": done
+Findings: 3 (1 top, 2 primary)
+Finding F-01 pair-e9d61976 (top finding, needs review): src/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx
+Finding F-01 summary: Test link: a test and the code it covers. 20 of 39 commits that changed src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (51%, 95% interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19. Before: 5 times this changed without index.ts; it changed within 48 h after 0 (not proof those were fixes).
+Finding F-01 subject 1 (file): src/helper/ssg/ssg.test.tsx
+Finding F-01 subject 2 (file): src/helper/ssg/index.ts
+Finding F-01 strength: 51% (range 36-66%), co-change confidence (95% interval)
+Receipt E-01 for F-01 (commit): 00b405a8f840f0f2ce4145e0fe5558cf2beeee78 2026-02-19: feat(ssg): add redirect plugin (#4599) <https://github.com/honojs/hono/commit/00b405a8f840f0f2ce4145e0fe5558cf2beeee78>
+Receipt E-02 for F-01 (commit): 58175a1b18e82219a9456709993656eb1cc9eeeb 2024-04-09: fix(ssg): use response header to mark as disabled routes for SSG (#2477) <https://github.com/honojs/hono/commit/58175a1b18e82219a9456709993656eb1cc9eeeb>
+Receipt E-03 for F-01 (commit): 8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3 2024-03-07: refactor(SSG): separate middleware logic (#2315) <https://github.com/honojs/hono/commit/8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3>
+Finding F-02 pair-ee66c335 (primary, needs review): src/jsx/streaming.test.tsx usually changes with runtime-tests/deno-jsx/jsx.test.tsx
+Finding F-02 summary: Test link: two tests that change together. 4 of 9 commits that changed runtime-tests/deno-jsx/jsx.test.tsx also changed src/jsx/streaming.test.tsx (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together 2024-02-16. No earlier triggers in the last 555 commits.
+Finding F-02 subject 1 (file): runtime-tests/deno-jsx/jsx.test.tsx
+Finding F-02 subject 2 (file): src/jsx/streaming.test.tsx
+Finding F-02 strength: 44% (range 19-73%), co-change confidence (95% interval)
+Receipt E-04 for F-02 (commit): 473a6f09991c4b400f05c66bfd953f577c2fda58 2024-02-16: refactor: jsx streaming (#2216) <https://github.com/honojs/hono/commit/473a6f09991c4b400f05c66bfd953f577c2fda58>
+Receipt E-05 for F-02 (commit): a183fe403ed12ba37f9f76320700571487e12074 2024-01-16: chore: enables lint and format for `.tsx` (#1994) <https://github.com/honojs/hono/commit/a183fe403ed12ba37f9f76320700571487e12074>
+Receipt E-06 for F-02 (commit): cd6c488b76a543583f0244ca43b1422e98236f3c 2023-11-21: feat(jsx): Introduce `ErrorBoundary` component (#1714) <https://github.com/honojs/hono/commit/cd6c488b76a543583f0244ca43b1422e98236f3c>
+Finding F-03 pair-7c78e775 (primary, needs review): src/jsx/jsx-dev-runtime.ts usually changes with src/jsx/jsx-runtime.ts
+Finding F-03 summary: Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that changed src/jsx/jsx-runtime.ts also changed src/jsx/jsx-dev-runtime.ts (50%, 95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08. Before: 1 time this changed without jsx-dev-runtime.ts; it changed within 48 h after 0 (small sample; not proof those were fixes).
+Finding F-03 subject 1 (file): src/jsx/jsx-runtime.ts
+Finding F-03 subject 2 (file): src/jsx/jsx-dev-runtime.ts
+Finding F-03 relation (direct): subject 1 references subject 2 directly
+Finding F-03 strength: 50% (range 19-81%), co-change confidence (95% interval)
+Receipt E-07 for F-03 (commit): 652ef7c86703cddbe572749d971ebe3880f89cf1 2023-11-08: feat(jsx): Define jsxTemplate/jsxAttr/jsxEscape for "@jsx precompile" of Deno 1.38 (#1651) <https://github.com/honojs/hono/commit/652ef7c86703cddbe572749d971ebe3880f89cf1>
+Receipt E-08 for F-03 (commit): c3031a418c2b9c56094a5095dbc5d34e7c8ad090 2022-11-01: fix(jsx): export fragment (#642) <https://github.com/honojs/hono/commit/c3031a418c2b9c56094a5095dbc5d34e7c8ad090>
+Receipt E-09 for F-03 (commit): 5f60a1822741f2e49fd8599c78c10a9f7b0f76f3 2022-07-24: feat(jsx): support `jsxImportSource` (#420) <https://github.com/honojs/hono/commit/5f60a1822741f2e49fd8599c78c10a9f7b0f76f3>
+Metric commits-analyzed "Commits analyzed": 2774
+Metric history "History": 2021-12-14 to 2026-11-04
+Metric sweeps-skipped "Sweeping commits skipped": 34
+Metric reverts-skipped "Revert commits skipped": 11
+Metric changed-files "Changed files": 16
+Metric changed-without-history "New or without usable history": 2
+Metric suggestions "Possibly missed": 3
+Warning: Historical signal, not proof: check whether the change really needs these files.
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/helper/ssg/ssg.test.tsx src/helper/ssg/index.ts (Show the shared commits behind F-01.)
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec runtime-tests/deno-jsx/jsx.test.tsx src/jsx/streaming.test.tsx (Show the shared commits behind F-02.)
+Next step: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 --base bcfd02bb50fb015587aac7fe1745b5b2b61361ec src/jsx/jsx-runtime.ts src/jsx/jsx-dev-runtime.ts (Show the shared commits behind F-03.)
+End of results: 3 findings, 1 warning, run completed.

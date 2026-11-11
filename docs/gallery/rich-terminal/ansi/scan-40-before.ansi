@@ -1,0 +1,88 @@
+[38;2;185;184;177m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[39m
+[1mFRAME/12[22m [2m·[22m [1mRepo Archaeology[22m [2m·[22m scan
+[2m2,780 commits analyzed from 2021-12-14 to 2026-11-07, 34 sweeping commits and 11 revert commits skipped[22m
+[38;2;185;184;177m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[39m
+
+344 relationships above the thresholds: 21 ghost wire · 56 unchecked · 9 indirect import · 54 import link · 204 test link
+[2mShowing ghost wire, unchecked. Change with --kinds ghost,unknown,indirect,direct,test.[22m
+
+[1mFinding families (3)[22m
+
+[2m 1.[22m [1mserve-static.ts across src/adapter/*[22m  [36m3 related implementations[39m [2m·[22m [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+    members: bun · cloudflare-workers · deno
+    16 supporting commits (2+ members via a qualifying pair) · 9 commits touched all 3 · all 3 pairwise links met thresholds · last together 6 months ago
+    [90m26f8c33[39m [2m2026-05-16[22m  fix(serveStatic): make options parameter optional in all adapters (#4934) [2m[all 3 members][22m
+    [90m1196f14[39m [2m2025-08-07[22m  feat(serve-static): use `join` to correct path resolution (#4291) [2m[2 of 3 members][22m
+    [90m246a06a[39m [2m2024-09-24[22m  feat(serve-static): support absolute root (#3420) [2m[2 of 3 members][22m
+
+[2m 2.[22m [1mrouter.ts across src/router/*[22m  [36m5 related implementations[39m [2m·[22m [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+    members: linear-router · pattern-router · reg-exp-router · smart-router · trie-router
+    8 supporting commits (2+ members via a qualifying pair) · 1 commit touched all 5 · 4 of 10 pairwise links met thresholds · last together 3 months ago
+    [90ma194628[39m [2m2026-08-17[22m  fix(pattern-router/linear-router): prevent prefix overmatch on wildcard routes (#5252) [2m[2 of 5 members][22m
+    [90m7b30835[39m [2m2024-11-12[22m  refactor(router): use `#` for private props to reduce the minified file size (#3660) [2m[4 of 5 members][22m
+    [90m10a5e65[39m [2m2024-10-26[22m  perf(router):  improve performance of router (#3526) [2m[4 of 5 members][22m
+
+[2m 3.[22m [1mwebsocket.ts across src/adapter/*[22m  [36m3 related implementations[39m [2m·[22m [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+    members: bun · cloudflare-workers · deno
+    4 supporting commits (2+ members via a qualifying pair) · 3 commits touched all 3 · 2 of 3 pairwise links met thresholds · last together 2 years ago
+    [90m234b083[39m [2m2024-10-25[22m  feat(ws): Make WebSocket adapter more changeable (#3531) [2m[all 3 members][22m
+    [90m6f69bf0[39m [2m2024-09-08[22m  feat(websocket): Add generics type to `WSContext` (#3337) [2m[all 3 members][22m
+    [90ma3d9cc7[39m [2m2024-05-28[22m  refactor(websocket): remove unused condition (#2839) [2m[2 of 3 members][22m
+
+[1mIndividual relationships (4)[22m
+
+[1;48;2;255;214;10;38;2;18;18;18m F-01 · #1 IN RANKING [0m [1msrc…ts[22m [2m→[22m [1msrc…ts[22m  [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+[2m    paths: src/preset/tiny.ts → src/preset/quick.ts[22m
+    when src/preset/tiny.ts changed, src/preset/quick.ts changed too in 8 of 8 commits (100%) (95% CI 67–100%) · last together 2.5 years ago
+[2m    reverse: 88% · no import link detected in the current code[22m
+    [90m16f7393[39m [2m2024-05-29[22m  fix(types): allow blank env (#2834)
+    [90m37df3dd[39m [2m2024-01-19[22m  refactor(types): name them `BlankSchema` or `BlankInput` (#2040)
+    [90m6880845[39m [2m2023-10-16[22m  refactor: refactored `hono-base` (#1588)
+[2m    Additional receipts (+5 more; pass --full-evidence to inline):[22m
+    [90m8b6bd46[39m [2m2023-10-16[22m  feat(app): `basePath` option for the constructor, deprecate `app.basePath()` (#1560)
+    [90m6034dd7[39m [2m2023-08-24[22m  fix(types): remove type-errors for routes (#1371)
+    [90m4fde03e[39m [2m2023-05-18[22m  fix(preset): fix constructor args (#1113)
+    [90mccc4308[39m [2m2023-05-13[22m  fix(types): set `/` for generics `basePath` (#1083)
+    [90mefebf64[39m [2m2023-05-09[22m  feat(preset): add `hono/quick` (#1074)
+[2m    Inspect: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/preset/tiny.ts src/preset/quick.ts[22m
+    [38;2;185;184;177m────────────────────────────────────────[39m
+
+[1m[F-02][22m [1msrc…ts[22m [2m→[22m [1msrc…ts[22m  [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+[2m    paths: src/helper/streaming/stream.ts → src/helper/streaming/sse.ts[22m
+    when src/helper/streaming/stream.ts changed, src/helper/streaming/sse.ts changed too in 7 of 8 commits (87%) (95% CI 52–98%) · last together 1.8 years ago
+[2m    reverse: 38% · no import link detected in the current code[22m
+    [90md72aa4b[39m [2m2025-01-27[22m  refactor(helper/streaming): Avoid attaching AbortSignal on newer versions of Bun (#3859)
+    [90me513fe7[39m [2m2024-07-06[22m  fix(helper/streaming): remove slow types (#3100)
+    [90mada10e5[39m [2m2024-07-03[22m  fix(stream): Fixed a problem that onAbort() is called even if request is normally closed in deno (#3079)
+[2m    Additional receipts (+4 more; pass --full-evidence to inline):[22m
+    [90m2d3bc55[39m [2m2024-06-28[22m  fix(streaming): call stream.abort() explicitly when request is aborted (#3042)
+    [90m5816cb2[39m [2m2024-02-24[22m  fix(stream): avoid hang up when stream helper's callback throw error (#2262)
+    [90m4dfcda8[39m [2m2024-01-02[22m  feat(streaming): implement `stream.onAbort` (#1871)
+    [90m7bbaefc[39m [2m2023-12-27[22m  feat(helper): export SSEStreamingApi and SSEMessage. (#1863)
+[2m    Inspect: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/helper/streaming/stream.ts src/helper/streaming/sse.ts[22m
+    [38;2;185;184;177m────────────────────────────────────────[39m
+
+[1m[F-03][22m [1msrc…ts[22m [2m→[22m [1msrc…ts[22m  [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+[2m    paths: src/adapter/deno/ssg.ts → src/adapter/bun/ssg.ts[22m
+    when src/adapter/deno/ssg.ts changed, src/adapter/bun/ssg.ts changed too in 3 of 3 commits (100%) (95% CI 43–100%) · last together 2.8 years ago
+[2m    reverse: 75% · possible parallel implementations: ssg.ts appears in sibling folders[22m
+    [90m23d96a9[39m [2m2024-01-19[22m  refactor(ssg): Removal of Libraries Dependent on Node.js (#2012)
+    [90m54ef22a[39m [2m2024-01-13[22m  chore(helper): Add experimental flag the SSG features (#1967)
+    [90m04b686c[39m [2m2024-01-11[22m  feat: Introducing a New SSG Adaptor/Helper  (#1904)
+[2m    Inspect: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/adapter/deno/ssg.ts src/adapter/bun/ssg.ts[22m
+    [38;2;185;184;177m────────────────────────────────────────[39m
+
+[1m[F-04][22m [1msrc…ts[22m [2m→[22m [1msrc…ts[22m  [1;38;2;216;112;255m[GHOST WIRE][22;39m [2m(ghost wire)[22m
+[2m    paths: src/preset/tiny.ts → src/hono.ts[22m
+    when src/preset/tiny.ts changed, src/hono.ts changed too in 6 of 8 commits (75%) (95% CI 40–93%) · last together 2.5 years ago
+[2m    reverse: 4% · no import link detected in the current code[22m
+    [90m16f7393[39m [2m2024-05-29[22m  fix(types): allow blank env (#2834)
+    [90m37df3dd[39m [2m2024-01-19[22m  refactor(types): name them `BlankSchema` or `BlankInput` (#2040)
+    [90m6880845[39m [2m2023-10-16[22m  refactor: refactored `hono-base` (#1588)
+[2m    Additional receipts (+3 more; pass --full-evidence to inline):[22m
+    [90m8b6bd46[39m [2m2023-10-16[22m  feat(app): `basePath` option for the constructor, deprecate `app.basePath()` (#1560)
+    [90m6034dd7[39m [2m2023-08-24[22m  fix(types): remove type-errors for routes (#1371)
+    [90mccc4308[39m [2m2023-05-13[22m  fix(types): set `/` for generics `basePath` (#1083)
+[2m    Inspect: npx repo-archaeology explain --head 61f7c59e50244ab4d2dd83c151928cf7ea448510 src/preset/tiny.ts src/hono.ts[22m
+
+[2mHistorical signal, not proof: check whether the change really needs these files.[22m

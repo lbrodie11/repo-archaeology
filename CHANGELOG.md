@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Minor release.
+
+### Changed
+- **`--style rich` is rendered by [`@frame12/terminal`](https://www.npmjs.com/package/@frame12/terminal) (RA-21):** `scan`, `diff`, `file`, `explain` and the bare command build a FRAME/12 snapshot with a typed, pure adapter (`src/report/frame12-terminal.ts`) and render it with the package's grammar, capability detection, width tiers, ambiguous-width glyph twins, color rules, OSC 8 links and sanitizing, so Repo Archaeology and FRAME/12 no longer keep two terminal implementations. One finding per relationship ("`<to>` usually changes with `<from>`") with its relationship, confidence and 95% Wilson interval, and commit receipts; the classic counts as metrics; caveats as warnings; copyable `explain` commands as next steps. Every number shown is a `--json` number. Before/after gallery: [`docs/gallery/rich-terminal/`](docs/gallery/rich-terminal/README.md).
+  - Receipts are the commits `--json` lists in `evidence`; `--full-evidence` adds every stored supporting commit (the card lists 3 and counts the rest; screen-reader output lists all).
+  - `explain`'s patch hunks are not part of the rich layout; rich `explain` suggests the `--style classic` command that shows them.
+  - On a pipe or file, rich output has no escape sequences unless `FORCE_COLOR` asks (the package's linear rules).
+  - Capability precedence is the package's: a terminal's own width now wins over `COLUMNS` (pass `--columns` to override both), and `FRAME12_*` variables (`FRAME12_ASCII`, `FRAME12_LINKS`, `FRAME12_AMBIGUOUS_WIDE`, `FRAME12_SCREEN_READER`, `FRAME12_MOTION`) apply.
+  - The track-record line is Repo Archaeology's shared sentence, as in classic and Markdown.
+  - Diff CODEOWNERS handles are printed without `@` (the package strips the zero-width break classic uses to keep copied handles from pinging).
+- **Dependency policy:** runtime dependencies are now `commander`, `typescript` and `@frame12/terminal` (exact-pinned at 0.1.0; it brings `@frame12/tokens@0.2.0`). Its optional `ink` and `react` peers are not installed or loaded. Install size, measured by `scripts/install-size.mjs` from `npm pack` of 0.12.0 and this version: tarball +0.2 KB, installed `node_modules` +368.4 KB (+488 KB on disk, +62 files).
+
+### Added
+- `--screen-reader` (or `FRAME12_SCREEN_READER=1`): `--style rich` as plain, append-only lines, one fact per line, every receipt and full path.
+- `--columns <n>`: lay out `--style rich` for `n` columns (20-400).
+- "Accessibility in the terminal" in the README (screen-reader mode, ASCII, `NO_COLOR`, motion).
+
+### Removed
+- Repo Archaeology's own rich renderer (`src/report/terminal-rich.ts`: `formatRich*`, `printRich*`) and its capability, sanitizing, display-width and OSC 8 code; `FRAME12.terminal` (ANSI and RGB values) from `src/style/frame12.ts`. The map's palette is unchanged. `parseTrustedRemoteRepoUrl`, `isValidCommitSha` and the 12 fps spinner stay.
+
+### Unchanged
+- `classic` output, `--json`, `--format markdown`, the HTML map in both styles and exit codes are byte-identical (pinned by `test/unchanged-outputs.test.ts`, recorded from 0.12.0).
+
 ## [0.12.0] - 2026-11-11
 
 ### Added

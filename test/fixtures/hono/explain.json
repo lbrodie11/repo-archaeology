@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "tool": {
+    "name": "repo-archaeology",
+    "version": "<version>"
+  },
+  "meta": {
+    "tool": "repo-archaeology",
+    "root": "hono",
+    "head": {
+      "ref": "61f7c59e50244ab4d2dd83c151928cf7ea448510",
+      "sha": "61f7c59e50244ab4d2dd83c151928cf7ea448510"
+    },
+    "commitsRead": 2835,
+    "commitsAnalyzed": 2780,
+    "sweepsSkipped": 34,
+    "subjectSkipped": 0,
+    "revertsSkipped": 11,
+    "renamesFollowed": 286,
+    "files": 887,
+    "oldestCommit": "2021-12-14",
+    "newestCommit": "2026-11-07",
+    "origins": {
+      "human": 2764,
+      "agent": 14,
+      "bot": 2
+    },
+    "verdicts": {
+      "loaded": 0,
+      "active": 0,
+      "expired": 0,
+      "file": ".repo-archaeology.verdicts.json"
+    },
+    "config": {
+      "source": "none"
+    },
+    "settings": {
+      "maxCommits": 5000,
+      "maxFilesPerCommit": 25,
+      "minShared": 3,
+      "minConfidence": 0.4,
+      "ignore": [],
+      "useDefaultIgnores": true
+    },
+    "warnings": []
+  },
+  "from": "src/helper/ssg/ssg.test.tsx",
+  "to": "src/helper/ssg/index.ts",
+  "relationship": "test",
+  "why": "a test and the code it covers",
+  "meetsThresholds": true,
+  "shared": 20,
+  "fromChanges": 40,
+  "toChanges": 27,
+  "confidence": 0.5,
+  "reverseConfidence": 0.741,
+  "interval": {
+    "low": 0.3519,
+    "high": 0.6481
+  },
+  "reverseInterval": {
+    "low": 0.5532,
+    "high": 0.8683
+  },
+  "score": 0.352,
+  "weighted": false,
+  "lastTogether": "2026-02-19",
+  "crossesDirectories": false,
+  "originShare": {
+    "human": 1,
+    "agent": 0,
+    "bot": 0
+  },
+  "sharedCommits": [
+    {
+      "hash": "00b405a8f840f0f2ce4145e0fe5558cf2beeee78",
+      "date": "2026-02-19",
+      "author": "3w36zj6",
+      "subject": "feat(ssg): add redirect plugin (#4599)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/helper/ssg/ssg.test.tsx",
+        "path": "src/helper/ssg/ssg.test.tsx",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": true,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 4,
+        "hunks": [
+          {
+            "header": "@@ -10,11 +10,5 @@ import {",
+            "lines": [
+              "   ssgParams,",
+              " } from './middleware'",
+              "-import {",
+              "-  defaultExtensionMap,",
+              "-  fetchRoutesContent,",
+              "-  saveContentToFile,",
+              "-  toSSG,",
+              "-  defaultPlugin,",
+              "-} from './ssg'",
+              "+import { defaultExtensionMap, fetchRoutesContent, saveContentToFile, toSSG } from './ssg'",
+              " import type {",
+              "   AfterGenerateHook,"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -844,28 +838,4 @@ describe('SSG Plugin System', () => {",
+            "lines": [
+              "   })",
+              " ",
+              "-  it('should use defaultPlugin when plugins option is omitted', async () => {",
+              "-    // @ts-expect-error defaultPlugin has afterResponseHook",
+              "-    const defaultPluginSpy = vi.spyOn(defaultPlugin, 'afterResponseHook')",
+              "-    await toSSG(app, fsMock, { dir: './static' })",
+              "-    expect(defaultPluginSpy).toHaveBeenCalled()",
+              "-    defaultPluginSpy.mockRestore()",
+              "-  })",
+              "-",
+              "-  it('should skip non-200 responses with defaultPlugin', async () => {",
+              "-    const result = await toSSG(app, fsMock, { plugins: [defaultPlugin], dir: './static' })",
+              "-    expect(fsMock.writeFile).toHaveBeenCalledWith('static/index.html', '<h1>Home</h1>')",
+              "-    expect(fsMock.writeFile).toHaveBeenCalledWith('static/about.html', '<h1>About</h1>')",
+              "-    expect(fsMock.writeFile).toHaveBeenCalledWith('static/blog.html', '<h1>Blog</h1>')",
+              "-    expect(fsMock.writeFile).not.toHaveBeenCalledWith('static/created.txt', expect.any(String))",
+              "-    expect(fsMock.writeFile).not.toHaveBeenCalledWith('static/redirect.txt', expect.any(String))",
+              "-    expect(fsMock.writeFile).not.toHaveBeenCalledWith('static/notfound.txt', expect.any(String))",
+              "-    expect(fsMock.writeFile).not.toHaveBeenCalledWith('static/error.txt', expect.any(String))",
+              "-    expect(result.files.some((f) => f.includes('created'))).toBe(false)",
+              "-    expect(result.files.some((f) => f.includes('redirect'))).toBe(false)",
+              "-    expect(result.files.some((f) => f.includes('notfound'))).toBe(false)",
+              "-    expect(result.files.some((f) => f.includes('error'))).toBe(false)",
+              "-    expect(result.success).toBe(true)"
+            ],
+            "truncated": true,
+            "omittedLines": 4
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "src/helper/ssg/index.ts",
+        "path": "src/helper/ssg/index.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -12,2 +12,3 @@ export {",
+            "lines": [
+              "   onlySSG,",
+              " } from './middleware'",
+              "+export { defaultPlugin, redirectPlugin } from './plugins'"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "58175a1b18e82219a9456709993656eb1cc9eeeb",
+      "date": "2024-04-09",
+      "author": "Taku Amano",
+      "subject": "fix(ssg): use response header to mark as disabled routes for SSG (#2477)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/helper/ssg/ssg.test.tsx",
+        "path": "src/helper/ssg/ssg.test.tsx",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -4,5 +4,11 @@ import { Hono } from '../../hono'",
+            "lines": [
+              " import { jsx } from '../../jsx'",
+              " import { poweredBy } from '../../middleware/powered-by'",
+              "-import { SSG_DISABLED_RESPONSE, ssgParams, isSSGContext, disableSSG, onlySSG } from './middleware'",
+              "+import {",
+              "+  X_HONO_DISABLE_SSG_HEADER_KEY,",
+              "+  ssgParams,",
+              "+  isSSGContext,",
+              "+  disableSSG,",
+              "+  onlySSG,",
+              "+} from './middleware'",
+              " import { fetchRoutesContent, saveContentToFile, toSSG, defaultExtensionMap } from './ssg'",
+              " import type {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -595,5 +601,7 @@ describe('disableSSG/onlySSG middlewares', () => {",
+            "lines": [
+              "   app.get('/', (c) => c.html(<h1>Hello</h1>))",
+              "   app.get('/api', disableSSG(), (c) => c.text('an-api'))",
+              "-  app.get('/disable-by-response', () => SSG_DISABLED_RESPONSE)",
+              "+  app.get('/disable-by-response', (c) =>",
+              "+    c.text('', 404, { [X_HONO_DISABLE_SSG_HEADER_KEY]: 'true' })",
+              "+  )",
+              "   app.get('/static-page', onlySSG(), (c) => c.html(<h1>Welcome to my site</h1>))",
+              " "
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "src/helper/ssg/index.ts",
+        "path": "src/helper/ssg/index.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "hunks": [
+          {
+            "header": "@@ -1,2 +1,8 @@",
+            "lines": [
+              " export * from './ssg'",
+              "-export { SSG_DISABLED_RESPONSE, ssgParams, isSSGContext, disableSSG, onlySSG } from './middleware'",
+              "+export {",
+              "+  X_HONO_DISABLE_SSG_HEADER_KEY,",
+              "+  ssgParams,",
+              "+  isSSGContext,",
+              "+  disableSSG,",
+              "+  onlySSG,",
+              "+} from './middleware'"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      }
+    },
+    {
+      "hash": "8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3",
+      "date": "2024-03-07",
+      "author": "watany",
+      "subject": "refactor(SSG): separate middleware logic (#2315)",
+      "origin": "human",
+      "fileA": {
+        "canonicalPath": "src/helper/ssg/ssg.test.tsx",
+        "path": "src/helper/ssg/ssg.test.tsx",
+        "oldPath": "src/helper/ssg/index.test.tsx",
+        "status": "R",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": false,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 0,
+        "statusNote": "Renamed from src/helper/ssg/index.test.tsx to src/helper/ssg/ssg.test.tsx",
+        "hunks": [
+          {
+            "header": "@@ -4,14 +4,6 @@ import { Hono } from '../../hono'",
+            "lines": [
+              " import { jsx } from '../../jsx'",
+              " import { poweredBy } from '../../middleware/powered-by'",
+              "-import {",
+              "-  SSG_DISABLED_RESPONSE,",
+              "-  fetchRoutesContent,",
+              "-  saveContentToFile,",
+              "-  ssgParams,",
+              "-  toSSG,",
+              "-  isSSGContext,",
+              "-  disableSSG,",
+              "-  onlySSG,",
+              "-} from './index'",
+              "+import { SSG_DISABLED_RESPONSE, ssgParams, isSSGContext, disableSSG, onlySSG } from './middleware'",
+              "+import { fetchRoutesContent, saveContentToFile, toSSG } from './ssg'",
+              " import type {",
+              "   BeforeRequestHook,"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          },
+          {
+            "header": "@@ -19,5 +11,5 @@ import type {",
+            "lines": [
+              "   AfterGenerateHook,",
+              "   FileSystemModule,",
+              "-} from './index'",
+              "+} from './ssg'",
+              " ",
+              " const resolveRoutesContent = async (res: ReturnType<typeof fetchRoutesContent>) => {"
+            ],
+            "truncated": false,
+            "omittedLines": 0
+          }
+        ]
+      },
+      "fileB": {
+        "canonicalPath": "src/helper/ssg/index.ts",
+        "path": "src/helper/ssg/index.ts",
+        "status": "M",
+        "binary": false,
+        "emptyDiff": false,
+        "unsupportedPath": false,
+        "truncated": true,
+        "timedOut": false,
+        "omittedHunks": 0,
+        "omittedLines": 338,
+        "hunks": [
+          {
+            "header": "@@ -1,360 +1,2 @@",
+            "lines": [
+              "-import { replaceUrlParam } from '../../client/utils'",
+              "-import type { Context } from '../../context'",
+              "-import type { Hono } from '../../hono'",
+              "-import type { Env, MiddlewareHandler, Schema } from '../../types'",
+              "-import { createPool } from '../../utils/concurrent'",
+              "-import { getExtension } from '../../utils/mime'",
+              "-import { joinPaths, dirname, filterStaticGenerateRoutes } from './utils'",
+              "-",
+              "-const SSG_CONTEXT = 'HONO_SSG_CONTEXT'",
+              "-export const SSG_DISABLED_RESPONSE = new Response('SSG is disabled', { status: 404 })",
+              "-",
+              "-const DEFAULT_CONCURRENCY = 2 // default concurrency for ssg",
+              "-",
+              "-/**",
+              "- * @experimental",
+              "- * `FileSystemModule` is an experimental feature.",
+              "- * The API might be changed.",
+              "- */",
+              "-export interface FileSystemModule {",
+              "-  writeFile(path: string, data: string | Uint8Array): Promise<void>",
+              "-  mkdir(path: string, options: { recursive: boolean }): Promise<void | string>",
+              "-}",
+              "-",
+              "-/**"
+            ],
+            "truncated": true,
+            "omittedLines": 338
+          }
+        ]
+      }
+    }
+  ],
+  "counterexamples": {
+    "fromWithoutToTotal": 20,
+    "toWithoutFromTotal": 7,
+    "fromWithoutTo": [
+      {
+        "hash": "7852e0a1e07f1d686f78f91589c7f9b573ca8bae",
+        "date": "2026-11-04",
+        "author": "Leo Camus",
+        "subject": "fix(ssg): do not reuse created directories across toSSG runs (#5381)",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/ssg.test.tsx",
+        "status": "M"
+      },
+      {
+        "hash": "e44d0a5329b0c2c7b540020abe86e3a8e8666f37",
+        "date": "2026-11-04",
+        "author": "sary",
+        "subject": "fix(utils/mime,ssg): match media types case-insensitively (#5449)",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/ssg.test.tsx",
+        "status": "M"
+      },
+      {
+        "hash": "3a67f7f3997e1437d108f7bcba2dbcee2df69221",
+        "date": "2026-08-26",
+        "author": "Taku Amano",
+        "subject": "Merge commit from fork",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/ssg.test.tsx",
+        "status": "M"
+      }
+    ],
+    "toWithoutFrom": [
+      {
+        "hash": "a32482ddb0d8c9b75310c28750389a1819be6618",
+        "date": "2024-02-25",
+        "author": "Yusuke Wada",
+        "subject": "fix(ssg): allow `app: Hono<any, any, any>` for `toSSG` (#2272)",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/index.ts",
+        "status": "M"
+      },
+      {
+        "hash": "5809f753dc3d9a1fa85735573ec869beb9b37400",
+        "date": "2024-01-24",
+        "author": "watany",
+        "subject": "fix: await generate hook (#2074)",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/index.ts",
+        "status": "M"
+      },
+      {
+        "hash": "1f46aa1561e032b99f0d013b404230aaaefa1ae4",
+        "date": "2024-01-19",
+        "author": "watany",
+        "subject": "fix(ssg): Remove ArrayBuffer from FileSystemModule's writeFile (#2032)",
+        "origin": "human",
+        "historicalPath": "src/helper/ssg/index.ts",
+        "status": "M"
+      }
+    ]
+  },
+  "bounds": {
+    "maxCommits": 3,
+    "contextLines": 2,
+    "maxPatchBytes": 65536,
+    "maxHunksPerFile": 4,
+    "maxLinesPerHunk": 24,
+    "maxTotalPatchLines": 200,
+    "timeoutMs": 8000,
+    "commitsTruncated": true,
+    "outputTruncated": false,
+    "timedOut": false
+  },
+  "cliCommand": "npx repo-archaeology explain src/helper/ssg/ssg.test.tsx src/helper/ssg/index.ts",
+  "disclaimer": "Historical patches show what changed in the same commit, not proof of why the files changed together or that future changes require both files."
+}
