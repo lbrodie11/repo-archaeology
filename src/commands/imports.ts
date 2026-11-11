@@ -1,7 +1,17 @@
-import { ignorePatterns } from '../config.js';
+import { ignorePatterns, type Settings } from '../config.js';
 import { toRepoPath, UsageError, type Context } from '../context.js';
-import { AnalysisSession, analysisWarnings, analyzeFile, type FileAnalysis } from '../imports/analysis.js';
-import { workingTreeFiles } from '../imports/classify.js';
+import { listTreeFiles, resolveCommit } from '../git/repo.js';
+import { runGit } from '../git/run.js';
+import {
+  AnalysisSession,
+  analysisWarnings,
+  analyzeFile,
+  createExtractionStore,
+  type ExtractionStore,
+  type FileAnalysis,
+  type ImportTargetRole,
+} from '../imports/analysis.js';
+import { gitTreeFiles, workingTreeFiles } from '../imports/classify.js';
 import {
   IMPORT_UNRESOLVED_REASON_CODES,
   type ImportResolutionVia,
@@ -18,6 +28,7 @@ export type {
   ImportEdgeKind,
   ImportResolutionVia,
   ImportsCoverageMeta,
+  ImportTargetRole,
   ImportUnresolvedReasonCode,
 };
 
@@ -28,6 +39,10 @@ export interface ImportGraphEdge {
   kind: ImportEdgeKind;
   via?: ImportResolutionVia;
   heuristic?: boolean;
+  /** What `to` is to the import (Python and Go edges, RA-20). */
+  role?: ImportTargetRole;
+  /** With `role: 'name'`: the imported name (`mod` in `from pkg import mod`). */
+  name?: string;
 }
 
 export interface ImportGraphUnresolved {
@@ -44,6 +59,8 @@ export interface ImportGraphOptions {
 
 export interface ImportGraphResult {
   meta: Meta;
+  /** Set when the graph is of another commit's tree than the session's (`importGraph({ at })`, RA-20). */
+  at?: { ref: string; sha: string };
   files: string[];
   edges: ImportGraphEdge[];
   unresolved: ImportGraphUnresolved[];
@@ -75,18 +92,47 @@ export interface ImportGraphIndex {
 }
 
 const sessionIndexCache = new WeakMap<Context, ImportGraphIndex>();
+/** The extractions a session's import graph computed, reusable for unchanged blobs in another tree (RA-20). */
+const sessionExtractionStores = new WeakMap<Context, ExtractionStore>();
+
+interface IndexSource {
+  /** Reader for the analyzed tree. */
+  files: RepoFiles;
+  /** Every file of the analyzed tree. */
+  currentFiles: ReadonlySet<string>;
+  settings: Settings;
+  extractions?: ExtractionStore;
+}
 
 export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   const existing = sessionIndexCache.get(ctx);
   if (existing) return existing;
-
-  const repoFiles: RepoFiles = ctx.files ?? workingTreeFiles(ctx.root, ctx.currentFiles);
-  // The graph only links files in the analyzed tree, and flags path references to symlinked targets.
-  const session = new AnalysisSession(repoFiles, {
-    includeTarget: (path) => ctx.currentFiles.has(path),
-    checkInvalidReferenceTargets: true,
+  const extractions = createExtractionStore();
+  const index = buildImportGraphIndex({
+    files: ctx.files ?? workingTreeFiles(ctx.root, ctx.currentFiles),
+    currentFiles: ctx.currentFiles,
+    settings: ctx.settings,
+    extractions,
   });
-  const ignoreMatcher = new PathMatcher(ignorePatterns(ctx.settings));
+  sessionIndexCache.set(ctx, index);
+  sessionExtractionStores.set(ctx, extractions);
+  return index;
+}
+
+function buildImportGraphIndex(source: IndexSource): ImportGraphIndex {
+  const repoFiles = source.files;
+  const currentFiles = source.currentFiles;
+  // The graph only links files in the analyzed tree, and flags path references to symlinked targets.
+  const session = new AnalysisSession(
+    repoFiles,
+    {
+      includeTarget: (path) => currentFiles.has(path),
+      checkInvalidReferenceTargets: true,
+    },
+    undefined,
+    source.extractions,
+  );
+  const ignoreMatcher = new PathMatcher(ignorePatterns(source.settings));
 
   const allFiles: string[] = [];
   const edgesByFrom = new Map<string, ImportGraphEdge[]>();
@@ -109,7 +155,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   const indexFile = (from: string): void => {
     if (edgesByFrom.has(from)) return;
     const analysis =
-      session.analyzerFor(from) !== undefined && ctx.currentFiles.has(from) ? analyzeFile(from, repoFiles, session) : undefined;
+      session.analyzerFor(from) !== undefined && currentFiles.has(from) ? analyzeFile(from, repoFiles, session) : undefined;
     if (!analysis?.analyzable) {
       edgesByFrom.set(from, []);
       unresolvedByFrom.set(from, []);
@@ -134,6 +180,8 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
           kind: edge.kind,
           via: target.via,
           ...(target.heuristic ? { heuristic: true } : {}),
+          ...(target.role !== undefined ? { role: target.role } : {}),
+          ...(target.name !== undefined ? { name: target.name } : {}),
         });
         addImporter(target.path, from);
       }
@@ -164,7 +212,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   };
 
   const candidates: string[] = [];
-  for (const file of ctx.currentFiles) {
+  for (const file of currentFiles) {
     if (ignoreMatcher.matches(file)) continue;
     if (session.analyzerFor(file) !== undefined) {
       candidates.push(file);
@@ -179,7 +227,7 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     allFiles.push(file);
   }
 
-  const index: ImportGraphIndex = {
+  return {
     allFiles,
     edgesByFrom,
     unresolvedByFrom,
@@ -192,8 +240,6 @@ export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
     analysisOf: (path) => analyses.get(path),
     indexFile,
   };
-  sessionIndexCache.set(ctx, index);
-  return index;
 }
 
 function buildGraphCoverage(
@@ -267,62 +313,181 @@ export function importGraph(ctx: Context, options: ImportGraphOptions = {}): Imp
   ctx.open?.();
   try {
     const index = getOrBuildImportGraphIndex(ctx);
+    return selectGraph(ctx, index, ctx.currentFiles, ctx.head?.ref ?? 'the working tree', options);
+  } finally {
+    ctx.close?.();
+  }
+}
 
-    if (options.files === undefined) {
-      const files = [...index.allFiles];
-      const edges = files.flatMap((from) => index.edgesByFrom.get(from) ?? []);
-      const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
-      const coverage = buildGraphCoverage(index, files, edges, unresolved, 'repository');
-      return {
-        meta: graphMeta(ctx, index, files, coverage),
-        files,
-        edges,
-        unresolved,
-        languages: [...index.languages],
-      };
-    }
-
-    const allowedFrom = new Set<string>();
-    for (const rawInput of options.files) {
-      const path = ctx.currentFiles.has(rawInput) ? rawInput : toRepoPath(ctx, rawInput);
-      if (!ctx.currentFiles.has(path)) {
-        throw new UsageError(`No such file in ${ctx.head?.ref ?? 'the working tree'}: ${path}`);
-      }
-      index.indexFile(path);
-      allowedFrom.add(path);
-      const importers = index.importersByTarget.get(path);
-      if (importers) {
-        for (const importer of importers) {
-          allowedFrom.add(importer);
-        }
-      }
-    }
-
-    const files = [...allowedFrom].sort();
+/** The graph (or the `files`-scoped part of it) from a built index. */
+function selectGraph(
+  ctx: Context,
+  index: ImportGraphIndex,
+  treeFiles: ReadonlySet<string>,
+  treeLabel: string,
+  options: ImportGraphOptions,
+): ImportGraphResult {
+  if (options.files === undefined) {
+    const files = [...index.allFiles];
     const edges = files.flatMap((from) => index.edgesByFrom.get(from) ?? []);
     const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
-    const langSet = new Set<string>();
-    for (const f of files) {
-      const lang = index.languageOf(f);
-      if (lang) langSet.add(lang);
-    }
-    const languages = langSet.size > 0 ? [...langSet].sort() : [...index.languages];
-    const coverage = buildGraphCoverage(index, files, edges, unresolved, 'analyzed-files');
-
+    const coverage = buildGraphCoverage(index, files, edges, unresolved, 'repository');
     return {
       meta: graphMeta(ctx, index, files, coverage),
       files,
       edges,
       unresolved,
-      languages,
+      languages: [...index.languages],
     };
+  }
+
+  const allowedFrom = new Set<string>();
+  for (const rawInput of options.files) {
+    const path = treeFiles.has(rawInput) ? rawInput : toRepoPath(ctx, rawInput);
+    if (!treeFiles.has(path)) {
+      throw new UsageError(`No such file in ${treeLabel}: ${path}`);
+    }
+    index.indexFile(path);
+    allowedFrom.add(path);
+    const importers = index.importersByTarget.get(path);
+    if (importers) {
+      for (const importer of importers) {
+        allowedFrom.add(importer);
+      }
+    }
+  }
+
+  const files = [...allowedFrom].sort();
+  const edges = files.flatMap((from) => index.edgesByFrom.get(from) ?? []);
+  const unresolved = files.flatMap((from) => index.unresolvedByFrom.get(from) ?? []);
+  const langSet = new Set<string>();
+  for (const f of files) {
+    const lang = index.languageOf(f);
+    if (lang) langSet.add(lang);
+  }
+  const languages = langSet.size > 0 ? [...langSet].sort() : [...index.languages];
+  const coverage = buildGraphCoverage(index, files, edges, unresolved, 'analyzed-files');
+
+  return {
+    meta: graphMeta(ctx, index, files, coverage),
+    files,
+    edges,
+    unresolved,
+    languages,
+  };
+}
+
+export interface ImportGraphAtOptions extends ImportGraphOptions {
+  /** Test hook: called with the paths whose extraction was reused from the session's own graph. */
+  onReuse?: (stats: { reused: number; extracted: number }) => void;
+}
+
+interface DerivedIndex {
+  sha: string;
+  index: ImportGraphIndex;
+  treeFiles: ReadonlySet<string>;
+  reader: { open(): void; close(): void };
+}
+
+/** The last tree a session's `importGraph({ at })` analyzed: Gutter asks for one base per PR. */
+const derivedIndexCache = new WeakMap<Context, DerivedIndex>();
+
+/** Resolves `importGraph({ at })` / `imports --at <ref>` to a commit SHA. */
+export async function resolveAtRef(root: string, at: string): Promise<string> {
+  const trimmed = typeof at === 'string' ? at.trim() : '';
+  if (trimmed === '' || trimmed.startsWith('-')) {
+    throw new UsageError(`Invalid --at revision "${String(at)}": revision cannot be empty or start with "-".`);
+  }
+  try {
+    return await resolveCommit(root, trimmed);
+  } catch {
+    throw new UsageError(`--at: "${at}" is not a branch, tag or commit in this repository.`);
+  }
+}
+
+const splitNul = (out: string): string[] => out.split('\0').filter((path) => path !== '');
+
+/**
+ * Paths whose content may differ between `atSha`'s tree and the tree the session analyzed:
+ * `git diff-tree` for a `head` session; `git diff` against the working tree plus untracked files
+ * otherwise. Every other path present in both has the same blob (or the same cleaned content).
+ */
+async function changedSince(ctx: Context, atSha: string): Promise<Set<string>> {
+  if (ctx.head !== undefined) {
+    const out = await runGit(ctx.root, ['diff-tree', '-r', '-z', '--no-renames', '--name-only', '--end-of-options', atSha, ctx.head.sha]);
+    return new Set(splitNul(out));
+  }
+  const [diffOut, untracked] = await Promise.all([
+    runGit(ctx.root, ['diff', '-z', '--name-only', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', atSha, '--']),
+    runGit(ctx.root, ['ls-files', '-z', '--others', '--exclude-standard']),
+  ]);
+  return new Set([...splitNul(diffOut), ...splitNul(untracked)]);
+}
+
+/**
+ * RA-20: the import graph of another commit's tree (`at`), from this session, without a second
+ * session or any history. The tree's file list, configuration (tsconfig, package.json, go.mod,
+ * pyproject, …) and resolution are its own; only per-file extractions (the parse of a file's
+ * import statements, a function of its bytes and path) are reused from this session's graph for
+ * files whose blob is the same in both trees. Settings are the session's (never `at`'s
+ * `.repo-archaeology.json`). The result equals a fresh session at `at` with the same settings.
+ */
+export async function importGraphAt(ctx: Context, at: string, options: ImportGraphAtOptions = {}): Promise<ImportGraphResult> {
+  const sha = await resolveAtRef(ctx.root, at);
+  let derived = derivedIndexCache.get(ctx);
+  let build: (() => void) | undefined;
+  if (derived?.sha !== sha) {
+    const [treeFiles, changed] = await Promise.all([listTreeFiles(ctx.root, sha), changedSince(ctx, sha)]);
+    const base = gitTreeFiles(ctx.root, sha, treeFiles);
+    const unchanged = (path: string): boolean => !changed.has(path) && ctx.currentFiles.has(path) && treeFiles.has(path);
+    // A `head` session reads the same blobs from its own (cached) reader; a working tree may differ in
+    // line endings after git's filters, so its tree is always read from `at`.
+    const headFiles = ctx.head !== undefined ? ctx.files : undefined;
+    const reader: RepoFiles = {
+      ...base,
+      read: (path) => (headFiles !== undefined && unchanged(path) ? headFiles.read(path) : base.read(path)),
+    };
+    const own = createExtractionStore();
+    let reused = 0;
+    let extracted = 0;
+    const extractions: ExtractionStore = {
+      get: (analyzer, path) => {
+        const local = own.get(analyzer, path);
+        if (local) return local;
+        const shared = unchanged(path) ? sessionExtractionStores.get(ctx)?.get(analyzer, path) : undefined;
+        if (shared) reused++;
+        return shared;
+      },
+      set: (analyzer, path, entry) => {
+        extracted++;
+        own.set(analyzer, path, entry);
+      },
+    };
+    const pending: DerivedIndex = { sha, index: undefined as unknown as ImportGraphIndex, treeFiles, reader: base };
+    build = () => {
+      pending.index = buildImportGraphIndex({ files: reader, currentFiles: treeFiles, settings: ctx.settings, extractions });
+      options.onReuse?.({ reused, extracted });
+    };
+    derived = pending;
+  }
+  ctx.open?.();
+  derived.reader.open();
+  try {
+    if (build) {
+      build();
+      derivedIndexCache.set(ctx, derived);
+    }
+    const result = selectGraph(ctx, derived.index, derived.treeFiles, at, options);
+    return { meta: result.meta, at: { ref: at, sha }, files: result.files, edges: result.edges, unresolved: result.unresolved, languages: result.languages };
   } finally {
+    derived.reader.close();
     ctx.close?.();
   }
 }
 
 export function printImports(result: ImportGraphResult): void {
   printHeader('imports', result.meta);
+  if (result.at) console.log(c.dim(`graph at ${terminalText(result.at.ref)} (${result.at.sha.slice(0, 12)})`));
   const heuristicCount = result.meta.imports?.heuristicEdges ?? 0;
   const heuristicNote = heuristicCount > 0 ? ` (${heuristicCount} heuristic)` : '';
   console.log(
@@ -333,7 +498,8 @@ export function printImports(result: ImportGraphResult): void {
   }
   console.log();
   for (const edge of result.edges) {
-    const tag = edge.heuristic ? `${edge.kind}, heuristic` : edge.kind;
+    const role = edge.role === 'name' && edge.name !== undefined ? `name ${edge.name}` : edge.role;
+    const tag = [edge.kind, ...(edge.role !== undefined && edge.role !== 'module' ? [role] : []), ...(edge.heuristic ? ['heuristic'] : [])].join(', ');
     console.log(
       `  ${c.bold(terminalText(edge.from))} ${c.dim('→')} ${c.bold(terminalText(edge.to))}  ${c.dim(`(${tag}: ${terminalText(edge.specifier)})`)}`,
     );

@@ -4,12 +4,14 @@ import { explain, type ExplainResult } from '../commands/explain.js';
 import { fileReport, type FileResult } from '../commands/file.js';
 import {
   importGraph,
+  importGraphAt,
   type ImportEdgeKind,
   type ImportGraphEdge,
   type ImportGraphResult,
   type ImportGraphUnresolved,
   type ImportResolutionVia,
   type ImportsCoverageMeta,
+  type ImportTargetRole,
   type ImportUnresolvedReasonCode,
 } from '../commands/imports.js';
 import { scan, type ScanResult } from '../commands/scan.js';
@@ -62,6 +64,7 @@ export {
   type ImportGraphUnresolved,
   type ImportResolutionVia,
   type ImportsCoverageMeta,
+  type ImportTargetRole,
   type ImportUnresolvedReasonCode,
   type OriginConfig,
   type OriginWeights,
@@ -174,7 +177,12 @@ export interface Repository {
     followUpWindowHours?: number;
     compareOriginWeights?: string | readonly string[];
   }): Promise<BacktestJson>;
-  importGraph(opts?: { files?: string[] }): Promise<ImportGraphJson>;
+  /**
+   * The import graph of the session's tree, or with `at` of another commit's tree (RA-20): the
+   * same result as a fresh `openRepository({ head: at })` with this session's settings, without
+   * loading history and re-parsing only files whose blob differs from this session's tree.
+   */
+  importGraph(opts?: { files?: string[]; at?: string }): Promise<ImportGraphJson>;
   close(): Promise<void>;
 }
 
@@ -319,6 +327,11 @@ export function createRepository(ctx: Context): Repository {
 
     async importGraph(opts) {
       assertOpen();
+      if (opts?.at !== undefined) {
+        const internal = opts as { onReuse?: (stats: { reused: number; extracted: number }) => void };
+        const result = await importGraphAt(ctx, opts.at, { files: opts.files, onReuse: internal.onReuse });
+        return withJsonContract(result);
+      }
       const result = importGraph(ctx, {
         files: opts?.files,
       });
