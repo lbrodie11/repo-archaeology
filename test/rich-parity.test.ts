@@ -104,6 +104,46 @@ function assertParity(label: string, output: string, json: unknown, view: RichVi
   assert.deepEqual(unknown, [], `${label}: numbers not found in --json: ${unknown.join(', ')}`);
 }
 
+type Json = Record<string, unknown> & { meta: { settings: unknown } };
+
+/** The `--json` object each finding (in reading order) was built from, plus anything it may cite. */
+function findingSources(command: Command, json: Json): unknown[] {
+  const list = (key: string) => (json[key] as Json[] | undefined) ?? [];
+  switch (command) {
+    case 'explain':
+      return [json];
+    case 'file':
+      return list('companions').map((c) => ({ c, path: json.path }));
+    case 'diff':
+      // A suggestion may name the diff family it belongs to.
+      return list('suggestions').map((s) => ({ s, family: list('families').find((f) => (f.suggestedMembers as string[]).includes(s.to as string)) }));
+    case 'scan':
+      return [...list('families'), ...list('relationships')];
+  }
+}
+
+/**
+ * Stricter than `assertParity`: in screen-reader output every line is tagged with its finding
+ * (`Finding F-02 …`, `Receipt E-05 for F-02 …`), so each finding's numbers must come from that
+ * finding's own `--json` object (plus the analysis settings), not merely from anywhere in `--json`.
+ * A number swapped between two findings fails here.
+ */
+function assertFindingParity(label: string, command: Command, json: Json, view: RichView): void {
+  const sr = renderRichView(view, capsFor({ flags: { screenReader: true } }));
+  const sources = findingSources(command, json);
+  assert.equal(view.snapshot.findings.length, sources.length, `${label}: one finding per --json item`);
+  sources.forEach((source, i) => {
+    const frame = `F-${String(i + 1).padStart(2, '0')}`;
+    const lines = sr.split('\n').filter((l) => l.startsWith(`Finding ${frame} `) || l.includes(` for ${frame} (`));
+    assert.ok(lines.length > 0, `${label}: no lines for ${frame}`);
+    const scope = { source, settings: json.meta.settings };
+    const receipts = view.snapshot.findings[i]!.receipts?.length ?? 0;
+    const allowed = new Set([...allowedFromJson(scope), String(receipts)]);
+    const unknown = renderedNumbers(lines.join('\n'), scope).filter((n) => !allowed.has(n));
+    assert.deepEqual(unknown, [], `${label} ${frame}: numbers not from this finding's --json item: ${unknown.join(', ')}`);
+  });
+}
+
 function checkAll(label: string, fixtures: HonoFixtures, command: Command, json: unknown): void {
   const options = { ...FIXED, remoteUrl: HONO_REMOTE };
   const view = viewFor(fixtures, command, options);
@@ -111,12 +151,22 @@ function checkAll(label: string, fixtures: HonoFixtures, command: Command, json:
     assertParity(`${label} ${command} rich ${columns}`, renderRichView(view, capsFor({ columns, env: { FORCE_COLOR: '3' } })), json, view);
   }
   assertParity(`${label} ${command} screen reader`, renderRichView(view, capsFor({ flags: { screenReader: true } })), json, view);
+  if (view.snapshot.findings.length > 0) assertFindingParity(`${label} ${command}`, command, json as Json, view);
 }
 
 describe('RA-21 · every number in --style rich equals a --json value', { concurrency: true }, () => {
   it('hono 61f7c59: scan, diff, file and explain', () => {
     const hono = loadHono();
     for (const command of COMMANDS) checkAll('hono', hono, command, hono[command]);
+  });
+
+  it('the per-finding check catches a number moved from one finding to another', () => {
+    const hono = loadHono();
+    const [a, b] = hono.diff.suggestions;
+    // F-01 claims F-02's shared-commit count: a --json number, but not F-01's.
+    const swapped = { ...hono.diff, suggestions: [{ ...a!, shared: b!.shared }, b!, ...hono.diff.suggestions.slice(2)] };
+    const view = viewFor({ ...hono, diff: swapped }, 'diff');
+    assert.throws(() => assertFindingParity('swapped', 'diff', hono.diff as unknown as Json, view), /F-01: numbers not from this finding's --json item/);
   });
 
   it('the parity check catches a number that is not in --json', () => {

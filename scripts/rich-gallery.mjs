@@ -35,7 +35,7 @@ function arg(name) {
 
 function render(cli, hono, args, columns) {
   const env = sanitizeGitEnv(process.env, { FORCE_COLOR: '3', COLUMNS: String(columns), LANG: 'en_US.UTF-8', TERM: 'xterm-256color' });
-  for (const k of ['NO_COLOR', 'TERM_PROGRAM', 'COLORTERM', 'LC_ALL', 'LC_CTYPE', 'FRAME12_ASCII', 'FRAME12_SCREEN_READER', 'CI']) delete env[k];
+  for (const k of Object.keys(env)) if (k.startsWith('FRAME12_') || ['NO_COLOR', 'NODE_DISABLE_COLORS', 'TERM_PROGRAM', 'COLORTERM', 'WT_SESSION', 'LC_ALL', 'LC_CTYPE', 'CI', 'INK_SCREEN_READER', 'FORCE_HYPERLINK'].includes(k)) delete env[k];
   return execFileSync(process.execPath, [cli, '-C', hono, '--head', HONO_SHA, '--no-cache', '--no-config', '--style', 'rich', ...args], {
     encoding: 'utf8',
     env,
