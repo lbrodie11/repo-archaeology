@@ -15,9 +15,7 @@ concurrency:
 jobs:
   verify:
     name: Verify, extract changelog, and smoke-test tarball
-    # Pinned: installs Playwright's system packages, which failed on the ubuntu-latest Ubuntu 26.04
-    # image because apt could not resolve the Ubuntu mirrors (2026-11-11). Revisit when that image is stable.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
@@ -59,7 +57,10 @@ jobs:
       # Without a browser the map's Playwright suites skip themselves, so a release would be
       # verified without them
       - name: Install Playwright Chromium for map browser tests
-        run: npx playwright install --with-deps chromium
+        # Browser only, no `--with-deps`: the runner image already has the libraries Chromium needs,
+        # and the apt step `--with-deps` adds can fail on its own (apt could not resolve the Ubuntu
+        # mirrors on 2026-11-11). A missing library still fails the browser tests (launch throws).
+        run: npx playwright install chromium
 
       - name: Run typecheck
         run: npm run typecheck
