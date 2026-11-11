@@ -19,13 +19,9 @@
 [1m┃[22m changed src/helper/ssg/index.ts (51%,
 [1m┃[22m 95% interval 36-66%); the other way 20
 [1m┃[22m of 27 (74%). Last together 2026-02-19.
-[1m┃[22m Track record: 5 changes to
-[1m┃[22m src/helper/ssg/ssg.test.tsx between
-[1m┃[22m 2025-07-29 and 2026-11-04 left
-[1m┃[22m src/helper/ssg/index.ts out; it
-[1m┃[22m changed within 48 h after 0 of them
-[1m┃[22m (historical activity, not
-[1m┃[22m correctness).
+[1m┃[22m Before: 5 times this changed without
+[1m┃[22m index.ts; it changed within 48 h after
+[1m┃[22m 0 (not proof those were fixes).
 [1m┃[22m src/helper/ssg/ssg.test.tsx
 [1m┃[22m src/helper/ssg/index.ts
 [1m┃[22m [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m51%[22m [2m(range 36–66%)[22m
@@ -45,13 +41,9 @@
   also changed
   src/jsx/streaming.test.tsx (44%, 95%
   interval 19-73%); the other way 4 of
-  19 (21%). Last together 2024-02-16.
-  Track record: no change to
-  runtime-tests/deno-jsx/jsx.test.tsx
-  between 2025-07-29 and 2026-11-04 left
-  src/jsx/streaming.test.tsx out, so
-  there is nothing to replay (historical
-  activity, not correctness).
+  19 (21%). Last together 2024-02-16. No
+  earlier triggers in the last 555
+  commits.
   runtime-tests/deno-jsx/jsx.test.tsx
   src/jsx/streaming.test.tsx
   [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m44%[22m [2m(range 19–73%)[22m
@@ -71,13 +63,10 @@
   src/jsx/jsx-dev-runtime.ts (50%, 95%
   interval 19-81%); the other way 3 of
   10 (30%). Last together 2023-11-08.
-  Track record: 1 change to
-  src/jsx/jsx-runtime.ts between
-  2025-07-29 and 2026-11-04 left
-  src/jsx/jsx-dev-runtime.ts out; it
-  changed within 48 h after 0 of them
-  (historical activity, not
-  correctness).
+  Before: 1 time this changed without
+  jsx-dev-runtime.ts; it changed within
+  48 h after 0 (small sample; not proof
+  those were fixes).
   src/jsx/jsx-runtime.ts
   [2m  → references it directly[22m
   src/jsx/jsx-dev-runtime.ts

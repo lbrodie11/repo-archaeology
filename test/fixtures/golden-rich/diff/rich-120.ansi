@@ -9,9 +9,8 @@
 [1;48;2;255;214;10;38;2;18;18;18m F-01 [22;39;49m  [1msrc/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx[22m
 [1m┃[22m [1mneeds review · top finding · pair-e9d61976[22m
 [1m┃[22m Test link: a test and the code it covers. 20 of 39 commits that changed src/helper/ssg/ssg.test.tsx also changed
-[1m┃[22m src/helper/ssg/index.ts (51%, 95% interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19. Track
-[1m┃[22m record: 5 changes to src/helper/ssg/ssg.test.tsx between 2025-07-29 and 2026-11-04 left src/helper/ssg/index.ts out;
-[1m┃[22m it changed within 48 h after 0 of them (historical activity, not correctness).
+[1m┃[22m src/helper/ssg/index.ts (51%, 95% interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19. Before: 5
+[1m┃[22m times this changed without index.ts; it changed within 48 h after 0 (not proof those were fixes).
 [1m┃[22m src/helper/ssg/ssg.test.tsx
 [1m┃[22m src/helper/ssg/index.ts
 [1m┃[22m [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m51%[22m [2m(range 36–66%)[22m
@@ -24,8 +23,7 @@
   [1mneeds review · primary · pair-ee66c335[22m
   Test link: two tests that change together. 4 of 9 commits that changed runtime-tests/deno-jsx/jsx.test.tsx also
   changed src/jsx/streaming.test.tsx (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together 2024-02-16.
-  Track record: no change to runtime-tests/deno-jsx/jsx.test.tsx between 2025-07-29 and 2026-11-04 left
-  src/jsx/streaming.test.tsx out, so there is nothing to replay (historical activity, not correctness).
+  No earlier triggers in the last 555 commits.
   runtime-tests/deno-jsx/jsx.test.tsx
   src/jsx/streaming.test.tsx
   [1m▰▰▰▰[22m[2m▱▱▱▱[22m [1m44%[22m [2m(range 19–73%)[22m
@@ -38,8 +36,8 @@
   [1mneeds review · primary · pair-7c78e775[22m
   Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that changed src/jsx/jsx-runtime.ts also
   changed src/jsx/jsx-dev-runtime.ts (50%, 95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08.
-  Track record: 1 change to src/jsx/jsx-runtime.ts between 2025-07-29 and 2026-11-04 left src/jsx/jsx-dev-runtime.ts
-  out; it changed within 48 h after 0 of them (historical activity, not correctness).
+  Before: 1 time this changed without jsx-dev-runtime.ts; it changed within 48 h after 0 (small sample; not proof those
+  were fixes).
   src/jsx/jsx-runtime.ts
   [2m  → references it directly[22m
   src/jsx/jsx-dev-runtime.ts

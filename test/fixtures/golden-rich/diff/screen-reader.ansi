@@ -3,7 +3,7 @@ Run started 2026-11-11T09:00:00.000Z, finished 2026-11-11T09:00:02.000Z.
 Cut C-01 read-history "Read git history": done
 Findings: 3 (1 top, 2 primary)
 Finding F-01 pair-e9d61976 (top finding, needs review): src/helper/ssg/index.ts usually changes with src/helper/ssg/ssg.test.tsx
-Finding F-01 summary: Test link: a test and the code it covers. 20 of 39 commits that changed src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (51%, 95% interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19. Track record: 5 changes to src/helper/ssg/ssg.test.tsx between 2025-07-29 and 2026-11-04 left src/helper/ssg/index.ts out; it changed within 48 h after 0 of them (historical activity, not correctness).
+Finding F-01 summary: Test link: a test and the code it covers. 20 of 39 commits that changed src/helper/ssg/ssg.test.tsx also changed src/helper/ssg/index.ts (51%, 95% interval 36-66%); the other way 20 of 27 (74%). Last together 2026-02-19. Before: 5 times this changed without index.ts; it changed within 48 h after 0 (not proof those were fixes).
 Finding F-01 subject 1 (file): src/helper/ssg/ssg.test.tsx
 Finding F-01 subject 2 (file): src/helper/ssg/index.ts
 Finding F-01 strength: 51% (range 36-66%), co-change confidence (95% interval)
@@ -11,7 +11,7 @@ Receipt E-01 for F-01 (commit): 00b405a8f840f0f2ce4145e0fe5558cf2beeee78 2026-02
 Receipt E-02 for F-01 (commit): 58175a1b18e82219a9456709993656eb1cc9eeeb 2024-04-09: fix(ssg): use response header to mark as disabled routes for SSG (#2477) <https://github.com/honojs/hono/commit/58175a1b18e82219a9456709993656eb1cc9eeeb>
 Receipt E-03 for F-01 (commit): 8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3 2024-03-07: refactor(SSG): separate middleware logic (#2315) <https://github.com/honojs/hono/commit/8ef9b7bb50c8b498aae44d8481ef915aebb5a6b3>
 Finding F-02 pair-ee66c335 (primary, needs review): src/jsx/streaming.test.tsx usually changes with runtime-tests/deno-jsx/jsx.test.tsx
-Finding F-02 summary: Test link: two tests that change together. 4 of 9 commits that changed runtime-tests/deno-jsx/jsx.test.tsx also changed src/jsx/streaming.test.tsx (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together 2024-02-16. Track record: no change to runtime-tests/deno-jsx/jsx.test.tsx between 2025-07-29 and 2026-11-04 left src/jsx/streaming.test.tsx out, so there is nothing to replay (historical activity, not correctness).
+Finding F-02 summary: Test link: two tests that change together. 4 of 9 commits that changed runtime-tests/deno-jsx/jsx.test.tsx also changed src/jsx/streaming.test.tsx (44%, 95% interval 19-73%); the other way 4 of 19 (21%). Last together 2024-02-16. No earlier triggers in the last 555 commits.
 Finding F-02 subject 1 (file): runtime-tests/deno-jsx/jsx.test.tsx
 Finding F-02 subject 2 (file): src/jsx/streaming.test.tsx
 Finding F-02 strength: 44% (range 19-73%), co-change confidence (95% interval)
@@ -19,7 +19,7 @@ Receipt E-04 for F-02 (commit): 473a6f09991c4b400f05c66bfd953f577c2fda58 2024-02
 Receipt E-05 for F-02 (commit): a183fe403ed12ba37f9f76320700571487e12074 2024-01-16: chore: enables lint and format for `.tsx` (#1994) <https://github.com/honojs/hono/commit/a183fe403ed12ba37f9f76320700571487e12074>
 Receipt E-06 for F-02 (commit): cd6c488b76a543583f0244ca43b1422e98236f3c 2023-11-21: feat(jsx): Introduce `ErrorBoundary` component (#1714) <https://github.com/honojs/hono/commit/cd6c488b76a543583f0244ca43b1422e98236f3c>
 Finding F-03 pair-7c78e775 (primary, needs review): src/jsx/jsx-dev-runtime.ts usually changes with src/jsx/jsx-runtime.ts
-Finding F-03 summary: Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that changed src/jsx/jsx-runtime.ts also changed src/jsx/jsx-dev-runtime.ts (50%, 95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08. Track record: 1 change to src/jsx/jsx-runtime.ts between 2025-07-29 and 2026-11-04 left src/jsx/jsx-dev-runtime.ts out; it changed within 48 h after 0 of them (historical activity, not correctness).
+Finding F-03 summary: Import link: jsx-runtime.ts imports jsx-dev-runtime.ts. 3 of 6 commits that changed src/jsx/jsx-runtime.ts also changed src/jsx/jsx-dev-runtime.ts (50%, 95% interval 19-81%); the other way 3 of 10 (30%). Last together 2023-11-08. Before: 1 time this changed without jsx-dev-runtime.ts; it changed within 48 h after 0 (small sample; not proof those were fixes).
 Finding F-03 subject 1 (file): src/jsx/jsx-runtime.ts
 Finding F-03 subject 2 (file): src/jsx/jsx-dev-runtime.ts
 Finding F-03 relation (direct): subject 1 references subject 2 directly

@@ -7,9 +7,11 @@
  * rounding (`Math.round(x * 100)`) everywhere, so a sentence and the tone bar never disagree.
  *
  * Ported from FRAME/12's reference adapter (`packages/terminal/examples/repo-archaeology/
- * adapter.mjs`, terminal@0.1.0): `pairId`, `trackRecordSentence`, the relationship → `relation`
- * map, the "<to> usually changes with <from>" title and the "activity, not correctness" wording.
- * That example should later import this module (or match it); see the RA-21 follow-ups.
+ * adapter.mjs`, terminal@0.1.0): `pairId`, the relationship → `relation` map, the
+ * "<to> usually changes with <from>" title, strength as confidence with its Wilson interval, and
+ * evidence commits as receipts. The track record keeps Repo Archaeology's own sentence (see
+ * `trackRecordSentence`). That example should later import this module (or match it); see the
+ * RA-21 follow-ups.
  *
  * The terminal glue (capability detection and the choice between `renderRich` and `renderPlain`)
  * is at the bottom; it is pure too: the environment, streams and flags are passed in.
@@ -39,7 +41,15 @@ import { RELATIONSHIPS, type Relationship } from '../imports/classify.js';
 import type { FindingFamilyView } from '../model/families.js';
 import type { RelationshipVerdictView } from '../model/verdicts.js';
 import { commitUrl } from './terminal-safety.js';
-import { DISCLAIMER, NAMES, weightingLabel, type EvidenceView, type Meta, type RelationshipView } from './views.js';
+import {
+  DISCLAIMER,
+  formatTrackRecordLine,
+  NAMES,
+  weightingLabel,
+  type EvidenceView,
+  type Meta,
+  type RelationshipView,
+} from './views.js';
 
 /** Product name in the masthead. */
 export const PRODUCT = 'Repo Archaeology';
@@ -180,18 +190,16 @@ function findingStatus(view: { verdict?: RelationshipVerdictView }): FindingStat
 type TrackRecordInput = Pick<Suggestion, 'from' | 'to' | 'trackRecord'>;
 
 /**
- * The track record, in words that never claim correctness, and scoped to the window Repo
- * Archaeology evaluated: it counts whether <to> changed soon after a change to <from> that left it
- * out, which is activity, not proof of a fix. (Ported from FRAME/12's reference adapter.)
+ * The track record: did <to> change soon after a change to <from> that left it out? Counts of
+ * activity, never accuracy. This is Repo Archaeology's one track-record sentence
+ * (`formatTrackRecordLine`, RA-06), shared with classic and Markdown so the wording cannot drift,
+ * and which RA-06's tests keep free of accuracy-type words in every renderer. FRAME/12's reference
+ * adapter words it differently ("historical activity, not correctness"); RA-21 keeps this one and
+ * leaves aligning the example to a FRAME/12 follow-up. `limited_history` prints nothing, as in
+ * classic.
  */
 export function trackRecordSentence(s: TrackRecordInput): string | undefined {
-  const tr = s.trackRecord;
-  if (!tr) return undefined;
-  if (!('fired' in tr)) return 'Track record: not enough history to replay (no claim either way).';
-  const when = tr.evaluated?.from && tr.evaluated?.to ? ` between ${tr.evaluated.from} and ${tr.evaluated.to}` : '';
-  if (tr.fired === 0) return `Track record: no change to ${s.from}${when} left ${s.to} out, so there is nothing to replay (historical activity, not correctness).`;
-  if (!('confirmed' in tr)) return `Track record: ${plural(tr.fired, 'change')} to ${s.from}${when} left ${s.to} out (historical activity, not correctness).`;
-  return `Track record: ${plural(tr.fired, 'change')} to ${s.from}${when} left ${s.to} out; it changed within ${tr.windowHours} h after ${tr.confirmed} of them (historical activity, not correctness).`;
+  return formatTrackRecordLine(s)?.text;
 }
 
 /** Contributor and CODEOWNERS context for a diff suggestion (`--owners`), in classic's words. */

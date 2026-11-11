@@ -119,8 +119,9 @@ describe('history from real git repositories', () => {
     for (const style of ['classic', 'rich']) {
       const out = runCli(['scan', '--style', style], r.dir);
       assert.equal(out.code, 0, out.stderr);
-      assert.match(out.stdout, /1 revert commit\b/, `${style} header should count the revert`);
-      assert.doesNotMatch(out.stdout, /matching --skip-commits/, `${style} header must not blame --skip-commits`);
+      // Classic says it in the header; rich (@frame12/terminal, RA-21) lists it as a metric.
+      assert.match(out.stdout, style === 'classic' ? /1 revert commit\b/ : /Revert commits skipped +1\b/, `${style} header should count the revert`);
+      assert.doesNotMatch(out.stdout, /matching --skip-commits/i, `${style} header must not blame --skip-commits`);
     }
 
     const json = JSON.parse(runCli(['scan', '--json'], r.dir).stdout);

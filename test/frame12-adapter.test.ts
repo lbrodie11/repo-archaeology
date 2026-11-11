@@ -15,7 +15,7 @@ import {
   scanToRichView,
   trackRecordSentence,
 } from '../src/report/frame12-terminal.js';
-import { DISCLAIMER } from '../src/report/views.js';
+import { DISCLAIMER, formatTrackRecordLine } from '../src/report/views.js';
 import { COMMANDS, FIXED, HONO_REMOTE, loadHono, SCAN_DEFAULTS, viewFor } from './rich-helpers.js';
 
 const hono = loadHono();
@@ -160,38 +160,47 @@ describe('RA-21 · frame12-terminal adapter', () => {
     });
   });
 
-  describe('track record (activity, never correctness)', () => {
+  // Repo Archaeology's shared sentence (RA-06), the same words classic and Markdown print.
+  describe('track record (activity, never accuracy)', () => {
     const base = hono.diff.suggestions[0]!;
     const sentence = (trackRecord: Suggestion['trackRecord']) => trackRecordSentence({ ...base, trackRecord });
 
-    it('words a fired record as counts within the evaluated window', () => {
+    it('words a fired record as counts, in the same words as classic and Markdown', () => {
+      assert.equal(trackRecordSentence(base), 'Before: 5 times this changed without index.ts; it changed within 48 h after 0 (not proof those were fixes).');
+      assert.equal(trackRecordSentence(base), formatTrackRecordLine(base)!.text);
       assert.equal(
-        trackRecordSentence(base),
-        'Track record: 5 changes to src/helper/ssg/ssg.test.tsx between 2025-07-29 and 2026-11-04 left src/helper/ssg/index.ts out; it changed within 48 h after 0 of them (historical activity, not correctness).',
+        sentence({ ...(base.trackRecord as Extract<Suggestion['trackRecord'], { confirmed: number }>), fired: 4, confirmed: 3 }),
+        'Before: 4 times this changed without index.ts; it changed within 48 h after 3 (small sample; not proof those were fixes).',
       );
     });
 
     it('handles fired = 0 (never fired)', () => {
       assert.equal(
         sentence({ fired: 0, reason: 'never_fired', windowHours: 48, evaluated: { from: '2025-07-29', to: '2026-11-04', commits: 555, trainingCommits: 2219 } }),
-        'Track record: no change to src/helper/ssg/ssg.test.tsx between 2025-07-29 and 2026-11-04 left src/helper/ssg/index.ts out, so there is nothing to replay (historical activity, not correctness).',
+        'No completed earlier triggers in the last 555 commits.',
       );
-      // The wire contract allows `never_fired` with nothing but `fired` and `reason`.
       assert.equal(
-        sentence({ fired: 0, reason: 'never_fired' }),
-        'Track record: no change to src/helper/ssg/ssg.test.tsx left src/helper/ssg/index.ts out, so there is nothing to replay (historical activity, not correctness).',
+        sentence({ fired: 0, reason: 'never_fired', triggers: 0, windowHours: 48, evaluated: { from: '2025-07-29', to: '2026-11-04', commits: 555, trainingCommits: 2219 } }),
+        'No earlier triggers in the last 555 commits.',
       );
+      // The wire contract allows `never_fired` with nothing but `fired` and `reason`: no window to report.
+      assert.equal(sentence({ fired: 0, reason: 'never_fired' }), undefined);
     });
 
-    it('handles limited_history and an absent record', () => {
-      assert.equal(sentence({ reason: 'limited_history' }), 'Track record: not enough history to replay (no claim either way).');
+    it('prints nothing for limited_history or an absent record, as classic does', () => {
+      assert.equal(sentence({ reason: 'limited_history' }), undefined);
       assert.equal(sentence(undefined), undefined);
+      const limited = diffToRichView({ ...hono.diff, suggestions: [{ ...base, trackRecord: { reason: 'limited_history' } }] }, FIXED);
+      assert.doesNotMatch(limited.snapshot.findings[0]!.summary!, /Before:|triggers/);
     });
 
-    it('never claims accuracy or correctness', () => {
+    it('never uses accuracy-type wording (RA-06)', () => {
       for (const s of hono.diff.suggestions) {
         const text = trackRecordSentence(s) ?? '';
-        assert.doesNotMatch(text, /\b(accura|precision|correct(?!ness\))|right|wrong|fix(es|ed)?\b)/i, text);
+        assert.doesNotMatch(text, /accura|correct|chance|precision/i, text);
+      }
+      for (const command of COMMANDS) {
+        for (const f of viewFor(hono, command).snapshot.findings) assert.doesNotMatch(f.summary ?? '', /accura|correct|chance/i);
       }
     });
 
