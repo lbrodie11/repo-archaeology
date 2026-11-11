@@ -434,55 +434,60 @@ async function changedSince(ctx: Context, atSha: string): Promise<Set<string>> {
  */
 export async function importGraphAt(ctx: Context, at: string, options: ImportGraphAtOptions = {}): Promise<ImportGraphResult> {
   const sha = await resolveAtRef(ctx.root, at);
-  let derived = derivedIndexCache.get(ctx);
-  let build: (() => void) | undefined;
-  if (derived?.sha !== sha) {
-    const [treeFiles, changed] = await Promise.all([listTreeFiles(ctx.root, sha), changedSince(ctx, sha)]);
-    const base = gitTreeFiles(ctx.root, sha, treeFiles);
-    const unchanged = (path: string): boolean => !changed.has(path) && ctx.currentFiles.has(path) && treeFiles.has(path);
-    // A `head` session reads the same blobs from its own (cached) reader; a working tree may differ in
-    // line endings after git's filters, so its tree is always read from `at`.
-    const headFiles = ctx.head !== undefined ? ctx.files : undefined;
-    const reader: RepoFiles = {
-      ...base,
-      read: (path) => (headFiles !== undefined && unchanged(path) ? headFiles.read(path) : base.read(path)),
-    };
+  const cached = derivedIndexCache.get(ctx);
+  const source = cached?.sha === sha ? undefined : await prepareDerivedTree(ctx, sha);
+  const reader = cached?.sha === sha ? cached.reader : source!.base;
+  ctx.open?.();
+  reader.open();
+  try {
+    let derived = cached;
+    if (source) {
+      derived = { sha, index: source.build(options.onReuse), treeFiles: source.treeFiles, reader: source.base };
+      derivedIndexCache.set(ctx, derived);
+    }
+    const result = selectGraph(ctx, derived!.index, derived!.treeFiles, at, options);
+    return { meta: result.meta, at: { ref: at, sha }, files: result.files, edges: result.edges, unresolved: result.unresolved, languages: result.languages };
+  } finally {
+    reader.close();
+    ctx.close?.();
+  }
+}
+
+/** `at`'s tree: its file list, a reader for it, and how to build its index reusing the session's extractions. */
+async function prepareDerivedTree(ctx: Context, sha: string) {
+  const [treeFiles, changed] = await Promise.all([listTreeFiles(ctx.root, sha), changedSince(ctx, sha)]);
+  const base = gitTreeFiles(ctx.root, sha, treeFiles);
+  const unchanged = (path: string): boolean => !changed.has(path) && ctx.currentFiles.has(path) && treeFiles.has(path);
+  // A `head` session reads the same blobs from its own (cached) reader; a working tree may differ in
+  // line endings after git's filters, so its tree is always read from `at`.
+  const headFiles = ctx.head !== undefined ? ctx.files : undefined;
+  const reader: RepoFiles = {
+    ...base,
+    read: (path) => (headFiles !== undefined && unchanged(path) ? headFiles.read(path) : base.read(path)),
+  };
+  const build = (onReuse?: ImportGraphAtOptions['onReuse']): ImportGraphIndex => {
     const own = createExtractionStore();
+    const shared = sessionExtractionStores.get(ctx);
     let reused = 0;
     let extracted = 0;
     const extractions: ExtractionStore = {
       get: (analyzer, path) => {
         const local = own.get(analyzer, path);
         if (local) return local;
-        const shared = unchanged(path) ? sessionExtractionStores.get(ctx)?.get(analyzer, path) : undefined;
-        if (shared) reused++;
-        return shared;
+        const entry = unchanged(path) ? shared?.get(analyzer, path) : undefined;
+        if (entry) reused++;
+        return entry;
       },
       set: (analyzer, path, entry) => {
         extracted++;
         own.set(analyzer, path, entry);
       },
     };
-    const pending: DerivedIndex = { sha, index: undefined as unknown as ImportGraphIndex, treeFiles, reader: base };
-    build = () => {
-      pending.index = buildImportGraphIndex({ files: reader, currentFiles: treeFiles, settings: ctx.settings, extractions });
-      options.onReuse?.({ reused, extracted });
-    };
-    derived = pending;
-  }
-  ctx.open?.();
-  derived.reader.open();
-  try {
-    if (build) {
-      build();
-      derivedIndexCache.set(ctx, derived);
-    }
-    const result = selectGraph(ctx, derived.index, derived.treeFiles, at, options);
-    return { meta: result.meta, at: { ref: at, sha }, files: result.files, edges: result.edges, unresolved: result.unresolved, languages: result.languages };
-  } finally {
-    derived.reader.close();
-    ctx.close?.();
-  }
+    const index = buildImportGraphIndex({ files: reader, currentFiles: treeFiles, settings: ctx.settings, extractions });
+    onReuse?.({ reused, extracted });
+    return index;
+  };
+  return { treeFiles, base, build };
 }
 
 export function printImports(result: ImportGraphResult): void {
