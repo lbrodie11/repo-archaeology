@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Minor release.
+## [0.13.0] - 2026-11-11
 
 ### Changed
 - **`--style rich` is rendered by [`@frame12/terminal`](https://www.npmjs.com/package/@frame12/terminal) (RA-21):** `scan`, `diff`, `file`, `explain` and the bare command build a FRAME/12 snapshot with a typed, pure adapter (`src/report/frame12-terminal.ts`) and render it with the package's grammar, capability detection, width tiers, ambiguous-width glyph twins, color rules, OSC 8 links and sanitizing, so Repo Archaeology and FRAME/12 no longer keep two terminal implementations. One finding per relationship ("`<to>` usually changes with `<from>`") with its relationship, confidence and 95% Wilson interval, and commit receipts; the classic counts as metrics; caveats as warnings; copyable `explain` commands as next steps. Every number shown is a `--json` number. Before/after gallery: [`docs/gallery/rich-terminal/`](docs/gallery/rich-terminal/README.md).

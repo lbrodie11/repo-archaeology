@@ -17,7 +17,7 @@ Last updated: November 2026
 
 ---
 
-## Shipped Foundations (`v0.2.x` – `v0.12.0`)
+## Shipped Foundations (`v0.2.x` – `v0.13.0`)
 
 - **Pre-Change Baseline Training (`v0.2.0`):** Isolates co-change training to pre-branch commits (`git merge-base HEAD <ref>`) when checking feature branches (`diff --base`), preventing branch commits from self-reinforcing historical statistics while bridging branch-local renames.
 - **"Explain My Silence" Diagnostics (`v0.2.0`):** Transparent CLI and JSON explanations when a change produces zero suggestions (e.g., new files without history, all companions already touched, or closest companions filtered by `--min-shared`, `--min-confidence`, or `--kinds`).
@@ -37,6 +37,7 @@ Last updated: November 2026
 - **Per-Pair Track Record (`v0.10.0`):** Each `diff` suggestion carries a `trackRecord` for its exact directional pair, replayed over the baseline history with no future information: how often a change to the edited file without the suggested one was followed by a change to the suggested file within 48 hours. It is shown as counts (`Before: 5 times this changed without permissions.ts; it changed within 48 h after 4`), never as accuracy, and the replay uses the same weighting arithmetic and threshold test as `diff`.
 - **Caller-Chosen Configuration (`v0.11.0`):** `--config-from <ref>` reads `.repo-archaeology.json` from a trusted commit (CI and review bots pass the base branch) and `--no-config` reads none, so the change under review cannot choose its own settings; `meta.config` records which config applied, and the library has `openRepository({ configRef })`.
 - **Base-Tree Import Graphs and Target Roles (`v0.12.0`):** `importGraph({ at })` / `imports --at <ref>` gives another commit's import graph (such as the importers a PR's removed files had at its base) from the current session, with no second session or history load and identical results to a fresh one, re-parsing only files whose blob differs; Python and Go edges say what each target is to the import (`role`: `module`, `init`, `name`).
+- **Rich Terminal Through FRAME/12 (`v0.13.0`):** `--style rich` for `scan`, `diff`, `file` and `explain` is rendered by `@frame12/terminal`, the FRAME/12 terminal package, instead of a second implementation: one finding per relationship with its confidence, 95% Wilson interval and commit receipts, the classic counts as metrics, and copyable `explain` commands as next steps, with every number taken from `--json`. Screen-reader mode (`--screen-reader`), ASCII twins, `NO_COLOR` and width tiers come from the package; classic, `--json`, Markdown and the map are unchanged.
 
 ---
 

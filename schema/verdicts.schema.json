@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.12.0/schema/verdicts.schema.json",
+  "$id": "https://raw.githubusercontent.com/lbrodie11/repo-archaeology/v0.13.0/schema/verdicts.schema.json",
   "title": "Repo Archaeology Relationship Verdicts (.repo-archaeology.verdicts.json, v1)",
   "description": "Repo-committed relationship verdicts file for silencing expected mechanical couplings or annotating confirmed hidden dependencies without altering underlying historical scores.",
   "type": "object",

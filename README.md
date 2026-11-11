@@ -240,7 +240,7 @@ jobs:
 
       - name: Check for overlooked companion files
         id: archaeology
-        uses: lbrodie11/repo-archaeology@v0.12.0
+        uses: lbrodie11/repo-archaeology@v0.13.0
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
@@ -255,9 +255,9 @@ jobs:
   - Always set `fetch-depth: 0` on `actions/checkout`. If a clone is shallow (`git rev-parse --is-shallow-repository`) or has fewer than 2 commits, the Action degrades gracefully (`analysis-status: insufficient-history`, exit code `0`) and explains how to enable full history in `$GITHUB_STEP_SUMMARY`.
   - Set `ref: ${{ github.event.pull_request.head.sha }}` on `actions/checkout` so Git checks out the PR's real head commit rather than GitHub's synthetic merge ref (`refs/pull/:id/merge`). The Action verifies `HEAD` against `head` so it never silently analyzes the wrong commit.
   - **Dirty working-tree warning:** If an earlier workflow step modifies tracked files or creates untracked files before the Action runs, the Action warns in `$GITHUB_STEP_SUMMARY`, emits a `::warning::` annotation, and sets `uncommitted-files-count`.
-  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.12.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.12.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
+  - **Pinned external execution (`action.yml`):** When used from another repository (`uses: lbrodie11/repo-archaeology@v0.13.0`), release tags intentionally omit `dist/` from git; `action.yml` runs `src/action/runner.ts` via Node 22's `--experimental-strip-types`, which installs and executes the exact pinned npm version `repo-archaeology@0.13.0` (`PINNED_ACTION_PACKAGE` matching `package.json`, never `latest` and never the consumer repository's working tree) inside an isolated temporary directory outside `$GITHUB_WORKSPACE`.
   - **Private registries / mirrors:** When running as an external consumer action, user-level npm configuration created outside `$GITHUB_WORKSPACE` (such as `NPM_CONFIG_USERCONFIG` from `actions/setup-node` with `registry-url`, or `~/.npmrc` on self-hosted runners) is resolved to its canonical absolute path and honoured, while repository-controlled `.npmrc` files inside `$GITHUB_WORKSPACE` are isolated into separate empty config files. You can also pass `npm_config_registry` in the step's `env:` as an explicit override.
-  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.12.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
+  - **Post-release consumer smoke test:** Maintainers can trigger `.github/workflows/action-smoke.yml` manually via `workflow_dispatch` (passing `tag: v0.13.0`) or automatically after `Release` completes to verify the unbuilt external consumer path across Linux and Windows (setting `REPO_ARCHAEOLOGY_SUMMARY_OUT` when a test workflow needs a copy of the rendered step summary).
 
 ### `explain`
 
