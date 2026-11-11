@@ -202,6 +202,34 @@ describe('importGraph({ at }) (RA-20): base-tree graph from the head session', (
     }
   });
 
+  it('a working-tree session never reuses an extraction whose bytes differ from the base blob', async () => {
+    const expected = graphPart(await freshGraph(repo.dir, baseSha, REMOVED));
+    // src/a.ts differs from base when the head graph is built, then is reverted before `at`: the
+    // stored extraction is of the edited text, so it must not be reused even though git now calls it clean.
+    repo.write('src/a.ts', "import { util } from '@lib/util';\n");
+    // src/b.ts is edited but flagged assume-unchanged, so `git diff` would not report it.
+    repo.write('src/b.ts', "import { util } from '@lib/util';\n");
+    repo.git('update-index', '--assume-unchanged', 'src/b.ts');
+    try {
+      const worktree = await open(repo.dir);
+      try {
+        await worktree.importGraph();
+        repo.git('checkout', '--', 'src/a.ts');
+        const { graph, stats } = await derivedGraph(worktree, baseSha, REMOVED);
+        assert.deepEqual(graphPart(graph), expected);
+        const keys = edgeKeys(graph);
+        assert.ok(keys.includes('src/a.ts -> src/lib/old.ts (./lib/old)'), keys.join('\n'));
+        assert.ok(keys.includes('src/b.ts -> src/lib/old.ts (@lib/old)'), keys.join('\n'));
+        assert.ok(stats!.reused > 0);
+      } finally {
+        await worktree.close();
+      }
+    } finally {
+      repo.git('update-index', '--no-assume-unchanged', 'src/b.ts');
+      repo.git('checkout', '--', 'src/a.ts', 'src/b.ts');
+    }
+  });
+
   it('loads no history for the base side and leaves the head session unchanged', async () => {
     const loads: (string | undefined)[] = [];
     setHistoryLoadObserverForTesting((_root, rev) => loads.push(rev));

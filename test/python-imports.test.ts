@@ -378,10 +378,10 @@ describe('Python import semantics (RA-10 review regressions)', () => {
       const analysis = analyze({ ...base, 'pkg/__init__.py': init }, 'main.py').analysis;
       if (ambiguous) {
         // RA-20: behind a lone PEP 562 `__getattr__` the submodule is also a heuristic, graph-only edge.
-        const certain = analysis.edges.flatMap((edge) => edge.targets.filter((target) => !target.heuristic).map((target) => target.path));
+        const certain = analysis.edges.flatMap((edge) => edge.targets.filter((target) => !target.graphOnly).map((target) => target.path));
         assert.deepEqual(certain, ['pkg/__init__.py'], label);
         assert.deepEqual(
-          analysis.edges.flatMap((edge) => edge.targets.filter((target) => target.heuristic).map((target) => target.path)),
+          analysis.edges.flatMap((edge) => edge.targets.filter((target) => target.graphOnly && target.heuristic).map((target) => target.path)),
           label === 'module __getattr__' ? ['pkg/child.py'] : [],
           label,
         );

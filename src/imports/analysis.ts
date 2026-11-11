@@ -32,6 +32,11 @@ export interface AnalysisTarget {
   role?: ImportTargetRole;
   /** With `role: 'name'`: the imported name (`mod` in `from pkg import mod`). */
   name?: string;
+  /**
+   * A probable target the import graph lists (as `heuristic`) but relationships must not claim:
+   * the file stays `uncertain` for the importer, so pairs with it are `unknown`, never `direct`.
+   */
+  graphOnly?: boolean;
 }
 
 export interface AnalysisEdge {
@@ -104,7 +109,8 @@ export type StoredExtraction = { unavailable: true } | { unavailable?: false; ex
 /** Where a session keeps the extractions it computed, and finds ones it may reuse. */
 export interface ExtractionStore {
   get(analyzer: string, path: string): StoredExtraction | undefined;
-  set(analyzer: string, path: string, entry: StoredExtraction): void;
+  /** `text` is the source the extraction was read from (absent when it was unavailable). */
+  set(analyzer: string, path: string, entry: StoredExtraction, text?: string): void;
 }
 
 /** A plain per-session extraction store. */
@@ -239,7 +245,7 @@ export function analysisWarnings(session: AnalysisSession, analyses: Iterable<Fi
 function readAndExtract(path: string, reader: RepoFiles, analyzer: LanguageAnalyzer, store: ExtractionStore | undefined): StoredExtraction {
   const text = reader.read(path);
   const entry: StoredExtraction = text === undefined ? { unavailable: true } : { extraction: analyzer.extract(text, path) };
-  store?.set(analyzer.id, path, entry);
+  store?.set(analyzer.id, path, entry, text);
   return entry;
 }
 
@@ -281,6 +287,9 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     if (resolved.kind === 'files') {
       if (resolved.incompleteReason) markIncomplete(resolved.incompleteReason);
       for (const item of resolved.uncertain ?? []) if (item.path !== path && !uncertain.has(item.path)) uncertain.set(item.path, item.reason);
+      for (const target of resolved.targets) {
+        if (target.graphOnly && target.path !== path && !uncertain.has(target.path)) uncertain.set(target.path, 'a probable import the analyzer cannot confirm');
+      }
       const targets: AnalysisTarget[] = [];
       for (const target of resolved.targets) {
         if (target.path === path || !session.includes(target.path)) continue;
@@ -313,9 +322,8 @@ export function analyzeFile(path: string, reader: RepoFiles, session: AnalysisSe
     }
   }
   if (warnings.size > 0) result.warnings = [...warnings].sort();
-  // A file that is also a certain target is not uncertain. A heuristic target the analyzer also
-  // called uncertain (a Python submodule behind `__getattr__`) stays uncertain: graph-only.
-  for (const edge of result.edges) for (const target of edge.targets) if (!target.heuristic) uncertain.delete(target.path);
+  // A file that is also a certain target is not uncertain; a graph-only target stays uncertain.
+  for (const edge of result.edges) for (const target of edge.targets) if (!target.graphOnly) uncertain.delete(target.path);
   if (uncertain.size > 0) result.uncertain = [...uncertain].sort(([a], [b]) => a.localeCompare(b)).map(([path, reason]) => ({ path, reason }));
   result.incomplete = result.unresolved.length > 0 || result.dynamicLoads > 0 || result.incompleteReason !== undefined;
   return result;

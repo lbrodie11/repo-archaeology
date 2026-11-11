@@ -1181,13 +1181,13 @@ function resolveModule(index: PythonIndex, from: string, topBase: string, rest: 
   if (!walked) return { kind: 'unresolved', reasonCode: 'target-missing' };
   // What each target is to the import (RA-20): set once per path, a certain target wins over a heuristic one.
   const targets = new Map<string, AnalysisTarget>();
-  const add = (path: string, role: ImportTargetRole, extra: { name?: string; heuristic?: boolean } = {}) => {
+  const add = (path: string, role: ImportTargetRole, extra: { name?: string; probable?: boolean } = {}) => {
     const existing = targets.get(path);
-    if (existing && !(existing.heuristic && !extra.heuristic)) return;
+    if (existing && !(existing.graphOnly && !extra.probable)) return;
     targets.set(path, {
       path,
       via: 'python-module',
-      ...(extra.heuristic ? { heuristic: true } : {}),
+      ...(extra.probable ? { heuristic: true, graphOnly: true } : {}),
       role,
       ...(extra.name !== undefined ? { name: extra.name } : {}),
     });
@@ -1229,7 +1229,7 @@ function resolveModule(index: PythonIndex, from: string, topBase: string, rest: 
         // on disk is the probable target; but `__getattr__` could still return something else. The
         // graph lists it as a heuristic edge; it stays uncertain, so relationships never claim it.
         readsLeaf = true;
-        add(subFile, 'name', { name, heuristic: true });
+        add(subFile, 'name', { name, probable: true });
         uncertain.push({ path: subFile, reason: `from ${posix.basename(walked.base)} import ${name}: ${name} may be an attribute of ${walked.leaf.init} or the submodule` });
         continue;
       }

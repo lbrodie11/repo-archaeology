@@ -79,6 +79,8 @@ export async function listCurrentFiles(root: string): Promise<Set<string>> {
 export interface TreeFileSet extends Set<string> {
   /** Git tree entry mode (`100644`, `100755`, `120000`, etc.) for each path. */
   readonly modes: ReadonlyMap<string, string>;
+  /** Git object id of each path's blob. */
+  readonly oids: ReadonlyMap<string, string>;
 }
 
 export function isRegularTreeMode(mode: string | undefined): boolean {
@@ -87,19 +89,22 @@ export function isRegularTreeMode(mode: string | undefined): boolean {
 
 export function parseLsTree(out: string): TreeFileSet {
   const modes = new Map<string, string>();
+  const oids = new Map<string, string>();
   const files = new Set<string>();
   for (const entry of splitNul(out)) {
     const tab = entry.indexOf('\t');
     if (tab === -1) continue;
     const meta = entry.slice(0, tab);
     const path = entry.slice(tab + 1);
-    const mode = meta.split(' ', 1)[0] ?? '';
+    const [mode = '', , oid = ''] = meta.split(' ');
     // Skip submodule gitlinks (160000); keep regular files (100644/100755) and symlinks (120000)
     // in the path set to match `git ls-files`, while recording modes so non-regular entries are not read as source.
     if (mode === '160000' || path === '') continue;
     files.add(path);
     modes.set(path, mode);
+    oids.set(path, oid);
   }
+  Object.defineProperty(files, 'oids', { value: oids, enumerable: false, writable: false });
   return Object.defineProperty(files, 'modes', {
     value: modes,
     enumerable: false,

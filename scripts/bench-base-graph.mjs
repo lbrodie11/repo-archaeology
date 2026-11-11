@@ -120,7 +120,12 @@ const rows = [];
 for (const pr of prs) {
   // Warm-up: fetches any missing blobs of a blobless clone, so the timings below are local reads.
   await secondSession(pr);
-  await (await open(pr.sha)).importGraph().catch(() => undefined);
+  const warm = await open(pr.sha);
+  try {
+    await warm.importGraph();
+  } finally {
+    await warm.close();
+  }
   if (args['memory-only']) {
     const repo = await open(pr.sha);
     const h0 = heap();

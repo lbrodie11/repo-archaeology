@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto';
 import { ignorePatterns, type Settings } from '../config.js';
 import { toRepoPath, UsageError, type Context } from '../context.js';
-import { listTreeFiles, resolveCommit } from '../git/repo.js';
-import { runGit } from '../git/run.js';
+import { isRegularTreeMode, listTreeFiles, resolveCommit, type TreeFileSet } from '../git/repo.js';
 import {
   AnalysisSession,
   analysisWarnings,
@@ -92,8 +92,42 @@ export interface ImportGraphIndex {
 }
 
 const sessionIndexCache = new WeakMap<Context, ImportGraphIndex>();
-/** The extractions a session's import graph computed, reusable for unchanged blobs in another tree (RA-20). */
-const sessionExtractionStores = new WeakMap<Context, ExtractionStore>();
+
+/**
+ * The extractions a session's import graph computed (RA-20), with the git blob id of the text each
+ * was read from: the tree's own id in a `head` session, the id of the bytes read in a working tree.
+ * Another tree reuses an extraction only for a path whose blob there has the same id.
+ */
+interface SessionExtractions {
+  store: ExtractionStore;
+  blobs: Map<string, string>;
+}
+const sessionExtractions = new WeakMap<Context, SessionExtractions>();
+
+/** `git hash-object` of a file's text (`sha256` in repositories that use it). */
+function gitBlobId(text: string, algorithm: 'sha1' | 'sha256'): string {
+  const bytes = Buffer.from(text, 'utf8');
+  return createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+}
+
+function recordingStore(ctx: Context): SessionExtractions {
+  const entries = createExtractionStore();
+  const blobs = new Map<string, string>();
+  const tree = ctx.head !== undefined ? (ctx.currentFiles as Partial<TreeFileSet>).oids : undefined;
+  const algorithm = ctx.headSha?.length === 64 ? 'sha256' : 'sha1';
+  return {
+    blobs,
+    store: {
+      get: (analyzer, path) => entries.get(analyzer, path),
+      set: (analyzer, path, entry, text) => {
+        entries.set(analyzer, path, entry);
+        if (text === undefined) return;
+        const id = tree !== undefined ? tree.get(path) : gitBlobId(text, algorithm);
+        if (id !== undefined) blobs.set(path, id);
+      },
+    },
+  };
+}
 
 interface IndexSource {
   /** Reader for the analyzed tree. */
@@ -107,15 +141,15 @@ interface IndexSource {
 export function getOrBuildImportGraphIndex(ctx: Context): ImportGraphIndex {
   const existing = sessionIndexCache.get(ctx);
   if (existing) return existing;
-  const extractions = createExtractionStore();
+  const extractions = recordingStore(ctx);
   const index = buildImportGraphIndex({
     files: ctx.files ?? workingTreeFiles(ctx.root, ctx.currentFiles),
     currentFiles: ctx.currentFiles,
     settings: ctx.settings,
-    extractions,
+    extractions: extractions.store,
   });
   sessionIndexCache.set(ctx, index);
-  sessionExtractionStores.set(ctx, extractions);
+  sessionExtractions.set(ctx, extractions);
   return index;
 }
 
@@ -378,7 +412,7 @@ function selectGraph(
 }
 
 export interface ImportGraphAtOptions extends ImportGraphOptions {
-  /** Test hook: called with the paths whose extraction was reused from the session's own graph. */
+  /** Test hook: how many extractions were reused from the session's own graph, and how many were made. */
   onReuse?: (stats: { reused: number; extracted: number }) => void;
 }
 
@@ -405,25 +439,6 @@ export async function resolveAtRef(root: string, at: string): Promise<string> {
   }
 }
 
-const splitNul = (out: string): string[] => out.split('\0').filter((path) => path !== '');
-
-/**
- * Paths whose content may differ between `atSha`'s tree and the tree the session analyzed:
- * `git diff-tree` for a `head` session; `git diff` against the working tree plus untracked files
- * otherwise. Every other path present in both has the same blob (or the same cleaned content).
- */
-async function changedSince(ctx: Context, atSha: string): Promise<Set<string>> {
-  if (ctx.head !== undefined) {
-    const out = await runGit(ctx.root, ['diff-tree', '-r', '-z', '--no-renames', '--name-only', '--end-of-options', atSha, ctx.head.sha]);
-    return new Set(splitNul(out));
-  }
-  const [diffOut, untracked] = await Promise.all([
-    runGit(ctx.root, ['diff', '-z', '--name-only', '--no-renames', '--no-ext-diff', '--no-textconv', '--end-of-options', atSha, '--']),
-    runGit(ctx.root, ['ls-files', '-z', '--others', '--exclude-standard']),
-  ]);
-  return new Set([...splitNul(diffOut), ...splitNul(untracked)]);
-}
-
 /**
  * RA-20: the import graph of another commit's tree (`at`), from this session, without a second
  * session or any history. The tree's file list, configuration (tsconfig, package.json, go.mod,
@@ -436,10 +451,10 @@ export async function importGraphAt(ctx: Context, at: string, options: ImportGra
   const sha = await resolveAtRef(ctx.root, at);
   const cached = derivedIndexCache.get(ctx);
   const source = cached?.sha === sha ? undefined : await prepareDerivedTree(ctx, sha);
-  const reader = cached?.sha === sha ? cached.reader : source!.base;
-  ctx.open?.();
-  reader.open();
+  const reader = source?.base ?? cached!.reader;
   try {
+    ctx.open?.();
+    reader.open();
     let derived = cached;
     if (source) {
       derived = { sha, index: source.build(options.onReuse), treeFiles: source.treeFiles, reader: source.base };
@@ -455,26 +470,32 @@ export async function importGraphAt(ctx: Context, at: string, options: ImportGra
 
 /** `at`'s tree: its file list, a reader for it, and how to build its index reusing the session's extractions. */
 async function prepareDerivedTree(ctx: Context, sha: string) {
-  const [treeFiles, changed] = await Promise.all([listTreeFiles(ctx.root, sha), changedSince(ctx, sha)]);
+  const treeFiles = await listTreeFiles(ctx.root, sha);
   const base = gitTreeFiles(ctx.root, sha, treeFiles);
-  const unchanged = (path: string): boolean => !changed.has(path) && ctx.currentFiles.has(path) && treeFiles.has(path);
-  // A `head` session reads the same blobs from its own (cached) reader; a working tree may differ in
-  // line endings after git's filters, so its tree is always read from `at`.
-  const headFiles = ctx.head !== undefined ? ctx.files : undefined;
+  // Same blob at the same path: same bytes, so the same extraction. Blob ids compare the exact bytes
+  // the session read, whatever git's diff, filters or index flags would say.
+  const sameBlob = (blobs: ReadonlyMap<string, string> | undefined, path: string): boolean =>
+    isRegularTreeMode(treeFiles.modes.get(path)) && blobs?.get(path) !== undefined && blobs.get(path) === treeFiles.oids.get(path);
+  // A `head` session reads unchanged blobs (configuration, `__init__.py`) from its own cached reader.
+  const headTree = ctx.head !== undefined ? (ctx.currentFiles as Partial<TreeFileSet>) : undefined;
+  const headFiles = headTree?.oids !== undefined ? ctx.files : undefined;
   const reader: RepoFiles = {
     ...base,
-    read: (path) => (headFiles !== undefined && unchanged(path) ? headFiles.read(path) : base.read(path)),
+    read: (path) =>
+      headFiles !== undefined && headTree?.modes?.get(path) === treeFiles.modes.get(path) && sameBlob(headTree?.oids, path)
+        ? headFiles.read(path)
+        : base.read(path),
   };
   const build = (onReuse?: ImportGraphAtOptions['onReuse']): ImportGraphIndex => {
     const own = createExtractionStore();
-    const shared = sessionExtractionStores.get(ctx);
+    const shared = sessionExtractions.get(ctx);
     let reused = 0;
     let extracted = 0;
     const extractions: ExtractionStore = {
       get: (analyzer, path) => {
         const local = own.get(analyzer, path);
         if (local) return local;
-        const entry = unchanged(path) ? shared?.get(analyzer, path) : undefined;
+        const entry = shared !== undefined && sameBlob(shared.blobs, path) ? shared.store.get(analyzer, path) : undefined;
         if (entry) reused++;
         return entry;
       },
