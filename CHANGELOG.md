@@ -6,8 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-18
+
 ### Fixed
 - **README images on npmjs.com (dark mode):** the `--style rich` before/after images used relative paths. npmjs.com rewrites a relative `<img src>` to GitHub but not a `<source srcset>`, so in dark mode the package page showed broken images. Every README image now uses an absolute URL, and `test/readme-npm.test.ts` keeps it that way (and checks that each image served from this repository exists).
+- **History cache: concurrent runs no longer warn "could not be updated (ENOENT)"** ([RA-04](src/git/cache.ts)): the run holding the cache lock deleted every temp file in the cache directory, including one another run was about to rename into place, so overlapping runs (for example parallel CI jobs on one checkout) could print that warning. Results were never affected. Temp files are now removed only once they are older than the lock's stale window (60 s), that is, left by a crashed writer.
 
 ## [0.13.0] - 2026-11-11
 
