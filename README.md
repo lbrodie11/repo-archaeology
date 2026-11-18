@@ -477,12 +477,12 @@ The output follows `@frame12/terminal`'s capability rules: width tiers (under 40
 `diff` on [honojs/hono](https://github.com/honojs/hono) at `61f7c59` (`diff --base 61f7c59~6`), 80 columns, truecolor. Left: the previous rich renderer; right: `@frame12/terminal`.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/gallery/rich-terminal/png/diff-80-after-dark.png">
-  <img src="docs/gallery/rich-terminal/png/diff-80-after-light.png" alt="repo-archaeology diff --style rich at 80 columns: three findings, the top one with a marker chip and a heavy left rule, each with a confidence tone bar, its 95% interval and commit receipts, then metrics, a warning and next-step explain commands" width="49%" align="top">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/gallery/rich-terminal/png/diff-80-after-dark.png">
+  <img src="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/gallery/rich-terminal/png/diff-80-after-light.png" alt="repo-archaeology diff --style rich at 80 columns: three findings, the top one with a marker chip and a heavy left rule, each with a confidence tone bar, its 95% interval and commit receipts, then metrics, a warning and next-step explain commands" width="49%" align="top">
 </picture>
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/gallery/rich-terminal/png/diff-80-before-dark.png">
-  <img src="docs/gallery/rich-terminal/png/diff-80-before-light.png" alt="The previous --style rich renderer on the same diff, for comparison" width="49%" align="top">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/gallery/rich-terminal/png/diff-80-before-dark.png">
+  <img src="https://raw.githubusercontent.com/lbrodie11/repo-archaeology/main/docs/gallery/rich-terminal/png/diff-80-before-light.png" alt="The previous --style rich renderer on the same diff, for comparison" width="49%" align="top">
 </picture>
 
 The full gallery (`scan` and `diff` at 40, 80 and 120 columns, light and dark) is in [`docs/gallery/rich-terminal/`](docs/gallery/rich-terminal/README.md), rendered through `@xterm/headless` by `scripts/rich-gallery.mjs`.

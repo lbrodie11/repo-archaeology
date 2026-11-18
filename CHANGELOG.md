@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **README images on npmjs.com (dark mode):** the `--style rich` before/after images used relative paths. npmjs.com rewrites a relative `<img src>` to GitHub but not a `<source srcset>`, so in dark mode the package page showed broken images. Every README image now uses an absolute URL, and `test/readme-npm.test.ts` keeps it that way (and checks that each image served from this repository exists).
+
 ## [0.13.0] - 2026-11-11
 
 ### Changed
