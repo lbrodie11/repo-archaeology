@@ -7,6 +7,7 @@ import { after, before, describe, it } from 'node:test';
 import { sanitizeGitEnv } from '../scripts/schema-validator.mjs';
 import {
   CACHE_DIR_ENV,
+  CACHE_LOCK_STALE_MS,
   CACHE_FORMAT_SIGNATURE,
   CACHE_GITIGNORE_FILE,
   CACHE_INDEX_FILE,
@@ -424,12 +425,21 @@ describe('RA-04 history cache: integrity, versioning, shallow clones, concurrenc
     const repo = freshRepo();
     runJson(['scan'], repo.dir);
     const dir = cacheDirOf(repo);
+    // An orphan is left by a crashed writer, so it is older than the lock's stale window.
     const strayTmp = join(dir, '.commits-99.jsonl.tmp-99999-deadbeef');
     writeFileSync(strayTmp, 'partial crash data');
+    const old = new Date(Date.now() - 2 * CACHE_LOCK_STALE_MS);
+    utimesSync(strayTmp, old, old);
+    // A fresh temp file belongs to a concurrent process that is about to rename it into place
+    // (claimDirectory writes CACHEDIR.TAG and .gitignore before taking the lock): deleting it
+    // made that process's rename fail with ENOENT.
+    const inFlightTmp = join(dir, '.CACHEDIR.TAG.tmp-88888-cafebabe');
+    writeFileSync(inFlightTmp, 'another process is writing this');
     repo.touch(['src/a.ts', 'src/b2.ts'], 'feat: trigger append after stray tmp');
     const afterAppend = runJson(['scan'], repo.dir);
     assert.equal(afterAppend.meta.cache?.misses, 1);
     assert.equal(existsSync(strayTmp), false, 'orphaned .tmp-* file must be cleaned up');
+    assert.equal(existsSync(inFlightTmp), true, "a concurrent writer's in-flight .tmp-* file must survive");
 
     if (process.platform !== 'win32' && process.getuid?.() !== 0) {
       const roBase = mkdtempSync(join(tmpdir(), 'repo-archaeology-ro-'));

@@ -964,12 +964,22 @@ function writeSegment(dir: string, index: CacheIndex, lines: readonly string[]):
   });
 }
 
-/** Deletes segment files and stray temp files that the index does not reference (lock held). */
+/**
+ * Deletes segment files the index does not reference, and temp files abandoned by a crashed
+ * writer (lock held). A temp file younger than the lock's stale window may belong to a live
+ * process: `claimDirectory` writes `CACHEDIR.TAG` and `.gitignore` through temp files before
+ * taking the lock, and deleting one made that process's rename fail with ENOENT.
+ */
 function removeUnreferenced(dir: string, index: CacheIndex): void {
   const keep = new Set(index.segments.map((s) => s.file));
+  const now = Date.now();
   for (const entry of readdirSync(dir)) {
-    if ((SEGMENT_FILE.test(entry) && !keep.has(entry)) || TEMP_FILE.test(entry)) {
-      tryUnlink(join(dir, entry));
+    const path = join(dir, entry);
+    if (SEGMENT_FILE.test(entry) && !keep.has(entry)) {
+      tryUnlink(path);
+    } else if (TEMP_FILE.test(entry)) {
+      const stat = lstatSync(path, { throwIfNoEntry: false });
+      if (stat && now - stat.mtimeMs > CACHE_LOCK_STALE_MS) tryUnlink(path);
     }
   }
 }
